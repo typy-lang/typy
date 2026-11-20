@@ -6,6 +6,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
+use super::binding::{Parameters, Slot};
 use super::generic_copy::Requested;
 use crate::generic::{TypeParameter, infer};
 use crate::typed::{ClassId, FunctionId, FunctionSignature, TypedExpr, TypedExprKind};
@@ -157,26 +158,25 @@ impl BodyChecker<'_> {
         let mut pairs: Vec<(Type, Type)> = Vec::new();
         let reported = self.diagnostics.len();
         let before = self.assigned.clone();
-        let named = keywords.iter().filter_map(|keyword| {
-            let name = keyword.name.as_ref()?;
-            let position = signature
-                .parameters
-                .iter()
-                .position(|parameter| parameter.name == name.name)?;
-            Some((position, &keyword.value))
-        });
+        // Each argument is paired with the type it must have: its parameter's, or the type of
+        // each item of `*args` or `**kwargs` (EXP-17).
+        let shape = Parameters::of(&signature.parameters[skip.min(signature.parameters.len())..]);
         let positional = arguments
             .iter()
             .enumerate()
-            .map(|(index, argument)| (index + skip, argument));
-        let given: Vec<(usize, &Expr)> = positional.chain(named).collect();
-        for (position, argument) in given {
-            let Some(parameter) = signature.parameters.get(position) else {
+            .map(|(index, argument)| (shape.of_position(index), argument));
+        let named = keywords.iter().filter_map(|keyword| {
+            let name = keyword.name.as_ref()?;
+            Some((shape.of_keyword(&name.name), &keyword.value))
+        });
+        let given: Vec<(Option<Slot<'_>>, &Expr)> = positional.chain(named).collect();
+        for (slot, argument) in given {
+            let Some(expected) = slot.and_then(Slot::expected) else {
                 continue;
             };
-            if parameter.ty.has_parameter() {
+            if expected.has_parameter() {
                 let value = self.expression(argument);
-                pairs.push((parameter.ty.clone(), value.ty));
+                pairs.push((expected.clone(), value.ty));
             }
         }
         self.diagnostics.truncate(reported);

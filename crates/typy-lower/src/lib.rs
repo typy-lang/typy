@@ -46,6 +46,7 @@ mod module_variable;
 mod operator_call;
 mod optional;
 mod ownership;
+mod packing;
 mod percent;
 mod program;
 mod set;

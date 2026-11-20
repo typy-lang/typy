@@ -22,6 +22,15 @@ pub enum ParameterKind {
     VarKeyword,
 }
 
+impl ParameterKind {
+    /// Returns true for `*args` and `**kwargs`, which a call always fills, with an empty
+    /// tuple or dict when no argument is left for them.
+    #[must_use]
+    pub const fn is_variadic(self) -> bool {
+        matches!(self, Self::VarPositional | Self::VarKeyword)
+    }
+}
+
 /// One parameter of a function definition.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parameter {

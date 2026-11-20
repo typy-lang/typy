@@ -224,6 +224,8 @@ impl RuleId {
     pub const FUN_10: Self = Self("FUN-10");
     /// A `yield` or `yield from` inside a larger expression shall be accepted.
     pub const FUN_12: Self = Self("FUN-12");
+    /// A function, nested function, method or `lambda` with `*args` or `**kwargs` parameters shall be a value where a `Callable` is expected, taking the arguments the `Callable` passes.
+    pub const FUN_13: Self = Self("FUN-13");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -504,6 +506,7 @@ impl RuleId {
         Self::FUN_09,
         Self::FUN_10,
         Self::FUN_12,
+        Self::FUN_13,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,

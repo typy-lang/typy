@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.11 |
+| Version | 1.12 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-19 |
+| Last updated | 2026-11-20 |
 
 ## 1. Purpose
 
@@ -357,7 +357,7 @@ that the specification does not define.
 | EXP-14 | 0.8 | UT, IT | `typy-check` tests of what a `lambda` captures, a comprehension's variable and the variable it is assigned to included, of each context that gives its types and of the refusals; `tests/conformance/exp/EXP-14_*.py`, late binding in a loop and in a comprehension run twice included, also in the sanitizer run |
 | EXP-15 | 0.9 | IT | `tests/conformance/exp/EXP-15_*.py`, the first iterable evaluated at once and the rest lazily, also in the sanitizer run |
 | EXP-16 | 0.1 | IT | `tests/conformance/exp/EXP-16_*.py` |
-| EXP-17 | 0.9 | UT, IT | `typy-source` tests of a starred item; `typy-check` tests of the element types of `*args` and `**kwargs` and of each unpacking; runtime tests of `unpack`; a `typy-driver` test that lowers each form; `tests/conformance/exp/EXP-17_*.py` |
+| EXP-17 | 0.9 | UT, IT | `typy-source` tests of a starred item; `typy-check` tests of the element types of `*args` and `**kwargs`, of the arguments each takes and refuses, and of each unpacking; runtime tests of `unpack`; `typy-driver` tests that lower each form and pack `*args` and `**kwargs`; `tests/conformance/exp/EXP-17_*.py`, among them the order in which a call evaluates its arguments |
 | EXP-18 | 1.0 | IT | `tests/conformance/exp/EXP-18_*.py` |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py`, a list, a `str`, a range, a dict and generators unpacked with CPython 3.15's messages |
@@ -394,6 +394,7 @@ that the specification does not define.
 | FUN-10 | 0.10 | IT | `tests/conformance/fun/FUN-10_*.py` |
 | FUN-11 | 0.9 | UT, IT, E2E | Runtime tests of closing in each state, of the queue of freed generators and of one that yields again; `tests/conformance/fun/FUN-11_*.py`, with `break`, a temporary, a container, an instance, `with`, nested generators, a variable an exception keeps, a module variable at the end, `close()` and a generator that yields again, in CPython's order, also in the sanitizer run; `crates/typy-cli/tests/end_to_end/generators.rs` for what standard error shows of an exception while one closes |
 | FUN-12 | 1.0 | IT | `tests/conformance/fun/FUN-12_*.py` |
+| FUN-13 | 0.10 | IT | `typy-check` tests of each value with `*args` or `**kwargs` refused as planned; `tests/conformance/fun/FUN-13_*.py` |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |

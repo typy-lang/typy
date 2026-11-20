@@ -349,10 +349,12 @@ impl BodyChecker<'_> {
             .clone();
         // The bound arguments name the static method's parameters, which follow the instance.
         let mut shifted = vec![Argument {
+            keyword: None,
             parameter: 0,
             value: Self::converted(receiver.clone(), Some(&owner)),
         }];
         shifted.extend(arguments.iter().map(|argument| Argument {
+            keyword: None,
             parameter: argument.parameter + 1,
             value: argument.value.clone(),
         }));
@@ -422,6 +424,7 @@ impl BodyChecker<'_> {
             TypedExprKind::Call {
                 function: getter,
                 arguments: vec![Argument {
+                    keyword: None,
                     parameter: 0,
                     value: Self::converted(object, owner.as_ref()),
                 }],
@@ -488,10 +491,12 @@ impl BodyChecker<'_> {
                 function: setter,
                 arguments: vec![
                     Argument {
+                        keyword: None,
                         parameter: 0,
                         value: Self::converted(object, owner.as_ref()),
                     },
                     Argument {
+                        keyword: None,
                         parameter: 1,
                         value,
                     },
@@ -654,6 +659,7 @@ impl BodyChecker<'_> {
             Err(error) => return Some(error),
         };
         let mut all = vec![Argument {
+            keyword: None,
             parameter: 0,
             value: class_object,
         }];

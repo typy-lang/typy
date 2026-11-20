@@ -29,6 +29,7 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         let signature = self.program.signatures[method.0 as usize].clone();
         let mut arguments = vec![Argument {
+            keyword: None,
             parameter: 0,
             value: Self::converted(receiver, signature.parameters.first().map(|p| &p.ty)),
         }];
@@ -54,6 +55,7 @@ impl BodyChecker<'_> {
                 );
             }
             arguments.push(Argument {
+                keyword: None,
                 parameter: position + 1,
                 value: Self::converted(value, Some(&parameter.ty)),
             });

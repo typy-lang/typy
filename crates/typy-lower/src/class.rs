@@ -19,16 +19,7 @@ impl FunctionLowerer<'_> {
         arguments: &[Argument],
         span: Span,
     ) -> Lowered {
-        let values: Vec<(usize, Lowered)> = arguments
-            .iter()
-            .map(|argument| {
-                let lowered = self.expression(&argument.value);
-                (
-                    argument.parameter,
-                    self.kept_for_call(&argument.value, lowered, span),
-                )
-            })
-            .collect();
+        let evaluated = self.evaluated_arguments(arguments, span);
         let ty = TyirType::Object(TypeId::class(class.0));
         let value = self
             .builder
@@ -36,12 +27,12 @@ impl FunctionLowerer<'_> {
         let instance = self.produced(value, ty);
         self.store_defaults(instance, class, span);
         if let Some(init) = init {
-            let mut values = values;
+            let mut values = self.packed_arguments(init, evaluated, span);
             values.insert(0, (0, Self::borrowed(instance.value, ty)));
             let done = self.call_function(init, values, TyirType::Unit, span);
             self.release(done, span);
         } else {
-            for (_, lowered) in values.into_iter().rev() {
+            for (_, _, lowered) in evaluated.into_iter().rev() {
                 self.release(lowered, span);
             }
         }

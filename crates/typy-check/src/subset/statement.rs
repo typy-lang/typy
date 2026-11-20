@@ -1,7 +1,7 @@
 //! Checks statements against the feature table.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId};
-use typy_source::syntax::{Expr, Parameter, ParameterKind, Stmt, TypeParameter, TypeParameterKind};
+use typy_source::syntax::{Expr, Parameter, Stmt, TypeParameter, TypeParameterKind};
 
 use super::feature::{Feature, feature, planned};
 use super::{Place, Walker};
@@ -17,19 +17,10 @@ impl Walker {
         }
     }
 
-    /// Checks the parameters of a function or a `lambda`: no `*args` or `**kwargs`, and
-    /// constant defaults.
+    /// Checks the parameters of a function or a `lambda`: their annotations, and constant
+    /// defaults.
     pub(super) fn parameters(&mut self, parameters: &[Parameter]) {
         for parameter in parameters {
-            match parameter.kind {
-                ParameterKind::Normal
-                | ParameterKind::PositionalOnly
-                | ParameterKind::KeywordOnly => {}
-                ParameterKind::VarPositional | ParameterKind::VarKeyword => self.report(
-                    parameter.span,
-                    planned("`*args` and `**kwargs` parameters", "0.9", RuleId::EXP_17),
-                ),
-            }
             if let Some(annotation) = &parameter.annotation {
                 self.annotation(annotation);
             }
@@ -47,6 +38,21 @@ impl Walker {
     /// Checks a `lambda`: its parameters as a function's, and its body in a scope of its own,
     /// as CPython reads it.
     pub(super) fn lambda(&mut self, parameters: &[Parameter], body: &Expr) {
+        // A `lambda` is always a value, and a `Callable` does not yet reach `*args` or
+        // `**kwargs`.
+        if let Some(variadic) = parameters
+            .iter()
+            .find(|parameter| parameter.kind.is_variadic())
+        {
+            self.report(
+                variadic.span,
+                planned(
+                    "`*args` and `**kwargs` in a `lambda`",
+                    "0.10",
+                    RuleId::FUN_13,
+                ),
+            );
+        }
         self.parameters(parameters);
         let names = parameters
             .iter()

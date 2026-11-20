@@ -424,7 +424,8 @@ impl BodyChecker<'_> {
     }
 
     /// Returns E0202 for a nested function with a keyword-only parameter read as a value,
-    /// since a `Callable` passes every argument by position.
+    /// since a `Callable` passes every argument by position, and E0201 for one with `*args`
+    /// or `**kwargs` (FUN-13).
     pub(super) fn refused_nested_value(
         &mut self,
         symbol: SymbolId,
@@ -435,6 +436,9 @@ impl BodyChecker<'_> {
             return None;
         }
         let function = *self.nested_functions.get(&symbol)?;
+        if let Some(refused) = self.refused_variadic_value(function, name, span) {
+            return Some(refused);
+        }
         let parameter = self.program.signatures[function.0 as usize]
             .parameters
             .iter()

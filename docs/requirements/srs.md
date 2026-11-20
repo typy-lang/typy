@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.97 |
+| Version | 1.98 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-19 |
+| Last updated | 2026-11-20 |
 
 ## 1. Introduction
 
@@ -295,6 +295,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | FUN-10 | A nested function inside a generic function, and a nested function with type parameters of its own, shall be accepted, with a copy for each set of types. | C | 0.10 | 8.10 |
 | FUN-11 | A generator closed, or freed while it is suspended, shall raise `GeneratorExit` at its `yield` and run its `except` and `finally` clauses when CPython does; one that yields again then shall raise `RuntimeError`, and one never started shall run nothing (ADR-0069, ADR-0070, ADR-0071). | M | 0.9 | 8.7 |
 | FUN-12 | A `yield` or `yield from` inside a larger expression, such as `print((yield value))`, shall be accepted. | C | 1.0 | 6.2.9 |
+| FUN-13 | A function, nested function, method or `lambda` with `*args` or `**kwargs` parameters shall be a value where a `Callable` is expected, taking the arguments the `Callable` passes. | C | 0.10 | 3.2.8 |
 
 ### 3.10 Classes (CLS)
 
@@ -543,7 +544,7 @@ cache, unless a row says otherwise.
 | 0.7 | | macOS AArch64 as host and target; LLVM built and pinned by TyPy for every host |
 | 0.8 | Functions as values: nested functions and closures, `lambda`, `nonlocal`, keyword-only and positional-only parameters, the `key` argument of `sorted`, `list.sort`, `min` and `max` | Attributes, tuple items, captures and cells stored by decreasing alignment |
 | 0.9 | Generators: `yield` and `yield from`, generator functions of `Generator`, `Iterator` and `Iterable` types, generator expressions; classes with `__iter__` and `__next__` as iterators; `*args`, `**kwargs` and unpacking with `*` and `**`; `Sequence` and the other abstract collections | Generator objects of one allocation |
-| 0.10 | Decorators, built-in functions, class methods and protocol methods as values, nested functions inside generic functions, `NamedTuple`, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values | |
+| 0.10 | Decorators, built-in functions, class methods, protocol methods and functions with `*args` or `**kwargs` as values, nested functions inside generic functions, `NamedTuple`, `isinstance` with a class held in a variable, `issubclass`, `typing` names as values | |
 | 1.0 | The remaining requirements of section 3 marked 1.0 | Cycle collection, `weakref`; Windows; performance budgets |
 
 ## 6. Out of scope

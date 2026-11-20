@@ -227,16 +227,7 @@ impl FunctionLowerer<'_> {
                 arguments,
                 dispatch,
             } => {
-                let values: Vec<(usize, Lowered)> = arguments
-                    .iter()
-                    .map(|argument| {
-                        let lowered = self.expression(&argument.value);
-                        (
-                            argument.parameter,
-                            self.kept_for_call(&argument.value, lowered, span),
-                        )
-                    })
-                    .collect();
+                let values = self.call_arguments(*function, arguments, span);
                 if *dispatch {
                     self.call_method(*function, values, ty, span)
                 } else {
@@ -284,16 +275,7 @@ impl FunctionLowerer<'_> {
             } => {
                 let closure_value = self.expression(closure);
                 let closure_value = self.kept_for_call(closure, closure_value, span);
-                let values: Vec<(usize, Lowered)> = arguments
-                    .iter()
-                    .map(|argument| {
-                        let lowered = self.expression(&argument.value);
-                        (
-                            argument.parameter,
-                            self.kept_for_call(&argument.value, lowered, span),
-                        )
-                    })
-                    .collect();
+                let values = self.call_arguments(*function, arguments, span);
                 let result = self.call_nested(*function, closure_value.value, values, ty, span);
                 self.release(closure_value, span);
                 result

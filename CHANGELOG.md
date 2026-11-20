@@ -29,6 +29,11 @@ All notable changes to TyPy are recorded here. The format follows
   EXP-17).
 - `*iterable` in list, set and tuple displays, and `**dict` in dict
   displays (EXP-17).
+- `*args: T` and `**kwargs: T` parameters, which take the arguments left
+  over as a `tuple[T, ...]` and a `dict[str, T]`, after every argument of
+  the call is evaluated in source order, as in CPython (EXP-17). A
+  function, nested function or method with them as a value, and a
+  `lambda` with them, are planned for 0.10 (FUN-13).
 - Generator expressions, `(element for target in source if condition)`:
   a `Generator[Y, None, None]` whose first iterable runs where the
   expression runs and the rest as it runs, reading the variables around it

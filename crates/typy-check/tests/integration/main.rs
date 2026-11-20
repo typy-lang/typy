@@ -28,3 +28,4 @@ mod sys;
 mod type_aliases;
 mod unions;
 mod unpacking;
+mod variadic;

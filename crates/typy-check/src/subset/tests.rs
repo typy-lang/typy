@@ -89,8 +89,8 @@ fn later_features_name_their_release_and_rule() {
             "decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
-            "def f(*a: int) -> None:\n    pass\n",
-            "`*args` and `**kwargs` parameters are planned for TyPy 0.9 (EXP-17)",
+            "f = lambda *a: 0\n",
+            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.10 (FUN-13)",
         ),
         (
             "def f(a: int = g()) -> None:\n    pass\n",

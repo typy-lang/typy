@@ -1,6 +1,7 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
 mod accessor;
+mod binding;
 mod builtin_call;
 mod builtin_module;
 mod call;

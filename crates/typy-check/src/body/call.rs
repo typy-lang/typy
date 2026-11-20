@@ -2,9 +2,10 @@
 //! types.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Expr, Keyword, ParameterKind};
+use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
+use super::binding::{Parameters, Slot};
 use crate::builtin::Builtin;
 use crate::exception::BuiltinException;
 use crate::typed::{Argument, FunctionId, TypedConstant, TypedExpr, TypedExprKind};
@@ -280,9 +281,9 @@ impl BodyChecker<'_> {
     }
 
     /// Binds the arguments of a call to the parameters of `signature` after the first `skip`:
-    /// each positional argument to the next parameter that is not keyword-only, and each
-    /// keyword argument to the parameter it names that is not positional-only, as CPython
-    /// binds them (FUN-03).
+    /// each positional argument to the next parameter that takes one by position, then to
+    /// `*args`, and each keyword argument to the parameter it names that is not
+    /// positional-only, then to `**kwargs`, as CPython binds them (FUN-03, EXP-17).
     pub(super) fn bind_to(
         &mut self,
         signature: &crate::typed::FunctionSignature,
@@ -293,94 +294,108 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Result<Vec<Argument>, TypedExpr> {
         let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
-        // Keyword-only parameters come last, so a positional argument fills the parameter of
-        // its own index among the others.
-        let positional = parameters
-            .iter()
-            .filter(|parameter| parameter.kind != ParameterKind::KeywordOnly)
-            .count();
+        let shape = Parameters::of(parameters);
         let mut bound: Vec<Argument> = Vec::new();
         let mut filled = vec![false; parameters.len()];
         for (index, argument) in arguments.iter().enumerate() {
-            let parameter = parameters.get(index).filter(|_| index < positional);
-            let value =
-                self.expression_expecting(argument, parameter.map(|parameter| &parameter.ty));
-            let Some(parameter) = parameter else {
-                let keyword_only = positional < parameters.len();
+            let slot = shape.of_position(index);
+            let value = self.expression_expecting(argument, slot.and_then(Slot::expected));
+            let Some(slot) = slot else {
+                let (positional, keyword_only) = (shape.positional(), shape.has_keyword_only());
                 return Err(self.too_many_positional(name, positional, keyword_only, &value, span));
             };
-            self.expect(
-                &value,
-                parameter.ty.clone(),
-                &format!("argument `{}`", parameter.name),
-            );
-            filled[index] = true;
-            bound.push(Argument {
-                parameter: index + skip,
-                value,
-            });
+            if let Slot::Named(index, _) = slot {
+                filled[index] = true;
+            }
+            bound.push(self.bound_argument(slot, None, value, (parameters, skip)));
         }
         for keyword in keywords {
-            let position = keyword.name.as_ref().and_then(|keyword_name| {
-                parameters
-                    .iter()
-                    .position(|parameter| parameter.name == keyword_name.name)
-            });
-            let expected = position.map(|index| &parameters[index].ty);
-            let value = self.expression_expecting(&keyword.value, expected);
             let Some(keyword_name) = &keyword.name else {
+                self.expression(&keyword.value);
                 continue;
             };
-            let Some(index) = position else {
-                return Err(self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(404),
-                        keyword_name.span,
-                        format!("`{name}` has no parameter named `{}`", keyword_name.name),
-                    )
-                    .with_rule(RuleId::TYP_01),
-                    span,
-                ));
+            let slot = shape.of_keyword(&keyword_name.name);
+            let value = self.expression_expecting(&keyword.value, slot.and_then(Slot::expected));
+            let message = match slot {
+                None => format!("`{name}` has no parameter named `{}`", keyword_name.name),
+                Some(Slot::PositionalOnly(_)) => {
+                    let message = format!(
+                        "`{name}` takes `{}` by position only, not by keyword",
+                        keyword_name.name
+                    );
+                    return Err(self.error(
+                        Diagnostic::new(DiagnosticCode::error(404), keyword_name.span, message)
+                            .with_rule(RuleId::FUN_03),
+                        span,
+                    ));
+                }
+                Some(Slot::Named(index, _)) if filled[index] => {
+                    format!("argument `{}` is given more than once", keyword_name.name)
+                }
+                Some(slot) => {
+                    if let Slot::Named(index, _) = slot {
+                        filled[index] = true;
+                    }
+                    let keyword = Some(keyword_name.name.as_str());
+                    bound.push(self.bound_argument(slot, keyword, value, (parameters, skip)));
+                    continue;
+                }
             };
-            if parameters[index].kind == ParameterKind::PositionalOnly {
-                let message = format!(
-                    "`{name}` takes `{}` by position only, not by keyword",
-                    keyword_name.name
-                );
-                return Err(self.error(
-                    Diagnostic::new(DiagnosticCode::error(404), keyword_name.span, message)
-                        .with_rule(RuleId::FUN_03),
-                    span,
-                ));
-            }
-            if filled[index] {
-                return Err(self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(404),
-                        keyword_name.span,
-                        format!("argument `{}` is given more than once", keyword_name.name),
-                    )
+            return Err(self.error(
+                Diagnostic::new(DiagnosticCode::error(404), keyword_name.span, message)
                     .with_rule(RuleId::TYP_01),
-                    span,
-                ));
-            }
-            self.expect(
-                &value,
-                parameters[index].ty.clone(),
-                &format!("argument `{}`", keyword_name.name),
-            );
-            filled[index] = true;
-            bound.push(Argument {
-                parameter: index + skip,
-                value,
-            });
+                span,
+            ));
         }
         self.bind_defaults(parameters, &filled, skip, name, span, &mut bound)?;
         Ok(bound)
     }
 
+    /// Returns the argument `value` bound to `slot`, after checking its type: an argument
+    /// `*args` or `**kwargs` takes is held as the parameter's items are, and keeps its
+    /// keyword.
+    fn bound_argument(
+        &mut self,
+        slot: Slot<'_>,
+        keyword: Option<&str>,
+        value: TypedExpr,
+        (parameters, skip): (&[crate::typed::SignatureParameter], usize),
+    ) -> Argument {
+        match slot {
+            Slot::Named(index, ty) => {
+                self.expect(
+                    &value,
+                    ty.clone(),
+                    &format!("argument `{}`", parameters[index].name),
+                );
+                Argument {
+                    parameter: index + skip,
+                    keyword: None,
+                    value,
+                }
+            }
+            Slot::Packed(index, item) => {
+                let value = Self::converted(value, Some(item));
+                let what = keyword.map_or_else(
+                    || format!("an argument for `*{}`", parameters[index].name),
+                    |keyword| format!("argument `{keyword}`"),
+                );
+                self.expect(&value, item.clone(), &what);
+                Argument {
+                    parameter: index + skip,
+                    keyword: keyword.map(str::to_owned),
+                    value,
+                }
+            }
+            Slot::PositionalOnly(_) => {
+                unreachable!("a keyword for a positional-only parameter is reported")
+            }
+        }
+    }
+
     /// Adds to `bound` the argument of each parameter no argument filled whose default a
-    /// call gives each time, and reports a parameter that has no default.
+    /// call gives each time, and reports a parameter that has no default; `*args` and
+    /// `**kwargs` take what is left, or nothing.
     fn bind_defaults(
         &mut self,
         parameters: &[crate::typed::SignatureParameter],
@@ -391,15 +406,19 @@ impl BodyChecker<'_> {
         bound: &mut Vec<Argument>,
     ) -> Result<(), TypedExpr> {
         for (index, (parameter, is_filled)) in parameters.iter().zip(filled).enumerate() {
-            if !is_filled && let Some(factory) = &parameter.default_call {
+            if *is_filled || parameter.kind.is_variadic() {
+                continue;
+            }
+            if let Some(factory) = &parameter.default_call {
                 let value = self.default_call(factory, &parameter.ty, span);
                 bound.push(Argument {
                     parameter: index + skip,
+                    keyword: None,
                     value,
                 });
                 continue;
             }
-            if !is_filled && parameter.default.is_none() {
+            if parameter.default.is_none() {
                 return Err(self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(404),

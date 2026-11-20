@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.54 |
+| Version | 2.55 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-19 |
+| Last updated | 2026-11-20 |
 
 ## 1. Purpose and scope
 
@@ -660,17 +660,27 @@ two types are equal when their structure is. `Dict`, `Set`, `Bytes` and
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `parameters` | `Vec<SignatureParameter>` | empty | Each with `name`, `ty`, `default: Option<TypedConstant>`, `default_call` and `kind`, the parser's `ParameterKind`: `Normal`, `PositionalOnly` before `/` or `KeywordOnly` after `*` |
+| `parameters` | `Vec<SignatureParameter>` | empty | Each with `name`, `ty`, `default: Option<TypedConstant>`, `default_call` and `kind`, the parser's `ParameterKind`: `Normal`, `PositionalOnly` before `/`, `KeywordOnly` after `*`, `VarPositional` for `*args`, whose `ty` is `tuple[T, ...]`, or `VarKeyword` for `**kwargs`, whose `ty` is `dict[str, T]` |
 | `returns` | `Type` | none | `NoneType` for `-> None` |
 
 A default value is a constant in 0.1, which makes "evaluated once, when the
 function is defined" (EXP-16) hold trivially. `BodyChecker::bind_to` binds
 each call's arguments to parameter positions, so TyIR and code generation
-see positions alone: a positional argument fills the parameter of its index
-among those that are not keyword-only, which Python puts last, and a
-keyword fills the parameter it names unless that is positional-only. A
-positional argument past the others, or a keyword for a positional-only
-parameter, is E0404 under FUN-03, where CPython raises `TypeError`.
+see positions alone. `body/binding.rs` says where each goes: a positional
+argument fills the parameter of its index among those that take one by
+position, which Python puts first, then `*args`; a keyword fills the
+parameter it names unless that is positional-only or variadic, then
+`**kwargs`. A positional argument past the others, or a keyword no
+parameter takes, is E0404 under FUN-03 and TYP-01, where CPython raises
+`TypeError`. Each `Argument` holds its parameter's index, and an argument
+`**kwargs` takes also holds its `keyword`; one `*args` or `**kwargs`
+takes is converted to the item type, so a call may hold several arguments
+of one variadic parameter, in source order (EXP-17). The generic solver
+pairs each argument with the type `body/binding.rs` gives it, so `T` of
+`*items: T` is solved from the items. An override keeps the variadic
+parameters of the method it overrides, E0404 (CLS-04), and a function,
+nested function or method with one read as a value, or a `lambda` with
+one, is E0201, planned for 0.10 (FUN-13).
 
 A function of the program read without a call, by its name or as
 `module.name`, is `TypedExprKind::FunctionValue(id)`, of the type
@@ -2652,6 +2662,7 @@ graph, symbol names and the string pool.
 | Sets | Every set operation is a runtime call that borrows its arguments; a set adds its own reference to an item it stores. A display creates the set, then adds each item in order. A display of three to thirty items that are all constants, literals, numbers with signs and tuples of them, is then copied, as CPython 3.15 merges the frozenset its compiler builds into a new set (OI-19). `set(s)` of a set copies it, which merges its table as CPython does; `set(source)` of any other source adds each value in order. Each operator and method takes CPython's steps: `\|` and `union` copy the set and extend the copy with each other collection, skipping the receiver itself; `&` and `intersection` intersect with each in turn, and with none copy; `-` and `difference` subtract the first and remove the items of the rest; `&=` and `intersection_update` replace the set's table with the intersection's. The in-place forms and the updating methods change the set, so every name that shares it sees the change. Another collection is passed as its address, a `Bits` value, since it may be a set or a list. `for` keeps the set, the next slot and its number of items in hidden slots; `typy_rt_set_next` returns the next active slot, or -1 at the end, and raises `RuntimeError` when the number of items changed, as CPython's set iterator does. `pop` gives an owned item. A set slot starts as the placeholder set |
 | Dicts | Every dict operation is a runtime call that borrows its arguments; a dict adds its own references to a key and a value it stores. A display creates the dict presized for its entries, as CPython's `BUILD_MAP` does, then sets each key and value in order. `d[k]` borrows the value, which gets its own reference when the dict is a temporary; `d[k] = v` evaluates the value, then the dict and the key. `get`, `setdefault` and `pop` give a value with a reference of its own, and `popitem` builds its pair from the key and value the dict gives up. `keys()`, `values()` and `items()` make a view object that holds the dict, so a view reads the dict as it changes and keeps its own type ID for `in`, `len` and its text, also inside a list or a tuple. `for` over a dict or a view keeps the source, the next entry, the number of entries when the loop began and the entries visited in hidden slots, and `typy_rt_dict_next` raises CPython's `RuntimeError` when the size or the keys changed. `\|` copies and updates, and `\|=` updates in place. A dict slot starts as the placeholder dict, and a view slot as null, which counting passes over, so a `return` lowered before a later loop adds its hidden view slot leaves nothing of that slot to release |
 | Comprehensions | A comprehension creates its list, set or dict, then lowers its clauses as loops, each around the next. A clause starts its iterator, binds its target and tests each condition, going back for the next value when one fails; the innermost loop evaluates the element and appends or adds it, or evaluates the key, then the value, and sets the entry, as CPython does. The collection is a temporary throughout, so an exception from an element releases it |
+| Variadic arguments | `call_arguments` in `packing.rs` evaluates a call's arguments in source order, each kept alive for the call, then packs those of the callee's `*args` into a new list sealed with `tuple_seal`, and those of `**kwargs` into a new dict with `dict_set`, each key a `str` constant, in order; a variadic parameter with no argument takes an empty one. Calls, nested calls, `New` and an exception's `__init__` go through it, and an exception keeps every positional argument in `args` before its `__init__` takes them packed, as `BaseException.__new__` does (EXP-17) |
 | Unpacking | A display with `*iterable`, `TypedExprKind::Spread`, makes an empty list or set of its item type, then appends or adds each item and each value of each iterable, read with `each_value` as a loop reads it; a tuple display seals its list with `tuple_seal`. A dict display with `**dict`, `DictSpread`, makes an empty dict, then sets each entry and merges each dict with `dict_update`, in order. `AssignTarget::Unpack` assigns a tuple of a fixed number of items item by item, and a new list of the items between the targets to a starred one; any other value goes to `unpack(source, kind, descriptor, before, after, starred)`, which gives a new list of its values, and each target takes its item with `list_get`, the last ones counted from the end, and a starred one the `list_slice` between, from left to right (SMT-02, EXP-17) |
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |

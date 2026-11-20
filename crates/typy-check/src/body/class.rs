@@ -649,6 +649,7 @@ impl BodyChecker<'_> {
             .first()
             .map(|parameter| parameter.ty.clone());
         let mut bound = vec![Argument {
+            keyword: None,
             parameter: 0,
             value: Self::converted(receiver, owner.as_ref()),
         }];

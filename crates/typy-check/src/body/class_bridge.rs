@@ -63,6 +63,7 @@ impl Program {
             .collect();
         let typed = |kind: TypedExprKind, ty: Type| TypedExpr { kind, ty, span };
         let mut arguments = vec![Argument {
+            keyword: None,
             parameter: 0,
             value: typed(
                 TypedExprKind::TypeObject(Box::new(of.clone())),
@@ -71,6 +72,7 @@ impl Program {
         }];
         arguments.extend(symbols.iter().zip(&parameters).enumerate().skip(1).map(
             |(index, (symbol, parameter))| Argument {
+                keyword: None,
                 parameter: index,
                 value: typed(TypedExprKind::Local(*symbol), parameter.ty.clone()),
             },

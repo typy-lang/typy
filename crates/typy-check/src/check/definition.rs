@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::{Constant, Expr, Identifier, Parameter, Stmt};
+use typy_source::syntax::{Constant, Expr, Identifier, Parameter, ParameterKind, Stmt};
 
 use super::annotation::{AnnotationScope, annotation_type};
 use crate::typed::ClassId;
@@ -320,6 +320,12 @@ pub(super) fn definition<'tree>(
                 );
                 Type::Error
             }
+        };
+        // `*args: T` holds a `tuple[T, ...]` and `**kwargs: T` a `dict[str, T]` (EXP-17).
+        let ty = match parameter.kind {
+            ParameterKind::VarPositional => Type::TupleOf(Box::new(ty)),
+            ParameterKind::VarKeyword => Type::Dict(Box::new(Type::Str), Box::new(ty)),
+            _ => ty,
         };
         let default_call = parameter.default.as_ref().and_then(factory_call);
         let default = parameter

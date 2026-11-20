@@ -86,17 +86,7 @@ impl FunctionLowerer<'_> {
         init: &InitCall,
         span: Span,
     ) -> Lowered {
-        let values: Vec<(usize, Lowered)> = init
-            .arguments
-            .iter()
-            .map(|argument| {
-                let lowered = self.expression(&argument.value);
-                (
-                    argument.parameter,
-                    self.kept_for_call(&argument.value, lowered, span),
-                )
-            })
-            .collect();
+        let evaluated = self.evaluated_arguments(&init.arguments, span);
         let program_class = class.class_id();
         // `OSError.__new__` leaves the arguments of a class with an `__init__` of its own to
         // `OSError.__init__`, so the exception starts with none.
@@ -112,9 +102,9 @@ impl FunctionLowerer<'_> {
             .collect();
         let id = self.tuple_type_id(&types);
         let layout = TyirType::Tuple(id);
-        let items: Vec<ValueId> = values[..kept]
+        let items: Vec<ValueId> = evaluated[..kept]
             .iter()
-            .map(|(_, lowered)| {
+            .map(|(_, _, lowered)| {
                 if self.counted(lowered.ty) {
                     self.builder.push(Operation::Increment(lowered.value), span);
                 }
@@ -142,7 +132,7 @@ impl FunctionLowerer<'_> {
         if let Some(program_class) = program_class {
             self.store_defaults(exception, program_class, span);
         }
-        let mut values = values;
+        let mut values = self.packed_arguments(init.function, evaluated, span);
         values.insert(0, (0, Self::borrowed(exception.value, TyirType::EXCEPTION)));
         let done = self.call_function(init.function, values, TyirType::Unit, span);
         self.release(done, span);

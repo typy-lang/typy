@@ -8,6 +8,7 @@
 | Recursion; running out of stack ends the program with `RecursionError` | FUN-02 |
 | Positional, keyword and default arguments, defaults evaluated once | EXP-16 |
 | Positional-only parameters before `/` and keyword-only parameters after `*`, bound as CPython binds them; a keyword for a positional-only parameter, or a positional argument past the others, is E0404 | FUN-03 |
+| `*args: T` and `**kwargs: T`, which take the arguments left over as a `tuple[T, ...]` and a `dict[str, T]` | EXP-17 |
 | A function of the program as a value of type `Callable[[A, ...], R]`: stored, passed, returned, called, compared and hashed | FUN-05, NFR-19 |
 | A method read through an instance as a bound method, and through its class as a function | FUN-05 |
 | A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
@@ -19,8 +20,46 @@
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
 Decorators, built-in functions as values, class methods and protocol
-methods as values, and nested functions of generic functions are planned
-for 0.10 (FUN-06, FUN-08 to FUN-10).
+methods as values, nested functions of generic functions, and functions
+with `*args` or `**kwargs` as values are planned for 0.10 (FUN-06, FUN-08
+to FUN-10, FUN-13).
+
+## Variable numbers of arguments
+
+A parameter written `*args: T` takes the positional arguments left after
+the other parameters as a `tuple[T, ...]`, and one written `**kwargs: T`
+takes the keyword arguments no other parameter names as a
+`dict[str, T]`, in the order the call gives them. The annotation is the
+type of each argument, as in `typing`. A call with nothing left for them
+gives an empty tuple and an empty dict:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(name: str, *tags: str, sep: str = ", ", **sizes: int) -> str:
+    parts = [name, sep.join(tags)]
+    for key in sizes:
+        parts.append(f"{key}={sizes[key]}")
+    return " | ".join(parts)
+
+
+print(describe("box"))
+print(describe("box", "red", "new", sep="/", width=2, height=3))
+```
+
+A call evaluates every argument in source order before it binds them, as
+CPython does, so a keyword that `**kwargs` takes and one a named
+parameter takes run in the order they are written. A keyword that names
+a positional-only parameter goes to `**kwargs`, and so does one that
+names `*args` or `**kwargs` itself.
+
+Methods, `__init__`, nested functions and generic functions take them
+too; a type parameter is solved from the arguments `*args` takes, as in
+`def first[T](*items: T) -> T`. An override keeps the `*args` and
+`**kwargs` of the method it overrides, E0404 (CLS-04). Reading such a
+function as a value, and `*args` or `**kwargs` in a `lambda`, are planned
+for 0.10 (FUN-13); call it from a `lambda` that takes the arguments the
+`Callable` passes. Unpacking in a call, `f(*values)` and `f(**options)`,
+comes later in 0.9 (EXP-17).
 
 ## Nested functions
 
@@ -425,6 +464,7 @@ These forms are refused:
 | A generic function as a value, which has one copy for each set of types | E0202 |
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
+| A function, nested function or method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.10 | E0201 (FUN-13) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
 | A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
 | A call of a value that is not a function, such as an `int` | E0401 |

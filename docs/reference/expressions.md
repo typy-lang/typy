@@ -126,8 +126,8 @@ print({**defaults, "size": "large"})
 
 The values unpacked must have the type of the display's other items, or
 be held alike, such as `int` values in a `list[int | None]`, E0409. A
-tuple display with `*` is a `tuple[T, ...]`. `*args`, `**kwargs` and
-unpacking in a call come later in 0.9 (EXP-17).
+tuple display with `*` is a `tuple[T, ...]`. Unpacking in a call comes
+later in 0.9 (EXP-17).
 
 ## Example
 

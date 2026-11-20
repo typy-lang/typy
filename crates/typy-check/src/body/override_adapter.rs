@@ -61,6 +61,7 @@ impl Program {
                     span,
                 };
                 Argument {
+                    keyword: None,
                     parameter: index,
                     value: widened(read, &wanted.ty),
                 }

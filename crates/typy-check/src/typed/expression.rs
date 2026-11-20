@@ -25,6 +25,9 @@ pub struct TypedExpr {
 pub struct Argument {
     /// The index of the parameter in the callee's signature.
     pub parameter: usize,
+    /// The keyword a `**kwargs` parameter takes the value by; `None` for any other argument
+    /// (EXP-17).
+    pub keyword: Option<String>,
     /// The value.
     pub value: TypedExpr,
 }

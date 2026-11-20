@@ -67,10 +67,12 @@ impl BodyChecker<'_> {
                 function: method,
                 arguments: vec![
                     Argument {
+                        keyword: None,
                         parameter: 0,
                         value: Self::converted(current.clone(), parameter(0)),
                     },
                     Argument {
+                        keyword: None,
                         parameter: 1,
                         value: Self::converted(value.clone(), parameter(1)),
                     },

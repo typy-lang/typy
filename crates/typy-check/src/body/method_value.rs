@@ -97,8 +97,8 @@ impl BodyChecker<'_> {
 
     /// Returns the error for a method that is no value of one `Callable` type: a class
     /// method, which binds the class it is read through, planned for 0.10 (FUN-09), and a
-    /// method with type parameters of its own or a keyword-only parameter, E0202, as for a
-    /// function.
+    /// method with type parameters of its own or a keyword-only parameter, E0202, and one with
+    /// `*args` or `**kwargs`, planned for 0.10 (FUN-13), as for a function.
     fn refused_method_value(
         &mut self,
         class: ClassId,
@@ -124,6 +124,9 @@ impl BodyChecker<'_> {
             );
         }
         let method = self.program.method(class, &name.name)?;
+        if let Some(refused) = self.refused_variadic_value(method, &qualified, name.span) {
+            return Some(refused);
+        }
         let keyword_only = self.program.signatures[method.0 as usize]
             .parameters
             .iter()

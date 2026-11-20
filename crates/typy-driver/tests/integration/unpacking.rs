@@ -20,3 +20,19 @@ fn exp_17_every_unpacking_form_lowers_verifies_and_becomes_llvm_ir() {
     let ir = text(emit(&main, EmitStage::LlvmIr));
     assert!(ir.contains("typy_rt_unpack"), "{ir}");
 }
+
+#[test]
+fn exp_17_star_args_and_star_star_kwargs_pack_after_every_argument_is_evaluated() {
+    let source = "def tagged(name: str, *tags: str, **sizes: int) -> str:\n    \
+                  return name + str(len(tags)) + str(len(sizes))\n\n\n\
+                  class Shape:\n    def __init__(self, *sides: float) -> None:\n        \
+                  self.sides = sides\n\n\n\
+                  print(tagged(\"a\", \"b\", \"c\", width=2), tagged(\"x\"), Shape(1.0).sides)\n";
+    let (_guard, main) = program(source);
+    let tyir = text(emit(&main, EmitStage::Tyir));
+    for call in ["rt.tuple_seal", "rt.dict_set"] {
+        assert!(tyir.contains(call), "{call} missing from\n{tyir}");
+    }
+    let ir = text(emit(&main, EmitStage::LlvmIr));
+    assert!(ir.contains("typy_rt_tuple_seal"), "{ir}");
+}

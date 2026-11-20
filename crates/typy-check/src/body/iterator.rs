@@ -139,6 +139,7 @@ impl BodyChecker<'_> {
                 function: method,
                 dispatch: true,
                 arguments: vec![Argument {
+                    keyword: None,
                     parameter: 0,
                     value: instance,
                 }],
