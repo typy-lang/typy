@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.63 |
+| Version | 2.64 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -2279,7 +2279,7 @@ FFI-05:
 
 | Check | Refused |
 | --- | --- |
-| The name | Listed twice; not ASCII; starting with `__`, `_` and a capital letter, or `typy_`; one of `RUNTIME_C_FUNCTIONS`, the C library functions the runtime calls, and `main`; one of the allocator's functions (MEM-08) |
+| The name | Listed twice; not ASCII; starting with `__`, `_` and a capital letter, or `typy_`; one of `RUNTIME_C_FUNCTIONS`, the C library functions the runtime calls, and `main`; one of the allocator's functions (MEM-08); a C function the module calls through `ctypes`, whose symbol the export would take the place of (FFI-05) |
 | The function | No function of the module defined at its top level has the name; it is generic |
 | Its types | A parameter or the result other than `int`, `float` or `bool`; a result of `None` is accepted |
 

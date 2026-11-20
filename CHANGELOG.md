@@ -29,6 +29,11 @@ All notable changes to TyPy are recorded here. The format follows
   does; they ended in an internal error (E9001). An exception class that
   defines `__eq__` or `__ne__` is refused with E0201, planned for 1.0
   (EXC-20), since TyPy does not call it yet (EXP-06).
+- A library whose `__all__` exports a function under the name of a C
+  function the module calls through `ctypes`, such as `labs` beside
+  `libc.labs`, is refused with E0429 at the name, since the export would
+  take the C function's place; it ended in an internal error (E9001)
+  (FFI-05).
 - An f-string `{value:c}` of `-2**63`, the smallest C `long`, raises
   CPython's `OverflowError: %c arg not in range(0x110000)`, not "Python
   int too large to convert to C long", since the value fits a C `long`
