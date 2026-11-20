@@ -266,7 +266,7 @@ fn derived_type(
         _ => (String::new(), None),
     };
     let Some(base_id) = base_id else {
-        diagnostics.push(unsupported_base(span));
+        diagnostics.push(unknown_base(&written, span));
         return None;
     };
     if base_id >= class.id {
@@ -330,6 +330,20 @@ pub(super) fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
         Stmt::FunctionDef { name, .. } => Some(name.name.as_str()),
         _ => None,
     })
+}
+
+/// Returns the error for a base `written` that names no class of the program: a named tuple,
+/// planned for 0.10 (CLS-27, ADR-0085), or any other base TyPy does not take.
+fn unknown_base(written: &str, span: Span) -> Diagnostic {
+    if matches!(written, "NamedTuple" | "typing.NamedTuple") {
+        return Diagnostic::new(
+            DiagnosticCode::error(201),
+            span,
+            "a class derived from `typing.NamedTuple` is planned for TyPy 0.10 (CLS-27)",
+        )
+        .with_rule(RuleId::CLS_27);
+    }
+    unsupported_base(span)
 }
 
 /// Returns the error for a base other than `object`, an exception class or a class of the

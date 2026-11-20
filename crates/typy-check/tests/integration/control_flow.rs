@@ -95,17 +95,17 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             "module `app` has no name `x`",
         ),
         (
-            "from collections.abc import Hashable\n",
+            "from collections.abc import Awaitable\n",
             "E0425",
             "TyPy's `collections.abc` gives `Iterator`, `Iterable`, `Generator` and \
-            `Callable`, not `Hashable`",
+            `Callable`, not `Awaitable`",
         ),
         (
-            "from typing import Hashable\n",
+            "from typing import Awaitable\n",
             "E0425",
             "TyPy's `typing` gives `Iterator`, `Iterable`, `Generator`, `Callable`, \
             `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar` \
-            and `Protocol`, not `Hashable`",
+            and `Protocol`, not `Awaitable`",
         ),
         (
             "from dataclasses import asdict\n",

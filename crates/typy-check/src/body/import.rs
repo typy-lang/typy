@@ -170,6 +170,32 @@ impl Program {
         Ok(resolved)
     }
 
+    /// Returns why each name a `from` import of `typing`, `collections.abc` or `dataclasses`
+    /// binds is refused, or nothing for any other statement.
+    pub(crate) fn refused_annotation_names(&self, statement: &Stmt) -> Vec<Diagnostic> {
+        let Stmt::ImportFrom {
+            module,
+            names,
+            level,
+            ..
+        } = statement
+        else {
+            return Vec::new();
+        };
+        let from = module.as_ref().map(|name| name.name.as_str());
+        let Ok(base) = absolute_name(self.package.as_ref(), *level, from) else {
+            return Vec::new();
+        };
+        if !ANNOTATION_MODULES.contains(&base.as_str()) || self.loaded.contains(base.as_str()) {
+            return Vec::new();
+        }
+        names
+            .iter()
+            .filter(|alias| annotation_name(base.as_str(), &alias.name.name).is_none())
+            .map(|alias| not_given(&base, alias))
+            .collect()
+    }
+
     /// Returns the type alias `name` of a module, as an importing module reads it.
     fn alias_value(
         &self,
@@ -363,7 +389,7 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 
 /// Returns the error for a name of `typing`, `collections.abc`, `types` or `dataclasses` that
 /// TyPy does not give: `Any` and `cast` are refused (TYP-10), `NamedTuple` and the abstract
-/// collections are planned for 0.10, and any other name is not given (LIB-17).
+/// collections are planned for a later release, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -398,19 +424,22 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_rule(RuleId::TYP_10)
         .with_help("annotate the value with its type, or a union of its types");
     }
-    // The names a later release gives, with the requirement that plans each.
+    // The names a later release gives, with the release and the requirement that plan each
+    // (ADR-0085, ADR-0086).
     let planned = match name.as_str() {
-        "NamedTuple" => Some(RuleId::CLS_27),
+        "NamedTuple" => Some(("0.10", RuleId::CLS_27)),
         "Sequence" | "MutableSequence" | "Mapping" | "MutableMapping" | "Collection"
-        | "Container" | "Sized" | "Set" | "MutableSet" | "Reversible" | "KeysView"
-        | "ValuesView" | "ItemsView" => Some(RuleId::LIB_20),
+        | "Container" | "Set" | "MutableSet" | "Reversible" | "KeysView" | "ValuesView"
+        | "ItemsView" => Some(("0.10", RuleId::LIB_20)),
+        "AbstractSet" if module.as_str() == "typing" => Some(("0.10", RuleId::LIB_20)),
+        "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
         _ => None,
     };
-    if let Some(rule) = planned {
+    if let Some((release, rule)) = planned {
         return Diagnostic::new(
             DiagnosticCode::error(201),
             alias.name.span,
-            format!("`{module}.{name}` is planned for TyPy 0.10 ({rule})"),
+            format!("`{module}.{name}` is planned for TyPy {release} ({rule})"),
         )
         .with_rule(rule);
     }
@@ -501,7 +530,15 @@ impl BodyChecker<'_> {
         let resolved = match self.program.resolve_import(statement) {
             Ok(resolved) => resolved,
             Err(diagnostic) => {
-                self.diagnostics.push(*diagnostic);
+                // Each name `typing` or `collections.abc` does not give is reported, not only
+                // the first.
+                let refused = self.program.refused_annotation_names(statement);
+                if refused.is_empty() {
+                    self.diagnostics.push(*diagnostic);
+                }
+                for each in refused {
+                    self.diagnostics.push(each);
+                }
                 return None;
             }
         };

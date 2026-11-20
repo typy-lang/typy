@@ -330,6 +330,8 @@ impl RuleId {
     pub const LIB_21: Self = Self("LIB-21");
     /// `map`, `filter` and `callable` shall be available, `map` and `filter` giving iterators that go on after the function raises, as CPython's do.
     pub const LIB_23: Self = Self("LIB-23");
+    /// `Sized`, `Hashable` and `MappingView` shall be accepted as types, and a class of the program with the methods of `Collection`, `Container` or `Reversible` shall be accepted where that collection is expected.
+    pub const LIB_24: Self = Self("LIB-24");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -575,6 +577,7 @@ impl RuleId {
         Self::LIB_20,
         Self::LIB_21,
         Self::LIB_23,
+        Self::LIB_24,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,

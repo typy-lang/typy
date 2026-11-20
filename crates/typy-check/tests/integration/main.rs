@@ -37,6 +37,7 @@ mod protocols;
 mod sys;
 mod type_aliases;
 mod type_objects;
+mod typing_names;
 mod unions;
 mod unpacking;
 mod variadic;

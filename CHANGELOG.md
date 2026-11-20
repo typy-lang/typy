@@ -18,6 +18,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `from typing import ...` and `from collections.abc import ...` report
+  every name a later release gives, not only the first. `typing.AbstractSet`
+  is refused as planned for 0.10 (LIB-20), where it was "not given"
+  (E0425), and `Sized`, `Hashable` and `MappingView` as planned for 0.14
+  (LIB-24). A class derived from `typing.NamedTuple` is refused as planned
+  for 0.10 (CLS-27), where the message named CLS-04.
 - A decorator on a method is refused as planned for 0.14 (FUN-15), and a
   class decorator other than `@dataclass` as planned for 1.0 (CLS-38);
   0.10 brings decorators of functions (FUN-06). `map`, `filter` and
