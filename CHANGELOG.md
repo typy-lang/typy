@@ -44,6 +44,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A generic function whose parameters or result name a type parameter
+  inside a `Callable` or a `Generator`, such as `def apply[T](value: T,
+  change: Callable[[T], T]) -> T` or a generic generator that yields `T`,
+  is accepted, and its type parameters are solved from those arguments.
+  It was refused with E0404 or E0405 (GEN-01).
 - `type(x)` of an instance whose class has subclasses, such as a `Circle`
   held as a `Shape`, is a class known only when the program runs. Calling
   it, or reading a class variable or a class method through it, is refused

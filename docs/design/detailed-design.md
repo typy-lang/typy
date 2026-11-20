@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.67 |
+| Version | 2.68 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -1204,7 +1204,11 @@ joining two solutions into a union, checks bounds and constraints, and asks
 `Program::request_copy` for the copy of the arguments, which
 `check::generic_copies::check` checks at the end of the module as an ordinary
 function with `Program::type_arguments` naming the arguments. A copy made inside
-64 others is E0428. A copy of another module's generic, a function or a method
+64 others is E0428. `generic::infer` and `Type::substituted_with` reach every
+type that can hold a parameter, the parameters and result of a `Callable` and
+the three types of a `Generator` included, so `apply(1, increment)` with
+`change: Callable[[T], T]` solves `T` from both arguments (ADR-0081). A copy
+of another module's generic, a function or a method
 of a generic class, is checked in that module's names, which
 `Program::context_of` kept when the module ended, from the definitions
 `ModuleDefinitions` holds for it, so its body reads its own module's functions,

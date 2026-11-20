@@ -42,6 +42,50 @@ fn calls_solve_type_parameters_from_every_kind_of_argument() {
 }
 
 #[test]
+fn type_parameters_are_solved_and_replaced_through_callable_and_generator_types() {
+    let source = concat!(
+        "from collections.abc import Callable, Generator, Iterator\n",
+        "def apply[T](value: T, change: Callable[[T], T]) -> T:\n",
+        "    return change(value)\n",
+        "def first_of[T](changes: list[Callable[[T], T]], value: T) -> T:\n",
+        "    return changes[0](value)\n",
+        "def call_with_one[R](make: Callable[[int], R]) -> R:\n",
+        "    return make(1)\n",
+        "def repeat[T](value: T, times: int) -> Generator[T, None, int]:\n",
+        "    for _ in range(times):\n",
+        "        yield value\n",
+        "    return times\n",
+        "def drain[T](items: Generator[T, None, int]) -> list[T]:\n",
+        "    return list(items)\n",
+        "def head[T](items: Iterator[T]) -> T:\n",
+        "    return next(items)\n",
+        "def increment(number: int) -> int:\n",
+        "    return number + 1\n",
+        "def describe(number: int) -> str:\n",
+        "    return str(number)\n",
+        "a: int = apply(1, increment)\n",
+        "b: int = first_of([increment], 2)\n",
+        "c: str = call_with_one(describe)\n",
+        "d: list[str] = drain(repeat('x', 2))\n",
+        "e: float = head(repeat(1.5, 1))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn a_callable_that_does_not_fit_the_solved_types_is_refused() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def apply[T](value: T, change: Callable[[T], T]) -> T:\n",
+        "    return change(value)\n",
+        "def increment(number: int) -> int:\n",
+        "    return number + 1\n",
+        "print(apply('a', increment))\n",
+    );
+    assert_eq!(app(source), ["E0404"]);
+}
+
+#[test]
 fn calls_that_give_no_fitting_type_are_refused() {
     let cases: &[(&str, &str)] = &[
         (

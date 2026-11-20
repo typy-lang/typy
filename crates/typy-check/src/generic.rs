@@ -57,6 +57,24 @@ impl Type {
                     item.visit(each);
                 }
             }
+            Self::Callable {
+                parameters,
+                returns,
+            } => {
+                for parameter in parameters {
+                    parameter.visit(each);
+                }
+                returns.visit(each);
+            }
+            Self::Generator {
+                yields,
+                sends,
+                returns,
+            } => {
+                yields.visit(each);
+                sends.visit(each);
+                returns.visit(each);
+            }
             // A copy of a generic class holds its type arguments (ADR-0028).
             Self::Instance(class) => {
                 for item in class.generic.iter().flat_map(|(_, items)| items) {
@@ -107,6 +125,22 @@ impl Type {
             }
             Self::Tuple(items) => Self::Tuple(items.iter().map(|item| *inner(item)).collect()),
             Self::Union(items) => Self::union(items.iter().map(|item| *inner(item)).collect()),
+            Self::Callable {
+                parameters,
+                returns,
+            } => Self::Callable {
+                parameters: parameters.iter().map(|item| *inner(item)).collect(),
+                returns: inner(returns),
+            },
+            Self::Generator {
+                yields,
+                sends,
+                returns,
+            } => Self::Generator {
+                yields: inner(yields),
+                sends: inner(sends),
+                returns: inner(returns),
+            },
             other => other.clone(),
         }
     }
@@ -156,6 +190,42 @@ pub(crate) fn infer(parameter: &Type, argument: &Type, owner: Span, solved: &mut
             for given in given {
                 infer(item, given, owner, solved);
             }
+        }
+        // A function solves by its parameters and its result (ADR-0081).
+        (
+            Type::Callable {
+                parameters,
+                returns,
+            },
+            Type::Callable {
+                parameters: given,
+                returns: given_returns,
+            },
+        ) if parameters.len() == given.len() => {
+            for (item, given) in parameters.iter().zip(given) {
+                infer(item, given, owner, solved);
+            }
+            infer(returns, given_returns, owner, solved);
+        }
+        (
+            Type::Generator {
+                yields,
+                sends,
+                returns,
+            },
+            Type::Generator {
+                yields: given_yields,
+                sends: given_sends,
+                returns: given_returns,
+            },
+        ) => {
+            infer(yields, given_yields, owner, solved);
+            infer(sends, given_sends, owner, solved);
+            infer(returns, given_returns, owner, solved);
+        }
+        // A generator is an iterator of what it yields.
+        (Type::Iterator(item), Type::Generator { yields, .. }) => {
+            infer(item, yields, owner, solved);
         }
         (Type::Iterable(item), given) => {
             if let Some(given) = given.iterable_item() {
