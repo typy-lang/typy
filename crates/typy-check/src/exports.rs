@@ -24,8 +24,10 @@ pub struct Export {
 /// which atomic instructions the processor has; on macOS the runtime reads `errno` through
 /// `__error`, an error's text from `strerror`, and the calling thread's stack from the
 /// `pthread` functions (ADR-0057), and Rust's `core` there calls `bzero`, `memcmp` and
-/// `sysctlbyname`.
-pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
+/// `sysctlbyname`. On Linux a library reads the stack of a thread other than the main one,
+/// told apart by `getpid` and the `gettid` of `syscall`, with `pthread_getattr_np`, and keeps
+/// it under a `pthread` key (ADR-0075).
+pub const RUNTIME_C_FUNCTIONS: [&str; 72] = [
     "__error",
     "abort",
     "acos",
@@ -56,6 +58,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
     "fstat",
     "ftruncate",
     "getauxval",
+    "getpid",
     "getrlimit",
     "isatty",
     "ldexp",
@@ -74,9 +77,15 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
     "nextafter",
     "open",
     "pow",
+    "pthread_attr_destroy",
+    "pthread_attr_getstack",
     "pthread_get_stackaddr_np",
     "pthread_get_stacksize_np",
+    "pthread_getattr_np",
+    "pthread_getspecific",
+    "pthread_key_create",
     "pthread_self",
+    "pthread_setspecific",
     "read",
     "realloc",
     "round",
@@ -85,6 +94,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
     "sqrt",
     "strerror",
     "strlen",
+    "syscall",
     "sysctlbyname",
     "tan",
     "tanh",

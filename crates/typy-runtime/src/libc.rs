@@ -18,6 +18,10 @@ pub(crate) use system::{
 };
 #[cfg(target_os = "macos")]
 pub(crate) use system::{error_text, stack_low};
+#[cfg(target_os = "linux")]
+pub(crate) use system::{
+    is_main_thread, keep_thread_value, new_thread_key, thread_stack_low, thread_value,
+};
 
 unsafe extern "C" {
     // The unit tests allocate with these; a program allocates through its own hooks

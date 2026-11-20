@@ -16,7 +16,7 @@ mod program {
     /// 1, or the status of a `SystemExit` (LIB-04).
     #[unsafe(no_mangle)]
     pub extern "C" fn main(argument_count: i32, arguments: *const *const u8) -> i32 {
-        crate::stack::record_limit();
+        crate::stack::record_main_limit();
         crate::sys::keep_arguments(argument_count, arguments);
         // SAFETY: `__typy_main` is the generated module body, which takes nothing and returns an exception or null.
         let exception = unsafe { __typy_main() };

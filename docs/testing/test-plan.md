@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.20 |
+| Version | 1.21 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -535,7 +535,7 @@ that the specification does not define.
 | FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/end_to_end/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
 | FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign/stack_argument.rs` for the registers arguments take and each type's width and attribute on the stack; `crates/typy-codegen/tests/codegen.rs` for the arguments of one call on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
 | FFI-14 | 0.7 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for a library without a name; `tests/conformance/ffi/FFI-14_*.py` on Linux and on the `macos-15` job, and the tests of FFI-02 and FFI-03, which call the C and maths libraries through `CDLL(None)` |
-| FFI-15 | 0.10 | UT, E2E | a runtime test that records the stack limit on a thread made with a 256 KiB stack; an end-to-end test of a C host that calls a recursive export on such a thread and gets `RecursionError` |
+| FFI-15 | 0.10 | UT, E2E | `crates/typy-runtime/src/stack.rs`: the limit recorded on a thread made with a 256 KiB stack lies inside it, and a second call finds it kept; `crates/typy-cli/tests/end_to_end/library.rs`: a C host that calls a recursive export on such a thread gets `RecursionError`, not a segmentation fault |
 | FFI-06 | 0.13 | IT | `tests/conformance/ffi/FFI-06_*.py` |
 | FFI-07 | 0.13 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |

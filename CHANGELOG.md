@@ -17,6 +17,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A library called on a thread its C host created with a stack smaller than
+  `RLIMIT_STACK` raises `RecursionError` for a recursion too deep for that
+  stack; on Linux the process ended with a segmentation fault (FFI-15).
 - A call that unpacks a tuple holding an instance of a derived class into a
   `Base | None` parameter compiles; it ended in an internal error (E9001)
   (EXP-17).

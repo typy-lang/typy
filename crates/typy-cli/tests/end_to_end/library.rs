@@ -367,6 +367,48 @@ int main(void) {
 }
 
 #[test]
+fn ffi_15_a_recursion_on_a_hosts_small_thread_raises_recursion_error() {
+    use std::os::unix::process::ExitStatusExt;
+    let host = r#"
+#include <pthread.h>
+#include <stdio.h>
+#include "tools.h"
+
+static void *work(void *argument) {
+    (void)argument;
+    printf("depth %lld\n", (long long)depth(1000000));
+    return NULL;
+}
+
+int main(void) {
+    /* A stack far smaller than RLIMIT_STACK, as a host may give the threads it makes. */
+    pthread_attr_t attributes;
+    pthread_attr_init(&attributes);
+    pthread_attr_setstacksize(&attributes, 256 * 1024);
+    pthread_t thread;
+    pthread_create(&thread, &attributes, work, NULL);
+    pthread_join(thread, NULL);
+    return 0;
+}
+"#;
+    let project = Project::new(&[("tools.py", TOOLS), ("host.c", host)]);
+    project.build(&["build", "--lib", "static", "tools.py"]);
+    project.tool(
+        "cc",
+        &["-o", "host", "host.c", "-L.", "-ltools", "-lm", "-lpthread"],
+    );
+    let run = project.run("host", &[]);
+    // The exception leaves the export, which ends the process with `abort` (EXC-05), not
+    // with the segmentation fault of a stack that ran out.
+    assert_eq!(run.status.signal(), Some(6), "{}", text(&run.stderr));
+    assert!(
+        text(&run.stderr).ends_with("RecursionError: maximum recursion depth exceeded\n"),
+        "{}",
+        text(&run.stderr)
+    );
+}
+
+#[test]
 fn ffi_05_a_name_a_library_cannot_export_is_e0429_in_check_and_build() {
     let source = "def label(n: int) -> str:\n    return str(n)\n\n\n__all__ = ['label']\n";
     let project = Project::new(&[("tools.py", source)]);

@@ -141,8 +141,11 @@ returns other values needs an export of these types that calls it. An
 `int` result outside `int64_t` raises `OverflowError`, which ends the
 process as any exception does. The runtime is not safe to call from two
 threads at once, so a program calls a library's exports from one thread at
-a time; each call may come from a different thread. Each library holds its
-own copy of the runtime, so a program may link several TyPy libraries.
+a time; each call may come from a different thread. A recursion too deep
+for the calling thread's stack raises `RecursionError`, also on a thread the
+program created with a stack smaller than the main thread's. Each library
+holds its own copy of the runtime, so a program may link several TyPy
+libraries.
 
 An export may not take a name the runtime calls in the C library, such as
 `read`, `free` or `sqrt`, or one C keeps for itself, such as `__init`; the
