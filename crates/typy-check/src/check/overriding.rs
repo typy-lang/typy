@@ -62,6 +62,23 @@ impl Override<'_> {
                     self.name, own.name, self.base_name, base.name
                 )));
             }
+            // A call through the base passes the argument as the base takes it, and CPython
+            // gives it to the override as it was passed.
+            let positional =
+                |kind| matches!(kind, ParameterKind::PositionalOnly | ParameterKind::Normal);
+            let keyword = |kind| matches!(kind, ParameterKind::Normal | ParameterKind::KeywordOnly);
+            if (positional(base.kind) && !positional(own.kind))
+                || (keyword(base.kind) && !keyword(own.kind))
+            {
+                return Err(self.mismatch(format!(
+                    "`{}` takes `{}` {}, where `{}`, which it overrides, takes it {}",
+                    self.name,
+                    own.name,
+                    passed(own.kind),
+                    self.base_name,
+                    passed(base.kind)
+                )));
+            }
             if !base.ty.is_assignable_to(&own.ty) {
                 return Err(self.mismatch(format!(
                     "`{}` takes {} for `{}`, which does not accept the {} `{}` takes",
@@ -119,6 +136,15 @@ impl Override<'_> {
 }
 
 /// Returns a parameter as its definition writes it: `*args`, `**kwargs` or its name.
+/// Returns how a parameter of `kind` takes its argument.
+const fn passed(kind: ParameterKind) -> &'static str {
+    match kind {
+        ParameterKind::PositionalOnly => "by position only",
+        ParameterKind::KeywordOnly => "by keyword only",
+        _ => "by position or by keyword",
+    }
+}
+
 fn written(parameter: &crate::typed::SignatureParameter) -> String {
     let stars = match parameter.kind {
         ParameterKind::VarPositional => "*",

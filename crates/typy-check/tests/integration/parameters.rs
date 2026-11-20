@@ -5,6 +5,8 @@ use camino::Utf8PathBuf;
 use typy_check::TypeChecker;
 use typy_source::{Project, ProjectSettings};
 
+use crate::common::{app, messages};
+
 /// Returns the message and the rule of each diagnostic of the one-module program `source`,
 /// or nothing when it is accepted.
 fn diagnostics(source: &str) -> Vec<(String, String)> {
@@ -103,4 +105,52 @@ fn fun_03_a_function_of_ordinary_parameters_counts_every_one() {
             "TYP-01".to_owned()
         )]
     );
+}
+
+#[test]
+fn cls_04_an_override_takes_each_parameter_every_way_its_base_does() {
+    let base = "class Base:\n    def scale(self, {base}) -> int:\n        return 1\n\n\n\
+                class Derived(Base):\n    def scale(self, {own}) -> int:\n        return 2\n";
+    let program = |base_parameters: &str, own: &str| {
+        base.replace("{base}", base_parameters)
+            .replace("{own}", own)
+    };
+    // A call through `Base` passes the argument as `Base` takes it, which CPython then gives
+    // to `Derived.scale`.
+    for (base_parameters, own, message) in [
+        (
+            "factor: int",
+            "*, factor: int",
+            "`Derived.scale` takes `factor` by keyword only, where `Base.scale`, which it \
+             overrides, takes it by position or by keyword",
+        ),
+        (
+            "factor: int",
+            "factor: int, /",
+            "`Derived.scale` takes `factor` by position only, where `Base.scale`, which it \
+             overrides, takes it by position or by keyword",
+        ),
+        (
+            "*, factor: int",
+            "factor: int, /",
+            "`Derived.scale` takes `factor` by position only, where `Base.scale`, which it \
+             overrides, takes it by keyword only",
+        ),
+    ] {
+        let source = program(base_parameters, own);
+        let found = messages(&source);
+        assert!(
+            found
+                .iter()
+                .any(|(code, text, rule)| code == "E0404" && text == message && rule == "CLS-04"),
+            "{source}: {found:?}"
+        );
+    }
+    for (base_parameters, own) in [
+        ("factor: int, /", "factor: int"),
+        ("*, factor: int", "factor: int"),
+    ] {
+        let source = program(base_parameters, own);
+        assert_eq!(app(&source), Vec::<String>::new(), "{source}");
+    }
 }

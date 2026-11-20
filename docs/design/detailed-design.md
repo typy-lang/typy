@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.59 |
+| Version | 2.60 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -1637,7 +1637,8 @@ declares, E0202 otherwise and when the base assigns it without declaring it
 (ADR-0021). A method is looked up in the class, then in each base. A method
 that a base defines too is checked against it by `check::overriding::Override`,
 except `__init__`: the same number of parameters with the same names, each of a
-type that accepts the base's and with a default where the base has one, and a
+type that accepts the base's, taken by position and by keyword wherever the base
+takes it so, and with a default where the base has one, and a
 result the base's result type accepts, E0404 otherwise (CLS-04, CLS-13). A
 call through the method table that leaves out a parameter whose default an
 override changes takes the default of the object's class: lowering tests the

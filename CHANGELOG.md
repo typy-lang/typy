@@ -15,6 +15,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `x += y` where the class of `x` has an `__iadd__` whose parameter does
   not take `y` is refused with E0404. TyPy called `__add__` instead, where
   CPython calls `__iadd__` whatever `y` is (CLS-20).
+- An override that takes a parameter by keyword only, or by position only,
+  where its base method takes it by position or by keyword is refused with
+  E0404. TyPy ran a call through the base that CPython refuses with
+  `TypeError` (CLS-04).
 
 ## [0.9.0] - 2026-11-20
 

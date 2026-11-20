@@ -127,7 +127,9 @@ print([shape.describe() for shape in shapes])
 
 An override takes the base method's parameters in the same order and
 with the same names. Each parameter accepts the type the base's takes,
-and the result is one the base's result type accepts, as type checkers
+by position and by keyword wherever the base's does, since CPython gives
+the override the arguments a call through the base passes, and the
+result is one the base's result type accepts, as type checkers
 require; a mismatch is E0404. A parameter with a default in the base
 has one in the override, which may differ: a call that leaves it out
 takes the default of the object's class, as in CPython. An override may
