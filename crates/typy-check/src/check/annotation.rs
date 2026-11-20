@@ -844,7 +844,8 @@ fn named_type(
                     DiagnosticCode::error(205),
                     span,
                     format!(
-                        "`{id}` is not a type TyPy 0.1 knows; use int, float, bool, str or None"
+                        "`{id}` names no type: it is not a built-in type, nor a class or a \
+                         type alias the program defines or imports"
                     ),
                 )
                 .with_rule(RuleId::STD_04),

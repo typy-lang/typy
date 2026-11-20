@@ -129,14 +129,29 @@ impl BodyChecker<'_> {
             other => other,
         };
         if let Some(keyword) = keywords.first() {
+            // `min(a, b, key=f)` and `max` were taken above; any other keyword is CPython's
+            // `TypeError`, with its message.
+            let name = builtin.name();
+            let message = match (
+                builtin,
+                keyword.name.as_ref().map(|name| name.name.as_str()),
+            ) {
+                (Builtin::Min | Builtin::Max, Some("default")) => format!(
+                    "Cannot specify a default for {name}() with multiple positional arguments"
+                ),
+                (Builtin::Min | Builtin::Max, Some("key")) => {
+                    format!("{name} expected at least 1 argument, got {}", values.len())
+                }
+                (Builtin::Min | Builtin::Max, Some(other)) => {
+                    format!("{name}() got an unexpected keyword argument '{other}'")
+                }
+                _ => format!("{name}() takes no keyword arguments"),
+            };
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(404),
                     keyword.span,
-                    format!(
-                        "`{}` takes no keyword arguments in TyPy 0.1",
-                        builtin.name()
-                    ),
+                    format!("{message}: CPython raises `TypeError`"),
                 )
                 .with_rule(RuleId::LIB_01),
                 span,
@@ -497,7 +512,7 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(404),
                 span,
                 format!(
-                    "`{}` takes {expected} arguments in TyPy 0.1, and {given} are given",
+                    "`{}` takes {expected} arguments, and {given} are given",
                     builtin.name()
                 ),
             )

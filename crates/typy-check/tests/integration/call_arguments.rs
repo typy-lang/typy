@@ -30,12 +30,23 @@ fn a_call_its_callee_does_not_take_is_refused_with_the_reason() {
         (
             "print(min(key=lambda x: x))\n",
             "E0404",
-            "`min` takes no keyword arguments in TyPy 0.1",
+            "min expected at least 1 argument, got 0: CPython raises `TypeError`",
         ),
         (
             "print(max(1, 2, default=3))\n",
             "E0404",
-            "`max` takes no keyword arguments in TyPy 0.1",
+            "Cannot specify a default for max() with multiple positional arguments: CPython \
+            raises `TypeError`",
+        ),
+        (
+            "print(min(1, 2, foo=3))\n",
+            "E0404",
+            "min() got an unexpected keyword argument 'foo': CPython raises `TypeError`",
+        ),
+        (
+            "print(abs(x=1), len(obj=[1]))\n",
+            "E0404",
+            "abs() takes no keyword arguments: CPython raises `TypeError`",
         ),
         (
             "print(min(1, 2, key=abs))\n",

@@ -143,7 +143,7 @@ fn calls_sys_exit_and_input_refuse_give_their_messages() {
         ),
         (
             "print(input(\"a\", \"b\"))\n",
-            "`input` takes 0 to 1 arguments in TyPy 0.1, and 2 are given",
+            "`input` takes 0 to 1 arguments, and 2 are given",
         ),
     ] {
         assert_eq!(

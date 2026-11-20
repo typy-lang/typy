@@ -8,6 +8,16 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- A keyword argument a builtin does not take is refused with CPython's
+  message, such as "Cannot specify a default for max() with multiple
+  positional arguments" or "abs() takes no keyword arguments", where the
+  message said the builtin "takes no keyword arguments in TyPy 0.1" (LIB-01).
+- A name `typing`, `collections.abc` or `dataclasses` does not give is
+  refused with the names that module gives; the message listed the names of
+  `typing` for each and left out `Generator` and `Callable` (LIB-17).
+- The messages for a builtin called with too many or too few arguments, and
+  for an annotation that names no type, no longer name TyPy 0.1; the latter
+  says the name is not a built-in type, a class or a type alias (STD-04).
 - Generics and `ctypes` features planned for 1.0 are now planned for 0.13
   (GEN-06, GEN-11 to GEN-17, FFI-06, FFI-07, FFI-09 to FFI-11), and the
   class rules planned for 1.0 for 0.14 (CLS-28 to CLS-37). The E0201

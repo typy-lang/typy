@@ -361,9 +361,9 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
     .with_rule(RuleId::LIB_08)
 }
 
-/// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy does not
-/// give: `Any` and `cast` are refused (TYP-10), `NamedTuple` and the abstract collections
-/// are planned for 0.9, and any other name is not given (LIB-17).
+/// Returns the error for a name of `typing`, `collections.abc`, `types` or `dataclasses` that
+/// TyPy does not give: `Any` and `cast` are refused (TYP-10), `NamedTuple` and the abstract
+/// collections are planned for 0.10, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -418,11 +418,59 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         DiagnosticCode::error(425),
         alias.name.span,
         format!(
-            "TyPy's `{module}` gives `Iterator`, `Iterable`, `Optional`, `Union`, `List`, \
-             `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar` and `Protocol`, not `{name}`"
+            "TyPy's `{module}` gives {}, not `{name}`",
+            listed(given_names(module.as_str()))
         ),
     )
     .with_rule(RuleId::LIB_17)
+}
+
+/// Returns the names TyPy gives of `typing`, `collections.abc` or `dataclasses`, each of
+/// which `annotation_name` resolves.
+fn given_names(module: &str) -> &'static [&'static str] {
+    match module {
+        "collections.abc" => &["Iterator", "Iterable", "Generator", "Callable"],
+        "dataclasses" => &["dataclass", "field"],
+        _ => &[
+            "Iterator",
+            "Iterable",
+            "Generator",
+            "Callable",
+            "Optional",
+            "Union",
+            "List",
+            "Dict",
+            "Set",
+            "Tuple",
+            "Type",
+            "Final",
+            "ClassVar",
+            "Protocol",
+        ],
+    }
+}
+
+/// Returns two or more names written as code and joined as a sentence lists them: `a`, `b`
+/// and `c`.
+fn listed(names: &[&str]) -> String {
+    let quoted: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
+    let (rest, last) = quoted.split_at(quoted.len() - 1);
+    format!("{} and {}", rest.join(", "), last.concat())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn each_name_a_refusal_lists_is_one_the_module_gives() {
+        for module in ["typing", "collections.abc", "dataclasses"] {
+            for name in super::given_names(module) {
+                assert!(
+                    crate::check::annotation_name(module, name).is_some(),
+                    "{module}.{name}"
+                );
+            }
+        }
+    }
 }
 
 /// Returns the error for a relative import that names no module, with CPython's message.

@@ -97,9 +97,20 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
         (
             "from collections.abc import Hashable\n",
             "E0425",
-            "TyPy's `collections.abc` gives `Iterator`, `Iterable`, `Optional`, `Union`, \
-            `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar` and `Protocol`, \
-            not `Hashable`",
+            "TyPy's `collections.abc` gives `Iterator`, `Iterable`, `Generator` and \
+            `Callable`, not `Hashable`",
+        ),
+        (
+            "from typing import Hashable\n",
+            "E0425",
+            "TyPy's `typing` gives `Iterator`, `Iterable`, `Generator`, `Callable`, \
+            `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar` \
+            and `Protocol`, not `Hashable`",
+        ),
+        (
+            "from dataclasses import asdict\n",
+            "E0425",
+            "TyPy's `dataclasses` gives `dataclass` and `field`, not `asdict`",
         ),
     ];
     for (source, code, message) in refused {
