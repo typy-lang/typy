@@ -6,6 +6,16 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
+  of its files, with their SHA-256, and of the crates and libraries the
+  compiler holds, with their licences; a copy is published beside the
+  archive (NFR-25).
+- Each release archive is attested with its build provenance, signed
+  through Sigstore without a key the project keeps; `gh attestation verify
+  ARCHIVE --repo typy-lang/typy` checks it (NFR-26).
+
 ### Changed
 
 - A keyword argument a builtin does not take is refused with CPython's

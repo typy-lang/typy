@@ -46,6 +46,8 @@ cargo about generate --frozen -c about.toml -m crates/typy-cli/Cargo.toml about.
 install -m 644 "${LLVM_SYS_231_PREFIX}/LICENSE.TXT" "${licenses}/llvm.txt"
 install -m 644 "$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html" \
     "${licenses}/rust-library.html"
+# The bill of materials lists every file above, so it is written last (NFR-25).
+python3 scripts/write-sbom.py "${stage}" "${version}"
 
 epoch="$(git log -1 --format=%ct)"
 gnu_tar=tar
@@ -60,6 +62,8 @@ else
     (cd dist && shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256")
 fi
 
+python3 scripts/check-sbom.py "dist/${name}.tar.gz"
+install -m 644 "${stage}/sbom.cdx.json" "dist/${name}.cdx.json"
 check="$(mktemp -d)"
 trap 'rm -rf "${check}"' EXIT
 tar -xzf "dist/${name}.tar.gz" -C "${check}"

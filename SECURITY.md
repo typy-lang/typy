@@ -29,5 +29,11 @@ fix or a plan with a date within 30 days.
 - Programs built by TyPy check every index, use integers that do not
   overflow, and free memory exactly once. Calls into C through `ctypes` are
   outside these guarantees, as for any C code.
+- Each release archive is attested with its build provenance through
+  Sigstore, by the release workflow's OIDC identity, so the project keeps
+  no signing key; `gh attestation verify ARCHIVE --repo typy-lang/typy`
+  checks one. Each archive holds a CycloneDX bill of materials,
+  `sbom.cdx.json`, listing its files with their SHA-256 and the crates and
+  libraries the compiler holds with their licences.
 - The full threat model is section 7.7 of the
   [architecture](docs/architecture/architecture.md).

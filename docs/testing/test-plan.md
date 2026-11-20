@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.21 |
+| Version | 1.22 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -575,8 +575,8 @@ that the specification does not define.
 | NFR-22 | 0.12 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 5 times |
 | NFR-23 | 0.15 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 3 times |
 | NFR-24 | 0.11 | Corpus | the corpus of `mypy --strict` modules, pinned by commit, checked, built and run against CPython in the release workflow, its share compared with the last release's |
-| NFR-25 | 0.10 | Release check | the release workflow writes the bill of materials of each archive and fails when a crate, a library or a file of the archive is missing from it |
-| NFR-26 | 0.10 | Release check | the release workflow signs each archive with GitHub's OIDC identity, attests its provenance, and verifies both with `gh attestation verify` before it publishes |
+| NFR-25 | 0.10 | Release check | `scripts/check-sbom.py`, run by `make dist` on each host: fails when the archive's `sbom.cdx.json` misses a file of the archive or lists it with another SHA-256, misses a crate `cargo tree` gives for the compiler or the runtime, or misses LLVM or the Rust standard library |
+| NFR-26 | 0.10 | Release check | the publish job of `release.yml` attests each archive with `actions/attest-build-provenance` and runs `gh attestation verify` on each before it creates the release, and again on the x86-64 archive it downloads back |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

@@ -36,6 +36,18 @@ export PATH="$PWD/$archive/bin:$PATH"
 typy --version
 ```
 
+Each archive carries an attestation of where and how it was built, signed
+without a key the project keeps. With the GitHub command line you check
+it before you unpack the archive:
+
+```sh
+gh attestation verify "$archive.tar.gz" --repo typy-lang/typy
+```
+
+The archive's `sbom.cdx.json`, also published beside it, is its bill of
+materials: each file with its SHA-256, and each crate and library the
+compiler holds with its licence.
+
 On a Mac the archive is `typy-0.9.0-aarch64-apple-darwin.tar.gz`, which
 [Using TyPy on macOS](../using/macos.md) installs, clearing the quarantine
 a browser download carries.
