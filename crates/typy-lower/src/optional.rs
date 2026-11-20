@@ -56,11 +56,33 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns `value` as a variable of type `ty` holds it: a value of the base of an optional
-    /// `ty` is wrapped, as a `for` loop binds an item to a `T | None` variable; any other value
-    /// is returned as it is. The result takes over the value's reference.
+    /// `ty` is wrapped, as a `for` loop binds an item to a `T | None` variable, and an instance
+    /// of a class derived from the base is held as the base first; any other value is returned
+    /// as it is. The result takes over the value's reference.
     pub(crate) fn held_as(&mut self, value: Lowered, ty: TyirType, span: Span) -> Lowered {
-        if value.ty == ty || !matches!(ty, TyirType::Optional(_)) || self.base_type(ty) != value.ty
-        {
+        if value.ty == ty || !matches!(ty, TyirType::Optional(_)) {
+            return value;
+        }
+        let base = self.base_type(ty);
+        // The checker lets an instance of a derived class fill a `Base | None` parameter
+        // from a tuple `*` unpacks (EXP-17), so it is held as the base before it is wrapped.
+        let value = match (value.ty, base) {
+            (TyirType::Object(from), TyirType::Object(to))
+                if from != to && from.class_index().is_some() && to.class_index().is_some() =>
+            {
+                let upcast = self.builder.push_value(
+                    Operation::Upcast {
+                        value: value.value,
+                        ty: base,
+                    },
+                    base,
+                    span,
+                );
+                self.transfer(value, upcast, base)
+            }
+            _ => value,
+        };
+        if value.ty != base {
             return value;
         }
         let wrapped = self.builder.push_value(
