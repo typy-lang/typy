@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.102 |
+| Version | 1.103 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -156,6 +156,8 @@ or later.
 | CLI-15 | `typy` shall run on macOS 11 or later on Apple silicon and build executables and libraries for `aarch64-apple-darwin` that run on macOS 11 or later. | M | 0.7 |
 | CLI-16 | A library built for macOS shall be named as macOS names libraries: `libNAME.X.dylib`, whose install name is that file name and whose compatibility and current versions are its release, with a link `libNAME.dylib`, and `libNAME.a`. | S | 0.7 |
 | CLI-17 | A development build shall compile each module of the standard library TyPy provides once for each release, target and mode, keep it in the user's cache directory, and link it from there in later builds (ADR-0016). | C | 1.0 |
+| CLI-18 | `typy` shall run on Windows on x86-64 and build executables and libraries for `x86_64-pc-windows-msvc` that run on Windows 10 or later. | S | 1.0 |
+| CLI-19 | `typy` shall build programs for WebAssembly with WASI 0.2, `wasm32-wasip2`, on each host it runs on. | C | 1.0 |
 
 TyPy has no formatter of its own. TyPy source is Python, so a standard
 formatter applies; Ruff's formatter is the project's recommendation.
@@ -534,6 +536,12 @@ cache, unless a row says otherwise.
 | NFR-18 | An instance of a class shall take at most its 16-byte prefix and the sizes of its attributes, each tuple attribute at its own size, rounded up to a multiple of 8 bytes. | 0.8 | Layout test of each descriptor's size and offsets against LLVM's |
 | NFR-19 | A value of type `Callable[[A, ...], R]` shall hold only a function that takes arguments of the types `A, ...` and returns an `R`, so a call through it passes and returns the values its code expects. | 0.8 | Checker tests that reject each assignment, argument and return that would break it; the sanitizer run of every conformance test |
 | NFR-20 | A generator object shall be one allocation that holds its frame and its position, with no machine stack of its own, and a step of a generator shall allocate nothing but the values it yields. | 0.9 | `typy-codegen` test of a generator object's layout; a runtime test that counts the allocations of a loop over a generator |
+| NFR-21 | No program of the benchmark suite built with `--release` shall take longer to run than CPython 3.15 takes to run it. | 0.11 | Weekly benchmark run |
+| NFR-22 | The geometric mean run time of the benchmark suite in `--release` mode shall be within 5 times that of the equivalent C programs. | 0.12 | Weekly benchmark run |
+| NFR-23 | The geometric mean run time of the benchmark suite in `--release` mode shall be within 3 times that of the equivalent C programs. | 0.15 | Weekly benchmark run |
+| NFR-24 | Each release shall report the share of a fixed corpus of Python modules that pass `mypy --strict` which TyPy compiles unchanged and runs with CPython's output, and the share shall not fall from one release to the next. | 0.11 | Corpus run in the release workflow |
+| NFR-25 | Each release archive shall come with a software bill of materials, in CycloneDX or SPDX form, that lists every component the archive holds with its version and licence. | 0.10 | Release workflow check |
+| NFR-26 | Each release archive shall be signed with Sigstore's keyless signing and carry SLSA build provenance from the release workflow, so a user verifies it without a key the project keeps. | 0.10 | `gh attestation verify` in the release workflow |
 
 ## 5. Release plan
 
@@ -587,7 +595,11 @@ TyPy rejects them (STD-04):
 ## 7. Open issues
 
 A new question gets the next unused issue number, after the last of the
-resolved issues below. No question is open.
+resolved issues below.
+
+| ID | Question | Raised |
+| --- | --- | --- |
+| OI-31 | Which concurrency model does TyPy take, and does safe code promise freedom from data races? The answer decides the object header and how reference counts change, which ADR-0074 fixes at 1.0, so it is settled before 1.0 although threads come after it: CPython's free-threaded build uses biased reference counting, and Swift 6 and Rust check data races when a program compiles. A research note measures three models on TyPy's benchmarks, isolated workers as in Python 3.14's `concurrent.interpreters` (PEP 734), free threads as in CPython's free-threaded build (PEP 703), and sharing that the checker proves safe, and the question is settled in the 0.11 planning. | 2026-11-20 |
 
 ## 8. Resolved issues
 

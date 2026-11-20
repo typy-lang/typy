@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.16 |
+| Version | 1.17 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -288,6 +288,8 @@ that the specification does not define.
 | CLI-15 | 0.7 | UT, E2E | `crates/typy-codegen/src/target.rs` for `aarch64-apple-darwin`, its LLVM triple and CPU; `crates/typy-codegen/tests/codegen.rs` for a deterministic Mach-O object of every test program; the `macos-15` CI job runs every unit, integration and end-to-end test natively on macOS, and builds and runs a program from the macOS release archive |
 | CLI-16 | 0.7 | UT, E2E | `crates/typy-build/src/library_layout.rs` for the macOS names, install name and versions; `crates/typy-build/src/mach_o.rs` for the arguments of Apple's linker and the exports list; `crates/typy-cli/tests/end_to_end/library.rs` on the `macos-15` job, linking a C host with each library |
 | CLI-17 | 1.0 | IT | a `typy-driver` test that builds two programs that import `math`, in two projects, and finds that the second build compiles no module of the standard library |
+| CLI-18 | 1.0 | UT, E2E | a Windows CI job that runs every unit, integration and conformance test with `x86_64-pc-windows-msvc`, and a test of the arguments of the MSVC linker |
+| CLI-19 | 1.0 | E2E | the conformance programs that need no file or process, built for `wasm32-wasip2` and run under a WASI runtime, each with CPython's output |
 | CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request.rs` and `library_kind.rs` for the output's name; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
 | CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version.rs` for the release of a version; `crates/typy-source/src/settings_file.rs` for `version`; `crates/typy-check/tests/integration/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout.rs` for each layout; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-10 |
@@ -567,6 +569,12 @@ that the specification does not define.
 | NFR-18 | 0.8 | UT | `typy-codegen` layout test of instances that mix every kind of attribute |
 | NFR-19 | 0.8 | UT, IT | `typy-check` tests that reject a function, a `lambda` or a method where its parameter or result types do not fit the expected `Callable`; the sanitizer run of every conformance test of FUN-04, FUN-05, SMT-09 and EXP-14 |
 | NFR-20 | 0.9 | UT | `typy-codegen` test of a generator object's layout; a runtime test that counts the allocations of a loop over a generator |
+| NFR-21 | 0.11 | Benchmark | `make bench-compare` over `tests/bench/programs`, run weekly: the median of each program against CPython 3.15's |
+| NFR-22 | 0.12 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 5 times |
+| NFR-23 | 0.15 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 3 times |
+| NFR-24 | 0.11 | Corpus | the corpus of `mypy --strict` modules, pinned by commit, checked, built and run against CPython in the release workflow, its share compared with the last release's |
+| NFR-25 | 0.10 | Release check | the release workflow writes the bill of materials of each archive and fails when a crate, a library or a file of the archive is missing from it |
+| NFR-26 | 0.10 | Release check | the release workflow signs each archive with GitHub's OIDC identity, attests its provenance, and verifies both with `gh attestation verify` before it publishes |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |
