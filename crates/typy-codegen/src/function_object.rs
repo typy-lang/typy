@@ -15,7 +15,6 @@ use crate::abi::{function_type, value_type};
 use crate::error::CodegenError;
 use crate::function::{FunctionEmitter, Shared};
 use crate::layout::{BUILTIN_FUNCTION_TYPE_ID, FUNCTION_TYPE_ID, IMMORTAL};
-use crate::statics::Statics;
 
 /// The field of the object that holds the descriptor: after the header, where an instance
 /// keeps its class (ADR-0012).
@@ -68,11 +67,11 @@ fn bound_type(context: &Context) -> StructType<'_> {
 }
 
 /// Returns the layout of a descriptor: the `str` objects of the function's name and qualified
-/// name, the address of its code, and the descriptor of its captures, null for none
-/// (detailed design section 10.2).
+/// name, the address of its code, the descriptor of its captures, null for none, and the
+/// descriptor of the function it stands for (detailed design section 10.2, ADR-0076).
 fn descriptor_type(context: &Context) -> StructType<'_> {
     let pointer = context.ptr_type(AddressSpace::default()).into();
-    context.struct_type(&[pointer, pointer, pointer, pointer], false)
+    context.struct_type(&[pointer, pointer, pointer, pointer, pointer], false)
 }
 
 /// Returns the immortal function object of `id`, emitting it with its descriptor and its thunk
@@ -168,23 +167,38 @@ fn descriptor<'ctx>(
         .functions
         .get(id.0 as usize)
         .ok_or_else(|| CodegenError(format!("fn{} does not exist", id.0)))?;
+    let (builtin, own_name) = (function.builtin, function.name.clone());
     let name = shared.statics.string(shared.module, &function.name);
     let qualified_name = shared
         .statics
         .string(shared.module, &function.qualified_name);
     let captures =
         captures.unwrap_or_else(|| context.ptr_type(AddressSpace::default()).const_null());
+    let global = shared.module.add_global(
+        descriptor_type(context),
+        None,
+        &format!("typy.{kind}.descriptor.{}", id.0),
+    );
+    let own = global.as_pointer_value();
+    // The hidden functions of one built-in stand for it, so they share one identity; any
+    // other function stands for itself (ADR-0076).
+    let identity = if builtin {
+        shared.statics.builtin_identity(&own_name, own)
+    } else {
+        own
+    };
     let descriptor = descriptor_type(context).const_named_struct(&[
         name.into(),
         qualified_name.into(),
         code.as_global_value().as_pointer_value().into(),
         captures.into(),
+        identity.into(),
     ]);
-    Ok(Statics::global(
-        shared.module,
-        descriptor.into(),
-        &format!("typy.{kind}.descriptor.{}", id.0),
-    ))
+    global.set_initializer(&descriptor);
+    global.set_constant(true);
+    global.set_linkage(Linkage::Private);
+    global.set_unnamed_addr(true);
+    Ok(own)
 }
 
 /// Emits the code a call through a function object of `id` runs: it takes the object, then

@@ -298,6 +298,9 @@ pub enum RuntimeFunction {
     /// Whether two objects of any types are equal, through the `equal` slot of the class
     /// that decides, as a union of objects compares them (GEN-10).
     ObjectsEqual,
+    /// Whether two function values stand for one function: the same object, or two objects
+    /// of functions that capture nothing whose descriptors name one identity (ADR-0076).
+    SameFunction,
     /// An `int` as a `double` for a `c_float` or `c_double` argument at the position the
     /// second argument gives, or `ctypes.ArgumentError` for one too large (FFI-03).
     CtypesFloatArgument,
@@ -501,7 +504,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 375] = [
+    pub const ALL: [Self; 376] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -752,6 +755,7 @@ impl RuntimeFunction {
         Self::SliceEqual,
         Self::ObjectHasTypeId,
         Self::ObjectsEqual,
+        Self::SameFunction,
         Self::CtypesFloatArgument,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
@@ -986,7 +990,7 @@ impl RuntimeFunction {
             Self::SliceIndex => signature(&[TyirType::SLICE, Int, Int], Int, true),
             Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
             Self::ObjectHasTypeId => signature(&[Bits, Int], Bool, false),
-            Self::ObjectsEqual => signature(&[Bits, Bits], Bool, false),
+            Self::ObjectsEqual | Self::SameFunction => signature(&[Bits, Bits], Bool, false),
             Self::CtypesFloatArgument => signature(&[Int, Int], Float, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked | Self::FreeVariableUnbound => {
@@ -1558,6 +1562,7 @@ impl RuntimeFunction {
             Self::SliceEqual => "slice_equal",
             Self::ObjectHasTypeId => "object_has_type_id",
             Self::ObjectsEqual => "objects_equal",
+            Self::SameFunction => "same_function",
             Self::CtypesFloatArgument => "ctypes_float_argument",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",

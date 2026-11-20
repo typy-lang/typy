@@ -165,6 +165,14 @@ impl FunctionLowerer<'_> {
             (TyirType::Bool | BOOL_OR_NONE, TyirType::Bool | BOOL_OR_NONE) => {
                 self.same_singleton(left, right, span)
             }
+            // Two function values are one function when they stand for it, as `len` filling
+            // two `Callable` types does (ADR-0076).
+            (TyirType::FUNCTION, TyirType::FUNCTION) => {
+                let left = self.bits(Self::borrowed(left.value, left.ty), span);
+                let right = self.bits(Self::borrowed(right.value, right.ty), span);
+                self.call_runtime(RuntimeFunction::SameFunction, vec![left, right], span)
+                    .value
+            }
             (
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),

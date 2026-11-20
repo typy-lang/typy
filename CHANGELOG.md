@@ -13,7 +13,9 @@ All notable changes to TyPy are recorded here. The format follows
   Callable[[str], int] = len`, written `<built-in function len>`, of the
   type `builtin_function_or_method`. `chr` and `ord` are values with no
   `Callable` expected; any other built-in function needs one, E0203
-  (FUN-08).
+  (FUN-08). Two values of one built-in are one function, also where they
+  fill different `Callable` types: `is`, `==` and `hash` treat them as one,
+  as CPython does (ADR-0076).
 - Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
   of its files, with their SHA-256, and of the crates and libraries the
   compiler holds, with their licences; a copy is published beside the

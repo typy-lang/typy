@@ -11,7 +11,9 @@ use crate::string::{StrBuilder, StrObject};
 use crate::type_object::{OBJECT, TypeObject};
 
 /// What the compiler emits once for each function used as a value: its names, the address of
-/// the code a call through the value runs, and the descriptor of its captures, null for none.
+/// the code a call through the value runs, the descriptor of its captures, null for none, and
+/// the descriptor of the function it stands for, its own address for a function of the
+/// program and one shared address for the hidden functions of one built-in (ADR-0076).
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct FunctionDescriptor {
@@ -19,6 +21,7 @@ pub(crate) struct FunctionDescriptor {
     pub(crate) qualified_name: *const StrObject,
     pub(crate) code: *const core::ffi::c_void,
     pub(crate) captures: *const crate::tuple::TupleType,
+    pub(crate) identity: *const FunctionDescriptor,
 }
 
 /// A function object: the header, then its descriptor, where an instance keeps its class.
@@ -79,16 +82,90 @@ pub(crate) unsafe fn destroy(function: *mut FunctionObject) {
 /// The type `function`.
 #[unsafe(export_name = "typy_rt_type_function")]
 pub(crate) static FUNCTION: TypeObject = TypeObject {
-    hash: Some(crate::instance::typy_rt_identity_hash),
+    hash: Some(function_hash),
+    equal: Some(function_equal),
     repr: Some(function_repr),
     ..TypeObject::new("function", &raw const OBJECT)
 };
+
+/// Returns the identity of the function `object` stands for, when it is the immortal object
+/// of a function that captures nothing; a nested function's object, made at each `def`, is a
+/// function of its own (ADR-0076).
+///
+/// # Safety
+///
+/// `object` points to a live object with a valid header.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "a function object is aligned for its pointers"
+)]
+unsafe fn identity_of(object: *mut ObjectHeader) -> Option<*const FunctionDescriptor> {
+    // SAFETY: the caller's guarantee; the type ID says the object is a function object,
+    // whose descriptor is an immortal static.
+    unsafe {
+        let type_id = (*object).type_id;
+        if type_id != crate::header::FUNCTION_TYPE_ID
+            && type_id != crate::header::BUILTIN_FUNCTION_TYPE_ID
+        {
+            return None;
+        }
+        let descriptor = (*object.cast::<FunctionObject>()).descriptor;
+        (*descriptor)
+            .captures
+            .is_null()
+            .then(|| (*descriptor).identity)
+    }
+}
+
+/// Returns true when the function values `left` and `right` stand for one function: the same
+/// object, or two that name one identity, as `len` filling two `Callable` types does
+/// (ADR-0076).
+///
+/// # Safety
+///
+/// `left` and `right` point to live objects with valid headers.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_same_function(
+    left: *mut ObjectHeader,
+    right: *mut ObjectHeader,
+) -> bool {
+    if core::ptr::eq(left, right) {
+        return true;
+    }
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        match (identity_of(left), identity_of(right)) {
+            (Some(left), Some(right)) => core::ptr::eq(left, right),
+            _ => false,
+        }
+    }
+}
+
+/// Returns true when `right` stands for the function `left` stands for.
+unsafe extern "C" fn function_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
+    // SAFETY: the slot is called with two live objects.
+    unsafe { typy_rt_same_function(left, right) }
+}
+
+/// Returns the hash of a function value: that of the identity it stands for, so values that
+/// compare equal hash alike, or of the object for a nested function's.
+unsafe extern "C" fn function_hash(object: *mut ObjectHeader) -> i64 {
+    // SAFETY: the slot is called with a live object, and the identity is an immortal
+    // descriptor whose address alone is hashed.
+    unsafe {
+        match identity_of(object) {
+            Some(identity) => crate::instance::typy_rt_identity_hash(identity.cast_mut().cast()),
+            None => crate::instance::typy_rt_identity_hash(object),
+        }
+    }
+}
 
 /// The type `builtin_function_or_method`, of a built-in function used as a value, whose
 /// object the compiler emits immortal (FUN-08, ADR-0077).
 #[unsafe(export_name = "typy_rt_type_builtin_function")]
 pub(crate) static BUILTIN_FUNCTION: TypeObject = TypeObject {
-    hash: Some(crate::instance::typy_rt_identity_hash),
+    hash: Some(function_hash),
+    equal: Some(function_equal),
     repr: Some(builtin_function_repr),
     ..TypeObject::new("builtin_function_or_method", &raw const OBJECT)
 };
@@ -167,6 +244,7 @@ mod tests {
             qualified_name,
             code: core::ptr::null(),
             captures: &raw const captures,
+            identity: core::ptr::null(),
         };
         let held = from_str("captured");
         // SAFETY: the descriptor, its layout and the strings live for the whole test.
@@ -197,6 +275,7 @@ mod tests {
             qualified_name,
             code: core::ptr::null(),
             captures: core::ptr::null(),
+            identity: core::ptr::null(),
         };
         let function = super::FunctionObject {
             header: crate::header::ObjectHeader {
@@ -221,6 +300,53 @@ mod tests {
     }
 
     #[test]
+    fn fun_08_function_values_are_one_function_when_they_name_one_identity() {
+        let (name, qualified_name) = (from_str("len"), from_str("len"));
+        let first = super::FunctionDescriptor {
+            name,
+            qualified_name,
+            code: core::ptr::null(),
+            captures: core::ptr::null(),
+            identity: core::ptr::null(),
+        };
+        let shared = &raw const first;
+        let second = super::FunctionDescriptor {
+            identity: shared,
+            ..first
+        };
+        let first = super::FunctionDescriptor {
+            identity: shared,
+            ..first
+        };
+        let object = |descriptor: &super::FunctionDescriptor| super::FunctionObject {
+            header: crate::header::ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: crate::header::BUILTIN_FUNCTION_TYPE_ID,
+            },
+            descriptor: core::ptr::from_ref(descriptor),
+        };
+        let (left, right) = (object(&first), object(&second));
+        let other_descriptor = super::FunctionDescriptor {
+            identity: core::ptr::null(),
+            ..first
+        };
+        let other = object(&other_descriptor);
+        // SAFETY: the objects, their descriptors and the strings live for the whole test.
+        unsafe {
+            let left = core::ptr::from_ref(&left).cast_mut().cast();
+            let right = core::ptr::from_ref(&right).cast_mut().cast();
+            let other = core::ptr::from_ref(&other).cast_mut().cast();
+            assert!(super::typy_rt_same_function(left, right));
+            assert!(super::function_equal(left, right));
+            assert_eq!(super::function_hash(left), super::function_hash(right));
+            assert!(!super::typy_rt_same_function(left, other));
+            for each in [name, qualified_name] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
+        }
+    }
+
+    #[test]
     fn fun_05_a_function_object_writes_its_qualified_name_and_address() {
         let (name, qualified_name) = (from_str("area"), from_str("Shape.area"));
         let descriptor = super::FunctionDescriptor {
@@ -228,6 +354,7 @@ mod tests {
             qualified_name,
             code: core::ptr::null(),
             captures: core::ptr::null(),
+            identity: core::ptr::null(),
         };
         let function = super::FunctionObject {
             header: crate::header::ObjectHeader {

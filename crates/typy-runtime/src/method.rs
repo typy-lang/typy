@@ -162,6 +162,7 @@ mod tests {
             qualified_name: names[1],
             code: core::ptr::without_provenance(code),
             captures: core::ptr::null(),
+            identity: core::ptr::null(),
         };
         let (first, second) = (descriptor(1), descriptor(2));
         let (left, right) = (from_str("left"), from_str("right"));

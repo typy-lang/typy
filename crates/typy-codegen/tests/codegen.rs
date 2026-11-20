@@ -256,7 +256,8 @@ fn fun_05_a_function_value_is_an_immortal_object_of_its_descriptor() {
     let (project, module) = compile(FUNCTION_VALUES);
     let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
     // The header is immortal and of the function type ID, then the descriptor: the name, the
-    // qualified name, the code and no captures. Only the object's address is its identity.
+    // qualified name, the code, no captures and its own address as the identity it stands
+    // for (ADR-0076).
     assert!(
         ir.contains(
             "@typy.function.0 = private constant { i32, i32, ptr } \
@@ -267,8 +268,8 @@ fn fun_05_a_function_value_is_an_immortal_object_of_its_descriptor() {
     assert!(
         ir.contains(
             "@typy.function.descriptor.0 = private unnamed_addr constant \
-             { ptr, ptr, ptr, ptr } { ptr @typy.str.1, ptr @typy.str.1, \
-             ptr @typy.thunk._TY8__main__6double, ptr null }"
+             { ptr, ptr, ptr, ptr, ptr } { ptr @typy.str.1, ptr @typy.str.1, \
+             ptr @typy.thunk._TY8__main__6double, ptr null, ptr @typy.function.descriptor.0 }"
         ),
         "{ir}"
     );
@@ -276,6 +277,37 @@ fn fun_05_a_function_value_is_an_immortal_object_of_its_descriptor() {
         ir.contains("call { i64, ptr } @_TY8__main__5apply(ptr @typy.function.1, i64 7)"),
         "{ir}"
     );
+}
+
+#[test]
+fn fun_08_the_hidden_functions_of_one_builtin_share_its_identity() {
+    let (project, module) = compile(
+        "from collections.abc import Callable\n\
+         measure: Callable[[str], int] = len\n\
+         count: Callable[[list[int]], int] = len\n\
+         print(measure is count)\n",
+    );
+    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let descriptors: Vec<&str> = ir
+        .lines()
+        .filter(|line| line.starts_with("@typy.function.descriptor."))
+        .collect();
+    assert_eq!(descriptors.len(), 2, "{ir}");
+    // The first descriptor of `len` names itself, and the second names the first.
+    let first = descriptors[0].split(' ').next().unwrap();
+    for descriptor in &descriptors {
+        assert!(
+            descriptor.contains(&format!("ptr null, ptr {first} }}")),
+            "{descriptor}"
+        );
+    }
+    // Each object is of the type ID of a built-in function.
+    assert_eq!(
+        ir.matches("{ i32 -1, i32 28, ptr @typy.function.descriptor.")
+            .count(),
+        2
+    );
+    assert!(ir.contains("call i8 @typy_rt_same_function("), "{ir}");
 }
 
 #[test]
@@ -352,7 +384,7 @@ fn fun_05_a_bound_method_chooses_its_classs_descriptor_and_its_thunk_reads_the_i
         assert!(
             ir.lines()
                 .any(|line| line.starts_with("@typy.method.descriptor.")
-                    && line.ends_with(&format!("ptr @typy.method_thunk.{symbol}, ptr null }}"))),
+                    && line.contains(&format!("ptr @typy.method_thunk.{symbol}, ptr null, "))),
             "{method}: {ir}"
         );
         let start = ir
@@ -407,8 +439,8 @@ fn fun_04_a_closure_comes_from_the_runtime_with_its_descriptor_and_the_layout_of
         .find(|line| line.starts_with("@typy.closure.descriptor."))
         .unwrap();
     assert!(
-        descriptor.ends_with(
-            "ptr @\"typy.closure_thunk._TY8__main__23make_adder.<locals>.add\", ptr @typy.tuple0 }"
+        descriptor.contains(
+            "ptr @\"typy.closure_thunk._TY8__main__23make_adder.<locals>.add\", ptr @typy.tuple0, "
         ),
         "{descriptor}"
     );

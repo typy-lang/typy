@@ -27,6 +27,7 @@ pub(crate) struct Statics<'ctx> {
     method_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     closure_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     generator_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
+    builtin_identities: BTreeMap<String, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -46,6 +47,7 @@ impl<'ctx> Statics<'ctx> {
             method_descriptors: BTreeMap::new(),
             closure_descriptors: BTreeMap::new(),
             generator_descriptors: BTreeMap::new(),
+            builtin_identities: BTreeMap::new(),
         }
     }
 
@@ -67,6 +69,19 @@ impl<'ctx> Statics<'ctx> {
     /// Records the descriptor of the resume function `id`.
     pub(crate) fn add_generator_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
         self.generator_descriptors.insert(id, pointer);
+    }
+
+    /// Returns the identity the hidden functions of the built-in `name` share: the descriptor
+    /// of the first one emitted, which is `own` for that first one (ADR-0076).
+    pub(crate) fn builtin_identity(
+        &mut self,
+        name: &str,
+        own: PointerValue<'ctx>,
+    ) -> PointerValue<'ctx> {
+        *self
+            .builtin_identities
+            .entry(name.to_owned())
+            .or_insert(own)
     }
 
     /// Returns the bound method descriptor of method `id`, if it was emitted already.
