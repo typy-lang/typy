@@ -95,9 +95,10 @@ impl BodyChecker<'_> {
         Self::after(object, value)
     }
 
-    /// Returns the error for a method that is no value of one `Callable` type: a class
-    /// method, which binds the class it is read through, planned for 0.10 (FUN-09), and a
-    /// method with type parameters of its own or a keyword-only parameter, E0202, and one with
+    /// Returns the error for a method that is no value of one `Callable` type: a property,
+    /// whose value through its class is a `property` object, planned for 1.0 (FUN-17); a class
+    /// method, which binds the class it is read through, planned for 0.10 (FUN-09); a method
+    /// with type parameters of its own or a keyword-only parameter, E0202; and one with
     /// `*args` or `**kwargs`, planned for 0.10 (FUN-13), as for a function.
     fn refused_method_value(
         &mut self,
@@ -105,6 +106,21 @@ impl BodyChecker<'_> {
         name: &Identifier,
         span: Span,
     ) -> Option<TypedExpr> {
+        if self.property_getter(class, &name.name).is_some() {
+            let class_name = &self.program.classes[class.0 as usize].name;
+            let message = format!(
+                "`{class_name}.{}` is a property, and a property read through its class as a \
+                 value is planned for TyPy 1.0 (FUN-17)",
+                name.name
+            );
+            return Some(
+                self.error(
+                    Diagnostic::new(DiagnosticCode::error(201), name.span, message)
+                        .with_rule(RuleId::FUN_17),
+                    span,
+                ),
+            );
+        }
         if self.class_method_named(class, &name.name) {
             return Some(self.planned_method_value(name, "a class method", span));
         }

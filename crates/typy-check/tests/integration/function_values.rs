@@ -354,6 +354,23 @@ fn fun_09_the_methods_without_one_bound_value_yet_are_planned() {
 }
 
 #[test]
+fn fun_17_a_property_read_through_its_class_is_planned() {
+    let source = "class Box:\n    @property\n    def v(self) -> int:\n        return 1\n\
+                  class Big(Box):\n    pass\nf = Box.v\ng = Big.v\n";
+    let message = |class: &str| {
+        (
+            "E0201".to_owned(),
+            format!(
+                "`{class}.v` is a property, and a property read through its class as a value is \
+                 planned for TyPy 1.0 (FUN-17)"
+            ),
+            "FUN-17".to_owned(),
+        )
+    };
+    assert_eq!(messages(source), [message("Box"), message("Big")]);
+}
+
+#[test]
 fn fun_05_a_method_without_one_callable_type_is_not_a_value() {
     let cases = [
         (

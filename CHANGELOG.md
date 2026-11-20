@@ -37,6 +37,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A property read through its class as a value, such as `getter = Box.v`,
+  is refused with E0201, planned for 1.0 (FUN-17). TyPy took it for the
+  getter, so calling the value ran the getter, where CPython raises
+  `TypeError: 'property' object is not callable`.
 - A library called on a thread its C host created with a stack smaller than
   `RLIMIT_STACK` raises `RecursionError` for a recursion too deep for that
   stack; on Linux the process ended with a segmentation fault (FFI-15).
