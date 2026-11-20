@@ -19,6 +19,7 @@ mod method;
 mod open;
 mod percent_format;
 mod protocol_fits;
+pub use protocol_fits::ProgramScope;
 mod subset;
 mod sys;
 mod typed;

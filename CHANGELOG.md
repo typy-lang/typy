@@ -34,6 +34,11 @@ All notable changes to TyPy are recorded here. The format follows
   the call is evaluated in source order, as in CPython (EXP-17). A
   function, nested function or method with them as a value, and a
   `lambda` with them, are planned for 0.10 (FUN-13).
+- `Generator` of `typing` or `collections.abc` as the class of
+  `isinstance`, and of `collections.abc` in a class pattern, and a value
+  held as an `Iterable[T]` tested against `Iterator`, answered by the
+  object it holds; a true test reads it as an `Iterator[T]` (TYP-21,
+  LIB-20).
 - A class whose `__next__` returns `T` and whose `__iter__` returns the
   instance is an `Iterator[T]`, and a class whose `__iter__` returns an
   iterator is an `Iterable[T]`, as `typing` reads the protocols: its
@@ -71,12 +76,22 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A class pattern of `Iterator` over a union that holds an iterator, such
+  as `list[int] | Iterator[int]`, matches the iterator, where TyPy
+  reported that it never matches.
+- A generator or an iterator passed where a union holding an
+  `Iterable[T]` is expected no longer stops the compiler with an internal
+  error.
 - `bool()` of an iterator, and an iterator as the condition of `if` or
   `while`, no longer stop the compiler with an internal error; an
   iterator is true, as in CPython.
 
 ### Changed
 
+- A class pattern that names `Iterable`, `Iterator`, `Generator`, `List`,
+  `Dict`, `Set`, `Tuple`, `Type`, `Optional` or `Union` of `typing` is
+  E0401, since CPython raises `TypeError` for it; name the class of
+  `collections.abc` or the built-in type instead.
 - Decorators, built-in functions, class methods and protocol methods as
   values, nested functions inside generic functions, `NamedTuple`,
   `isinstance` with a class held in a variable, `issubclass`, and

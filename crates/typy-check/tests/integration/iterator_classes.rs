@@ -65,3 +65,52 @@ fn typ_20_a_class_that_does_not_fit_the_protocol_is_refused() {
         );
     }
 }
+
+#[test]
+fn typ_21_isinstance_with_generator_tells_a_generator_apart() {
+    let accepted = "def numbers() -> Generator[int, None, None]:\n    yield 1\n\n\n\
+                    def first(values: Iterable[int]) -> int:\n    \
+                    if isinstance(values, Generator):\n        return next(values)\n    \
+                    if isinstance(values, Iterator):\n        return next(values)\n    \
+                    return -1\n\n\n\
+                    def kind(value: Iterable[int] | int) -> str:\n    match value:\n        \
+                    case Generator():\n            return \"generator\"\n        \
+                    case Iterator():\n            return \"iterator\"\n        \
+                    case _:\n            return \"other\"\n\n\n\
+                    print(first(numbers()), kind(numbers()), isinstance(Countdown(1), Generator))\n";
+    let source = format!("{COUNTDOWN}{accepted}");
+    assert_eq!(app(&source), Vec::<String>::new(), "{source}");
+    let found = dump(&format!(
+        "{COUNTDOWN}def first(values: Iterable[int]) -> int:\n    \
+         if isinstance(values, Iterator):\n        return next(values)\n    return -1\n"
+    ));
+    // A true test reads the iterable as an iterator.
+    assert!(found.contains("Downcast : Iterator[int]"), "{found}");
+}
+
+#[test]
+fn typ_17_a_class_pattern_of_a_typing_name_is_refused() {
+    for (name, written) in [
+        ("Iterator", "Iterator"),
+        ("Generator", "Generator"),
+        ("List", "List"),
+        ("Optional", "Optional"),
+    ] {
+        let source = format!(
+            "import typing\n\n\ndef kind(value: list[int]) -> str:\n    match value:\n        \
+             case typing.{name}():\n            return \"x\"\n        case _:\n            \
+             return \"y\"\n"
+        );
+        let message = format!(
+            "`typing.{written}` is no class, so a class pattern cannot name it: CPython raises \
+             `TypeError`"
+        );
+        let found = messages(&source);
+        assert!(
+            found
+                .iter()
+                .any(|(code, text, _)| code == "E0401" && *text == message),
+            "{source}: {found:?}"
+        );
+    }
+}

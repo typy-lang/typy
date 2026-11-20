@@ -742,15 +742,9 @@ impl Program {
         symbol
     }
 
-    /// Returns the typed program, whose entry is the body of the module named `main`.
-    pub(crate) fn finish(self, main: &str) -> TypedProgram {
-        let entry = self
-            .modules
-            .iter()
-            .find(|module| module.name == main)
-            .map_or(FunctionId(0), |module| module.body);
-        let classes = self
-            .classes
+    /// Returns each class as the typed program holds it.
+    fn typed_classes(&self) -> Vec<TypedClass> {
+        self.classes
             .iter()
             .enumerate()
             .map(|(index, class)| {
@@ -814,7 +808,17 @@ impl Program {
                     iterates: !opaque && self.protocol_values.iterations.contains_key(&class.id),
                 }
             })
-            .collect();
+            .collect()
+    }
+
+    /// Returns the typed program, whose entry is the body of the module named `main`.
+    pub(crate) fn finish(self, main: &str) -> TypedProgram {
+        let entry = self
+            .modules
+            .iter()
+            .find(|module| module.name == main)
+            .map_or(FunctionId(0), |module| module.body);
+        let classes = self.typed_classes();
         TypedProgram {
             symbols: self.symbols,
             functions: self.functions.into_iter().flatten().collect(),
@@ -842,6 +846,10 @@ impl Program {
             closures: self.closures,
             cells: self.cells,
             nonlocals: self.nonlocals,
+            fits: (
+                self.protocol_values.fits.clone(),
+                self.protocol_values.iterations.clone(),
+            ),
         }
     }
 }

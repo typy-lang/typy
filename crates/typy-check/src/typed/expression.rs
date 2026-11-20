@@ -646,9 +646,9 @@ pub struct IsInstanceTest {
     /// Whether every value of the static type that is not `None` is an instance of one of the
     /// classes.
     pub always: bool,
-    /// The classes the value's class decides, tested when the program runs, when `always` is
-    /// false.
-    pub checks: Vec<crate::types::TypeObjectOf>,
+    /// The classes the value's class decides, and the kinds of the runtime's own objects
+    /// that pass, tested when the program runs, when `always` is false.
+    pub checks: Vec<MemberTest>,
     /// The position, in the function's table of narrowed types, of the type a true test gives
     /// the variable the value reads, when it narrows one (TYP-07).
     pub narrowed: Option<u32>,
@@ -656,8 +656,8 @@ pub struct IsInstanceTest {
     /// tested class takes in every case (TYP-07, TYP-14).
     pub otherwise: Option<u32>,
     /// For a union, each member in order: whether every value of it is an instance of one of
-    /// the classes, and the classes its value's class decides (TYP-14).
-    pub members: Vec<(bool, Vec<crate::types::TypeObjectOf>)>,
+    /// the classes, and the tests its value's class decides (TYP-14).
+    pub members: Vec<(bool, Vec<MemberTest>)>,
 }
 
 /// What a call with a `key` does with the items of its list (FUN-05).
@@ -699,6 +699,8 @@ pub enum MemberTest {
 pub enum RuntimeKind {
     /// An iterator.
     Iterator,
+    /// A generator (TYP-21).
+    Generator,
     /// A traceback.
     Traceback,
     /// A module object.

@@ -24,6 +24,7 @@ value.
 | `A \| B`, such as `int \| str`, narrowed by `isinstance` | TYP-14, TYP-07 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
 | A class with `__iter__` and `__next__` as an `Iterator[T]`, and one with `__iter__` as an `Iterable[T]` | TYP-20 |
+| `Generator` of `typing` or `collections.abc` as the class of `isinstance`, and of `collections.abc` in a class pattern | TYP-21 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 | `Callable[[A, ...], R]` from `typing` or `collections.abc`, the type of a function value; see [Functions as values](functions.md#functions-as-values) | FUN-05, NFR-19 |
 
@@ -107,12 +108,18 @@ condition on it are refused.
 The older names of `typing` spell the types above: `Optional[int]` is
 `int | None`, `Union[int, str]` is `int | str`, and `List`, `Dict`, `Set`,
 `Tuple` and `Type` are `list`, `dict`, `set`, `tuple` and `type` (LIB-17).
-`Iterable` and `Iterator`, of either module, and `List`, `Dict`, `Set`,
-`Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing` may also be
-the class of `isinstance` and of a class pattern, answered as CPython
+`Iterable`, `Iterator` and `Generator`, of either module, and `List`,
+`Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of
+`typing` may also be the class of `isinstance`, answered as CPython
 answers them: a list is `Iterable` and not an `Iterator`, its iterator is
-both, and a class is `Iterable` when it, or a base, defines `__iter__`
-(TYP-17).
+both, a generator is all three, and a class is `Iterable` when it, or a
+base, defines `__iter__`, an `Iterator` when it also defines `__next__`,
+and a `Generator` when it also defines `send`, `throw` and `close`
+(TYP-17, TYP-21). A value held as an `Iterable[T]` is tested by the object
+it holds, and one found an `Iterator` or a `Generator` is then read as an
+`Iterator[T]`. A class pattern takes the classes of `collections.abc`;
+the names of `typing` are no classes, so a class pattern of one is E0401,
+where CPython raises `TypeError`.
 
 <!-- typy-expect: accepted -->
 ```python

@@ -19,6 +19,8 @@ use crate::strings::StringPool;
 /// held in its frame (MEM-03). A function may raise when its lowered code contains an `invoke`,
 /// so lowering repeats until that set stops growing (detailed design section 9).
 pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
+    // A type's assignability reads which classes satisfy protocols and iterate (TYP-20).
+    let _tables = typy_check::ProgramScope::open(program);
     let recursive = recursive_functions(program);
     let methods = MethodTables::new(program);
     let families = methods.families();

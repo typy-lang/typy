@@ -144,8 +144,10 @@ impl BodyChecker<'_> {
         }
         let test = self.isinstance_test(value, classes, span);
         let always = matches!(&test.kind, TypedExprKind::IsInstance(test) if test.always);
+        // A union's members each answer, so the pattern never matches only when none may.
         let never = matches!(&test.kind,
-            TypedExprKind::IsInstance(test) if !test.always && test.checks.is_empty());
+            TypedExprKind::IsInstance(test) if !test.always && test.checks.is_empty()
+                && test.members.iter().all(|(always, checks)| !always && checks.is_empty()));
         if never {
             let error = self.error(
                 Diagnostic::new(

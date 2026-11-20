@@ -33,6 +33,23 @@ impl FitsScope {
     }
 }
 
+/// The classes of a checked program that satisfy its protocols and its iterator classes, put
+/// back while a later stage, such as lowering, reads the program's types (ADR-0041, TYP-20).
+#[must_use = "the tables are cleared when the scope is dropped"]
+pub struct ProgramScope {
+    /// The check's scope, whose drop clears the tables again.
+    _scope: FitsScope,
+}
+
+impl ProgramScope {
+    /// Opens a scope with the tables of `program`.
+    pub fn open(program: &crate::typed::TypedProgram) -> Self {
+        let scope = FitsScope::new(program.fits.0.iter().copied());
+        crate::iterator_fits::reset(&program.fits.1);
+        Self { _scope: scope }
+    }
+}
+
 impl Drop for FitsScope {
     fn drop(&mut self) {
         let before = std::mem::take(&mut self.before);

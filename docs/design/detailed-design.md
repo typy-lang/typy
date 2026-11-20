@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.57 |
+| Version | 2.58 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -682,6 +682,18 @@ parameters of the method it overrides, E0404 (CLS-04), and a function,
 nested function or method with one read as a value, or a `lambda` with
 one, is E0201, planned for 0.10 (FUN-13).
 
+An `isinstance` test of an abstract class of `collections.abc` or `typing`,
+`Iterable`, `Iterator` or `Generator`, is decided by its static type when
+it can be, and otherwise tested by `MemberTest`s: the classes of the
+program that define the class's methods, and for `Iterator` the runtime's
+iterators, generators and files, for `Generator` its generators, each by
+the type ID in its header (TYP-17, TYP-21). A true test of an
+`Iterable[T]` against `Iterator` or `Generator` reads it as an
+`Iterator[T]`. A class pattern's test never matches only when the value
+and each member of a union decide so. `AnnotationName` keeps whether a
+name of both modules came from `typing`, whose names a class pattern
+refuses, E0401, as CPython raises `TypeError`.
+
 `iterator_fits.rs` holds, for one check, what the instances of each
 iterator or iterable class are, which `body/iterator_class.rs` finds
 once the methods' signatures are known: a class whose `__next__` and
@@ -689,8 +701,10 @@ once the methods' signatures are known: a class whose `__next__` and
 instance of the class or of a base, is an `Iterator[T]` of `__next__`'s
 result, and a class whose `__iter__` returns an `Iterator[T]`, a generator
 or an instance of such an iterator class is an `Iterable[T]`.
-`Type::is_assignable_to` and `Type::iterable_item` read it, and a value
-converted to an `Iterator[T]` becomes `AsIterator`; a `for` over a class
+`Type::is_assignable_to` and `Type::iterable_item` read it, as they read
+the classes that satisfy protocols; `TypedProgram` keeps both tables, and
+`ProgramScope` puts them back while lowering reads the program's types. A
+value converted to an `Iterator[T]` becomes `AsIterator`; a `for` over a class
 whose `__iter__` returns an iterator of another kind goes over the call of
 `__iter__` (TYP-20).
 
@@ -2691,7 +2705,7 @@ graph, symbol names and the string pool.
 | Dicts | Every dict operation is a runtime call that borrows its arguments; a dict adds its own references to a key and a value it stores. A display creates the dict presized for its entries, as CPython's `BUILD_MAP` does, then sets each key and value in order. `d[k]` borrows the value, which gets its own reference when the dict is a temporary; `d[k] = v` evaluates the value, then the dict and the key. `get`, `setdefault` and `pop` give a value with a reference of its own, and `popitem` builds its pair from the key and value the dict gives up. `keys()`, `values()` and `items()` make a view object that holds the dict, so a view reads the dict as it changes and keeps its own type ID for `in`, `len` and its text, also inside a list or a tuple. `for` over a dict or a view keeps the source, the next entry, the number of entries when the loop began and the entries visited in hidden slots, and `typy_rt_dict_next` raises CPython's `RuntimeError` when the size or the keys changed. `\|` copies and updates, and `\|=` updates in place. A dict slot starts as the placeholder dict, and a view slot as null, which counting passes over, so a `return` lowered before a later loop adds its hidden view slot leaves nothing of that slot to release |
 | Comprehensions | A comprehension creates its list, set or dict, then lowers its clauses as loops, each around the next. A clause starts its iterator, binds its target and tests each condition, going back for the next value when one fails; the innermost loop evaluates the element and appends or adds it, or evaluates the key, then the value, and sets the entry, as CPython does. The collection is a temporary throughout, so an exception from an element releases it |
 | Variadic arguments | `call_arguments` in `packing.rs` evaluates a call's arguments in source order, each kept alive for the call, then packs those of the callee's `*args` into a new list sealed with `tuple_seal`, and those of `**kwargs` into a new dict with `dict_set`, each key a `str` constant, in order; a variadic parameter with no argument takes an empty one. Calls, nested calls, `New` and an exception's `__init__` go through it, and an exception keeps every positional argument in `args` before its `__init__` takes them packed, as `BaseException.__new__` does (EXP-17) |
-| Iterator classes | A class the checker finds an iterator or an iterable (`TypedClass::steps`, `iterates`) gives its `TyirClass` its `__next__` and `__iter__`, and code generation emits `typy.classN.next` and `typy.classN.iter`, which call the method and write its result into the slot the runtime gives, returning the exception the method raised or null; the type object also holds the item kind and layout of `__next__`'s result. `AsIterator` holds an instance as an `Iterator[T]`, the same object. A loop over an `Iterator[T]` or an `Iterable[T]` asks `iterable_iterator`, which calls an instance's `__iter__` and wraps an instance it gives in a runtime iterator of kind `Instance`, which holds each item until the next step and reads a `StopIteration` as the end; `next()` asks `iterator_stepper`, which wraps the instance without calling `__iter__`, and `iter()` of an `Iterable[T]` asks `iter`, which gives what `__iter__` returns as it is (TYP-20, ADR-0065) |
+| Iterator classes | A class the checker finds an iterator or an iterable (`TypedClass::steps`, `iterates`) gives its `TyirClass` its `__next__` and `__iter__`, and code generation emits `typy.classN.next` and `typy.classN.iter`, which call the method and write its result into the slot the runtime gives, returning the exception the method raised or null; the type object also holds the item kind and layout of `__next__`'s result. `AsIterator` holds an instance as an `Iterator[T]`, the same object. A loop over an `Iterator[T]` or an `Iterable[T]` asks `iterable_iterator`, which calls an instance's `__iter__` and wraps an instance it gives in a runtime iterator of kind `Instance`, which holds each item until the next step and reads a `StopIteration` as the end; `next()` asks `iterator_stepper`, which wraps the instance without calling `__iter__`, and `iter()` of an `Iterable[T]` asks `iter`, which gives what `__iter__` returns as it is. An object held as an iterable or an iterator in a union, or read as an iterator after an `isinstance` test, is the same object, relabelled through its bits (TYP-20, TYP-21, ADR-0065) |
 | Calls that unpack | `bound_call.rs` evaluates the arguments in source order: each static one, the items of a fixed tuple, the tail's list, then each keyword, whose name `call_name` records, and each `**dict`, which `call_merge` merges, both raising CPython's `got multiple values for keyword argument`. `call_check` then checks the number of positional values and the names against the callee, read from a `str` description: the qualified name, the name with its module, and a line per parameter of its kind, whether it has a default, and its name. Each parameter takes its static argument, or the tail's item when the tail reaches it, else its entry in the merged dict, else its default, through `either` branches; `*args` takes the static extras and the rest of the tail, and `**kwargs` the keywords and entries no parameter took. `print` writes each value of a list a `*iterable` gives it, with a separator before every value but the first written (EXP-17, ADR-0073) |
 | Unpacking | A display with `*iterable`, `TypedExprKind::Spread`, makes an empty list or set of its item type, then appends or adds each item and each value of each iterable, read with `each_value` as a loop reads it; a tuple display seals its list with `tuple_seal`. A dict display with `**dict`, `DictSpread`, makes an empty dict, then sets each entry and merges each dict with `dict_update`, in order. `AssignTarget::Unpack` assigns a tuple of a fixed number of items item by item, and a new list of the items between the targets to a starred one; any other value goes to `unpack(source, kind, descriptor, before, after, starred)`, which gives a new list of its values, and each target takes its item with `list_get`, the last ones counted from the end, and a starred one the `list_slice` between, from left to right (SMT-02, EXP-17) |
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |

@@ -174,6 +174,9 @@ pub enum AbstractClass {
     Iterable,
     /// `Iterator`: a class with `__iter__` and `__next__`.
     Iterator,
+    /// `Generator`: a class with `__iter__`, `__next__`, `send`, `throw` and `close`, as
+    /// CPython's `__subclasshook__` reads it (TYP-21).
+    Generator,
 }
 
 impl TypeObjectOf {
@@ -289,6 +292,10 @@ impl TypeObjectOf {
                 kind: AbstractClass::Iterator,
                 ..
             } => "Iterator",
+            Self::Abstract {
+                kind: AbstractClass::Generator,
+                ..
+            } => "Generator",
         }
     }
 }

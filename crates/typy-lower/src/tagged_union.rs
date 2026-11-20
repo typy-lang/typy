@@ -50,6 +50,15 @@ impl FunctionLowerer<'_> {
         if value.ty == ty {
             return value;
         }
+        // A generator, an iterator or a collection held as an iterable or an iterator is the
+        // same object, as `AsIterable` holds it.
+        if ty == TyirType::ITERABLE || ty == TyirType::ITERATOR {
+            let bits = self.bits(value, span);
+            let held = self
+                .builder
+                .push_value(Operation::FromBits { bits, ty }, ty, span);
+            return self.transfer(value, held, ty);
+        }
         let cast = self.builder.push_value(
             Operation::Upcast {
                 value: value.value,

@@ -31,6 +31,22 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedPattern {
         let mut steps = Vec::new();
+        if let Some(alias) = self.typing_alias(class) {
+            let message = format!(
+                "`typing.{alias}` is no class, so a class pattern cannot name it: CPython raises \
+                 `TypeError`"
+            );
+            let error = self.error(
+                Diagnostic::new(DiagnosticCode::error(401), class.span(), message)
+                    .with_rule(RuleId::TYP_17)
+                    .with_help(format!(
+                        "name the class of `collections.abc` or the built-in type for `{alias}`"
+                    )),
+                span,
+            );
+            self.bind_after_error(whole, &error);
+            return TypedPattern::All(steps);
+        }
         let tested = match self.isinstance_classes(class) {
             Ok(mut classes) if classes.len() == 1 => classes.remove(0),
             other => {
