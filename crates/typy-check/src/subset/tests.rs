@@ -94,7 +94,7 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "def f(a: int = g()) -> None:\n    pass\n",
-            "default values other than constants are planned for TyPy 1.0 (EXP-16)",
+            "default values other than constants are planned for TyPy 1.0 (EXP-20)",
         ),
         (
             "def f() -> None:\n    print((yield 1))\n",

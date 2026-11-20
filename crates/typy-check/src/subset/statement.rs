@@ -29,7 +29,7 @@ impl Walker {
                 Some(default) if crate::check::factory_call(default).is_some() => {}
                 Some(default) => self.report(
                     default.span(),
-                    planned("default values other than constants", "1.0", RuleId::EXP_16),
+                    planned("default values other than constants", "1.0", RuleId::EXP_20),
                 ),
             }
         }

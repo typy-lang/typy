@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.26 |
+| Version | 0.27 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -95,7 +95,7 @@ The `macos-15` job of CI does the same on every pull request.
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
 | `make docs` | Builds the documentation site into `site/` with `scripts/build-docs.sh`: Zensical in strict mode, which fails on a link to a page or an anchor that does not exist (DOC-05). The first run installs Zensical 0.1.1 and its dependencies from `scripts/docs-requirements.txt`, each checked against its sha256, into a CPython 3.14 environment at `/var/cache/typy/docs` in the dev container, about 20 MB to download, which a container built anew installs again. Open `site/index.html`, or serve the directory, to read the result |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
-| `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
+| `make traceability` | Fails when a requirement has no row in the test plan's matrix, a document cites an ID that is not defined, or a diagnostic plans a requirement for another release than the SRS gives it |
 | `make diagrams` | Renders every PlantUML source to the SVG beside it |
 | `make diagrams-check` | Renders, then fails when an SVG differs from the one staged |
 | `make unicode-tables` | Writes `crates/typy-runtime/src/string/unicode/tables.rs` from the `unicodedata` of CPython 3.15 (OI-15); never edit that file by hand |

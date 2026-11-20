@@ -6,6 +6,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The refusal of a default value other than a constant names EXP-20, the
+  requirement that plans it for 1.0, not EXP-16, which TyPy meets.
+
 ### Fixed
 
 - An f-string `{value:c}` of `-2**63`, the smallest C `long`, raises

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.103 |
+| Version | 1.104 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -249,6 +249,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-17 | `*args` and `**kwargs` parameters with annotated element types shall be accepted, and so shall unpacking with `*` and `**` in calls of the program's functions, methods and classes and with `*` in calls of `print`, binding as CPython binds them (ADR-0073), in list, tuple, set and dict displays, and in assignment targets. | S | 0.9 | 8.7 |
 | EXP-18 | An assignment expression inside a generator expression shall bind the variable of the function around it, as CPython binds it. | C | 1.0 | 6.12 |
 | EXP-19 | `*` and `**` shall be accepted in a call of a built-in function or method other than `print`, of a function value and of an exception class, and `**` in a call of `print`, binding as CPython binds them (ADR-0073). | C | 0.10 | 6.3.4 |
+| EXP-20 | A default value other than a constant, such as `-1`, a tuple or a call, shall be accepted and evaluated once, when the function is defined. | C | 1.0 | 6.3.4 |
 
 ### 3.7 Simple statements (SMT)
 

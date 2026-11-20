@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.17 |
+| Version | 1.18 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -363,6 +363,7 @@ that the specification does not define.
 | EXP-17 | 0.9 | UT, IT | `typy-source` tests of a starred item; `typy-check` tests of the element types of `*args` and `**kwargs`, of the arguments each takes and refuses, and of each unpacking; runtime tests of `unpack` and of `call_check`, `call_merge` and `call_name` against CPython 3.15's messages; `typy-check` tests of each argument a call unpacks and of each it refuses; `typy-driver` tests that lower each form, pack `*args` and `**kwargs` and bind a call that unpacks; `tests/conformance/exp/EXP-17_*.py`, among them the order in which a call evaluates its arguments |
 | EXP-18 | 1.0 | IT | `tests/conformance/exp/EXP-18_*.py` |
 | EXP-19 | 0.10 | IT | `typy-check` tests of each call that refuses unpacking as planned; `tests/conformance/exp/EXP-19_*.py` |
+| EXP-20 | 1.0 | UT | `typy-check` subset test of the refusal while it is planned; a conformance program of each kind of default |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py`, a list, a `str`, a range, a dict and generators unpacked with CPython 3.15's messages |
 | SMT-03 | 0.1 | IT | `tests/conformance/smt/SMT-03_*.py` |
