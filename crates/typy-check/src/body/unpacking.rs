@@ -171,6 +171,8 @@ fn iteration_item(ty: &Type) -> Option<Type> {
         Type::DictView(view, key, value) => view.item(key, value),
         Type::Str => Type::Str,
         Type::Bytes | Type::Range => Type::Int,
+        // An instance of an iterator or iterable class gives its class's items (TYP-20).
+        Type::Instance(_) => return ty.iterable_item(),
         _ => return None,
     })
 }

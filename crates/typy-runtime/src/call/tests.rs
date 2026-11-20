@@ -340,3 +340,77 @@ fn merging_a_dict_records_its_keys_and_passes_the_unnamed_to_kwargs() {
 fn names_with(keys: &[&str]) -> *mut DictObject {
     names(keys)
 }
+
+#[test]
+fn the_rarer_messages_are_cpython_s() {
+    let keyword_only = "kw\n__main__.kw\nK-k";
+    assert_eq!(
+        check(keyword_only, 1, &["k"]).as_deref(),
+        Some(
+            "kw() takes 0 positional arguments but 1 positional argument (and 1 keyword-only \
+             argument) were given"
+        )
+    );
+    assert_eq!(
+        check(ONLY, 3, &[]).as_deref(),
+        Some("only() takes 2 positional arguments but 3 were given")
+    );
+    // Of two candidates as near, the first is named.
+    let two = "two\n__main__.two\nN=abd\nN=abe";
+    assert_eq!(
+        check(two, 0, &["abc"]).as_deref(),
+        Some("two() got an unexpected keyword argument 'abc'. Did you mean 'abd'?")
+    );
+}
+
+#[test]
+fn a_name_too_long_to_compare_gets_no_suggestion() {
+    let long = "x".repeat(300);
+    let with_long_parameter = format!("f\n__main__.f\nN-{long}y");
+    assert_eq!(
+        check(&with_long_parameter, 0, &["xy"]).as_deref(),
+        Some("f() got an unexpected keyword argument 'xy'")
+    );
+    assert_eq!(
+        check(NAMED, 1, &[long.as_str()]),
+        Some(format!(
+            "named() got an unexpected keyword argument '{long}'"
+        ))
+    );
+    // CPython compares at most 749 candidates.
+    let many = (0..750).fold(String::new(), |mut text, index| {
+        use std::fmt::Write;
+        let _ = write!(text, "\nN=p{index}");
+        text
+    });
+    assert_eq!(
+        check(&format!("f\n__main__.f{many}"), 0, &["p0x"]).as_deref(),
+        Some("f() got an unexpected keyword argument 'p0x'")
+    );
+}
+
+#[test]
+fn a_byte_of_the_same_low_bits_is_no_change_of_case() {
+    use super::levenshtein;
+    assert_eq!(levenshtein(b"x!", b"xa", 10), 2);
+    assert_eq!(levenshtein(b"xA", b"xa", 10), 1);
+}
+
+#[test]
+fn merging_skips_removed_entries_and_may_have_no_kwargs() {
+    let description = from_str("f\n__main__.f\nN-a");
+    let (names, merged, source) = (dict(), dict(), names_with(&["gone", "kept", "a"]));
+    let gone = from_str("gone");
+    // SAFETY: every object is live and owned here.
+    unsafe {
+        crate::dict::typy_rt_dict_pop(source, gone.expose_provenance() as u64);
+        let found = typy_rt_call_merge(description, names, merged, source, 0);
+        assert_eq!(message(found), None);
+        assert_eq!(inline_value(typy_rt_dict_length(merged)), 2);
+        typy_rt_decrement(gone.cast());
+        typy_rt_decrement(description.cast());
+        for dict in [names, merged, source] {
+            typy_rt_decrement(dict.cast());
+        }
+    }
+}

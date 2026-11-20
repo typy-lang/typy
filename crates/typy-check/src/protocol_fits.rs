@@ -18,14 +18,18 @@ thread_local! {
 pub(crate) struct FitsScope {
     /// The table the scope replaced, put back when it ends.
     before: BTreeSet<(ClassId, ClassId)>,
+    /// The table of iterator classes it replaced, put back too (TYP-20).
+    iterations: std::collections::BTreeMap<ClassId, crate::iterator_fits::Iteration>,
 }
 
 impl FitsScope {
-    /// Opens a scope whose table holds `fits`, each a class and a protocol it satisfies.
+    /// Opens a scope whose table holds `fits`, each a class and a protocol it satisfies, and
+    /// whose table of iterator classes is empty.
     pub(crate) fn new(fits: impl IntoIterator<Item = (ClassId, ClassId)>) -> Self {
         let table: BTreeSet<(ClassId, ClassId)> = fits.into_iter().collect();
         let before = FITS.with(|cell| cell.replace(table));
-        Self { before }
+        let iterations = crate::iterator_fits::take();
+        Self { before, iterations }
     }
 }
 
@@ -33,6 +37,7 @@ impl Drop for FitsScope {
     fn drop(&mut self) {
         let before = std::mem::take(&mut self.before);
         FITS.with(|cell| cell.replace(before));
+        crate::iterator_fits::reset(&self.iterations);
     }
 }
 

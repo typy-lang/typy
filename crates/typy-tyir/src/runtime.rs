@@ -211,6 +211,12 @@ pub enum RuntimeFunction {
     ExceptionSetArguments,
     IteratorNew,
     IterableIterator,
+    /// What `next()` steps for a value held as an `Iterator[T]`: the iterator itself, or a
+    /// wrapper of an instance of a class with `__next__` (TYP-20).
+    IteratorStepper,
+    /// `iter()` of a value held as an `Iterable[T]`: what an instance's `__iter__` returns, as
+    /// it is, or a new iterator (TYP-20).
+    Iter,
     IteratorAdvance,
     IteratorItem,
     /// `generator.send(value)`: steps the generator with the value's bits and whether it is
@@ -495,7 +501,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 373] = [
+    pub const ALL: [Self; 375] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -690,6 +696,8 @@ impl RuntimeFunction {
         Self::ExceptionSetArguments,
         Self::IteratorNew,
         Self::IterableIterator,
+        Self::IteratorStepper,
+        Self::Iter,
         Self::IteratorAdvance,
         Self::GeneratorSend,
         Self::GeneratorThrow,
@@ -1125,7 +1133,11 @@ impl RuntimeFunction {
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
-            Self::IterableIterator => signature(&[TyirType::ITERABLE, Bits], ITERATOR, false),
+            // An instance's `__iter__` may raise (TYP-20).
+            Self::IterableIterator | Self::Iter => {
+                signature(&[TyirType::ITERABLE, Bits], ITERATOR, true)
+            }
+            Self::IteratorStepper => signature(&[ITERATOR], ITERATOR, false),
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
             Self::GeneratorSend => signature(&[TyirType::GENERATOR, Bits, Bool], Bool, true),
             Self::GeneratorThrow => signature(&[TyirType::GENERATOR, EXCEPTION], Bool, true),
@@ -1490,6 +1502,8 @@ impl RuntimeFunction {
             Self::ExceptionSetArguments => "exception_set_arguments",
             Self::IteratorNew => "iterator_new",
             Self::IterableIterator => "iterable_iterator",
+            Self::IteratorStepper => "iterator_stepper",
+            Self::Iter => "iter",
             Self::IteratorAdvance => "iterator_advance",
             Self::GeneratorSend => "generator_send",
             Self::GeneratorThrow => "generator_throw",

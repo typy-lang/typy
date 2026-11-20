@@ -47,6 +47,7 @@ mod in_place;
 mod isinstance;
 mod iterable_call;
 mod iterator;
+mod iterator_class;
 mod key_argument;
 mod lambda;
 mod list;

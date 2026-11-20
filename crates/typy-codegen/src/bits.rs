@@ -7,6 +7,46 @@ use typy_tyir::{TyirType, ValueId};
 use crate::error::CodegenError;
 use crate::function::FunctionEmitter;
 
+/// Returns true for a type whose items are words of a tuple's layout, which a list stores
+/// in place: a tuple, or an optional one.
+pub(crate) const fn holds_words(ty: TyirType) -> bool {
+    matches!(
+        ty,
+        TyirType::Tuple(_) | TyirType::Optional(typy_tyir::OptionalBase::Tuple(_))
+    )
+}
+
+/// Returns the eight bytes of `lowered`, a value of type `ty` that is one word: an `int` word
+/// as it is, the bits of a `float`, a `bool` as 0 or 1, or a pointer's address, an optional
+/// one as its base's storage.
+pub(crate) fn word_of<'ctx>(
+    builder: &inkwell::builder::Builder<'ctx>,
+    word: inkwell::types::IntType<'ctx>,
+    lowered: BasicValueEnum<'ctx>,
+    ty: TyirType,
+) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+    let ty = match ty {
+        TyirType::Optional(typy_tyir::OptionalBase::Bool) => {
+            return Ok(builder
+                .build_int_z_extend(lowered.into_int_value(), word, "")?
+                .into());
+        }
+        TyirType::Optional(base) => crate::abi::storage(base),
+        other => other,
+    };
+    Ok(match ty {
+        TyirType::Int => lowered,
+        TyirType::Float => builder.build_bit_cast(lowered, word, "")?,
+        TyirType::Bool => builder
+            .build_int_z_extend(lowered.into_int_value(), word, "")?
+            .into(),
+        TyirType::Object(_) => builder
+            .build_ptr_to_int(lowered.into_pointer_value(), word, "")?
+            .into(),
+        other => return Err(CodegenError(format!("{other} is not a list item"))),
+    })
+}
+
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     /// Returns the eight bytes for a value: an `int` word as it is, the bits of a `float`, a
     /// `bool` as 0 or 1, a pointer's address, 0 for `None`, or for a tuple the address of a
@@ -20,34 +60,13 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             return Ok(word.const_zero().into());
         }
         let lowered = self.value(value)?;
-        let ty = match self.function.value(value).ty {
-            TyirType::Optional(typy_tyir::OptionalBase::Bool) => {
-                return Ok(self
-                    .builder
-                    .build_int_z_extend(lowered.into_int_value(), word, "")?
-                    .into());
-            }
-            TyirType::Optional(base) => crate::abi::storage(base),
-            other => other,
-        };
-        Ok(match ty {
-            TyirType::Int => lowered,
-            TyirType::Float => self.builder.build_bit_cast(lowered, word, "")?,
-            TyirType::Bool => self
-                .builder
-                .build_int_z_extend(lowered.into_int_value(), word, "")?
-                .into(),
-            TyirType::Object(_) => self
-                .builder
-                .build_ptr_to_int(lowered.into_pointer_value(), word, "")?
-                .into(),
-            TyirType::Tuple(_) => {
-                let slot = self.entry_alloca(lowered.get_type())?;
-                self.builder.build_store(slot, lowered)?;
-                self.builder.build_ptr_to_int(slot, word, "")?.into()
-            }
-            other => return Err(CodegenError(format!("{other} is not a list item"))),
-        })
+        let ty = self.function.value(value).ty;
+        if holds_words(ty) {
+            let slot = self.entry_alloca(lowered.get_type())?;
+            self.builder.build_store(slot, lowered)?;
+            return Ok(self.builder.build_ptr_to_int(slot, word, "")?.into());
+        }
+        word_of(&self.builder, word, lowered, ty)
     }
 
     /// Returns the value of type `ty` that eight bytes hold, or `None` for `None`.

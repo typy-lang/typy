@@ -99,6 +99,8 @@ pub enum TypedExprKind {
     },
     /// A built-in iterable or an iterator held as an `Iterable[T]`: the same object (TYP-15).
     AsIterable(Box<TypedExpr>),
+    /// An instance of an iterator class held as an `Iterator[T]`: the same object (TYP-20).
+    AsIterator(Box<TypedExpr>),
     /// `__name__`, which is `"__main__"` in the main module (STD-06).
     ModuleName,
     Binary {
@@ -842,6 +844,7 @@ impl TypedExpr {
             | TypedExprKind::Downcast(inner)
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
+            | TypedExprKind::AsIterator(inner)
             | TypedExprKind::Lazy { value: inner, .. }
             | TypedExprKind::BoundMethod { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],

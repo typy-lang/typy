@@ -190,6 +190,7 @@ impl Program {
             self.add_static_bridges(*class);
         }
         self.note_protocol_fits(Some(&made));
+        self.note_iterator_classes(Some(&made));
     }
 
     fn make_class_copy(&mut self, copy: &ClassCopy) {

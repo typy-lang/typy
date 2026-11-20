@@ -202,7 +202,7 @@ fn smt_11_a_generator_writes_its_qualified_name_and_address() {
         let class = crate::type_object::typy_rt_type_text(ty);
         assert_eq!(text(class), "<class 'generator'>");
         // `iter()` of a generator is the generator.
-        let iterator = crate::iterator::typy_rt_iterable_iterator(object, core::ptr::null());
+        let iterator = crate::iterator::typy_rt_iterable_iterator(object, core::ptr::null()).value;
         assert_eq!(iterator.cast::<crate::header::ObjectHeader>(), object);
         crate::refcount::typy_rt_decrement(iterator.cast());
         for each in [repr, class] {
@@ -684,7 +684,8 @@ fn smt_11_an_iterator_that_is_no_generator_takes_next_alone() {
             0,
         );
         crate::list::typy_rt_list_append(list, word(5));
-        let iterator = crate::iterator::typy_rt_iterable_iterator(list.cast(), core::ptr::null());
+        let iterator =
+            crate::iterator::typy_rt_iterable_iterator(list.cast(), core::ptr::null()).value;
         assert!(typy_rt_generator_delegate(delegator, iterator.cast(), true).value);
         (*delegator).received = super::VALUE;
         (*delegator).sent = word(1);

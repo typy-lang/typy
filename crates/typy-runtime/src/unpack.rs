@@ -40,10 +40,16 @@ pub unsafe extern "C" fn typy_rt_unpack(
     let list = crate::list::typy_rt_list_new(kind, inline(0).unwrap_or(1), descriptor);
     // SAFETY: the caller's guarantee.
     unsafe {
-        let iterator = crate::iterator::typy_rt_iterable_iterator(
+        let made = crate::iterator::typy_rt_iterable_iterator(
             object,
             core::ptr::with_exposed_provenance(usize::try_from(descriptor).unwrap_or(0)),
         );
+        // `__iter__` of an instance may raise (TYP-20).
+        if !made.exception.is_null() {
+            crate::refcount::typy_rt_decrement(list.cast());
+            return Raising::error(none, made.exception);
+        }
+        let iterator = made.value;
         let mut count = 0;
         let mut raised: *mut ExceptionObject = core::ptr::null_mut();
         while starred || count <= wanted {

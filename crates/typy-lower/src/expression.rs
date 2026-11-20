@@ -185,18 +185,18 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Submodule(module) => self.submodule(module, span),
             // An iterable is the same object, so only its type changes.
-            TypedExprKind::AsIterable(inner) => {
+            TypedExprKind::AsIterable(inner) | TypedExprKind::AsIterator(inner) => {
+                let held = if let TypedExprKind::AsIterator(_) = expression.kind {
+                    TyirType::ITERATOR
+                } else {
+                    TyirType::ITERABLE
+                };
                 let lowered = self.expression(inner);
                 let bits = self.bits(lowered, span);
-                let value = self.builder.push_value(
-                    Operation::FromBits {
-                        bits,
-                        ty: TyirType::ITERABLE,
-                    },
-                    TyirType::ITERABLE,
-                    span,
-                );
-                self.transfer(lowered, value, TyirType::ITERABLE)
+                let value =
+                    self.builder
+                        .push_value(Operation::FromBits { bits, ty: held }, held, span);
+                self.transfer(lowered, value, held)
             }
             TypedExprKind::Binary {
                 left,

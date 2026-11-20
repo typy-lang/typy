@@ -126,6 +126,11 @@ pub struct TyirClass {
     pub hash: Option<FunctionId>,
     /// `__bool__`, which the type object's `truth` slot calls.
     pub truth: Option<FunctionId>,
+    /// `__next__` of an iterator class, which the type object's `next` entry calls (TYP-20).
+    pub next: Option<FunctionId>,
+    /// `__iter__` of an iterator or iterable class, which the type object's `iter` entry
+    /// calls (TYP-20).
+    pub iter: Option<FunctionId>,
     /// The method table: the methods a subclass may override, its own or a base's, each at
     /// the position it has in the base's table, then those the class adds (ADR-0021).
     pub methods: Vec<FunctionId>,

@@ -117,3 +117,74 @@ fn exp_19_unpacking_in_a_call_of_any_other_callee_is_planned() {
         );
     }
 }
+
+#[test]
+fn exp_17_each_kind_of_unpacked_argument_reaches_the_parameters_it_may() {
+    let accepted = [
+        "def rest(a: int, *more: int) -> int:\n    return a + len(more)\n\n\n\
+         print(rest(*(1, 2, 3)))\n",
+        "def keyed(*, k: int) -> int:\n    return k\n\n\noptions = {\"k\": 1}\nprint(keyed(**options))\n",
+        "def two(**named: int) -> int:\n    return len(named)\n\n\n\
+         print(two(**{\"a\": 1}, **{\"b\": 2}))\n",
+        "def later(a: int, b: int | None, *, k: int = 0) -> int:\n    return a\n\n\n\
+         numbers = [1]\nprint(later(*numbers))\n",
+        "def first[T](*items: T) -> T:\n    return items[0]\n\n\n\
+         def pick[T](a: T, b: T) -> T:\n    return b\n\n\n\
+         def named[T](**options: T) -> list[T]:\n    return list(options.values())\n\n\n\
+         print(pick(*(1, 2)), first(*[1], 2), named(**{\"x\": 1.5}), pick(1, b=2))\n",
+    ];
+    for program in accepted {
+        assert_eq!(app(program), Vec::<String>::new(), "{program}");
+    }
+}
+
+#[test]
+fn exp_17_an_argument_that_cannot_be_unpacked_is_refused() {
+    let refusals = [
+        (
+            "def one(a: int) -> int:\n    return a\n\n\nprint(one(*(1, 2)))\n",
+            "E0404",
+            "`one` takes 1 positional argument, and the tuple `*` unpacks gives more",
+        ),
+        (
+            "def pair(a: int, b: int) -> int:\n    return a\n\n\nprint(pair(**{1: 2}))\n",
+            "E0404",
+            "`**` in a call takes a dict of `str` keys, and this is a dict[int, int]",
+        ),
+        (
+            "def mixed(a: int, b: int | None) -> int:\n    return a\n\n\n\
+             print(mixed(*[1], *[\"a\"]))\n",
+            "E0409",
+            "the positional arguments from the first `*` on have one type; this unpacks items \
+             of type str, and they are int",
+        ),
+        (
+            "def rest(a: int, *more: str) -> int:\n    return a\n\n\nprint(rest(*[1]))\n",
+            "E0404",
+            "`*more` takes a str, and `*` may give it values of type int",
+        ),
+        (
+            "def kw(**named: str) -> int:\n    return 0\n\n\nprint(kw(**{\"a\": 1}))\n",
+            "E0404",
+            "`**named` takes a str, and `**` may give it values of type int",
+        ),
+    ];
+    for (program, code, message) in refusals {
+        let found = messages(program);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
+            "{program}: {found:?}"
+        );
+    }
+    // An unpacked value whose type is unknown is reported once, where it is named.
+    for program in [
+        "def pair(a: int, b: int) -> int:\n    return a\n\n\nprint(pair(*missing))\n",
+        "def pair(a: int, b: int) -> int:\n    return a\n\n\nprint(pair(*(missing, 1)))\n",
+        "def pair(a: int, b: int) -> int:\n    return a\n\n\nprint(pair(**missing))\n",
+        "def first[T](*items: T) -> T:\n    return items[0]\n\n\nprint(first(*5))\n",
+    ] {
+        assert_ne!(messages(program).len(), 0, "{program}");
+    }
+}

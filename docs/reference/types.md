@@ -23,6 +23,7 @@ value.
 | `type Name = annotation` at module level names an annotation | SMT-10 |
 | `A \| B`, such as `int \| str`, narrowed by `isinstance` | TYP-14, TYP-07 |
 | `Iterator[T]` and `Iterable[T]` from `typing` or `collections.abc` | TYP-15 |
+| A class with `__iter__` and `__next__` as an `Iterator[T]`, and one with `__iter__` as an `Iterable[T]` | TYP-20 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 | `Callable[[A, ...], R]` from `typing` or `collections.abc`, the type of a function value; see [Functions as values](functions.md#functions-as-values) | FUN-05, NFR-19 |
 
@@ -50,6 +51,53 @@ def countdown(start: int) -> Iterator[int]:
 
 print(total([1, 2]), total(range(3)), total({4: "x"}), list(countdown(3)))
 ```
+
+A class of the program fits too, as `typing` reads the protocols. A class
+whose `__next__` returns `T` and whose `__iter__` returns the instance is
+an `Iterator[T]`, and a class whose `__iter__` returns an `Iterator[T]`,
+a generator of `T`, or an instance of such an iterator class is an
+`Iterable[T]` (TYP-20):
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Iterable, Iterator
+
+
+class Countdown:
+    def __init__(self, start: int) -> None:
+        self.current = start
+
+    def __iter__(self) -> "Countdown":
+        return self
+
+    def __next__(self) -> int:
+        if self.current == 0:
+            raise StopIteration
+        self.current -= 1
+        return self.current + 1
+
+
+class Word:
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.text)
+
+
+def joined(parts: Iterable[str]) -> str:
+    return "-".join(parts)
+
+
+steps: Iterator[int] = Countdown(3)
+print(next(steps), list(steps), joined(Word("abc")))
+```
+
+The instance is passed as it is, so `iter(steps) is steps` holds. A loop
+over it calls its `__iter__` first, `next()` calls `__next__` alone, and a
+`StopIteration` that `__next__` raises ends a loop, as in CPython. Each
+method takes the instance alone, and the items pass as they are: a class
+whose `__next__` returns an `int` is no `Iterator[int | None]`, E0404.
 
 An iterable may be read by `for`, `iter`, a comprehension and the
 builtins that read an iterable, such as `sum` and `sorted`. Its length and

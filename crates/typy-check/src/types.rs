@@ -412,6 +412,11 @@ impl Type {
             (Self::Callable { .. }, Self::Callable { .. }) => self.fits_callable(target),
             // A generator is an iterator of what it yields, held as the same object.
             (Self::Generator { yields, .. }, Self::Iterator(item)) => yields.matches(item),
+            // So is an instance of an iterator class, whose item passes as it is (TYP-20).
+            (Self::Instance(class), Self::Iterator(item)) => matches!(
+                crate::iterator_fits::iteration(class.id),
+                Some(crate::iterator_fits::Iteration::Iterator(own)) if own.matches(item)
+            ),
             (_, Self::Iterable(item)) => self.iterable_item().is_some_and(|own| own.matches(item)),
             _ => self.matches(target),
         }
@@ -749,6 +754,10 @@ impl Type {
             | Self::Iterator(item)
             | Self::Iterable(item) => Some(item.as_ref().clone()),
             Self::Generator { yields, .. } => Some(yields.as_ref().clone()),
+            // An instance of an iterator or iterable class gives its class's items (TYP-20).
+            Self::Instance(class) => {
+                crate::iterator_fits::iteration(class.id).map(|each| each.item().clone())
+            }
             Self::DictView(view, key, value) => Some(view.item(key, value)),
             Self::Str => Some(Self::Str),
             Self::Bytes | Self::Range => Some(Self::Int),

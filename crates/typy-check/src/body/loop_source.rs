@@ -109,6 +109,30 @@ impl BodyChecker<'_> {
             return (LoopSource::Items(iterable), Type::Error);
         };
         let iterator = self.program.signatures[iter.0 as usize].returns.clone();
+        // `__iter__` may return an iterator of another kind, such as a generator, which the
+        // loop then goes over as an `Iterator[T]` (TYP-20).
+        if let Type::Iterator(item) | Type::Generator { yields: item, .. } = &iterator {
+            let item = item.as_ref().clone();
+            let owner = self.program.signatures[iter.0 as usize]
+                .parameters
+                .first()
+                .map(|parameter| parameter.ty.clone());
+            let span = iterable.span;
+            let call = Self::typed(
+                TypedExprKind::Call {
+                    function: iter,
+                    arguments: vec![crate::typed::Argument {
+                        parameter: 0,
+                        passed: crate::typed::Passed::Position,
+                        value: Self::converted(iterable, owner.as_ref()),
+                    }],
+                    dispatch: true,
+                },
+                iterator.clone(),
+                span,
+            );
+            return (LoopSource::Items(Self::as_iterator(call)), item);
+        }
         let next = iterator
             .class_id()
             .and_then(|class| self.program.method(class, "__next__"));

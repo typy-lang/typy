@@ -20,6 +20,8 @@ use crate::types::{Type, TypeObjectOf};
 pub(crate) struct ProtocolValues {
     /// Each pair of a class and a protocol it satisfies.
     pub(crate) fits: BTreeSet<(ClassId, ClassId)>,
+    /// What the instances of each iterator or iterable class are (TYP-20).
+    pub(crate) iterations: std::collections::BTreeMap<ClassId, crate::iterator_fits::Iteration>,
     /// The dispatcher of each member read through a protocol value, by protocol and name.
     pub(crate) dispatchers: BTreeMap<(ClassId, String), FunctionId>,
 }

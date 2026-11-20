@@ -545,6 +545,7 @@ impl Dump<'_> {
             }
             .to_owned(),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
+            TypedExprKind::AsIterator(_) => "AsIterator".to_owned(),
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
             TypedExprKind::ForeignLibrary(index) => {

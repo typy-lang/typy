@@ -426,9 +426,15 @@ impl FunctionLowerer<'_> {
                 }
             }
             LoopSource::Items(sequence) if let typy_check::Type::Iterator(item) = &sequence.ty => {
-                let iterator = self.kept(sequence, "iterator", span);
+                // The loop asks the iterator for its iterator, which runs an instance's
+                // `__iter__` and steps it through a wrapper (TYP-20).
+                let lowered = self.expression(sequence);
+                let made = self.iterable_iterator(lowered, item, span);
+                self.release(lowered, span);
+                let slot = self.hidden_slot("iterator", TyirType::ITERATOR);
+                self.store(slot, made, span);
                 Iterator::Object {
-                    iterator,
+                    iterator: slot,
                     item: self.lowered_type(item),
                 }
             }

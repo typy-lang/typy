@@ -231,6 +231,7 @@ impl Checked<'_> {
             .foreign
             .set_declarations(self.foreign.clone(), self.structures.to_vec());
         crate::protocol_fits::reset(&program.protocol_values.fits);
+        crate::iterator_fits::reset(&program.protocol_values.iterations);
         program.set_floor(project.settings().python_floor.minor());
         program.set_platform(project.settings().platform);
         program.set_known_creations(known.cloned());
@@ -460,6 +461,7 @@ fn check_module<'tree>(
     );
     program.make_class_copies();
     program.note_protocol_fits(None);
+    program.note_iterator_classes(None);
     program.import_names(&imports.functions, annotations);
     program.import_module_functions(&imports.module_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);

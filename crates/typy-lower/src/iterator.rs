@@ -30,8 +30,11 @@ impl FunctionLowerer<'_> {
     /// the layout of the tuple of a key and a value, which it builds each item in.
     pub(crate) fn iter_of(&mut self, source: &TypedExpr, span: Span) -> Lowered {
         if let Type::Iterable(item) = &source.ty {
+            // `iter()` of an instance gives what its `__iter__` returns, as it is (TYP-20).
             let lowered = self.expression(source);
-            let iterator = self.iterable_iterator(lowered, item, span);
+            let pair = self.pair_layout(item, span);
+            let iterator =
+                self.call_runtime(RuntimeFunction::Iter, vec![lowered.value, pair], span);
             self.release(lowered, span);
             return iterator;
         }
@@ -65,18 +68,39 @@ impl FunctionLowerer<'_> {
         item: &Type,
         span: Span,
     ) -> Lowered {
-        let pair = if let Type::Tuple(items) = item {
+        let pair = self.pair_layout(item, span);
+        // An iterator is iterated as the iterable it also is; an instance's `__iter__` runs
+        // first, as CPython's loop asks `iter()` (TYP-20).
+        let iterable = if iterable.ty == TyirType::ITERABLE {
+            iterable.value
+        } else {
+            let bits = self.bits(iterable, span);
+            self.builder.push_value(
+                Operation::FromBits {
+                    bits,
+                    ty: TyirType::ITERABLE,
+                },
+                TyirType::ITERABLE,
+                span,
+            )
+        };
+        self.call_runtime(
+            RuntimeFunction::IterableIterator,
+            vec![iterable, pair],
+            span,
+        )
+    }
+
+    /// Returns the layout of the pair a dict's items iterator builds, when the items are
+    /// tuples, or 0.
+    fn pair_layout(&mut self, item: &Type, span: Span) -> ValueId {
+        if let Type::Tuple(items) = item {
             let id = self.tuple_type_id(items);
             self.constant(Constant::TupleDescriptor(id), span)
         } else {
             let unit = self.constant(Constant::Unit, span);
             self.bits(Self::borrowed(unit, TyirType::Unit), span)
-        };
-        self.call_runtime(
-            RuntimeFunction::IterableIterator,
-            vec![iterable.value, pair],
-            span,
-        )
+        }
     }
 
     /// Lowers `next(iterator)` and `next(iterator, default)`: the next item, with a reference
@@ -90,6 +114,16 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let lowered = self.operand_before(iterator, &default.into_iter().collect::<Vec<_>>(), span);
+        // `next()` steps an instance of an iterator class through a wrapper, without asking
+        // its `__iter__` (TYP-20).
+        let lowered = if method.is_none() {
+            let stepper =
+                self.call_runtime(RuntimeFunction::IteratorStepper, vec![lowered.value], span);
+            self.release(lowered, span);
+            stepper
+        } else {
+            lowered
+        };
         let item = match (&iterator.ty, method) {
             (_, Some(next)) => self.lowered_type(&self.program.function(next).signature.returns),
             (Type::Iterator(item), None) => self.lowered_type(item),

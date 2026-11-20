@@ -168,6 +168,17 @@ impl BodyChecker<'_> {
             );
         }
         match expected {
+            // An instance of an iterator class becomes an iterator as it is (TYP-20).
+            Type::Iterator(_)
+                if matches!(value.ty, Type::Instance(_)) && value.ty.is_assignable_to(expected) =>
+            {
+                let span = value.span;
+                Self::typed(
+                    TypedExprKind::AsIterator(Box::new(value)),
+                    expected.clone(),
+                    span,
+                )
+            }
             // A collection or an iterator becomes an iterable as it is.
             Type::Iterable(item)
                 if !matches!(value.ty, Type::Iterable(_) | Type::Error)

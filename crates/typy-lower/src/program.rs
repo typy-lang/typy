@@ -417,6 +417,8 @@ fn tyir_class(
         order: slots.order,
         hash: slots.hash,
         truth: slots.truth,
+        next: method("__next__").filter(|_| class.steps),
+        iter: method("__iter__").filter(|_| class.iterates),
         base: class.base.map(|base| base.0),
         exception_base,
         os_error: class

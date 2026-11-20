@@ -525,10 +525,8 @@ fn suggestion(description: &Description, name: Text) -> Option<Text> {
     let mut wanted = [0; MAX_NAME_BYTES];
     let wanted_size = name.utf8(&mut wanted)?;
     let mut best: Option<(Text, usize)> = None;
+    // `name` is no parameter's, which CPython skips, since `unexpected` asks.
     for candidate in candidates {
-        if candidate.name.equals(name) {
-            continue;
-        }
         let mut item = [0; MAX_NAME_BYTES];
         let Some(item_size) = candidate.name.utf8(&mut item) else {
             continue;

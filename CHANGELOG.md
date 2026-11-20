@@ -34,6 +34,12 @@ All notable changes to TyPy are recorded here. The format follows
   the call is evaluated in source order, as in CPython (EXP-17). A
   function, nested function or method with them as a value, and a
   `lambda` with them, are planned for 0.10 (FUN-13).
+- A class whose `__next__` returns `T` and whose `__iter__` returns the
+  instance is an `Iterator[T]`, and a class whose `__iter__` returns an
+  iterator is an `Iterable[T]`, as `typing` reads the protocols: its
+  instances are passed and held where those are expected, and a loop,
+  `next()` and every builtin that reads an iterable call its methods as
+  CPython does (TYP-20, ADR-0065).
 - `*iterable` and `**dict` in a call of the program's functions, methods
   and classes, and `*iterable` in `print`. A tuple of a fixed number of
   items binds as its items would; anything else binds when the call runs,

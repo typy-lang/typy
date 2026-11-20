@@ -709,6 +709,7 @@ impl Program {
         self.class_copies.replace(snapshot.class_copies);
         self.protocol_values = snapshot.protocol_values;
         crate::protocol_fits::reset(&self.protocol_values.fits);
+        crate::iterator_fits::reset(&self.protocol_values.iterations);
         let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
         for (symbol, ty) in symbols.into_iter().zip(found) {
             self.symbols[symbol.0 as usize].ty = ty;
@@ -805,6 +806,12 @@ impl Program {
                     span: class.span,
                     generic,
                     opaque,
+                    steps: !opaque
+                        && matches!(
+                            self.protocol_values.iterations.get(&class.id),
+                            Some(crate::iterator_fits::Iteration::Iterator(_))
+                        ),
+                    iterates: !opaque && self.protocol_values.iterations.contains_key(&class.id),
                 }
             })
             .collect();

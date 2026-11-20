@@ -85,3 +85,31 @@ fn exp_17_unpacking_refuses_what_cpython_or_typing_refuses() {
         );
     }
 }
+
+#[test]
+fn exp_17_a_display_refuses_an_item_of_another_type_after_an_unpacked_one() {
+    let cases = [
+        (
+            "values = [*[1], \"a\"]\n",
+            "the items of a list have one type; this is a str, and the list holds int",
+        ),
+        (
+            "merged = {**{\"a\": 1}, **{\"b\": \"x\"}}\n",
+            "the entries of a dict have one key type and one value type; these are str and \
+             str, and the dict holds str and int",
+        ),
+        (
+            "pairs: list[tuple[int, int] | None] = [*[(1, 2)]]\n",
+            "the items of a list have one type; this unpacks items of type tuple[int, int], and \
+             the list holds tuple[int, int] | None",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = messages(source);
+        assert!(
+            found.iter().any(|(_, text, _)| text == message),
+            "{source}: {found:?}"
+        );
+    }
+    assert_ne!(messages("values = [*missing]\n").len(), 0);
+}

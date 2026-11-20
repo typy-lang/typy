@@ -13,6 +13,7 @@ mod final_names;
 mod function_values;
 mod generators;
 mod generics;
+mod iterator_classes;
 mod lambda_expressions;
 mod lazy_imports;
 mod matching;

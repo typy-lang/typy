@@ -590,6 +590,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner)
+        | TypedExprKind::AsIterator(inner)
         | TypedExprKind::Named { value: inner, .. }
         | TypedExprKind::CaptureOf { closure: inner, .. } => {
             expression(inner, callees);

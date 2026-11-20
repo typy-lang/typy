@@ -153,7 +153,8 @@ pub(crate) fn outlives_call(expression: &TypedExpr) -> bool {
         | TypedExprKind::CapturedCellObject(_) => true,
         TypedExprKind::Wrap(inner)
         | TypedExprKind::Unwrap(inner)
-        | TypedExprKind::AsIterable(inner) => outlives_call(inner),
+        | TypedExprKind::AsIterable(inner)
+        | TypedExprKind::AsIterator(inner) => outlives_call(inner),
         _ => false,
     }
 }
@@ -190,6 +191,7 @@ pub(crate) fn is_quiet(expression: &TypedExpr) -> bool {
         | TypedExprKind::Upcast(operand)
         | TypedExprKind::Downcast(operand)
         | TypedExprKind::AsIterable(operand)
+        | TypedExprKind::AsIterator(operand)
         | TypedExprKind::Unary { operand, .. } => is_quiet(operand),
         TypedExprKind::ListItem {
             list: left,

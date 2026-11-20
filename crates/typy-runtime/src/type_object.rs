@@ -14,6 +14,7 @@ pub(crate) use builtin::{
 };
 
 use crate::Raising;
+use crate::exception::ExceptionObject;
 use crate::header::{
     BIG_INT_TYPE_ID, BYTES_TYPE_ID, DICT_TYPE_ID, DICT_VIEW_TYPE_ID, EXCEPTION_TYPE_ID, IMMORTAL,
     INSTANCE_TYPE_ID, ITERATOR_TYPE_ID, LIST_TYPE_ID, MODULE_TYPE_ID, ObjectHeader, RANGE_TYPE_ID,
@@ -32,6 +33,13 @@ pub type Equal = unsafe extern "C" fn(*mut ObjectHeader, *mut ObjectHeader) -> b
 pub type Order = unsafe extern "C" fn(*mut ObjectHeader, *mut ObjectHeader, i64) -> bool;
 /// Returns `repr` of an object, or the exception that writing it raised.
 pub type Repr = unsafe extern "C" fn(*mut ObjectHeader) -> Raising<*mut StrObject>;
+/// Calls `__next__` of an instance and writes its item into the slot, with a reference of its
+/// own; returns the exception `__next__` raised, `StopIteration` at the end, or null
+/// (ADR-0065).
+pub type NextEntry = unsafe extern "C" fn(*mut ObjectHeader, *mut u64) -> *mut ExceptionObject;
+/// Calls `__iter__` of an instance and writes the iterator it returns into the slot, with a
+/// reference of its own; returns the exception `__iter__` raised, or null (ADR-0065).
+pub type IterEntry = unsafe extern "C" fn(*mut ObjectHeader, *mut u64) -> *mut ExceptionObject;
 
 /// A type: itself an immortal object, whose type is `type`.
 #[repr(C)]
@@ -68,6 +76,15 @@ pub struct TypeObject {
     /// The class `type()` gives for an object of this type: for a copy of a generic class, the
     /// generic class; null for every other type, which is its own (ADR-0028).
     pub public: *const TypeObject,
+    /// Steps an instance of a class with `__next__`; absent for every other type (TYP-20).
+    pub next: Option<NextEntry>,
+    /// Gives an iterator of an instance of a class with `__iter__`; absent for every other
+    /// type (TYP-20).
+    pub iter: Option<IterEntry>,
+    /// How the items `next` writes are held, as an `ItemKind` code.
+    pub next_kind: u64,
+    /// The layout of tuple items `next` writes, or null.
+    pub next_tuple: *const TupleType,
 }
 
 // SAFETY: a type object is immortal and never written after it is built, so threads may share it.
@@ -94,6 +111,10 @@ impl TypeObject {
             fields: core::ptr::null(),
             str: None,
             public: core::ptr::null(),
+            next: None,
+            iter: None,
+            next_kind: 0,
+            next_tuple: core::ptr::null(),
         }
     }
 
