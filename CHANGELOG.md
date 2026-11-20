@@ -18,6 +18,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- A decorator on a method is refused as planned for 0.14 (FUN-15), and a
+  class decorator other than `@dataclass` as planned for 1.0 (CLS-38);
+  0.10 brings decorators of functions (FUN-06). `map`, `filter` and
+  `callable` are refused as planned for 0.10 under LIB-23, and
+  `property`, `staticmethod` and `classmethod` as values as planned for
+  1.0 (FUN-17). The messages named FUN-06 for every decorator and FUN-08
+  for those names.
 - A keyword argument a builtin does not take is refused with CPython's
   message, such as "Cannot specify a default for max() with multiple
   positional arguments" or "abs() takes no keyword arguments", where the

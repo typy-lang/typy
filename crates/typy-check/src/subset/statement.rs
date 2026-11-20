@@ -96,10 +96,12 @@ impl Walker {
                 let method_decorator = place == Place::Class
                     && matches!(decorators.as_slice(), [one] if is_method_decorator(one));
                 if !method_decorator && let Some(decorator) = decorators.first() {
-                    self.report(
-                        decorator.span(),
-                        planned("decorators", "0.10", RuleId::FUN_06),
-                    );
+                    let feature = if place == Place::Class {
+                        planned("decorators of methods", "0.14", RuleId::FUN_15)
+                    } else {
+                        planned("decorators", "0.10", RuleId::FUN_06)
+                    };
+                    self.report(decorator.span(), feature);
                 }
                 self.type_parameters(type_parameters);
                 self.parameters(parameters);

@@ -27,12 +27,17 @@ impl Walker {
                 },
             );
         }
-        // `@dataclass` is taken off the class before this walk (CLS-05); any other class
-        // decorator is a user-defined decorator (FUN-06).
+        // `@dataclass` is taken off the class before this walk (CLS-05). Another class
+        // decorator that returns the class it is given is planned (CLS-38); one that may
+        // return anything else changes the class, which TyPy excludes (SRS 6.1).
         if let Some(decorator) = class.decorators.first() {
             self.report(
                 decorator.span(),
-                planned("class decorators", "0.10", RuleId::FUN_06),
+                planned(
+                    "class decorators other than `@dataclass`",
+                    "1.0",
+                    RuleId::CLS_38,
+                ),
             );
         }
         if !class.type_parameters.is_empty() {

@@ -70,11 +70,11 @@ fn later_features_name_their_release_and_rule() {
     let cases = [
         (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 0.10 (FUN-06)",
+            "class decorators other than `@dataclass` are planned for TyPy 1.0 (CLS-38)",
         ),
         (
             "@decorated\nclass C[T]:\n    pass\n",
-            "class decorators are planned for TyPy 0.10 (FUN-06)",
+            "class decorators other than `@dataclass` are planned for TyPy 1.0 (CLS-38)",
         ),
         (
             "x = [i async for i in y]\n",
@@ -87,6 +87,14 @@ fn later_features_name_their_release_and_rule() {
         (
             "@d\ndef f() -> None:\n    pass\n",
             "decorators are planned for TyPy 0.10 (FUN-06)",
+        ),
+        (
+            "class C:\n    @d\n    def m(self) -> None:\n        pass\n",
+            "decorators of methods are planned for TyPy 0.14 (FUN-15)",
+        ),
+        (
+            "class C:\n    @staticmethod\n    @d\n    def m() -> None:\n        pass\n",
+            "decorators of methods are planned for TyPy 0.14 (FUN-15)",
         ),
         (
             "f = lambda *a: 0\n",

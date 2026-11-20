@@ -85,6 +85,8 @@ impl RuleId {
     pub const CLS_35: Self = Self("CLS-35");
     /// `super()` shall be usable as a value: held in a variable, passed and returned.
     pub const CLS_36: Self = Self("CLS-36");
+    /// A class decorator other than `@dataclass` shall be accepted when its type shows that it returns the class it is given.
+    pub const CLS_38: Self = Self("CLS-38");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -232,6 +234,8 @@ impl RuleId {
     pub const FUN_12: Self = Self("FUN-12");
     /// A function, nested function, method or `lambda` with `*args` or `**kwargs` parameters shall be a value where a `Callable` is expected, taking the arguments the `Callable` passes.
     pub const FUN_13: Self = Self("FUN-13");
+    /// User-defined decorators shall be accepted on methods, alone and together with `@staticmethod`, `@classmethod` and `@property`.
+    pub const FUN_15: Self = Self("FUN-15");
     /// `property`, `staticmethod` and `classmethod`, and the objects they make, such as a property read through its class, shall be values as CPython's are.
     pub const FUN_17: Self = Self("FUN-17");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
@@ -322,6 +326,8 @@ impl RuleId {
     pub const LIB_20: Self = Self("LIB-20");
     /// `math.prod` shall take items and a start other than numbers, multiplying them in turn as CPython does.
     pub const LIB_21: Self = Self("LIB-21");
+    /// `map`, `filter` and `callable` shall be available, `map` and `filter` giving iterators that go on after the function raises, as CPython's do.
+    pub const LIB_23: Self = Self("LIB-23");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -446,6 +452,7 @@ impl RuleId {
         Self::CLS_34,
         Self::CLS_35,
         Self::CLS_36,
+        Self::CLS_38,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
@@ -518,6 +525,7 @@ impl RuleId {
         Self::FUN_10,
         Self::FUN_12,
         Self::FUN_13,
+        Self::FUN_15,
         Self::FUN_17,
         Self::GEN_01,
         Self::GEN_02,
@@ -563,6 +571,7 @@ impl RuleId {
         Self::LIB_19,
         Self::LIB_20,
         Self::LIB_21,
+        Self::LIB_23,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,
