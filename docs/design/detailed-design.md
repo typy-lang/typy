@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.58 |
+| Version | 2.59 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -1798,6 +1798,8 @@ way (CLS-22); `operator_unary` calls
 assignment on an instance calls the class's in-place method, such as
 `__iadd__`, with `dispatch` set, and the binary method when the class has
 none, and assigns the result to the target (CLS-20); an in-place method that
+does not take the value is E0404, since CPython calls it whatever the value
+is, and an in-place method that
 may give way is the first step of an `OperatorCall` whose symbol is `+=`.
 `body::in_place::pinned_augmented` first holds the object and the key of an
 item or an attribute of an expression in hidden variables, so the target is

@@ -12,6 +12,9 @@ All notable changes to TyPy are recorded here. The format follows
   CPython's `OverflowError: %c arg not in range(0x110000)`, not "Python
   int too large to convert to C long", since the value fits a C `long`
   (LEX-07).
+- `x += y` where the class of `x` has an `__iadd__` whose parameter does
+  not take `y` is refused with E0404. TyPy called `__add__` instead, where
+  CPython calls `__iadd__` whatever `y` is (CLS-20).
 
 ## [0.9.0] - 2026-11-20
 

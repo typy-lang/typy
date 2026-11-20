@@ -459,9 +459,11 @@ reflected method may run, the operator's type joins the two methods'
 results, such as `int | str` (CLS-22). `x += y` calls
 the class's in-place method, such as `__iadd__`, when it defines one,
 and `x = x + y` otherwise, for any target: an item or an attribute of an
-expression is evaluated once, as in CPython (CLS-20). An in-place method
-that only a subclass of the target's class defines is planned for 1.0
-(CLS-32).
+expression is evaluated once, as in CPython (CLS-20). CPython calls the
+in-place method whatever `y` is, so an in-place method whose parameter
+does not take `y` is refused (E0404), never passed over for `__add__`.
+An in-place method that only a subclass of the target's class defines is
+planned for 1.0 (CLS-32).
 
 ## Giving way with `NotImplemented`
 
