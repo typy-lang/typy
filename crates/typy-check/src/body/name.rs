@@ -154,6 +154,9 @@ impl BodyChecker<'_> {
             let value = self.function_value(function, id, span);
             return Some(self.through_lazy(id, value));
         }
+        if let Some(builtin) = self.unbound_builtin_function(id, span) {
+            return Some(self.builtin_without_context(builtin, span));
+        }
         if !self.program.module_functions.contains_key(id) && Builtin::named(id).is_none() {
             return None;
         }

@@ -14,7 +14,7 @@ use typy_tyir::{FunctionId, TupleTypeId, TyirType, ValueId};
 use crate::abi::{function_type, value_type};
 use crate::error::CodegenError;
 use crate::function::{FunctionEmitter, Shared};
-use crate::layout::{FUNCTION_TYPE_ID, IMMORTAL};
+use crate::layout::{BUILTIN_FUNCTION_TYPE_ID, FUNCTION_TYPE_ID, IMMORTAL};
 use crate::statics::Statics;
 
 /// The field of the object that holds the descriptor: after the header, where an instance
@@ -87,6 +87,17 @@ pub(crate) fn function_object<'ctx>(
     let context = shared.context;
     let code = thunk(shared, id, Receives::Nothing)?;
     let descriptor = descriptor(shared, id, code, ("function", None))?;
+    // A built-in function used as a value is written as CPython writes one (FUN-08).
+    let builtin = shared
+        .tyir
+        .functions
+        .get(id.0 as usize)
+        .is_some_and(|function| function.builtin);
+    let type_id = if builtin {
+        BUILTIN_FUNCTION_TYPE_ID
+    } else {
+        FUNCTION_TYPE_ID
+    };
     let object = object_type(context).const_named_struct(&[
         context
             .i32_type()
@@ -94,7 +105,7 @@ pub(crate) fn function_object<'ctx>(
             .into(),
         context
             .i32_type()
-            .const_int(u64::from(FUNCTION_TYPE_ID), false)
+            .const_int(u64::from(type_id), false)
             .into(),
         descriptor.into(),
     ]);

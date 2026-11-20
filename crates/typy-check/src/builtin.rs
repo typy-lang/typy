@@ -85,6 +85,33 @@ impl Builtin {
         })
     }
 
+    /// Returns true for a built-in function, which CPython writes as `<built-in function
+    /// NAME>`, and false for a built-in type, such as `int` or `zip`, which is a class.
+    #[must_use]
+    pub const fn is_function(self) -> bool {
+        matches!(
+            self,
+            Self::Abs
+                | Self::All
+                | Self::Any
+                | Self::Chr
+                | Self::Input
+                | Self::IsInstance
+                | Self::Iter
+                | Self::Len
+                | Self::Max
+                | Self::Min
+                | Self::Next
+                | Self::Open
+                | Self::Ord
+                | Self::Print
+                | Self::Repr
+                | Self::Round
+                | Self::Sorted
+                | Self::Sum
+        )
+    }
+
     /// Returns the builtin's Python name.
     #[must_use]
     pub const fn name(self) -> &'static str {

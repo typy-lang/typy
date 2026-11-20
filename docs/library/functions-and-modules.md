@@ -71,8 +71,8 @@ soon as it is computed, and give the first item of the smallest or the
 largest key. `key=None` is no key. `list.sort` orders a copy of the items
 and writes them back, so a key that raises leaves the list as it was, as
 in CPython; CPython leaves undefined what a key sees of the list while it
-is sorted, and in TyPy it sees the items unsorted. A built-in function as
-a key, such as `key=len`, is planned for 0.10 (FUN-08).
+is sorted, and in TyPy it sees the items unsorted. A built-in function is
+a key too, such as `key=len` or `key=abs`, called with each item.
 
 ## Formatting with `%`
 

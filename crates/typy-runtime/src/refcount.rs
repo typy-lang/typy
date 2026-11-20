@@ -112,7 +112,9 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         crate::header::CDATA_TYPE_ID => unsafe { crate::cdata::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a function object a `def` made; the
         // immortal ones are never freed.
-        crate::header::FUNCTION_TYPE_ID => unsafe { crate::function::destroy(object.cast()) },
+        crate::header::FUNCTION_TYPE_ID | crate::header::BUILTIN_FUNCTION_TYPE_ID => unsafe {
+            crate::function::destroy(object.cast());
+        },
         // SAFETY: the type ID says the object is a cell.
         crate::header::CELL_TYPE_ID => unsafe { crate::variable_cell::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a bound method.

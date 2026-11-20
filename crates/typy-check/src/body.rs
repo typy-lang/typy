@@ -4,6 +4,7 @@ mod accessor;
 mod binding;
 mod builtin_call;
 mod builtin_module;
+mod builtin_value;
 mod call;
 mod call_expression;
 mod cdata;

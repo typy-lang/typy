@@ -372,6 +372,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             crate::header::TEXT_FILE_TYPE_ID => &crate::text_file::TEXT_FILE,
             crate::header::CDATA_TYPE_ID => &crate::cdata::CDATA,
             crate::header::FUNCTION_TYPE_ID => &crate::function::FUNCTION,
+            crate::header::BUILTIN_FUNCTION_TYPE_ID => &crate::function::BUILTIN_FUNCTION,
             crate::header::METHOD_TYPE_ID => &crate::method::METHOD,
             crate::header::GENERATOR_TYPE_ID => &crate::generator::GENERATOR,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),

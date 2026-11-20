@@ -61,9 +61,10 @@ impl BodyChecker<'_> {
         };
         let target = member.as_ref().or(target);
         let value = match (expression, target) {
-            // A `lambda` takes its parameter and result types from the `Callable` expected.
+            // A `lambda`, and a built-in function, takes its parameter and result types from
+            // the `Callable` expected (FUN-08).
             (
-                Expr::Lambda { .. },
+                Expr::Lambda { .. } | Expr::Name { .. },
                 Some(Type::Callable {
                     parameters,
                     returns,
@@ -365,11 +366,33 @@ impl BodyChecker<'_> {
             .iter()
             .map(|operand| self.empty_collection(operand))
             .collect();
+        // A built-in function compared with a function value takes its `Callable` type, as
+        // `measure is len` reads it (FUN-08).
+        let builtins: Vec<bool> = operands
+            .iter()
+            .map(|operand| match operand {
+                Expr::Name { id, span } => self.unbound_builtin_function(id, *span).is_some(),
+                _ => false,
+            })
+            .collect();
         let mut typed: Vec<Option<TypedExpr>> = operands
             .iter()
             .zip(&kinds)
-            .map(|(operand, kind)| kind.is_none().then(|| self.expression(operand)))
+            .zip(&builtins)
+            .map(|((operand, kind), builtin)| {
+                (kind.is_none() && !builtin).then(|| self.expression(operand))
+            })
             .collect();
+        for position in (0..operands.len()).filter(|position| builtins[*position]) {
+            let neighbour = [position.checked_sub(1), Some(position + 1)]
+                .into_iter()
+                .flatten()
+                .filter_map(|other| typed.get(other)?.as_ref())
+                .find(|other| matches!(other.ty, Type::Callable { .. }))
+                .map(|other| other.ty.clone());
+            typed[position] =
+                Some(self.expression_expecting(operands[position], neighbour.as_ref()));
+        }
         for (position, kind) in kinds.iter().enumerate() {
             let Some(kind) = kind else {
                 continue;

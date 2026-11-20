@@ -84,6 +84,30 @@ pub(crate) static FUNCTION: TypeObject = TypeObject {
     ..TypeObject::new("function", &raw const OBJECT)
 };
 
+/// The type `builtin_function_or_method`, of a built-in function used as a value, whose
+/// object the compiler emits immortal (FUN-08, ADR-0077).
+#[unsafe(export_name = "typy_rt_type_builtin_function")]
+pub(crate) static BUILTIN_FUNCTION: TypeObject = TypeObject {
+    hash: Some(crate::instance::typy_rt_identity_hash),
+    repr: Some(builtin_function_repr),
+    ..TypeObject::new("builtin_function_or_method", &raw const OBJECT)
+};
+
+/// Returns `repr` of a built-in function: `<built-in function NAME>`, as CPython writes it.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "a function object is a static the compiler aligns for its pointers"
+)]
+unsafe extern "C" fn builtin_function_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    let mut text = StrBuilder::with_capacity(32);
+    push_ascii(&mut text, "<built-in function ");
+    // SAFETY: the type of the object says it is a function object, whose descriptor and
+    // names are immortal statics.
+    unsafe { text.push_str((*(*object.cast::<FunctionObject>()).descriptor).name) };
+    push_ascii(&mut text, ">");
+    Raising::ok(text.finish())
+}
+
 /// Returns `repr` of a function object: `<function QUALNAME at 0x...>`, with the object's
 /// address, as CPython writes it.
 #[allow(
@@ -160,6 +184,37 @@ mod tests {
             crate::refcount::typy_rt_decrement(closure.cast());
             assert_eq!((*held).header.reference_count, 1);
             for each in [held, name, qualified_name] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
+        }
+    }
+
+    #[test]
+    fn fun_08_a_builtin_function_writes_its_name_and_its_type() {
+        let (name, qualified_name) = (from_str("len"), from_str("len"));
+        let descriptor = super::FunctionDescriptor {
+            name,
+            qualified_name,
+            code: core::ptr::null(),
+            captures: core::ptr::null(),
+        };
+        let function = super::FunctionObject {
+            header: crate::header::ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: crate::header::BUILTIN_FUNCTION_TYPE_ID,
+            },
+            descriptor: &raw const descriptor,
+        };
+        // SAFETY: the object, its descriptor and the strings are live for the whole test.
+        unsafe {
+            let object = core::ptr::from_ref(&function).cast_mut().cast();
+            let repr = super::builtin_function_repr(object).value;
+            assert_eq!(text(repr), "<built-in function len>");
+            let ty = crate::type_object::type_of(object);
+            assert!(core::ptr::eq(ty, &raw const super::BUILTIN_FUNCTION));
+            let class = crate::type_object::typy_rt_type_text(ty);
+            assert_eq!(text(class), "<class 'builtin_function_or_method'>");
+            for each in [repr, class, name, qualified_name] {
                 crate::refcount::typy_rt_decrement(each.cast());
             }
         }

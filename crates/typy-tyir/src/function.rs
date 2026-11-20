@@ -36,6 +36,9 @@ pub struct TyirFunction {
     /// The frame a generator's resume function keeps in its object, or `None` for any other
     /// function (ADR-0063).
     pub generator: Option<GeneratorFrame>,
+    /// Whether the function stands for a built-in function used as a value, whose object is
+    /// written `<built-in function NAME>` (FUN-08, ADR-0077).
+    pub builtin: bool,
 }
 
 /// What a generator's object holds between steps: the arguments its maker stores, then each

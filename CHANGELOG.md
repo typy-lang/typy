@@ -8,6 +8,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- A built-in function is a value where a `Callable` is expected, such as
+  `sorted(words, key=len)`, `max(rows, key=len)` or `measure:
+  Callable[[str], int] = len`, written `<built-in function len>`, of the
+  type `builtin_function_or_method`. `chr` and `ord` are values with no
+  `Callable` expected; any other built-in function needs one, E0203
+  (FUN-08).
 - Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
   of its files, with their SHA-256, and of the crates and libraries the
   compiler holds, with their licences; a copy is published beside the

@@ -49,9 +49,9 @@ fn a_call_its_callee_does_not_take_is_refused_with_the_reason() {
             "abs() takes no keyword arguments: CPython raises `TypeError`",
         ),
         (
-            "print(min(1, 2, key=abs))\n",
-            "E0201",
-            "using `abs` as a value is planned for TyPy 0.10 (FUN-08)",
+            "print(min(1, 2, key=len))\n",
+            "E0404",
+            "the argument of `len` must be a str, and this is an int",
         ),
         (
             "import ctypes\n\nlibc = ctypes.CDLL(None)\n\

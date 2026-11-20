@@ -59,6 +59,9 @@ pub struct TypedProgram {
     /// The captures of each nested function, in order, whose code takes its function object
     /// first (FUN-04, ADR-0061).
     pub closures: std::collections::BTreeMap<FunctionId, Vec<CapturedVariable>>,
+    /// The hidden functions that stand for a built-in function used as a value, whose
+    /// objects CPython writes as `<built-in function NAME>` (FUN-08, ADR-0077).
+    pub builtin_values: std::collections::BTreeSet<FunctionId>,
     /// The variables of each function that live in a cell, which its nested functions share.
     pub cells: std::collections::BTreeMap<FunctionId, std::collections::BTreeSet<SymbolId>>,
     /// The variables nested functions declare `nonlocal`, each a cell variable whose cell is

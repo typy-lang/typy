@@ -55,6 +55,9 @@ pub const CELL_TYPE_ID: u32 = 26;
 /// The type ID of a generator object, the state of a generator function's body between
 /// steps (SMT-11, ADR-0063).
 pub const GENERATOR_TYPE_ID: u32 = 27;
+/// The type ID of the object of a built-in function used as a value, laid out as a function
+/// object, which CPython writes as `<built-in function NAME>` (FUN-08, ADR-0077).
+pub const BUILTIN_FUNCTION_TYPE_ID: u32 = 28;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

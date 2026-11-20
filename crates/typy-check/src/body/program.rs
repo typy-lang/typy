@@ -135,6 +135,9 @@ pub(crate) struct Program {
     /// before any module is checked, so a subclass in a module checked later counts
     /// (ADR-0084).
     pub(super) derived_classes: BTreeSet<crate::check::class_index::ClassKey>,
+    /// The hidden function of each built-in function used as a value, by its module, its
+    /// name and the parameter types of its `Callable` (FUN-08, ADR-0077).
+    builtin_values: Vec<(String, String, Vec<Type>, FunctionId)>,
     /// The operator and comparison methods that return `T | NotImplementedType` (CLS-21).
     pub(crate) giving_way: crate::check::not_implemented::GivingWay,
 }
@@ -225,6 +228,7 @@ impl Program {
             foreign: super::foreign_call::Foreign::default(),
             subclass_variables: crate::check::subclass_variables::SubclassVariables::default(),
             derived_classes: BTreeSet::new(),
+            builtin_values: Vec::new(),
             giving_way: crate::check::not_implemented::GivingWay::new(),
         }
     }
@@ -378,6 +382,29 @@ impl Program {
     }
 
     /// Returns the ID the next function added while checking a module body takes.
+    /// Returns the hidden function of the module being checked that calls the built-in
+    /// `name` with arguments of `parameters`, when one was made.
+    pub(super) fn builtin_value(&self, name: &str, parameters: &[Type]) -> Option<FunctionId> {
+        self.builtin_values
+            .iter()
+            .find(|(module, each, types, _)| {
+                *module == self.module && each == name && types.as_slice() == parameters
+            })
+            .map(|(.., function)| *function)
+    }
+
+    /// Keeps `function`, the hidden function that calls the built-in `name` with arguments of
+    /// `parameters`, for the module being checked.
+    pub(super) fn add_builtin_value(
+        &mut self,
+        name: &str,
+        parameters: Vec<Type>,
+        function: FunctionId,
+    ) {
+        self.builtin_values
+            .push((self.module.clone(), name.to_owned(), parameters, function));
+    }
+
     pub(super) fn next_function(&self) -> FunctionId {
         FunctionId(id(self.functions.len()))
     }
@@ -705,6 +732,9 @@ impl Program {
         let first_new = FunctionId(id(snapshot.functions));
         self.lazy_imports
             .retain(|function, _| *function < first_new);
+        // The hidden functions of built-ins the look made are made again (FUN-08).
+        self.builtin_values
+            .retain(|(.., function)| *function < first_new);
         self.functions.truncate(snapshot.functions);
         self.signatures.truncate(snapshot.signatures);
         self.classes.truncate(snapshot.first_class);
@@ -849,6 +879,11 @@ impl Program {
             library_version: None,
             warnings: typy_diagnostics::Diagnostics::new(),
             closures: self.closures,
+            builtin_values: self
+                .builtin_values
+                .iter()
+                .map(|(.., function)| *function)
+                .collect(),
             cells: self.cells,
             nonlocals: self.nonlocals,
             fits: (

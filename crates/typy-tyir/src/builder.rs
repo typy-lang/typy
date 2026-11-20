@@ -31,6 +31,7 @@ pub struct FunctionBuilder {
     slots: Vec<Slot>,
     current: BlockId,
     generator: Option<crate::function::GeneratorFrame>,
+    builtin: bool,
 }
 
 impl FunctionBuilder {
@@ -59,6 +60,7 @@ impl FunctionBuilder {
             slots: Vec::new(),
             current: BlockId(0),
             generator: None,
+            builtin: false,
         }
     }
 
@@ -202,6 +204,11 @@ impl FunctionBuilder {
         self.generator = Some(frame);
     }
 
+    /// Marks the function as standing for a built-in function used as a value (FUN-08).
+    pub fn set_builtin(&mut self, builtin: bool) {
+        self.builtin = builtin;
+    }
+
     /// Returns the types of the slots made so far, in order.
     #[must_use]
     pub fn slot_types(&self) -> Vec<TyirType> {
@@ -234,6 +241,7 @@ impl FunctionBuilder {
             values: self.values,
             slots: self.slots,
             generator: self.generator,
+            builtin: self.builtin,
         }
     }
 }

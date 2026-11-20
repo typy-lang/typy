@@ -34,6 +34,12 @@ impl BodyChecker<'_> {
             span,
         } = expression
         else {
+            // A built-in function takes the `Callable` the context expects (FUN-08).
+            if let Some(types) = expected.parameters
+                && let Some(value) = self.builtin_as_callable(expression, types, expected.returns)
+            {
+                return value;
+            }
             return self.expression(expression);
         };
         if let Some(refused) = self.refused_lambda(*span) {
@@ -203,7 +209,7 @@ impl BodyChecker<'_> {
 
     /// Returns the type of the body of the `lambda` `function`, which no context gave, and
     /// gives its signature that result.
-    fn settle_lambda_result(&mut self, function: crate::typed::FunctionId) -> Type {
+    pub(super) fn settle_lambda_result(&mut self, function: crate::typed::FunctionId) -> Type {
         let index = function.0 as usize;
         let returns = self.program.functions[index]
             .as_ref()

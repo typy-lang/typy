@@ -144,8 +144,9 @@ fn fun_05_a_function_without_one_callable_type_is_not_a_value() {
         ),
         (
             "print(len)",
-            "E0201",
-            "using `len` as a value is planned for TyPy 0.10 (FUN-08)",
+            "E0203",
+            "`len` takes arguments of more than one type, so as a value it needs the \
+             `Callable` type its context expects",
         ),
     ];
     for (statement, code, message) in cases {
@@ -472,4 +473,63 @@ fn fun_05_a_key_is_a_function_value_of_one_item_whose_results_order() {
             "{statement}"
         );
     }
+}
+
+#[test]
+fn fun_08_a_builtin_function_takes_the_callable_its_context_expects() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def apply(function: Callable[[int], str], value: int) -> str:\n",
+        "    return function(value)\n",
+        "words = ['pear', 'fig']\n",
+        "print(sorted(words, key=len), max(words, key=len), min([3, -5], key=abs))\n",
+        "measure: Callable[[str], int] = len\n",
+        "letter = chr\n",
+        "code = ord\n",
+        "print(apply(chr, 97), apply(repr, 5), measure is len, len == measure, letter(66), code('a'))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn fun_08_a_builtin_function_that_does_not_fit_its_context_is_refused() {
+    let cases = [
+        (
+            "from collections.abc import Callable\nmeasure: Callable[[str], float] = len\n",
+            "E0404",
+            "`len` called with a str gives an int, and this `Callable` returns float",
+        ),
+        (
+            "print(sorted([1, 2], key=len))\n",
+            "E0404",
+            "the argument of `len` must be a str, and this is an int",
+        ),
+        (
+            "measure = abs\n",
+            "E0203",
+            "`abs` takes arguments of more than one type, so as a value it needs the `Callable` \
+             type its context expects",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            (code, message),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn fun_08_a_name_the_program_binds_is_not_the_builtin() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def len(text: str) -> int:\n",
+        "    return 0\n",
+        "measure: Callable[[str], int] = len\n",
+        "print(sorted(['a'], key=len))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
 }

@@ -576,6 +576,7 @@ fn function_builder(
         (builder, None, closure)
     };
     builder.set_qualified_name(function.qualified_name.clone());
+    builder.set_builtin(program.builtin_values.contains(&function.id));
     (builder, generator, closure)
 }
 
@@ -585,9 +586,9 @@ pub(crate) fn function_symbol(program: &TypedProgram, function: &TypedFunction) 
         ENTRY_SYMBOL.to_owned()
     } else if function.name == FINISH_NAME {
         FINISH_SYMBOL.to_owned()
-    } else if function.name == "<lambda>" {
-        // The lambdas of one function share a `__qualname__`, so each symbol adds the
-        // lambda's number.
+    } else if function.name == "<lambda>" || program.builtin_values.contains(&function.id) {
+        // The lambdas of one function share a `__qualname__`, and so do the hidden functions
+        // of one built-in, so each symbol adds the function's number.
         symbol(
             &function.module,
             &format!("{}.{}", function.qualified_name, function.id.0),
