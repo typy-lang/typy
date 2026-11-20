@@ -155,6 +155,27 @@ same type. The base of a class is `object`, an exception class or a
 class of the program defined before it; a built-in type such as `int` or
 `list` is E0201, and several bases are planned for after 1.0.
 
+`type(x)` of an instance whose class has subclasses gives the class the
+instance has when the program runs, which `print`, `__name__`, `is` and
+`==` read. Calling that class, or reading a class variable or a class
+method through it, is planned for 0.14 (CLS-39); call the class by its
+name instead.
+
+<!-- typy-expect: rejected E0201 at 11:12 -->
+```python
+class Shape:
+    pass
+
+
+class Circle(Shape):
+    pass
+
+
+def copy(shape: Shape) -> Shape:
+    kind = type(shape)
+    return kind()
+```
+
 ## Calling the base with `super()`
 
 In a method, `super().name(...)` calls the method of the nearest base

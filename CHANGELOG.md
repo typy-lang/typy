@@ -44,6 +44,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- `type(x)` of an instance whose class has subclasses, such as a `Circle`
+  held as a `Shape`, is a class known only when the program runs. Calling
+  it, or reading a class variable or a class method through it, is refused
+  with E0201, planned for 0.14 (CLS-39), and passing it where a
+  `type[Shape]` is expected with E0404. TyPy took it for the static class,
+  so `type(shape)()` made a `Shape` and `type(shape).kind` read `Shape`'s
+  variable, where CPython uses `Circle`'s. Call the class by its name, or
+  pass a function that makes the object.
 - A property read through its class as a value, such as `getter = Box.v`,
   is refused with E0201, planned for 1.0 (FUN-17). TyPy took it for the
   getter, so calling the value ran the getter, where CPython raises

@@ -131,6 +131,10 @@ pub(crate) struct Program {
     /// The class variables the program assigns through a subclass that inherits them
     /// (ADR-0037).
     pub(super) subclass_variables: crate::check::subclass_variables::SubclassVariables,
+    /// The classes of every module that some class derives from, by module and name, read
+    /// before any module is checked, so a subclass in a module checked later counts
+    /// (ADR-0084).
+    pub(super) derived_classes: BTreeSet<crate::check::class_index::ClassKey>,
     /// The operator and comparison methods that return `T | NotImplementedType` (CLS-21).
     pub(crate) giving_way: crate::check::not_implemented::GivingWay,
 }
@@ -220,6 +224,7 @@ impl Program {
             contexts: BTreeMap::new(),
             foreign: super::foreign_call::Foreign::default(),
             subclass_variables: crate::check::subclass_variables::SubclassVariables::default(),
+            derived_classes: BTreeSet::new(),
             giving_way: crate::check::not_implemented::GivingWay::new(),
         }
     }

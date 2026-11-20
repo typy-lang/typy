@@ -254,6 +254,7 @@ impl Checked<'_> {
         );
         // Each module is checked after the modules its module-level imports need.
         program.set_subclass_variables(subclass_variables::subclass_variables(self.modules));
+        program.set_derived_classes(class_index::ClassIndex::of(self.modules).derived_from());
         program.giving_way = not_implemented::not_implemented_methods(self.modules);
         let mut deferred = Vec::new();
         let mut definitions = ModuleDefinitions::new();

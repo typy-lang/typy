@@ -57,18 +57,7 @@ impl BodyChecker<'_> {
             for argument in arguments {
                 self.expression(argument);
             }
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(401),
-                    name_span,
-                    format!(
-                        "`{name}` is {} and cannot be called",
-                        callee.ty.with_article()
-                    ),
-                )
-                .with_rule(RuleId::EXP_02),
-                span,
-            );
+            return self.not_callable((Some(name), name_span), &callee.ty, span);
         }
         if let Some(call) = self.rebound_call(name, arguments, keywords, span) {
             return call;
@@ -128,18 +117,7 @@ impl BodyChecker<'_> {
             if read.ty == Type::Error {
                 return TypedExpr { span, ..read };
             }
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(401),
-                    name_span,
-                    format!(
-                        "`{name}` is {} and cannot be called",
-                        read.ty.with_article()
-                    ),
-                )
-                .with_rule(RuleId::EXP_02),
-                span,
-            );
+            return self.not_callable((Some(name), name_span), &read.ty, span);
         }
         let result = self.unknown_name(name, name_span);
         for argument in arguments {
@@ -191,13 +169,36 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        self.not_callable((Some(name), name_span), &ty, span)
+    }
+
+    /// Returns the error for a call of `callee`, named or not, a value of type `ty` that is no
+    /// function: E0201 for a class known only when the program runs, whose call CLS-39 plans,
+    /// and E0401 for any other value.
+    pub(super) fn not_callable(
+        &mut self,
+        (callee, at): (Option<&str>, Span),
+        ty: &Type,
+        span: Span,
+    ) -> TypedExpr {
+        if *ty == Type::TypeObject(None) {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    at,
+                    "calling a class known only when the program runs, such as `type(x)` of an \
+                     instance whose class has subclasses, is planned for TyPy 0.14 (CLS-39)",
+                )
+                .with_rule(RuleId::CLS_39),
+                span,
+            );
+        }
+        let message = match callee {
+            Some(name) => format!("`{name}` is {} and cannot be called", ty.with_article()),
+            None => format!("{} cannot be called", ty.with_article()),
+        };
         self.error(
-            Diagnostic::new(
-                DiagnosticCode::error(401),
-                name_span,
-                format!("`{name}` is {} and cannot be called", ty.with_article()),
-            )
-            .with_rule(RuleId::EXP_02),
+            Diagnostic::new(DiagnosticCode::error(401), at, message).with_rule(RuleId::EXP_02),
             span,
         )
     }

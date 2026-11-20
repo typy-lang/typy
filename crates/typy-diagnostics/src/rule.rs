@@ -87,6 +87,8 @@ impl RuleId {
     pub const CLS_36: Self = Self("CLS-36");
     /// A class decorator other than `@dataclass` shall be accepted when its type shows that it returns the class it is given.
     pub const CLS_38: Self = Self("CLS-38");
+    /// A value of type `type[C]` that may hold a class derived from `C` shall be callable, and its class methods and class variables reachable through it, as CPython reaches those of the class it holds.
+    pub const CLS_39: Self = Self("CLS-39");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -453,6 +455,7 @@ impl RuleId {
         Self::CLS_35,
         Self::CLS_36,
         Self::CLS_38,
+        Self::CLS_39,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

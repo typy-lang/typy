@@ -55,7 +55,19 @@ impl BodyChecker<'_> {
             );
         }
         let value = self.expression(argument);
-        let ty = TypeObjectOf::type_of(TypeObjectOf::of(&value.ty));
+        let of = match &value.ty {
+            // An instance of a class some class derives from may be of that class, so its
+            // type object is known only when the program runs (ADR-0084).
+            Type::Instance(class)
+                if self.program.has_derived_class(
+                    class.generic.as_ref().map_or(class.id, |(root, _)| *root),
+                ) =>
+            {
+                None
+            }
+            other => TypeObjectOf::of(other),
+        };
+        let ty = TypeObjectOf::type_of(of);
         Self::typed(TypedExprKind::TypeOf(Box::new(value)), ty, span)
     }
 
@@ -92,10 +104,14 @@ impl BodyChecker<'_> {
             object.ty.with_article(),
             attribute.name
         );
-        self.error(
-            Diagnostic::new(DiagnosticCode::error(412), attribute.span, message)
-                .with_rule(RuleId::CLS_12),
-            span,
-        )
+        let mut diagnostic = Diagnostic::new(DiagnosticCode::error(412), attribute.span, message)
+            .with_rule(RuleId::CLS_12);
+        if object.ty == Type::TypeObject(None) {
+            diagnostic = diagnostic.with_help(
+                "reading a class variable or a class method through a class known only when \
+                 the program runs is planned for TyPy 0.14 (CLS-39)",
+            );
+        }
+        self.error(diagnostic, span)
     }
 }

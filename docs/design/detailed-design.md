@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.66 |
+| Version | 2.67 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -1600,7 +1600,12 @@ known only when the program runs. `type(x)` is `TypedExprKind::TypeOf(x)`.
 The type object of an instance of a class that no class of the program
 derives from is the class's, and that of an optional one `NoneType` or
 its base's; an instance of a class with a subclass, and an exception, give
-the class the object holds when the program runs. A class name,
+the class the object holds when the program runs, of type `type`. The
+classes some class derives from, in any module, are read from the syntax
+before any module is checked (`ClassIndex::derived_from`), so a subclass
+in a module checked later counts. Calling a value of type `type` is
+E0201, planned for 0.14 (CLS-39), and so is reading a class variable or a
+class method through it (ADR-0084). A class name,
 or one of `int`, `float`, `bool`, `str`, `bytes`, `list`, `tuple`, `set`,
 `dict`, `object` and `type` read as a value, is `TypedExprKind::TypeObject`,
 and `__name__` of a type object is `TypedExprKind::TypeName`; any other

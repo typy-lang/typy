@@ -85,15 +85,7 @@ impl BodyChecker<'_> {
                         for argument in arguments {
                             self.expression(argument);
                         }
-                        self.error(
-                            Diagnostic::new(
-                                DiagnosticCode::error(401),
-                                function.span(),
-                                format!("{} cannot be called", class.ty.with_article()),
-                            )
-                            .with_rule(RuleId::EXP_02),
-                            span,
-                        )
+                        self.not_callable((None, function.span()), &class.ty, span)
                     }
                 }
             }
