@@ -110,6 +110,37 @@ impl<'signature> Parameters<'signature> {
     }
 }
 
+impl<'signature> Parameters<'signature> {
+    /// Returns the type of each parameter a positional value at `position` or later may fill,
+    /// and the item type of `*args`.
+    pub(super) fn reached_from(&self, position: usize) -> Vec<&'signature Type> {
+        self.all
+            .iter()
+            .enumerate()
+            .filter_map(|(index, parameter)| match parameter.kind {
+                ParameterKind::PositionalOnly | ParameterKind::Normal if index >= position => {
+                    Some(&parameter.ty)
+                }
+                ParameterKind::VarPositional => Some(packed_item(&parameter.ty)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Returns the type of each parameter a keyword may fill, and the value type of
+    /// `**kwargs`.
+    pub(super) fn reached_by_name(&self) -> Vec<&'signature Type> {
+        self.all
+            .iter()
+            .filter_map(|parameter| match parameter.kind {
+                ParameterKind::Normal | ParameterKind::KeywordOnly => Some(&parameter.ty),
+                ParameterKind::VarKeyword => Some(packed_item(&parameter.ty)),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
 /// Returns the type of each item of a `*args` parameter, of type `tuple[T, ...]`, or of each
 /// value of a `**kwargs` parameter, of type `dict[str, T]`: `T`.
 fn packed_item(ty: &Type) -> &Type {

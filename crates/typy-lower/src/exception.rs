@@ -86,7 +86,7 @@ impl FunctionLowerer<'_> {
         init: &InitCall,
         span: Span,
     ) -> Lowered {
-        let evaluated = self.evaluated_arguments(&init.arguments, span);
+        let evaluated = self.evaluated_arguments(init.function, &init.arguments, span);
         let program_class = class.class_id();
         // `OSError.__new__` leaves the arguments of a class with an `__init__` of its own to
         // `OSError.__init__`, so the exception starts with none.

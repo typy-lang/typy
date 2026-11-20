@@ -6,9 +6,10 @@ use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
 use super::binding::{Parameters, Slot};
+use super::unpacked_arguments::{Reach, Tail};
 use crate::builtin::Builtin;
 use crate::exception::BuiltinException;
-use crate::typed::{Argument, FunctionId, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{Argument, FunctionId, Passed, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -283,7 +284,10 @@ impl BodyChecker<'_> {
     /// Binds the arguments of a call to the parameters of `signature` after the first `skip`:
     /// each positional argument to the next parameter that takes one by position, then to
     /// `*args`, and each keyword argument to the parameter it names that is not
-    /// positional-only, then to `**kwargs`, as CPython binds them (FUN-03, EXP-17).
+    /// positional-only, then to `**kwargs`, as CPython binds them (FUN-03, EXP-17). The
+    /// items of a fixed tuple `*` unpacks bind as positional arguments; from the first
+    /// `*iterable` of unknown length on, the positional values, and the entries of each
+    /// `**dict`, bind when the call runs (ADR-0073).
     pub(super) fn bind_to(
         &mut self,
         signature: &crate::typed::FunctionSignature,
@@ -293,11 +297,37 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> Result<Vec<Argument>, TypedExpr> {
+        // The call takes what it unpacks, so its own errors stand (ADR-0073).
+        if super::call_expression::unpacking(arguments, keywords).is_some() {
+            self.unpacking_calls.push(span);
+        }
         let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
         let shape = Parameters::of(parameters);
         let mut bound: Vec<Argument> = Vec::new();
         let mut filled = vec![false; parameters.len()];
-        for (index, argument) in arguments.iter().enumerate() {
+        let mut position = 0;
+        let mut tail: Option<Tail> = None;
+        for argument in arguments {
+            if let Some(tail) = &mut tail {
+                self.add_to_tail(tail, argument);
+                continue;
+            }
+            if let Expr::Starred { value, .. } = argument {
+                let value = Self::version_tuple(self.expression(value));
+                if let Type::Tuple(items) = &value.ty {
+                    let count = items.len();
+                    let shapes = (&shape, parameters);
+                    let argument =
+                        self.bind_items(shapes, (value, position), (&mut filled, skip), name)?;
+                    bound.push(argument);
+                    position += count;
+                } else {
+                    tail = Some(self.start_tail(parameters, position, value));
+                }
+                continue;
+            }
+            let index = position;
+            position += 1;
             let slot = shape.of_position(index);
             let value = self.expression_expecting(argument, slot.and_then(Slot::expected));
             let Some(slot) = slot else {
@@ -309,9 +339,18 @@ impl BodyChecker<'_> {
             }
             bound.push(self.bound_argument(slot, None, value, (parameters, skip)));
         }
+        let mut reach = Reach {
+            tail_from: tail.as_ref().map(Tail::start),
+            entries: false,
+        };
+        if let Some(tail) = tail {
+            bound.push(self.finish_tail(tail, parameters, skip));
+        }
+        let mut entries = None;
         for keyword in keywords {
             let Some(keyword_name) = &keyword.name else {
-                self.expression(&keyword.value);
+                bound.extend(self.bind_entries(&keyword.value, &mut entries));
+                reach.entries = true;
                 continue;
             };
             let slot = shape.of_keyword(&keyword_name.name);
@@ -347,7 +386,10 @@ impl BodyChecker<'_> {
                 span,
             ));
         }
-        self.bind_defaults(parameters, &filled, skip, name, span, &mut bound)?;
+        if let Some(item) = &entries {
+            self.check_entries_reach(item, parameters, &filled, span);
+        }
+        self.bind_defaults((parameters, &filled, reach), skip, name, span, &mut bound)?;
         Ok(bound)
     }
 
@@ -370,7 +412,11 @@ impl BodyChecker<'_> {
                 );
                 Argument {
                     parameter: index + skip,
-                    keyword: None,
+                    passed: if keyword.is_some() {
+                        Passed::Name
+                    } else {
+                        Passed::Position
+                    },
                     value,
                 }
             }
@@ -383,7 +429,9 @@ impl BodyChecker<'_> {
                 self.expect(&value, item.clone(), &what);
                 Argument {
                     parameter: index + skip,
-                    keyword: keyword.map(str::to_owned),
+                    passed: keyword.map_or(Passed::Position, |keyword| {
+                        Passed::Keyword(keyword.to_owned())
+                    }),
                     value,
                 }
             }
@@ -394,12 +442,12 @@ impl BodyChecker<'_> {
     }
 
     /// Adds to `bound` the argument of each parameter no argument filled whose default a
-    /// call gives each time, and reports a parameter that has no default; `*args` and
-    /// `**kwargs` take what is left, or nothing.
+    /// call gives each time, and reports a parameter that has no default and that no
+    /// unpacked argument may fill when the call runs; `*args` and `**kwargs` take what is
+    /// left, or nothing.
     fn bind_defaults(
         &mut self,
-        parameters: &[crate::typed::SignatureParameter],
-        filled: &[bool],
+        (parameters, filled, reach): (&[crate::typed::SignatureParameter], &[bool], Reach),
         skip: usize,
         name: &str,
         span: Span,
@@ -413,12 +461,12 @@ impl BodyChecker<'_> {
                 let value = self.default_call(factory, &parameter.ty, span);
                 bound.push(Argument {
                     parameter: index + skip,
-                    keyword: None,
+                    passed: Passed::Default,
                     value,
                 });
                 continue;
             }
-            if parameter.default.is_none() {
+            if parameter.default.is_none() && !reach.reaches(index, parameter.kind) {
                 return Err(self.error(
                     Diagnostic::new(
                         DiagnosticCode::error(404),

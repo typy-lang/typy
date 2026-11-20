@@ -362,55 +362,7 @@ impl BodyChecker<'_> {
                 arguments,
                 keywords,
                 ..
-            } => match function.as_ref() {
-                // A module's declaration of a library holds nothing to evaluate (FFI-01).
-                _ if let Some(library) = self.foreign_library(span) => library,
-                Expr::Name {
-                    id,
-                    span: name_span,
-                } => self.call(id, *name_span, arguments, keywords, span),
-                Expr::Attribute {
-                    value, attribute, ..
-                } => self.method_call(value, attribute, arguments, keywords, span),
-                // A generic class given its type arguments, such as `Box[int](1)`.
-                Expr::Subscript { value, .. }
-                    if matches!(value.as_ref(), Expr::Name { id, .. }
-                        if self.program.class_ids.contains_key(id)) =>
-                {
-                    self.applied_class_call(function, arguments, keywords, span)
-                }
-                // A class `POINTER(T)` or `T * length` called where it is made (FFI-03), or a
-                // function value (FUN-05).
-                _ => {
-                    let class = self.expression_or_class(function);
-                    match class.ty {
-                        Type::CDataClass(class) => {
-                            self.cdata_new(&class, arguments, keywords, span)
-                        }
-                        Type::Error => {
-                            for argument in arguments {
-                                self.expression(argument);
-                            }
-                            TypedExpr { span, ..class }
-                        }
-                        Type::Callable { .. } => self.call_value(class, arguments, keywords, span),
-                        _ => {
-                            for argument in arguments {
-                                self.expression(argument);
-                            }
-                            self.error(
-                                Diagnostic::new(
-                                    DiagnosticCode::error(401),
-                                    function.span(),
-                                    format!("{} cannot be called", class.ty.with_article()),
-                                )
-                                .with_rule(RuleId::EXP_02),
-                                span,
-                            )
-                        }
-                    }
-                }
-            },
+            } => self.checked_call(function, arguments, keywords, span),
             Expr::List { elements, .. } => self.list_display(elements, None, span),
             Expr::Slice { .. } => self.misplaced_slice(span),
             Expr::Attribute {

@@ -227,7 +227,7 @@ impl FunctionLowerer<'_> {
                 arguments,
                 dispatch,
             } => {
-                let values = self.call_arguments(*function, arguments, span);
+                let values = self.call_arguments(*function, arguments, *dispatch, span);
                 if *dispatch {
                     self.call_method(*function, values, ty, span)
                 } else {
@@ -275,7 +275,7 @@ impl FunctionLowerer<'_> {
             } => {
                 let closure_value = self.expression(closure);
                 let closure_value = self.kept_for_call(closure, closure_value, span);
-                let values = self.call_arguments(*function, arguments, span);
+                let values = self.call_arguments(*function, arguments, false, span);
                 let result = self.call_nested(*function, closure_value.value, values, ty, span);
                 self.release(closure_value, span);
                 result
@@ -678,7 +678,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns the value of the default `default` of `parameter`, held as the parameter is.
-    fn default_value(
+    pub(crate) fn default_value(
         &mut self,
         parameter: &SignatureParameter,
         default: Option<&TypedConstant>,
@@ -706,7 +706,7 @@ impl FunctionLowerer<'_> {
     /// Returns the default of parameter `index` of a call through the method table of the
     /// instance `instance`: that of the method of the instance's class, the nearest override
     /// of `function` whose class the instance is of, or `function`'s own.
-    fn dispatched_default(
+    pub(crate) fn dispatched_default(
         &mut self,
         function: FunctionId,
         index: usize,

@@ -4,6 +4,7 @@
 mod arithmetic;
 mod augmented;
 mod borrow;
+mod bound_call;
 mod builtin;
 mod call_graph;
 mod cdata;

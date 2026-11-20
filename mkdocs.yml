@@ -198,6 +198,7 @@ nav:
           - adr/0070-keep-the-variables-of-each-function-an-exception-leaves-with-it.md
           - adr/0071-release-the-module-variables-when-a-program-with-generators-ends.md
           - adr/0072-delegate-yield-from-one-step-at-a-time-through-the-runtime.md
+          - adr/0073-bind-the-arguments-of-a-call-with-unpacking-when-the-program-runs.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

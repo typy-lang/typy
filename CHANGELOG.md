@@ -34,6 +34,13 @@ All notable changes to TyPy are recorded here. The format follows
   the call is evaluated in source order, as in CPython (EXP-17). A
   function, nested function or method with them as a value, and a
   `lambda` with them, are planned for 0.10 (FUN-13).
+- `*iterable` and `**dict` in a call of the program's functions, methods
+  and classes, and `*iterable` in `print`. A tuple of a fixed number of
+  items binds as its items would; anything else binds when the call runs,
+  with CPython 3.15's `TypeError` for a call that does not fit (EXP-17,
+  ADR-0073). Unpacking in a call of another builtin, of a function value,
+  of a protocol method or of an exception class is planned for 0.10
+  (EXP-19).
 - Generator expressions, `(element for target in source if condition)`:
   a `Generator[Y, None, None]` whose first iterable runs where the
   expression runs and the rest as it runs, reading the variables around it

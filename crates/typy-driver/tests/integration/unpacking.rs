@@ -36,3 +36,23 @@ fn exp_17_star_args_and_star_star_kwargs_pack_after_every_argument_is_evaluated(
     let ir = text(emit(&main, EmitStage::LlvmIr));
     assert!(ir.contains("typy_rt_tuple_seal"), "{ir}");
 }
+
+#[test]
+fn exp_17_a_call_that_unpacks_checks_and_binds_its_arguments_when_it_runs() {
+    let source = "def pair(a: int, b: int = 0) -> int:\n    return a + b\n\n\n\
+                  def sink(*args: int, **kwargs: int) -> int:\n    return len(args)\n\n\n\
+                  values = [1, 2]\nprint(pair(*values), pair(**{\"a\": 1}, b=2), \
+                  sink(*values, **{\"x\": 1}), pair(*(1, 2)))\nprint(*values, sep=\"-\")\n";
+    let (_guard, main) = program(source);
+    let tyir = text(emit(&main, EmitStage::Tyir));
+    for call in [
+        "rt.call_check",
+        "rt.call_merge",
+        "rt.call_name",
+        "rt.list_get",
+    ] {
+        assert!(tyir.contains(call), "{call} missing from\n{tyir}");
+    }
+    let ir = text(emit(&main, EmitStage::LlvmIr));
+    assert!(ir.contains("typy_rt_call_check"), "{ir}");
+}

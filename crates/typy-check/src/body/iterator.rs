@@ -139,7 +139,7 @@ impl BodyChecker<'_> {
                 function: method,
                 dispatch: true,
                 arguments: vec![Argument {
-                    keyword: None,
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: instance,
                 }],

@@ -233,6 +233,14 @@ pub enum RuntimeFunction {
     /// The values of an iterable for unpacking targets, in a new list, with CPython's
     /// `ValueError` when there are too few or too many (SMT-02, EXP-17).
     Unpack,
+    /// Records a keyword name of a call that unpacks, with CPython's `TypeError` for one given
+    /// twice (EXP-17, ADR-0073).
+    CallName,
+    /// Merges the dict of a `**` argument into a call's keywords (EXP-17, ADR-0073).
+    CallMerge,
+    /// Checks a call that unpacks against its callee's parameters, with CPython's `TypeError`
+    /// (EXP-17, ADR-0073).
+    CallCheck,
     ObjectType,
     ObjectRepr,
     ObjectStr,
@@ -487,7 +495,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 370] = [
+    pub const ALL: [Self; 373] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -691,6 +699,9 @@ impl RuntimeFunction {
         Self::GeneratorResult,
         Self::GeneratorDelegate,
         Self::Unpack,
+        Self::CallName,
+        Self::CallMerge,
+        Self::CallCheck,
         Self::IteratorItem,
         Self::ObjectType,
         Self::ObjectRepr,
@@ -1126,6 +1137,9 @@ impl RuntimeFunction {
                 signature(&[TyirType::GENERATOR, ITERATOR, Bool], Bool, true)
             }
             Self::Unpack => signature(&[Bits, Int, Bits, Int, Int, Bool], LIST, true),
+            Self::CallName => signature(&[STR, DICT, STR], Unit, true),
+            Self::CallMerge => signature(&[STR, DICT, DICT, DICT, Bits], Unit, true),
+            Self::CallCheck => signature(&[STR, Int, Bits], Unit, true),
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::ObjectRepr | Self::ObjectStr => signature(&[Bits], STR, true),
@@ -1485,6 +1499,9 @@ impl RuntimeFunction {
             Self::GeneratorResult => "generator_result",
             Self::GeneratorDelegate => "generator_delegate",
             Self::Unpack => "unpack",
+            Self::CallName => "call_name",
+            Self::CallMerge => "call_merge",
+            Self::CallCheck => "call_check",
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",

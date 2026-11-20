@@ -148,7 +148,7 @@ impl BodyChecker<'_> {
             crate::typed::TypedExprKind::Call {
                 function: getter,
                 arguments: vec![crate::typed::Argument {
-                    keyword: None,
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: object.clone(),
                 }],

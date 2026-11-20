@@ -91,7 +91,7 @@ impl FunctionLowerer<'_> {
 
     /// Returns a new list of the items of `list` after the first `before` and before the last
     /// `after`.
-    fn list_between(
+    pub(crate) fn list_between(
         &mut self,
         list: typy_tyir::ValueId,
         before: usize,

@@ -42,10 +42,10 @@ pub use typed::{
     Conversion, DictPart, EachMember, ExceptionPart, FStringPart, FileAttribute, FormattedValue,
     FunctionId, FunctionSignature, Generator, GeneratorTypes, ImportBinding, InitCall,
     IsInstanceTest, KeyedOperation, LoopSource, MemberTest, OpenOptions, OperatorCall,
-    OperatorKind, PartOperation, PercentConversion, PercentField, PercentNumber, PercentPart,
-    PercentValue, PrintCall, RaiseCause, RuntimeKind, SignatureParameter, SpreadKind, SpreadPart,
-    Symbol, SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr, TypedExprKind,
-    TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt,
+    OperatorKind, PartOperation, Passed, PercentConversion, PercentField, PercentNumber,
+    PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind, SignatureParameter, SpreadKind,
+    SpreadPart, Symbol, SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr,
+    TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt,
     TypedTypeAlias, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

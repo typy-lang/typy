@@ -342,16 +342,9 @@ impl Walker {
                     // which it is.
                     other => self.expression(other),
                 }
+                // The checker decides which callees take `*value` and `**value` (ADR-0073).
                 for argument in arguments {
-                    if let Expr::Starred { value, span } = argument {
-                        self.report(
-                            *span,
-                            planned(
-                                "iterable unpackings with `*` in calls",
-                                "0.9",
-                                RuleId::EXP_17,
-                            ),
-                        );
+                    if let Expr::Starred { value, .. } = argument {
                         self.expression(value);
                     } else {
                         self.expression(argument);
@@ -374,16 +367,6 @@ impl Walker {
                     }
                 }
                 for keyword in keywords {
-                    if keyword.name.is_none() {
-                        self.report(
-                            keyword.span,
-                            planned(
-                                "dictionary unpackings with `**` in calls",
-                                "0.9",
-                                RuleId::EXP_17,
-                            ),
-                        );
-                    }
                     self.expression(&keyword.value);
                 }
             }

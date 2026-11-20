@@ -159,23 +159,70 @@ impl BodyChecker<'_> {
         let reported = self.diagnostics.len();
         let before = self.assigned.clone();
         // Each argument is paired with the type it must have: its parameter's, or the type of
-        // each item of `*args` or `**kwargs` (EXP-17).
+        // each item of `*args` or `**kwargs`; a value `*` or `**` unpacks, with each type it
+        // may have to fit (EXP-17, ADR-0073).
         let shape = Parameters::of(&signature.parameters[skip.min(signature.parameters.len())..]);
-        let positional = arguments
-            .iter()
-            .enumerate()
-            .map(|(index, argument)| (shape.of_position(index), argument));
-        let named = keywords.iter().filter_map(|keyword| {
-            let name = keyword.name.as_ref()?;
-            Some((shape.of_keyword(&name.name), &keyword.value))
-        });
-        let given: Vec<(Option<Slot<'_>>, &Expr)> = positional.chain(named).collect();
-        for (slot, argument) in given {
-            let Some(expected) = slot.and_then(Slot::expected) else {
+        let mut position = 0;
+        let mut tail = false;
+        for argument in arguments {
+            let (value, unpacked) = match argument {
+                Expr::Starred { value, .. } => (value.as_ref(), true),
+                other => (other, false),
+            };
+            let reached: Vec<Type> = if tail || unpacked {
+                shape.reached_from(position).into_iter().cloned().collect()
+            } else {
+                shape
+                    .of_position(position)
+                    .and_then(Slot::expected)
+                    .into_iter()
+                    .cloned()
+                    .collect()
+            };
+            if reached.iter().all(|expected| !expected.has_parameter()) {
+                position += 1;
+                continue;
+            }
+            let ty = Self::version_tuple(self.expression(value)).ty;
+            match (&ty, unpacked) {
+                (Type::Tuple(items), true) if !tail => {
+                    for item in items {
+                        let expected = shape.of_position(position).and_then(Slot::expected);
+                        pairs.extend(expected.map(|expected| (expected.clone(), item.clone())));
+                        position += 1;
+                    }
+                    continue;
+                }
+                (_, true) => {
+                    tail = true;
+                    if let Some(item) = super::unpacked_arguments::iterated_type(&ty) {
+                        pairs.extend(reached.into_iter().map(|expected| (expected, item.clone())));
+                    }
+                }
+                (_, false) => {
+                    pairs.extend(reached.into_iter().map(|expected| (expected, ty.clone())));
+                }
+            }
+            position += 1;
+        }
+        for keyword in keywords {
+            let Some(name) = &keyword.name else {
+                let ty = self.expression(&keyword.value).ty;
+                if let Type::Dict(_, item) = &ty {
+                    pairs.extend(
+                        shape
+                            .reached_by_name()
+                            .into_iter()
+                            .map(|expected| (expected.clone(), item.as_ref().clone())),
+                    );
+                }
+                continue;
+            };
+            let Some(expected) = shape.of_keyword(&name.name).and_then(Slot::expected) else {
                 continue;
             };
             if expected.has_parameter() {
-                let value = self.expression(argument);
+                let value = self.expression(&keyword.value);
                 pairs.push((expected.clone(), value.ty));
             }
         }

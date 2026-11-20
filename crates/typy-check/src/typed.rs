@@ -19,8 +19,8 @@ pub use dump::dump;
 pub use expression::{
     Argument, Conversion, DictPart, EachMember, ExceptionPart, FStringPart, FileAttribute,
     FormattedValue, InitCall, IsInstanceTest, KeyedOperation, MemberTest, OpenOptions,
-    OperatorCall, OperatorKind, PartOperation, PrintCall, RuntimeKind, SpreadKind, SpreadPart,
-    TypedExpr, TypedExprKind,
+    OperatorCall, OperatorKind, PartOperation, Passed, PrintCall, RuntimeKind, SpreadKind,
+    SpreadPart, TypedExpr, TypedExprKind,
 };
 pub use function::{FunctionId, GeneratorTypes, TypedFunction};
 pub use percent::{PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue};

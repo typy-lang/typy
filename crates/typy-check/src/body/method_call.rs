@@ -187,7 +187,7 @@ impl BodyChecker<'_> {
         let arguments: Vec<Argument> = bound
             .into_iter()
             .map(|(parameter, expression)| Argument {
-                keyword: None,
+                passed: crate::typed::Passed::Position,
                 parameter,
                 value: self.method_argument(
                     method,
@@ -208,7 +208,7 @@ impl BodyChecker<'_> {
                     span,
                 );
                 arguments.push(Argument {
-                    keyword: None,
+                    passed: crate::typed::Passed::Position,
                     parameter: 1,
                     value: Self::converted(none, Some(&signature.result)),
                 });

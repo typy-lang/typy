@@ -17,12 +17,12 @@ pub(crate) use text::typy_rt_dict_view_text;
 pub(crate) use view::typy_rt_dict_view;
 pub(crate) use view::{ViewObject, destroy as destroy_view, length as view_length};
 
-pub(crate) use operations::{
-    typy_rt_dict_copy, typy_rt_dict_equal, typy_rt_dict_key, typy_rt_dict_length,
-    typy_rt_dict_next, typy_rt_dict_pop, typy_rt_dict_value,
-};
 #[cfg(test)]
-pub(crate) use operations::{typy_rt_dict_new, typy_rt_dict_set};
+pub(crate) use operations::typy_rt_dict_new;
+pub(crate) use operations::{
+    typy_rt_dict_contains, typy_rt_dict_copy, typy_rt_dict_equal, typy_rt_dict_key,
+    typy_rt_dict_length, typy_rt_dict_next, typy_rt_dict_pop, typy_rt_dict_set, typy_rt_dict_value,
+};
 pub(crate) use text::typy_rt_dict_repr;
 
 use crate::allocator::{allocate, array_size, free};

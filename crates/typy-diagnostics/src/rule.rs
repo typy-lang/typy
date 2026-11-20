@@ -183,6 +183,8 @@ impl RuleId {
     pub const EXP_17: Self = Self("EXP-17");
     /// An assignment expression inside a generator expression shall bind the variable of the function around it.
     pub const EXP_18: Self = Self("EXP-18");
+    /// `*` and `**` shall be accepted in a call of a built-in function or method other than `print`, of a function value and of an exception class, and `**` in a call of `print`, binding as CPython binds them (ADR-0073).
+    pub const EXP_19: Self = Self("EXP-19");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
     /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
@@ -487,6 +489,7 @@ impl RuleId {
         Self::EXP_16,
         Self::EXP_17,
         Self::EXP_18,
+        Self::EXP_19,
         Self::FFI_01,
         Self::FFI_02,
         Self::FFI_03,

@@ -19,7 +19,15 @@ impl FunctionLowerer<'_> {
         arguments: &[Argument],
         span: Span,
     ) -> Lowered {
-        let evaluated = self.evaluated_arguments(arguments, span);
+        if let Some(init) = init
+            && Self::binds_when_run(arguments)
+        {
+            return self.new_instance_bound_when_run(class, init, arguments, span);
+        }
+        let evaluated = match init {
+            Some(init) => self.evaluated_arguments(init, arguments, span),
+            None => Vec::new(),
+        };
         let ty = TyirType::Object(TypeId::class(class.0));
         let value = self
             .builder
@@ -36,6 +44,32 @@ impl FunctionLowerer<'_> {
                 self.release(lowered, span);
             }
         }
+        instance
+    }
+
+    /// Lowers `Class(arguments)` whose arguments bind when `__init__` is called: they are
+    /// evaluated, the instance is made, then the call is checked and `__init__` runs, as
+    /// CPython does (ADR-0073).
+    fn new_instance_bound_when_run(
+        &mut self,
+        class: ClassId,
+        init: FunctionId,
+        arguments: &[Argument],
+        span: Span,
+    ) -> Lowered {
+        let info = self.program.class(class);
+        let called = format!("{}.{}", info.module, info.name);
+        let unbound = self.unbound_arguments(init, arguments, (1, Some(&called)), span);
+        let ty = TyirType::Object(TypeId::class(class.0));
+        let value = self
+            .builder
+            .push_value(Operation::NewInstance { class: class.0 }, ty, span);
+        let instance = self.produced(value, ty);
+        self.store_defaults(instance, class, span);
+        let receiver = Self::borrowed(instance.value, ty);
+        let values = self.bind_when_run(init, unbound, (Some(receiver), false), span);
+        let done = self.call_function(init, values, TyirType::Unit, span);
+        self.release(done, span);
         instance
     }
 

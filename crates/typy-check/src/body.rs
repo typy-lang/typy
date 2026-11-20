@@ -5,6 +5,7 @@ mod binding;
 mod builtin_call;
 mod builtin_module;
 mod call;
+mod call_expression;
 mod cdata;
 mod class;
 mod class_bridge;
@@ -87,6 +88,7 @@ mod type_object;
 mod typing_class;
 mod union;
 mod union_loop;
+mod unpacked_arguments;
 mod unpacking;
 mod version_info;
 mod view_operator;
@@ -183,6 +185,8 @@ pub(crate) struct BodyChecker<'program> {
     /// The variables read or captured through their cells, among them an `except` clause's,
     /// whose name leaves the body's names when the clause ends.
     used_cells: BTreeSet<SymbolId>,
+    /// The calls with `*` or `**` that bound their arguments, by their spans (ADR-0073).
+    unpacking_calls: Vec<Span>,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -225,6 +229,7 @@ impl<'program> BodyChecker<'program> {
             nested_functions: BTreeMap::new(),
             reading_function: false,
             used_cells: BTreeSet::new(),
+            unpacking_calls: Vec::new(),
         }
     }
 

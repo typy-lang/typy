@@ -61,7 +61,7 @@ impl Program {
                     span,
                 };
                 Argument {
-                    keyword: None,
+                    passed: crate::typed::Passed::Position,
                     parameter: index,
                     value: widened(read, &wanted.ty),
                 }

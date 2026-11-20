@@ -25,11 +25,31 @@ pub struct TypedExpr {
 pub struct Argument {
     /// The index of the parameter in the callee's signature.
     pub parameter: usize,
-    /// The keyword a `**kwargs` parameter takes the value by; `None` for any other argument
-    /// (EXP-17).
-    pub keyword: Option<String>,
+    /// How the value reaches the parameter.
+    pub passed: Passed,
     /// The value.
     pub value: TypedExpr,
+}
+
+/// How an argument reaches its parameter (EXP-17, ADR-0073).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Passed {
+    /// By its position, also into `*args`.
+    Position,
+    /// By the parameter's name.
+    Name,
+    /// By a keyword `**kwargs` takes, this one.
+    Keyword(String),
+    /// `*tuple` of a tuple of a fixed number of items: each item by its position, to the
+    /// parameter at the same place in this list.
+    Items(Vec<usize>),
+    /// A list of every positional value from the first `*iterable` of unknown length on,
+    /// bound from `parameter` on when the call runs.
+    Tail,
+    /// `**dict`: each entry by its key, bound when the call runs.
+    Entries,
+    /// The value of a default a call makes, used when no argument fills the parameter.
+    Default,
 }
 
 /// What an expression does.
@@ -506,6 +526,9 @@ pub enum DictPart {
 pub struct PrintCall {
     /// The values printed, in order.
     pub values: Vec<TypedExpr>,
+    /// The positions of `values` that hold a list of the values of a `*iterable`, each
+    /// written as a value of its own (EXP-17).
+    pub each: Vec<usize>,
     /// What is written between two values.
     pub sep: Option<TypedExpr>,
     /// What is written after the last value.

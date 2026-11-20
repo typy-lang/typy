@@ -268,7 +268,7 @@ impl Program {
                 let method = self.method(class, name)?;
                 let own = &self.signatures[method.0 as usize];
                 let mut arguments = vec![Argument {
-                    keyword: None,
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: BodyChecker::converted(
                         object,
@@ -281,7 +281,7 @@ impl Program {
                     let value = typed(TypedExprKind::Local(*symbol), parameter.ty.clone());
                     let wanted = own.parameters.get(position).map(|each| &each.ty);
                     arguments.push(Argument {
-                        keyword: None,
+                        passed: crate::typed::Passed::Position,
                         parameter: position,
                         value: BodyChecker::converted(value, wanted),
                     });
@@ -350,7 +350,7 @@ impl BodyChecker<'_> {
             TypedExprKind::Call {
                 function: getter,
                 arguments: vec![Argument {
-                    keyword: None,
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: object,
                 }],

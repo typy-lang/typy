@@ -97,14 +97,6 @@ fn later_features_name_their_release_and_rule() {
             "default values other than constants are planned for TyPy 1.0 (EXP-16)",
         ),
         (
-            "print(*x)\n",
-            "iterable unpackings with `*` in calls are planned for TyPy 0.9 (EXP-17)",
-        ),
-        (
-            "print(**x)\n",
-            "dictionary unpackings with `**` in calls are planned for TyPy 0.9 (EXP-17)",
-        ),
-        (
             "def f() -> None:\n    print((yield 1))\n",
             "`yield` and `yield from` inside a larger expression are planned for TyPy 1.0 \
              (FUN-12)",

@@ -66,7 +66,7 @@ impl Program {
             .skip(1)
             .enumerate()
             .map(|(index, (symbol, parameter))| Argument {
-                keyword: None,
+                passed: crate::typed::Passed::Position,
                 parameter: index,
                 value: TypedExpr {
                     kind: TypedExprKind::Local(*symbol),

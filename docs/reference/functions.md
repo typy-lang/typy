@@ -9,6 +9,7 @@
 | Positional, keyword and default arguments, defaults evaluated once | EXP-16 |
 | Positional-only parameters before `/` and keyword-only parameters after `*`, bound as CPython binds them; a keyword for a positional-only parameter, or a positional argument past the others, is E0404 | FUN-03 |
 | `*args: T` and `**kwargs: T`, which take the arguments left over as a `tuple[T, ...]` and a `dict[str, T]` | EXP-17 |
+| `f(*iterable)` and `f(**dict)` in a call of the program's code, and `print(*iterable)`, bound as CPython binds them | EXP-17 |
 | A function of the program as a value of type `Callable[[A, ...], R]`: stored, passed, returned, called, compared and hashed | FUN-05, NFR-19 |
 | A method read through an instance as a bound method, and through its class as a function | FUN-05 |
 | A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
@@ -58,8 +59,55 @@ too; a type parameter is solved from the arguments `*args` takes, as in
 `**kwargs` of the method it overrides, E0404 (CLS-04). Reading such a
 function as a value, and `*args` or `**kwargs` in a `lambda`, are planned
 for 0.10 (FUN-13); call it from a `lambda` that takes the arguments the
-`Callable` passes. Unpacking in a call, `f(*values)` and `f(**options)`,
-comes later in 0.9 (EXP-17).
+`Callable` passes. A call may also unpack its arguments; see
+[Unpacking in a call](#unpacking-in-a-call).
+
+## Unpacking in a call
+
+A call of a function, method or class of the program passes each value of
+an iterable written `*iterable` as a positional argument, and each entry
+of a `dict[str, T]` written `**dict` as a keyword argument, as CPython
+does. `print(*values)` writes each value:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(name: str, count: int = 1, *, unit: str = "item") -> str:
+    return f"{count} {unit}(s) of {name}"
+
+
+def total(*numbers: int) -> int:
+    return sum(numbers)
+
+
+def forward(*numbers: int) -> int:
+    return total(*numbers)
+
+
+order = ("apple", 3)
+options = {"unit": "box"}
+values = [1, 2, 3]
+print(describe(*order, **options))
+print(forward(*values), *values, sep=", ")
+```
+
+The items of a tuple of a fixed number of items bind as positional
+arguments would, and are checked as they are. The values of any other
+iterable, and the entries of a dict, bind when the call runs, and a call
+that does not fit raises CPython's `TypeError` with CPython 3.15's
+message, such as `pair() missing 1 required positional argument: 'b'`
+(ADR-0073). A call evaluates every positional argument, each `*iterable`
+read to its end, before its keyword arguments, as CPython does.
+
+From the first `*iterable` of unknown length on, the positional values
+have one type: the one the parameters they may reach share, which each
+value must fit, E0404, or else the first value's, which the others must
+have, E0409, and which must fit each of those parameters. The values of
+the `**` dicts
+have one type too, which must fit each parameter a keyword may still
+fill and the values of `**kwargs`. `*` and `**` in a call of a builtin
+other than `print`, of a function value, of a protocol method or of an
+exception class, and `**` in a call of `print`, are planned for 0.10
+(EXP-19).
 
 ## Nested functions
 
@@ -465,6 +513,7 @@ These forms are refused:
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
 | A function, nested function or method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.10 | E0201 (FUN-13) |
+| `*` or `**` in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and `**` in a call of `print`, planned for 0.10 | E0201 (EXP-19) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
 | A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
 | A call of a value that is not a function, such as an `int` | E0401 |

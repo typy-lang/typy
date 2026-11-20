@@ -182,7 +182,7 @@ impl BodyChecker<'_> {
 /// Returns true when the values of `from` are held as the values of `to` are, so a value of an
 /// iterable unpacked goes into the collection unchanged: the same type, the optional of a type
 /// other than a tuple, which an optional holds as a pair, or a base class of an instance's.
-fn held_alike(from: &Type, to: &Type) -> bool {
+pub(super) fn held_alike(from: &Type, to: &Type) -> bool {
     match (from, to) {
         _ if from == to => true,
         (_, Type::Optional(base)) if !matches!(from, Type::Tuple(_)) => held_alike(from, base),

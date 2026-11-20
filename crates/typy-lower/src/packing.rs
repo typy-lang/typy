@@ -3,7 +3,7 @@
 //! `**kwargs` into a new dict, in order, as CPython binds them. A call leaves neither
 //! parameter out: one with no argument takes an empty tuple or dict.
 
-use typy_check::{Argument, FunctionId, Type, TypedConstant};
+use typy_check::{Argument, FunctionId, Passed, Type, TypedConstant};
 use typy_diagnostics::Span;
 use typy_source::syntax::ParameterKind;
 use typy_tyir::{RuntimeFunction, TyirType};
@@ -22,30 +22,42 @@ impl FunctionLowerer<'_> {
         &mut self,
         function: FunctionId,
         arguments: &[Argument],
+        dispatch: bool,
         span: Span,
     ) -> Vec<(usize, Lowered)> {
-        let evaluated = self.evaluated_arguments(arguments, span);
+        if Self::binds_when_run(arguments) {
+            let unbound = self.unbound_arguments(function, arguments, (0, None), span);
+            return self.bind_when_run(function, unbound, (None, dispatch), span);
+        }
+        let evaluated = self.evaluated_arguments(function, arguments, span);
         self.packed_arguments(function, evaluated, span)
     }
 
-    /// Returns the arguments of a call, evaluated in source order, each kept alive until the
-    /// call.
+    /// Returns the arguments of a call of `function`, evaluated in source order, each kept
+    /// alive until the call; the items of a tuple `*` unpacks are arguments of their own.
     pub(crate) fn evaluated_arguments<'call>(
         &mut self,
+        function: FunctionId,
         arguments: &'call [Argument],
         span: Span,
     ) -> Vec<Evaluated<'call>> {
-        arguments
-            .iter()
-            .map(|argument| {
-                let lowered = self.expression(&argument.value);
-                (
-                    argument.parameter,
-                    argument.keyword.as_deref(),
-                    self.kept_for_call(&argument.value, lowered, span),
-                )
-            })
-            .collect()
+        let mut evaluated = Vec::new();
+        for argument in arguments {
+            let keyword = match &argument.passed {
+                Passed::Items(targets) => {
+                    for (target, item) in self.tuple_items(function, argument, targets, span) {
+                        evaluated.push((target, None, item));
+                    }
+                    continue;
+                }
+                Passed::Keyword(keyword) => Some(keyword.as_str()),
+                _ => None,
+            };
+            let lowered = self.expression(&argument.value);
+            let lowered = self.kept_for_call(&argument.value, lowered, span);
+            evaluated.push((argument.parameter, keyword, lowered));
+        }
+        evaluated
     }
 
     /// Returns `evaluated` with the values of the `*args` parameter of `function` packed into

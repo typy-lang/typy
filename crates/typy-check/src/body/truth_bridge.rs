@@ -33,7 +33,7 @@ impl Program {
             TypedExprKind::Call {
                 function: length,
                 arguments: vec![Argument {
-                    keyword: None,
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: typed(TypedExprKind::Local(symbol), instance.clone()),
                 }],

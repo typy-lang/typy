@@ -3,7 +3,8 @@
 use typy_check::{Builtin, PrintCall, Type, TypedExpr};
 use typy_diagnostics::Span;
 use typy_tyir::{
-    Comparison, Constant, Operation, RuntimeFunction, ScalarKind, Terminator, TyirType,
+    Comparison, Constant, IntOperator, Operation, RuntimeFunction, ScalarKind, Terminator,
+    TyirType, ValueId,
 };
 
 use crate::function::FunctionLowerer;
@@ -280,13 +281,17 @@ impl FunctionLowerer<'_> {
             Some(value) => value.value,
             None => self.string(" ", span),
         };
-        for (position, value) in lowered.iter().enumerate() {
-            if position > 0 {
-                self.write_text(target, separator_value, span);
+        if print.each.is_empty() {
+            for (position, value) in lowered.iter().enumerate() {
+                if position > 0 {
+                    self.write_text(target, separator_value, span);
+                }
+                let text = self.string_of(*value, span);
+                self.write_text(target, text.value, span);
+                self.release(text, span);
             }
-            let text = self.string_of(*value, span);
-            self.write_text(target, text.value, span);
-            self.release(text, span);
+        } else {
+            self.write_each(print, &lowered, (target, separator_value), span);
         }
         let ending_value = match ending {
             Some(value) => value.value,
@@ -306,6 +311,116 @@ impl FunctionLowerer<'_> {
             self.release(value, span);
         }
         Self::borrowed(self.constant(Constant::Unit, span), TyirType::Unit)
+    }
+
+    /// Writes the values of a `print` with `*iterable`: each list it holds for one is written
+    /// value by value, and a separator goes before every value but the first written, which
+    /// only the run knows when a list may be empty (EXP-17).
+    fn write_each(
+        &mut self,
+        print: &PrintCall,
+        lowered: &[Lowered],
+        (target, separator): (Option<ValueId>, ValueId),
+        span: Span,
+    ) {
+        let started = self.hidden_slot("print_started", TyirType::Bool);
+        let no = self.constant(Constant::Bool(false), span);
+        self.store(started, Self::borrowed(no, TyirType::Bool), span);
+        for (position, value) in lowered.iter().enumerate() {
+            if !print.each.contains(&position) {
+                self.separate(started, (target, separator), span);
+                let text = self.string_of(*value, span);
+                self.write_text(target, text.value, span);
+                self.release(text, span);
+                continue;
+            }
+            let Type::List(item) = &print.values[position].ty else {
+                unreachable!("`*iterable` gives `print` a list")
+            };
+            let item = self.lowered_type(item);
+            let index = self.hidden_slot("print_index", TyirType::Int);
+            let zero = self.constant(Constant::Int("0".to_owned()), span);
+            self.store(index, Self::borrowed(zero, TyirType::Int), span);
+            let (header, body, exit) = (
+                self.builder.create_block(),
+                self.builder.create_block(),
+                self.builder.create_block(),
+            );
+            self.builder.terminate(Terminator::Jump {
+                target: header,
+                arguments: Vec::new(),
+            });
+            self.builder.switch_to(header);
+            let at = self.load(index, span);
+            let length = self.call_runtime(RuntimeFunction::ListLength, vec![value.value], span);
+            let more = self.builder.push_value(
+                Operation::Compare {
+                    kind: ScalarKind::Int,
+                    comparison: Comparison::Less,
+                    left: at.value,
+                    right: length.value,
+                },
+                TyirType::Bool,
+                span,
+            );
+            self.release(length, span);
+            self.builder.terminate(Terminator::Branch {
+                condition: more,
+                then: body,
+                otherwise: exit,
+            });
+            self.builder.switch_to(body);
+            self.separate(started, (target, separator), span);
+            let at = self.load(index, span);
+            let bits =
+                self.call_runtime(RuntimeFunction::ListGet, vec![value.value, at.value], span);
+            let item_value = self.value_of_bits(bits.value, item, span);
+            let text = self.string_of(Self::borrowed(item_value, item), span);
+            self.write_text(target, text.value, span);
+            self.release(text, span);
+            let one = self.constant(Constant::Int("1".to_owned()), span);
+            let next = self.builder.push_value(
+                Operation::IntBinary {
+                    operator: IntOperator::Add,
+                    left: at.value,
+                    right: one,
+                },
+                TyirType::Int,
+                span,
+            );
+            let next = self.produced(next, TyirType::Int);
+            self.store(index, next, span);
+            self.builder.terminate(Terminator::Jump {
+                target: header,
+                arguments: Vec::new(),
+            });
+            self.builder.switch_to(exit);
+        }
+    }
+
+    /// Writes the separator when a value was already written, and notes that one was.
+    fn separate(
+        &mut self,
+        started: typy_tyir::SlotId,
+        (target, separator): (Option<ValueId>, ValueId),
+        span: Span,
+    ) {
+        let was = self.load(started, span);
+        let (write, after) = (self.builder.create_block(), self.builder.create_block());
+        self.builder.terminate(Terminator::Branch {
+            condition: was.value,
+            then: write,
+            otherwise: after,
+        });
+        self.builder.switch_to(write);
+        self.write_text(target, separator, span);
+        self.builder.terminate(Terminator::Jump {
+            target: after,
+            arguments: Vec::new(),
+        });
+        self.builder.switch_to(after);
+        let yes = self.constant(Constant::Bool(true), span);
+        self.store(started, Self::borrowed(yes, TyirType::Bool), span);
     }
 
     /// Writes text to a text file, or to standard output when there is none.

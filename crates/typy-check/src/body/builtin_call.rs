@@ -401,13 +401,24 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
-        let values: Vec<TypedExpr> = arguments
-            .iter()
-            .map(|argument| {
-                self.written_part(argument, false)
-                    .unwrap_or_else(|| self.expression(argument))
-            })
-            .collect();
+        let mut each = Vec::new();
+        let mut values = Vec::new();
+        for argument in arguments {
+            // `*iterable` gives each of its values to `print`, read before the keywords are
+            // (EXP-17, ADR-0073).
+            if let Expr::Starred { value, .. } = argument {
+                each.push(values.len());
+                values.push(self.unpacked_list(value));
+                continue;
+            }
+            let value = self
+                .written_part(argument, false)
+                .unwrap_or_else(|| self.expression(argument));
+            values.push(value);
+        }
+        if !each.is_empty() {
+            self.unpacking_calls.push(span);
+        }
         let mut sep = None;
         let mut end = None;
         let mut file = None;
@@ -455,6 +466,7 @@ impl BodyChecker<'_> {
         Self::typed(
             TypedExprKind::Print(Box::new(PrintCall {
                 values,
+                each,
                 sep,
                 end,
                 file,

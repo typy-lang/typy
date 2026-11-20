@@ -497,6 +497,11 @@ impl BodyChecker<'_> {
         let init = self.program.method(class, "__init__");
         let ty = self.program.instance_type(class);
         if let Type::Exception(exception) = &ty {
+            // An exception keeps the arguments given by position, which unpacking would make
+            // a number only the run knows; the call refuses it (EXP-19).
+            if super::call_expression::unpacking(arguments, keywords).is_some() {
+                return Self::invalid_call(span);
+            }
             let exception = exception.clone();
             return match init {
                 Some(function) => {
@@ -649,7 +654,7 @@ impl BodyChecker<'_> {
             .first()
             .map(|parameter| parameter.ty.clone());
         let mut bound = vec![Argument {
-            keyword: None,
+            passed: crate::typed::Passed::Position,
             parameter: 0,
             value: Self::converted(receiver, owner.as_ref()),
         }];
