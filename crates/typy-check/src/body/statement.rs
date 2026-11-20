@@ -63,29 +63,33 @@ impl BodyChecker<'_> {
                 span,
             } => self.yield_statement(value.as_deref(), *span),
             Stmt::Assign {
-                value: value @ Expr::Yield { .. },
+                value: yielded @ Expr::Yield { value, .. },
                 span,
                 ..
             }
             | Stmt::AnnAssign {
-                value: Some(value @ Expr::Yield { .. }),
+                value: Some(yielded @ Expr::Yield { value, .. }),
                 span,
                 ..
-            } if self.received.is_none() => self.yield_assignment(statement, value, *span),
+            } if self.received.is_none() => {
+                self.yield_assignment(statement, (value.as_deref(), yielded.span()), *span)
+            }
             Stmt::Expr {
                 value: Expr::YieldFrom { value, .. },
                 span,
             } => self.yield_from_statement(value, None, *span),
             Stmt::Assign {
-                value: value @ Expr::YieldFrom { .. },
+                value: yielded @ Expr::YieldFrom { value, .. },
                 span,
                 ..
             }
             | Stmt::AnnAssign {
-                value: Some(value @ Expr::YieldFrom { .. }),
+                value: Some(yielded @ Expr::YieldFrom { value, .. }),
                 span,
                 ..
-            } if self.received.is_none() => self.yield_from_assignment(statement, value, *span),
+            } if self.received.is_none() => {
+                self.yield_from_assignment(statement, (value, yielded.span()), *span)
+            }
             Stmt::Assign {
                 targets,
                 value,

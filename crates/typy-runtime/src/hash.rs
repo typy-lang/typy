@@ -109,6 +109,8 @@ pub(crate) fn float(value: f64) -> i64 {
         return 0;
     }
     let (mut mantissa, mut exponent) = frexp(value.abs());
+    // A double's 53-bit mantissa is taken in two steps of 28 bits, so the hash stays below
+    // 2**56 and never reaches the modulus CPython reduces it by for wider formats.
     let mut hash: u64 = 0;
     while mantissa != 0.0 {
         hash = ((hash << 28) & MODULUS) | (hash >> (BITS - 28));
@@ -127,9 +129,6 @@ pub(crate) fn float(value: f64) -> i64 {
         let whole = integer as f64;
         mantissa -= whole;
         hash += integer;
-        if hash >= MODULUS {
-            hash -= MODULUS;
-        }
     }
     let bits = i32::try_from(BITS).unwrap_or(61);
     let shift = if exponent >= 0 {
