@@ -159,6 +159,29 @@ impl BodyChecker<'_> {
         let Some(expected) = expected else {
             return value;
         };
+        // A member of a union that holds a value as another object, an iterable, an iterator
+        // or a `tuple[T, ...]`, takes it as it would alone: a fixed tuple becomes a
+        // `tuple[T, ...]` object first, and a collection or an iterator an iterable. The union
+        // then holds that object.
+        if let Type::Union(members) = expected
+            && value.ty != *expected
+            && !members.contains(&value.ty)
+            && let Some(member) = members
+                .iter()
+                .find(|member| value.ty.is_assignable_to(member))
+            && matches!(
+                member,
+                Type::Iterable(_) | Type::Iterator(_) | Type::TupleOf(_)
+            )
+        {
+            let value = Self::converted(value, Some(member));
+            let span = value.span;
+            return Self::typed(
+                TypedExprKind::Upcast(Box::new(value)),
+                expected.clone(),
+                span,
+            );
+        }
         if value.ty != *expected && value.ty.is_upcast_to(expected) {
             let span = value.span;
             return Self::typed(

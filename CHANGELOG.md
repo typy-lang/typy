@@ -20,6 +20,11 @@ All notable changes to TyPy are recorded here. The format follows
 - A call that unpacks a tuple holding an instance of a derived class into a
   `Base | None` parameter compiles; it ended in an internal error (E9001)
   (EXP-17).
+- A fixed tuple, a collection or an iterator passed where a union of
+  iterables and iterators is expected, or of an iterable and another type,
+  such as `Iterable[int] | int`, compiles and runs as in CPython. A fixed
+  tuple aborted the program with "an object has an unknown type", and the
+  others ended in an internal error (E9001) (TYP-15).
 - An f-string `{value:c}` of `-2**63`, the smallest C `long`, raises
   CPython's `OverflowError: %c arg not in range(0x110000)`, not "Python
   int too large to convert to C long", since the value fits a C `long`
