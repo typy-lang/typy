@@ -689,7 +689,7 @@ fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
         "{ir}"
     );
     assert!(ir.contains("call void @typy_rt_int_decrement("), "{ir}");
-    let header = typy_codegen::c_header(&module).unwrap();
+    let header = typy_codegen::c_header(module.library.as_ref().unwrap());
     assert!(
         header.contains("bool test(int64_t count, double ratio, bool flag);"),
         "{header}"

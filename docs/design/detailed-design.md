@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.60 |
+| Version | 2.61 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -2981,19 +2981,19 @@ names. `LibraryEmitter` adds to the object (ADR-0044):
 | Export | A function with the export's name and C types, a `bool` as an `i1` that is `zeroext` on x86-64 and not on AArch64 Linux, as clang lowers `_Bool` (ADR-0058): calls `typy_rt_library_enter()`, converts each `int64_t` with `typy_rt_int_from_int64`, calls the program's function, drops the converted words, ends the process through the no-return `typy_rt_library_raised` when the call raised, converts an `int` result with `typy_rt_int_into_int64`, which may raise `OverflowError`, calls `typy_rt_library_leave()` and returns |
 
 An export whose name the object already has is an internal error, which
-the checker's rules prevent. `c_header(module)` writes the header: a guard
+the checker's rules prevent. `c_header(library)` writes the header: a guard
 of the name in capitals, `stdbool.h` and `stdint.h`, `extern "C"` for C++,
 and a declaration of each export, whose parameters keep their Python
 names, with an underscore after one that C or C++ reads as a keyword, such
 as `default_`, and `argumentN` for one that is not ASCII.
 
-`python_binding(module, soname)` writes the binding module of ADR-0046: it
+`python_binding(library, soname)` writes the binding module of ADR-0046: it
 imports `ctypes`, lists the exports in `__all__`, loads `soname` with
 `ctypes.CDLL` into `_library`, with underscores added until no export or
 parameter has the name, assigns each export's `argtypes` and `restype`
 from `c_int64`, `c_double`, `c_bool` or `None`, and defines a function of
 each export's name, parameters and Python types that calls it.
-`python_stub(module)` writes the stub of those functions. A string literal
+`python_stub(library)` writes the stub of those functions. A string literal
 escapes `"`, the backslash and control characters.
 
 ## 11. typy-build

@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use typy_tyir::{TyirLibrary, TyirModule};
+use typy_tyir::TyirLibrary;
 
 /// Names a C or C++ compiler reads as a keyword, or that the header's includes define, which
 /// a parameter name cannot be.
@@ -74,14 +74,9 @@ const TAKEN: [&str; 64] = [
     "volatile",
 ];
 
-/// Returns the header of the library `module` is built as, or `None` for an executable.
+/// Returns the C header of `library`.
 #[must_use]
-pub fn c_header(module: &TyirModule) -> Option<String> {
-    let library = module.library.as_ref()?;
-    Some(header(library))
-}
-
-fn header(library: &TyirLibrary) -> String {
+pub fn c_header(library: &TyirLibrary) -> String {
     let guard = format!("{}_H", library.name.to_ascii_uppercase());
     let mut text = format!(
         "/* {name}.h: the functions the library {name} exports, built by TyPy {version}. */\n\
@@ -125,7 +120,7 @@ fn parameter_name(name: &str, index: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::header;
+    use super::c_header;
     use typy_tyir::{CType, FunctionId, TyirExport, TyirLibrary};
 
     fn export(name: &str, parameters: &[(&str, CType)], result: Option<CType>) -> TyirExport {
@@ -164,7 +159,7 @@ mod tests {
                 ),
             ],
         };
-        let text = header(&library);
+        let text = c_header(&library);
         assert!(text.starts_with("/* geometry.h: the functions the library geometry exports"));
         for line in [
             "#ifndef GEOMETRY_H",

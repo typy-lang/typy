@@ -8,7 +8,7 @@ use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{Target, assembly, llvm_ir, object};
 use typy_diagnostics::Diagnostics;
 use typy_source::{Platform, Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
-use typy_tyir::{TyirAllocator, TyirModule};
+use typy_tyir::{TyirAllocator, TyirLibrary, TyirModule};
 
 use crate::emission::Emission;
 use crate::failure::Failure;
@@ -184,7 +184,7 @@ impl Pipeline {
                 let artifact = linker
                     .link_library(&object, &layout, kind, &exports)
                     .map_err(failed)?;
-                write_header(&module, &layout.path, &library.name).map_err(failed)?;
+                write_header(library, &layout.path).map_err(failed)?;
                 // CPython loads the shared library of the build's release, also for a static
                 // build, whose binding serves CPython and TyPy alike (ADR-0046).
                 let soname = match (kind, &layout.soname) {
@@ -199,7 +199,7 @@ impl Pipeline {
                     .soname
                     .unwrap_or_default(),
                 };
-                write_binding(&module, &layout.path, &library.name, &soname).map_err(failed)?;
+                write_binding(library, &layout.path, &soname).map_err(failed)?;
                 artifact
             }
             _ => linker
@@ -285,38 +285,33 @@ fn root_of(main: &Utf8Path) -> Utf8PathBuf {
     }
 }
 
-/// Writes the C header of the library `module` is built as beside the library `output`:
-/// `NAME.h` for the module `NAME` (FFI-05).
-fn write_header(module: &TyirModule, output: &Utf8Path, name: &str) -> Result<(), Diagnostics> {
-    let Some(text) = typy_codegen::c_header(module) else {
-        return Ok(());
-    };
-    let path = output.with_file_name(format!("{name}.h"));
+/// Writes the C header of `library` beside the library `output`: `NAME.h` for the module
+/// `NAME` (FFI-05).
+fn write_header(library: &TyirLibrary, output: &Utf8Path) -> Result<(), Diagnostics> {
+    let path = output.with_file_name(format!("{}.h", library.name));
+    let text = typy_codegen::c_header(library);
     std::fs::write(&path, text).map_err(|error| cannot_write(&path, &error))
 }
 
 /// Writes the binding module `NAME_binding.py`, which loads the shared library `soname`, and
 /// its stub `NAME_binding.pyi`, beside the library `output` (FFI-08, ADR-0046).
 fn write_binding(
-    module: &TyirModule,
+    library: &TyirLibrary,
     output: &Utf8Path,
-    name: &str,
     soname: &str,
 ) -> Result<(), Diagnostics> {
+    let name = &library.name;
     let files = [
         (
             format!("{name}_binding.py"),
-            typy_codegen::python_binding(module, soname),
+            typy_codegen::python_binding(library, soname),
         ),
         (
             format!("{name}_binding.pyi"),
-            typy_codegen::python_stub(module),
+            typy_codegen::python_stub(library),
         ),
     ];
     for (file_name, text) in files {
-        let Some(text) = text else {
-            continue;
-        };
         let path = output.with_file_name(file_name);
         std::fs::write(&path, text).map_err(|error| cannot_write(&path, &error))?;
     }
