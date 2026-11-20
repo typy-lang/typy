@@ -153,6 +153,8 @@ impl RuleId {
     pub const EXC_17: Self = Self("EXC-17");
     /// `characters_written` of a `BlockingIOError`, and a number as the third argument of `OSError` or `BlockingIOError`, shall behave as CPython's do.
     pub const EXC_18: Self = Self("EXC-18");
+    /// The special methods an exception class of the program defines, such as `__eq__`, `__lt__`, `__hash__` and `__len__`, shall be called by the operators and the built-in functions as they are for other classes.
+    pub const EXC_20: Self = Self("EXC-20");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -476,6 +478,7 @@ impl RuleId {
         Self::EXC_16,
         Self::EXC_17,
         Self::EXC_18,
+        Self::EXC_20,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,

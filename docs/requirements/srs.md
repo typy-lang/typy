@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.105 |
+| Version | 1.106 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -389,6 +389,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXC-17 | `args` of an exception shall hold the `args` of an exception of a related class, a type that nests without end, as CPython allows. | C | 1.0 | |
 | EXC-18 | `characters_written` of a `BlockingIOError`, and a number as the third argument of `OSError` or `BlockingIOError`, shall behave as CPython's do. | C | 1.0 | |
 | EXC-19 | The text and the class of an `OSError` the C library reports shall be those CPython gives on the program's operating system: on macOS, `strerror`'s text and macOS's error numbers. | M | 0.7 | |
+| EXC-20 | The special methods an exception class of the program defines, such as `__eq__`, `__lt__`, `__hash__` and `__len__`, shall be called by the operators and the built-in functions as they are for other classes. | C | 1.0 | |
 
 ### 3.13 Modules and imports (MOD)
 

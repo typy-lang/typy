@@ -333,9 +333,12 @@ impl FunctionLowerer<'_> {
             (left_type, right_type) if equal_by_type(left_type, right_type, comparison) => {
                 return self.objects_equality(comparison == Comparison::Equal, left, right, span);
             }
-            // An instance of a class without `__eq__` is equal only to itself (CLS-07).
+            // An instance of a class without `__eq__` is equal only to itself (CLS-07), and so
+            // is an exception, whose classes `__eq__` the checker does not call (EXC-20).
             (TyirType::Object(id), _)
-                if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE =>
+                if id.class_index().is_some()
+                    || id == typy_tyir::TypeId::TYPE
+                    || id == typy_tyir::TypeId::EXCEPTION =>
             {
                 return self.instance_equality(comparison == Comparison::Equal, left, right, span);
             }

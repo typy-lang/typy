@@ -25,6 +25,10 @@ All notable changes to TyPy are recorded here. The format follows
   such as `Iterable[int] | int`, compiles and runs as in CPython. A fixed
   tuple aborted the program with "an object has an unknown type", and the
   others ended in an internal error (E9001) (TYP-15).
+- `==` and `!=` of two exceptions compare them by identity, as CPython
+  does; they ended in an internal error (E9001). An exception class that
+  defines `__eq__` or `__ne__` is refused with E0201, planned for 1.0
+  (EXC-20), since TyPy does not call it yet (EXP-06).
 - An f-string `{value:c}` of `-2**63`, the smallest C `long`, raises
   CPython's `OverflowError: %c arg not in range(0x110000)`, not "Python
   int too large to convert to C long", since the value fits a C `long`

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.19 |
+| Version | 1.20 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -473,6 +473,7 @@ that the specification does not define.
 | EXC-17 | 1.0 | IT | `tests/conformance/exc/EXC-17_*.py` |
 | EXC-18 | 1.0 | IT | `tests/conformance/exc/EXC-18_*.py` |
 | EXC-19 | 0.7 | UT, IT | `crates/typy-runtime/src/text_file/os_error.rs` for each system's numbers; `tests/conformance/exc/EXC-19_*.py` on Linux and on the `macos-15` job, against CPython on each |
+| EXC-20 | 1.0 | IT | `tests/conformance/exc/EXC-20_*`: `==` of an exception class that defines `__eq__`, refused while it is planned |
 | MOD-01 | 0.3 | IT, E2E | `tests/conformance/mod/MOD-01_*`; module paths in `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for MOD-01 |
 | MOD-02 | 0.3 | IT | `tests/conformance/mod/MOD-02_*.py` |
 | MOD-03 | 0.3 | IT | `tests/conformance/mod/MOD-03_*.py` |
