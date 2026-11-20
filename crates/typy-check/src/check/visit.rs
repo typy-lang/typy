@@ -151,7 +151,9 @@ pub(crate) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
         Expr::UnaryOp { operand, .. } | Expr::Attribute { value: operand, .. } => {
             visit_expression(operand, visit);
         }
-        Expr::Named { value, .. } | Expr::YieldFrom { value, .. } => visit_expression(value, visit),
+        Expr::Named { value, .. } | Expr::YieldFrom { value, .. } | Expr::Starred { value, .. } => {
+            visit_expression(value, visit);
+        }
         Expr::Yield { value, .. } => {
             if let Some(value) = value {
                 visit_expression(value, visit);

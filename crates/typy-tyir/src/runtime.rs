@@ -230,6 +230,9 @@ pub enum RuntimeFunction {
     /// One step of `yield from`: resumes the iterator as the generator was resumed, and
     /// gives whether it yielded (SMT-11).
     GeneratorDelegate,
+    /// The values of an iterable for unpacking targets, in a new list, with CPython's
+    /// `ValueError` when there are too few or too many (SMT-02, EXP-17).
+    Unpack,
     ObjectType,
     ObjectRepr,
     ObjectStr,
@@ -484,7 +487,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 369] = [
+    pub const ALL: [Self; 370] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -687,6 +690,7 @@ impl RuntimeFunction {
         Self::GeneratorHasResult,
         Self::GeneratorResult,
         Self::GeneratorDelegate,
+        Self::Unpack,
         Self::IteratorItem,
         Self::ObjectType,
         Self::ObjectRepr,
@@ -1121,6 +1125,7 @@ impl RuntimeFunction {
             Self::GeneratorDelegate => {
                 signature(&[TyirType::GENERATOR, ITERATOR, Bool], Bool, true)
             }
+            Self::Unpack => signature(&[Bits, Int, Bits, Int, Int, Bool], LIST, true),
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::ObjectRepr | Self::ObjectStr => signature(&[Bits], STR, true),
@@ -1479,6 +1484,7 @@ impl RuntimeFunction {
             Self::GeneratorHasResult => "generator_has_result",
             Self::GeneratorResult => "generator_result",
             Self::GeneratorDelegate => "generator_delegate",
+            Self::Unpack => "unpack",
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",

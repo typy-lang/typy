@@ -171,6 +171,11 @@ pub enum Expr {
         generators: Vec<Comprehension>,
         span: Span,
     },
+    /// `*value`, an iterable unpacked into a display or an unpacking target (EXP-17).
+    Starred {
+        value: Box<Expr>,
+        span: Span,
+    },
     /// `(element for ...)`, a generator expression (EXP-15).
     GeneratorExp {
         element: Box<Expr>,
@@ -238,6 +243,7 @@ impl Expr {
             | Self::Dict { span, .. }
             | Self::ListComp { span, .. }
             | Self::GeneratorExp { span, .. }
+            | Self::Starred { span, .. }
             | Self::SetComp { span, .. }
             | Self::DictComp { span, .. }
             | Self::Attribute { span, .. }

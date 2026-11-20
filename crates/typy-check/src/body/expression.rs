@@ -6,7 +6,7 @@ use typy_source::syntax::{BoolOperator, Constant, Expr};
 use super::BodyChecker;
 use super::flow::test_facts;
 use super::slice::Bounds;
-use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{SpreadKind, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -246,6 +246,9 @@ impl BodyChecker<'_> {
                 generators,
                 ..
             } => self.generator_expression(element, generators, None, span),
+            Expr::Tuple { elements, .. } if has_starred(elements) => {
+                self.spread_display(SpreadKind::Tuple, elements, None, span)
+            }
             Expr::Tuple { elements, .. } => {
                 let elements: Vec<TypedExpr> = elements
                     .iter()
@@ -415,6 +418,9 @@ impl BodyChecker<'_> {
             } => self.attribute(value, attribute, span),
             Expr::FString { parts, .. } => self.fstring(parts, span),
             Expr::Yield { .. } | Expr::YieldFrom { .. } => self.received_value(span),
+            // The subset check accepts `*value` only in a display or a target, which check it
+            // themselves.
+            Expr::Starred { .. } => Self::invalid_call(span),
             // The subset check refuses every other expression, and a quoted expression is
             // only read as an annotation.
             Expr::Quoted { .. } | Expr::Other { .. } => Self::typed(
@@ -563,4 +569,11 @@ pub(super) fn literal_position(index: &Expr) -> Option<i128> {
         } => literal_position(operand).map(|value| -value),
         _ => None,
     }
+}
+
+/// Returns true when a display has a `*value` item (EXP-17).
+pub(super) fn has_starred(elements: &[Expr]) -> bool {
+    elements
+        .iter()
+        .any(|element| matches!(element, Expr::Starred { .. }))
 }

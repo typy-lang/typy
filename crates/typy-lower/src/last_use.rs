@@ -81,7 +81,12 @@ impl Analysis<'_> {
                 }
                 expression_reads(value, &mut reads);
                 if let ([single], TypedExprKind::Local(symbol)) = (&targets[..], &value.kind)
-                    && !matches!(single, AssignTarget::Tuple(_) | AssignTarget::Slice { .. })
+                    && !matches!(
+                        single,
+                        AssignTarget::Tuple(_)
+                            | AssignTarget::Unpack { .. }
+                            | AssignTarget::Slice { .. }
+                    )
                 {
                     self.consider(*symbol, value.span, &reads, &after);
                 }
@@ -407,8 +412,8 @@ fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
             expression_reads(value, reads);
             target_reads(target, reads);
         }
-        AssignTarget::Tuple(targets) => {
-            for each in targets {
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for each in target.nested() {
                 target_reads(each, reads);
             }
         }
@@ -449,8 +454,8 @@ fn target_defines(target: &AssignTarget, live: &mut Live) {
         AssignTarget::Name(symbol) => {
             live.remove(symbol);
         }
-        AssignTarget::Tuple(targets) => {
-            for each in targets {
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for each in target.nested() {
                 target_defines(each, live);
             }
         }

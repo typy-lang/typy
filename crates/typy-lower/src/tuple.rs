@@ -209,6 +209,12 @@ impl FunctionLowerer<'_> {
                 self.release(value, span);
                 self.release(object, span);
             }
+            AssignTarget::Unpack {
+                before,
+                rest,
+                after,
+                item,
+            } => self.assign_unpacked((before, rest.as_deref(), after), item, value, span),
             AssignTarget::Tuple(targets) => {
                 let (_, items) = self.item_types(value.ty);
                 for (index, (target, ty)) in targets.iter().zip(items).enumerate() {

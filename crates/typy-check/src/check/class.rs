@@ -1781,6 +1781,7 @@ fn initialized_attributes(parts: &FunctionParts<'_>) -> Vec<String> {
                     assigned(element, instance, found);
                 }
             }
+            Expr::Starred { value, .. } => assigned(value, instance, found),
             _ => {}
         }
     }

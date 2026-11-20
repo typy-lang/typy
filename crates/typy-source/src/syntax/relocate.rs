@@ -290,7 +290,7 @@ impl Expr {
                     value.relocate(span);
                 }
             }
-            Self::YieldFrom { value, span: at } => {
+            Self::YieldFrom { value, span: at } | Self::Starred { value, span: at } => {
                 *at = span;
                 value.relocate(span);
             }

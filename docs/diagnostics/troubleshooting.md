@@ -425,8 +425,11 @@ print(number, name)
 
 ## E0308: unpacking into a different number of targets
 
-The value has a different number of items than there are targets
-(SMT-02). Use as many targets as the tuple has items.
+The value is a tuple with a different number of items than there are
+targets, or a value that is not iterable (SMT-02). Use as many targets as
+the tuple has items, or a starred target that takes the rest, `first,
+*rest = values` (EXP-17). The values of a list or any other iterable are
+counted as the program runs, which raises `ValueError` as CPython does.
 
 This program gives E0308:
 

@@ -343,11 +343,27 @@ impl Walker {
                 self.expression(value);
                 self.expression(index);
             }
-            // An unpacking target: each element is itself a target (SMT-02).
+            // An unpacking target: each element is itself a target (SMT-02), and one may take
+            // the rest of the items as a list (EXP-17).
             Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
-                for element in elements {
-                    self.name_target(element);
+                let mut starred = elements
+                    .iter()
+                    .filter(|element| matches!(element, Expr::Starred { .. }));
+                if let (Some(_), Some(second)) = (starred.next(), starred.next()) {
+                    self.syntax_error(second.span(), "multiple starred expressions in assignment");
                 }
+                for element in elements {
+                    match element {
+                        Expr::Starred { value, .. } => self.name_target(value),
+                        other => self.name_target(other),
+                    }
+                }
+            }
+            Expr::Starred { span, .. } => {
+                self.syntax_error(
+                    *span,
+                    "starred assignment target must be in a list or tuple",
+                );
             }
             // An attribute of an instance; the checker decides which may be assigned (CLS-02).
             Expr::Attribute { value, .. } => self.expression(value),

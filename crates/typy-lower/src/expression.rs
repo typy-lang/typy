@@ -257,6 +257,10 @@ impl FunctionLowerer<'_> {
             TypedExprKind::RunningFunction => self.running_function(),
             TypedExprKind::Received => self.received(ty, span),
             TypedExprKind::DelegatedItem => self.delegated_item(ty, span),
+            TypedExprKind::Spread { kind, parts } => {
+                self.spread(*kind, parts, &expression.ty, span)
+            }
+            TypedExprKind::DictSpread(parts) => self.dict_spread(parts, &expression.ty, span),
             TypedExprKind::DelegatedResult => self.delegated_result(ty, span),
             TypedExprKind::CellRead(symbol) => self.read_name(*symbol, span),
             TypedExprKind::CellObject(symbol) => self.cell_of(*symbol, span).0,

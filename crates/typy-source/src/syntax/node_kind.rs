@@ -15,7 +15,6 @@ pub enum NodeKind {
     Await,
     IpyEscapeCommand,
     NamedExpr,
-    Starred,
     TemplateStr,
     TryStar,
 }

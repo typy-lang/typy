@@ -527,6 +527,10 @@ impl Dump<'_> {
                 self.line(depth, &format!("Attribute {}", attribute.name), span);
                 self.expression(depth + 1, value);
             }
+            Expr::Starred { value, .. } => {
+                self.line(depth, "Starred", span);
+                self.expression(depth + 1, value);
+            }
             Expr::Slice {
                 lower, upper, step, ..
             } => {

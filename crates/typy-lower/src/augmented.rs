@@ -68,7 +68,7 @@ impl FunctionLowerer<'_> {
                     span,
                 );
             }
-            AssignTarget::Tuple(_) => {
+            AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
                 unreachable!("Python refuses a tuple as the target of an augmented assignment")
             }
             AssignTarget::Slice { .. } => {

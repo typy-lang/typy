@@ -351,7 +351,10 @@ impl Converter<'_> {
                 attribute: self.identifier(&node.attr),
                 span: self.span(node.range),
             },
-            ast::Expr::Starred(node) => self.other(NodeKind::Starred, node.range),
+            ast::Expr::Starred(node) => Expr::Starred {
+                value: Box::new(self.expression(&node.value)),
+                span: self.span(node.range),
+            },
             ast::Expr::List(node) => Expr::List {
                 elements: node
                     .elts

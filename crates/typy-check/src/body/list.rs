@@ -6,7 +6,7 @@ use typy_source::syntax::{BinaryOperator, CompareOperator, Expr};
 
 use super::BodyChecker;
 use crate::builtin::Builtin;
-use crate::typed::{TypedExpr, TypedExprKind};
+use crate::typed::{SpreadKind, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -26,6 +26,12 @@ impl BodyChecker<'_> {
         } = expression
         {
             let made = self.generator_expression(element, generators, expected, *span);
+            return Self::converted(made, expected);
+        }
+        if let Expr::Tuple { elements, span } = expression
+            && super::expression::has_starred(elements)
+        {
+            let made = self.spread_display(SpreadKind::Tuple, elements, expected, *span);
             return Self::converted(made, expected);
         }
         // A display or a collection call where `T | None` is expected is built as a `T`,
@@ -259,6 +265,9 @@ impl BodyChecker<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> TypedExpr {
+        if super::expression::has_starred(elements) {
+            return self.spread_display(SpreadKind::List, elements, expected, span);
+        }
         let expected_item = match expected {
             Some(Type::List(item)) => Some(item.as_ref().clone()),
             // The expected type already has its error, so the display gives no second one.

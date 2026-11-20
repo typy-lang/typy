@@ -139,6 +139,20 @@ impl Dump<'_> {
                 let parts: Vec<String> = targets.iter().map(|target| self.target(target)).collect();
                 format!("({})", parts.join(", "))
             }
+            AssignTarget::Unpack {
+                before,
+                rest,
+                after,
+                ..
+            } => {
+                let mut parts: Vec<String> =
+                    before.iter().map(|target| self.target(target)).collect();
+                if let Some(rest) = rest {
+                    parts.push(format!("*{}", self.target(rest)));
+                }
+                parts.extend(after.iter().map(|target| self.target(target)));
+                format!("unpack ({})", parts.join(", "))
+            }
             AssignTarget::Item { list, .. } => format!("item of {}", list.ty),
             AssignTarget::Slice { list, .. } => format!("slice of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
@@ -490,6 +504,8 @@ impl Dump<'_> {
             TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
             TypedExprKind::Received => "Received".to_owned(),
             TypedExprKind::DelegatedItem => "DelegatedItem".to_owned(),
+            TypedExprKind::Spread { kind, .. } => format!("Spread {kind:?}"),
+            TypedExprKind::DictSpread(_) => "DictSpread".to_owned(),
             TypedExprKind::DelegatedResult => "DelegatedResult".to_owned(),
             TypedExprKind::CellRead(symbol) => {
                 format!("CellRead {}", self.program.symbol(*symbol).name)

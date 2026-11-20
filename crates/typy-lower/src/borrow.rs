@@ -14,8 +14,8 @@ fn target(assigned: &AssignTarget, found: &mut BTreeSet<SymbolId>) {
         AssignTarget::Name(symbol) => {
             found.insert(*symbol);
         }
-        AssignTarget::Tuple(targets) => {
-            for each in targets {
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for each in assigned.nested() {
                 target(each, found);
             }
         }

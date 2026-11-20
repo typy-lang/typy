@@ -133,6 +133,10 @@ impl BodyChecker<'_> {
             }
             return;
         }
+        if let Expr::Starred { value, .. } = target {
+            self.bind_local(value);
+            return;
+        }
         let Expr::Name { id, span } = target else {
             return;
         };
@@ -389,6 +393,14 @@ impl BodyChecker<'_> {
             }
             return self.assign(target, ty, value).map(AssignTarget::Name);
         };
+        let starred = elements
+            .iter()
+            .position(|element| matches!(element, Expr::Starred { .. }));
+        if let super::unpacking::Unpacking::Checked(unpacked) =
+            self.unpacking_target(elements, starred, &ty, value)
+        {
+            return unpacked;
+        }
         let items = match ty {
             Type::Tuple(items) if items.len() == elements.len() => items,
             Type::Error => vec![Type::Error; elements.len()],

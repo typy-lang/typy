@@ -27,6 +27,20 @@ pub enum AssignTarget {
     },
     /// One target for each item of a tuple value.
     Tuple(Vec<AssignTarget>),
+    /// Targets for the values of an iterable, `a, *rest, b = source` (SMT-02, EXP-17):
+    /// `before` take the first values and `after` the last, and `rest`, when there is one, a
+    /// new list of the values between them. `item` is the type of the values, or, for a
+    /// tuple of a fixed number of items, of those `rest` takes.
+    Unpack {
+        /// The targets of the first values.
+        before: Vec<AssignTarget>,
+        /// The starred target, which takes a list of the values between.
+        rest: Option<Box<AssignTarget>>,
+        /// The targets of the last values.
+        after: Vec<AssignTarget>,
+        /// The type of the values.
+        item: Type,
+    },
     /// An item of a list, `list[index] = value`; the list and the index are evaluated after the
     /// value, as CPython does (DAT-07).
     Item {
@@ -90,6 +104,27 @@ pub enum AssignTarget {
         /// The type of the value assigned, converted to the setter's parameter.
         value: crate::types::Type,
     },
+}
+
+impl AssignTarget {
+    /// Returns the targets an unpacking target holds, in order, or none for any other.
+    #[must_use]
+    pub fn nested(&self) -> Vec<&Self> {
+        match self {
+            Self::Tuple(targets) => targets.iter().collect(),
+            Self::Unpack {
+                before,
+                rest,
+                after,
+                ..
+            } => before
+                .iter()
+                .chain(rest.as_deref())
+                .chain(after.iter())
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
 }
 
 /// One `for target in source if condition ...` clause of a comprehension (EXP-12).

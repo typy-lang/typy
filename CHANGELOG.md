@@ -23,6 +23,12 @@ All notable changes to TyPy are recorded here. The format follows
   sent before the first step, a step after the end, and a generator that
   yields after `close()` raise CPython's `TypeError`, `StopIteration` and
   `RuntimeError` (SMT-11, FUN-07, FUN-11).
+- Unpacking any iterable into targets, `first, second = items`, checked
+  as the program runs with CPython 3.15's `ValueError`, and a starred
+  target that takes the rest as a list, `first, *rest = items` (SMT-02,
+  EXP-17).
+- `*iterable` in list, set and tuple displays, and `**dict` in dict
+  displays (EXP-17).
 - Generator expressions, `(element for target in source if condition)`:
   a `Generator[Y, None, None]` whose first iterable runs where the
   expression runs and the rest as it runs, reading the variables around it

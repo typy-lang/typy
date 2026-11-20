@@ -1117,3 +1117,20 @@ fn a_generator_expression_keeps_its_element_and_clauses() {
     assert_eq!(generators[0].ifs.len(), 1);
     assert_eq!(generators[1].ifs.len(), 0);
 }
+
+#[test]
+fn a_starred_item_keeps_its_value_in_a_display_and_a_target() {
+    let Expr::List { elements, .. } = only_expression("[*a, b]\n") else {
+        panic!("not a list display");
+    };
+    assert!(
+        matches!(&elements[0], Expr::Starred { value, .. } if matches!(**value, Expr::Name { .. }))
+    );
+    let Stmt::Assign { targets, .. } = body("first, *rest = items\n").remove(0) else {
+        panic!("not an assignment");
+    };
+    let [Expr::Tuple { elements, .. }] = targets.as_slice() else {
+        panic!("not a tuple target");
+    };
+    assert!(matches!(elements[1], Expr::Starred { .. }));
+}

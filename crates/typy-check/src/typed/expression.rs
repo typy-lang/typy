@@ -456,8 +456,45 @@ pub enum TypedExprKind {
     Received,
     /// The item the iterator a `yield from` delegates to yielded last (SMT-11).
     DelegatedItem,
+    /// A list, set or tuple display that unpacks iterables with `*`: the collection gets each
+    /// part in order (EXP-17).
+    Spread {
+        kind: SpreadKind,
+        parts: Vec<SpreadPart>,
+    },
+    /// A dict display that unpacks dicts with `**`: the dict gets each part in order (EXP-17).
+    DictSpread(Vec<DictPart>),
     /// What the generator a `yield from` delegated to returned, or `None` (FUN-07).
     DelegatedResult,
+}
+
+/// The collection a display with `*` builds (EXP-17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpreadKind {
+    /// `[*a, b]`.
+    List,
+    /// `{*a, b}`.
+    Set,
+    /// `(*a, b)`, a `tuple[T, ...]`.
+    Tuple,
+}
+
+/// One part of a display with `*`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SpreadPart {
+    /// An item.
+    Item(TypedExpr),
+    /// `*source`: each value of the source, as a `for` loop reads it.
+    Each(Box<super::statement::LoopSource>),
+}
+
+/// One part of a dict display with `**`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DictPart {
+    /// `key: value`.
+    Entry(TypedExpr, TypedExpr),
+    /// `**dict`: each entry of the dict.
+    Merge(TypedExpr),
 }
 
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
@@ -729,6 +766,20 @@ impl TypedExpr {
             TypedExprKind::ListOf(source)
             | TypedExprKind::SetOf(source)
             | TypedExprKind::DictOf(source) => source.expressions(),
+            TypedExprKind::Spread { parts, .. } => parts
+                .iter()
+                .flat_map(|part| match part {
+                    SpreadPart::Item(item) => vec![item],
+                    SpreadPart::Each(source) => source.expressions(),
+                })
+                .collect(),
+            TypedExprKind::DictSpread(parts) => parts
+                .iter()
+                .flat_map(|part| match part {
+                    DictPart::Entry(key, value) => vec![key, value],
+                    DictPart::Merge(dict) => vec![dict],
+                })
+                .collect(),
             TypedExprKind::DictWith { source, entries } => source
                 .iter()
                 .flat_map(|source| source.expressions())

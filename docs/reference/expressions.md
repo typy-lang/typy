@@ -19,6 +19,7 @@ order.
 | Truth tests of numbers, strings, containers, optional values and instances | EXP-10 |
 | `x if c else y` with branches of one type | EXP-11 |
 | List, set and dict comprehensions, each with its own scope | EXP-12 |
+| `*iterable` in list, set and tuple displays and `**dict` in dict displays | EXP-17 |
 | Assignment expressions `name := value`, as CPython scopes them | EXP-13 |
 | `lambda` where a `Callable` is expected | EXP-14 |
 | Generator expressions, whose first iterable runs where they run and the rest lazily | EXP-15 |
@@ -106,8 +107,27 @@ or iterator the context expects, such as `Iterator[int | None]`. A
 generator expression reads the variables around it as a nested function
 does, so one assigned after it is read with its later value. An
 assignment expression inside one is planned for 1.0 (EXP-18), and one
-inside a generic function for 0.10 (FUN-10). `*args` comes in 0.9
-(EXP-17).
+inside a generic function for 0.10 (FUN-10).
+
+## Unpacking in displays
+
+A list, set or tuple display takes each value of an iterable written
+`*iterable`, and a dict display each entry of a dict written `**dict`, in
+order, so a later entry replaces an earlier one with the same key:
+
+<!-- typy-expect: accepted -->
+```python
+low = [1, 2]
+high = (3, 4)
+defaults = {"color": "red", "size": "small"}
+print([*low, *high, 5], (*low, 6), {*low, *high})
+print({**defaults, "size": "large"})
+```
+
+The values unpacked must have the type of the display's other items, or
+be held alike, such as `int` values in a `list[int | None]`, E0409. A
+tuple display with `*` is a `tuple[T, ...]`. `*args`, `**kwargs` and
+unpacking in a call come later in 0.9 (EXP-17).
 
 ## Example
 

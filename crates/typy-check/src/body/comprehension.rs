@@ -148,6 +148,7 @@ impl BodyChecker<'_> {
                     self.bind_comprehension_target(element);
                 }
             }
+            Expr::Starred { value, .. } => self.bind_comprehension_target(value),
             Expr::Name { id, span } => {
                 let symbol = self
                     .program

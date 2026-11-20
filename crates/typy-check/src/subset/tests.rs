@@ -77,10 +77,6 @@ fn later_features_name_their_release_and_rule() {
             "class decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
-            "x = {**y}\n",
-            "dictionary unpackings with `**` are planned for TyPy 0.9 (EXP-17)",
-        ),
-        (
             "x = [i async for i in y]\n",
             "`async` and `await` are planned for a release after TyPy 1.0",
         ),
@@ -102,11 +98,11 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "print(*x)\n",
-            "iterable unpackings with `*` are planned for TyPy 0.9 (EXP-17)",
+            "iterable unpackings with `*` in calls are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "print(**x)\n",
-            "dictionary unpackings with `**` are planned for TyPy 0.9 (EXP-17)",
+            "dictionary unpackings with `**` in calls are planned for TyPy 0.9 (EXP-17)",
         ),
         (
             "def f() -> None:\n    print((yield 1))\n",

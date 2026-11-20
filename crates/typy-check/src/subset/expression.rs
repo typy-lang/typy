@@ -343,7 +343,19 @@ impl Walker {
                     other => self.expression(other),
                 }
                 for argument in arguments {
-                    self.expression(argument);
+                    if let Expr::Starred { value, span } = argument {
+                        self.report(
+                            *span,
+                            planned(
+                                "iterable unpackings with `*` in calls",
+                                "0.9",
+                                RuleId::EXP_17,
+                            ),
+                        );
+                        self.expression(value);
+                    } else {
+                        self.expression(argument);
+                    }
                 }
                 // CPython refuses a call that names one keyword twice when it compiles it.
                 for (index, keyword) in keywords.iter().enumerate() {
@@ -365,7 +377,11 @@ impl Walker {
                     if keyword.name.is_none() {
                         self.report(
                             keyword.span,
-                            planned("dictionary unpackings with `**`", "0.9", RuleId::EXP_17),
+                            planned(
+                                "dictionary unpackings with `**` in calls",
+                                "0.9",
+                                RuleId::EXP_17,
+                            ),
                         );
                     }
                     self.expression(&keyword.value);
@@ -406,12 +422,19 @@ impl Walker {
                     self.expression(bound);
                 }
             }
+            // A display unpacks an iterable item with `*` (EXP-17).
             Expr::Tuple { elements, .. }
             | Expr::List { elements, .. }
             | Expr::Set { elements, .. } => {
                 for element in elements {
-                    self.expression(element);
+                    match element {
+                        Expr::Starred { value, .. } => self.expression(value),
+                        other => self.expression(other),
+                    }
                 }
+            }
+            Expr::Starred { span, .. } => {
+                self.syntax_error(*span, "can't use starred expression here");
             }
             Expr::ListComp {
                 element,
@@ -445,14 +468,11 @@ impl Walker {
             Expr::Lambda {
                 parameters, body, ..
             } => self.lambda(parameters, body),
+            // A dict display unpacks a mapping with `**` (EXP-17).
             Expr::Dict { keys, values, .. } => {
                 for (key, value) in keys.iter().zip(values) {
-                    match key {
-                        Some(key) => self.expression(key),
-                        None => self.report(
-                            value.span(),
-                            planned("dictionary unpackings with `**`", "0.9", RuleId::EXP_17),
-                        ),
+                    if let Some(key) = key {
+                        self.expression(key);
                     }
                     self.expression(value);
                 }
@@ -474,6 +494,7 @@ fn collect_names(target: &Expr, names: &mut Vec<String>) {
                 collect_names(element, names);
             }
         }
+        Expr::Starred { value, .. } => collect_names(value, names),
         _ => {}
     }
 }

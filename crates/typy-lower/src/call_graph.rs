@@ -245,9 +245,9 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
             callees.insert(*reify);
             assign_target(target, callees);
         }
-        AssignTarget::Tuple(targets) => {
-            for target in targets {
-                assign_target(target, callees);
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for nested in target.nested() {
+                assign_target(nested, callees);
             }
         }
         AssignTarget::Slice {
@@ -396,6 +396,25 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Dict { keys, values } => {
             for value in keys.iter().chain(values) {
                 expression(value, callees);
+            }
+        }
+        TypedExprKind::Spread { parts, .. } => {
+            for part in parts {
+                match part {
+                    typy_check::SpreadPart::Item(item) => expression(item, callees),
+                    typy_check::SpreadPart::Each(source) => loop_source(source, callees),
+                }
+            }
+        }
+        TypedExprKind::DictSpread(parts) => {
+            for part in parts {
+                match part {
+                    typy_check::DictPart::Entry(key, value) => {
+                        expression(key, callees);
+                        expression(value, callees);
+                    }
+                    typy_check::DictPart::Merge(dict) => expression(dict, callees),
+                }
             }
         }
         TypedExprKind::ListOf(source)

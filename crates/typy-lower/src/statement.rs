@@ -68,6 +68,7 @@ impl FunctionLowerer<'_> {
                         ),
                     },
                     typy_check::AssignTarget::Tuple(_)
+                    | typy_check::AssignTarget::Unpack { .. }
                     | typy_check::AssignTarget::CData { .. }
                     | typy_check::AssignTarget::Slice { .. }
                     | typy_check::AssignTarget::Lazy { .. }

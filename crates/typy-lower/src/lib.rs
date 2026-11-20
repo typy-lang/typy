@@ -50,6 +50,7 @@ mod percent;
 mod program;
 mod set;
 mod slice;
+mod spread;
 mod statement;
 mod str_method;
 mod strings;
@@ -58,6 +59,7 @@ mod tagged_union;
 mod tuple;
 mod type_object;
 mod types;
+mod unpack;
 mod view_set;
 
 pub use program::lower;

@@ -563,6 +563,7 @@ impl Names {
                     self.target_after(element, in_loop, after);
                 }
             }
+            Expr::Starred { value, .. } => self.target_after(value, in_loop, after),
             Expr::Subscript { value, index, .. } => {
                 self.expression(value, in_loop);
                 self.expression(index, in_loop);
@@ -667,7 +668,9 @@ impl Names {
                 generators,
                 span,
             } => self.generator_expression(element, generators, *span, in_loop),
-            Expr::Attribute { value, .. } | Expr::YieldFrom { value, .. } => {
+            Expr::Attribute { value, .. }
+            | Expr::YieldFrom { value, .. }
+            | Expr::Starred { value, .. } => {
                 self.expression(value, in_loop);
             }
             Expr::Slice {
@@ -845,6 +848,7 @@ fn target_names(target: &Expr) -> Vec<String> {
         Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
             elements.iter().flat_map(target_names).collect()
         }
+        Expr::Starred { value, .. } => target_names(value),
         _ => Vec::new(),
     }
 }

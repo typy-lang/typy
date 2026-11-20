@@ -779,6 +779,7 @@ fn target_names<'tree>(target: &'tree Expr, names: &mut BTreeSet<&'tree str>) {
                 target_names(element, names);
             }
         }
+        Expr::Starred { value, .. } => target_names(value, names),
         _ => {}
     }
 }
