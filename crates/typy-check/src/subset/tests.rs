@@ -308,6 +308,7 @@ fn nonlocal_where_cpython_rejects_it_is_a_syntax_error() {
 fn yield_where_cpython_rejects_it_is_a_syntax_error() {
     let cases = [
         ("yield 1\n", Some("'yield' outside function")),
+        ("print((yield 1))\n", Some("'yield' outside function")),
         (
             "def f() -> list[int]:\n    return [(yield x) for x in []]\n",
             Some("'yield' inside list comprehension"),
@@ -383,6 +384,35 @@ fn global_after_a_use_an_assignment_or_an_annotation_is_a_syntax_error() {
             ),
             None => assert!(found.is_empty(), "{source:?} gave {found:?}"),
         }
+    }
+}
+
+#[test]
+fn assigning_debug_or_binding_a_name_twice_in_a_pattern_is_a_syntax_error() {
+    let cases = [
+        ("print((__debug__ := 1))\n", "cannot assign to __debug__"),
+        (
+            "match 1:\n    case __debug__:\n        pass\n",
+            "cannot assign to __debug__",
+        ),
+        (
+            "match [1, 2]:\n    case [x, x]:\n        pass\n",
+            "multiple assignments to name 'x' in pattern",
+        ),
+        // The names an alternative binds count once, against the rest of the pattern.
+        (
+            "match [1, [2]]:\n    case [x, ([x] | [x])]:\n        pass\n",
+            "multiple assignments to name 'x' in pattern",
+        ),
+    ];
+    for (source, expected) in cases {
+        let found = diagnostics(source);
+        assert!(
+            found
+                .iter()
+                .any(|(code, message)| code == "E0103" && message == expected),
+            "{source:?} gave {found:?}"
+        );
     }
 }
 
