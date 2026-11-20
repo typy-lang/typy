@@ -206,7 +206,7 @@ fn refuse_generic_kind(class: &ClassStatement<'_>, ty: &Type, diagnostics: &mut 
         Diagnostic::new(
             DiagnosticCode::error(201),
             class.name.span,
-            format!("`{name}` is {what}, which is planned for TyPy 1.0 ({rule})"),
+            format!("`{name}` is {what}, which is planned for TyPy 0.13 ({rule})"),
         )
         .with_rule(rule),
     );
@@ -299,7 +299,7 @@ fn derived_type(
                     DiagnosticCode::error(201),
                     span,
                     format!(
-                        "a class derived from the protocol `{written}` is planned for TyPy 1.0 \
+                        "a class derived from the protocol `{written}` is planned for TyPy 0.13 \
                          (GEN-17)"
                     ),
                 )
@@ -882,7 +882,7 @@ impl ClassMethodCopies<'_> {
                     info.span,
                     format!(
                         "`{}` derives from a copy of a generic class with class methods, which it \
-                         inherits from TyPy 1.0 (GEN-15)",
+                         inherits from TyPy 0.13 (GEN-15)",
                         info.name
                     ),
                 )
@@ -936,7 +936,7 @@ fn give_way(
                 name.span,
                 format!(
                     "`{}` returns `None` and `NotImplemented`, and an operator method that may \
-                     return both is planned for TyPy 1.0 (CLS-33)",
+                     return both is planned for TyPy 0.14 (CLS-33)",
                     name.name
                 ),
             )
@@ -1270,7 +1270,7 @@ fn check_override(
                 name.span,
                 format!(
                     "a static method that overrides `{base_class}.{}`, or is overridden, with a \
-                     parameter or result held otherwise is planned for TyPy 1.0 (CLS-35)",
+                     parameter or result held otherwise is planned for TyPy 0.14 (CLS-35)",
                     name.name
                 ),
             )
@@ -1319,7 +1319,7 @@ fn later_generic_method(name: &Identifier, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         name.span,
-        format!("{what} planned for TyPy 1.0 (GEN-16)"),
+        format!("{what} planned for TyPy 0.13 (GEN-16)"),
     )
     .with_rule(RuleId::GEN_16)
 }
@@ -1452,7 +1452,7 @@ fn refuse_shared_parameter(
             annotation.span(),
             format!(
                 "a value of the generic class `{}` whose type names its type parameter \
-                 `{parameter}` is planned for TyPy 1.0 (GEN-11)",
+                 `{parameter}` is planned for TyPy 0.13 (GEN-11)",
                 info.name
             ),
         )

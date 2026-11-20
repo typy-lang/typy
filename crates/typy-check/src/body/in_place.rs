@@ -70,7 +70,7 @@ impl BodyChecker<'_> {
                         span,
                         format!(
                             "an augmented assignment whose target's class has no `{name}` while \
-                             a class derived from it defines one is planned for TyPy 1.0 \
+                             a class derived from it defines one is planned for TyPy 0.14 \
                              (CLS-32)"
                         ),
                     )

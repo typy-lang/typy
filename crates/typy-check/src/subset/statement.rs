@@ -320,13 +320,13 @@ impl Walker {
             if parameter.kind != TypeParameterKind::Type {
                 self.report(
                     parameter.span,
-                    planned("`*Ts` and `**P` type parameters", "1.0", RuleId::GEN_06),
+                    planned("`*Ts` and `**P` type parameters", "0.13", RuleId::GEN_06),
                 );
             }
             if parameter.default.is_some() {
                 self.report(
                     parameter.span,
-                    planned("defaults of type parameters", "1.0", RuleId::GEN_06),
+                    planned("defaults of type parameters", "0.13", RuleId::GEN_06),
                 );
             }
             match &parameter.bound {

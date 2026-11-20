@@ -1034,7 +1034,7 @@ fn planned(span: Span, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        format!("{what} is planned for TyPy 1.0 (CLS-28)"),
+        format!("{what} is planned for TyPy 0.14 (CLS-28)"),
     )
     .with_rule(RuleId::CLS_28)
 }
@@ -1048,7 +1048,7 @@ fn generic_comparisons(class: &str, compared: &str, at: Span) -> Diagnostic {
         at,
         format!(
             "the comparison methods of `{class}`, a generic dataclass derived from the dataclass \
-             `{compared}`, are planned for TyPy 1.0 (GEN-14)"
+             `{compared}`, are planned for TyPy 0.13 (GEN-14)"
         ),
     )
     .with_rule(RuleId::GEN_14)
@@ -1063,7 +1063,7 @@ fn fields_through_copy(class: &str, at: Span) -> Diagnostic {
         at,
         format!(
             "`{class}` is a dataclass derived from a copy of a generic dataclass, whose fields \
-             it takes from TyPy 1.0 (GEN-15)"
+             it takes from TyPy 0.13 (GEN-15)"
         ),
     )
     .with_rule(RuleId::GEN_15)

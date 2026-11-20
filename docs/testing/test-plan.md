@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.18 |
+| Version | 1.19 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -425,16 +425,16 @@ that the specification does not define.
 | CLS-25 | 0.5 | IT | `tests/conformance/cls/CLS-25_*.py` |
 | CLS-26 | 0.5 | IT | `tests/conformance/cls/CLS-26_*.py` |
 | CLS-27 | 0.10 | IT | `tests/conformance/cls/CLS-27_*.py` |
-| CLS-28 | 1.0 | IT | `tests/conformance/cls/CLS-28_*.py` |
-| CLS-29 | 1.0 | IT | `tests/conformance/cls/CLS-29_*.py` |
-| CLS-30 | 1.0 | IT | `tests/conformance/cls/CLS-30_*.py` |
-| CLS-31 | 1.0 | IT | `tests/conformance/cls/CLS-31_*.py` |
-| CLS-32 | 1.0 | IT | `tests/conformance/cls/CLS-32_*.py` |
-| CLS-33 | 1.0 | IT | `tests/conformance/cls/CLS-33_*.py` |
-| CLS-34 | 1.0 | IT | `tests/conformance/cls/CLS-34_*.py` |
-| CLS-35 | 1.0 | IT | `tests/conformance/cls/CLS-35_*.py` |
-| CLS-36 | 1.0 | IT | `tests/conformance/cls/CLS-36_*.py` |
-| CLS-37 | 1.0 | IT | `tests/conformance/cls/CLS-37_*.py` |
+| CLS-28 | 0.14 | IT | `tests/conformance/cls/CLS-28_*.py` |
+| CLS-29 | 0.14 | IT | `tests/conformance/cls/CLS-29_*.py` |
+| CLS-30 | 0.14 | IT | `tests/conformance/cls/CLS-30_*.py` |
+| CLS-31 | 0.14 | IT | `tests/conformance/cls/CLS-31_*.py` |
+| CLS-32 | 0.14 | IT | `tests/conformance/cls/CLS-32_*.py` |
+| CLS-33 | 0.14 | IT | `tests/conformance/cls/CLS-33_*.py` |
+| CLS-34 | 0.14 | IT | `tests/conformance/cls/CLS-34_*.py` |
+| CLS-35 | 0.14 | IT | `tests/conformance/cls/CLS-35_*.py` |
+| CLS-36 | 0.14 | IT | `tests/conformance/cls/CLS-36_*.py` |
+| CLS-37 | 0.14 | IT | `tests/conformance/cls/CLS-37_*.py` |
 | CLS-18 | 0.10 | IT | `tests/conformance/cls/CLS-18_*.py` |
 | CLS-19 | 0.10 | IT | `tests/conformance/cls/CLS-19_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
@@ -442,18 +442,18 @@ that the specification does not define.
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
 | GEN-04 | 0.4 | IT | `tests/conformance/gen/GEN-04_*.py` |
 | GEN-05 | 0.4 | IT | `tests/conformance/gen/GEN-05_*.py` |
-| GEN-06 | 1.0 | IT | `tests/conformance/gen/GEN-06_*.py` |
+| GEN-06 | 0.13 | IT | `tests/conformance/gen/GEN-06_*.py` |
 | GEN-07 | 0.5 | IT | `tests/conformance/gen/GEN-07_*`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-08 | 0.5 | IT | `tests/conformance/gen/GEN-08_*`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-09 | 0.5 | IT | `tests/conformance/gen/GEN-09_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-10 | 0.5 | IT | `tests/conformance/gen/GEN-10_*`; `crates/typy-check/tests/integration/protocols.rs` |
-| GEN-11 | 1.0 | IT | `tests/conformance/gen/GEN-11_*.py`; `crates/typy-check/tests/integration/generics.rs` |
-| GEN-12 | 1.0 | IT | `tests/conformance/gen/GEN-12_*.py`; `crates/typy-check/tests/integration/generics.rs` |
-| GEN-13 | 1.0 | IT | `tests/conformance/gen/GEN-13_*.py`; `crates/typy-check/tests/integration/protocols.rs` |
-| GEN-14 | 1.0 | IT | `tests/conformance/gen/GEN-14_*.py`; `crates/typy-check/tests/integration/generics.rs` |
-| GEN-15 | 1.0 | IT | `tests/conformance/gen/GEN-15_*.py` |
-| GEN-16 | 1.0 | IT | `tests/conformance/gen/GEN-16_*.py`; `crates/typy-check/tests/integration/generics.rs` |
-| GEN-17 | 1.0 | IT | `tests/conformance/gen/GEN-17_*.py`; `crates/typy-check/tests/integration/protocols.rs` |
+| GEN-11 | 0.13 | IT | `tests/conformance/gen/GEN-11_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-12 | 0.13 | IT | `tests/conformance/gen/GEN-12_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-13 | 0.13 | IT | `tests/conformance/gen/GEN-13_*.py`; `crates/typy-check/tests/integration/protocols.rs` |
+| GEN-14 | 0.13 | IT | `tests/conformance/gen/GEN-14_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-15 | 0.13 | IT | `tests/conformance/gen/GEN-15_*.py` |
+| GEN-16 | 0.13 | IT | `tests/conformance/gen/GEN-16_*.py`; `crates/typy-check/tests/integration/generics.rs` |
+| GEN-17 | 0.13 | IT | `tests/conformance/gen/GEN-17_*.py`; `crates/typy-check/tests/integration/protocols.rs` |
 | EXC-01 | 0.3 | IT | `tests/conformance/exc/EXC-01_*.py` |
 | EXC-02 | 0.3 | IT | `tests/conformance/exc/EXC-02_*.py` |
 | EXC-03 | 0.3 | Golden | `tests/golden/llvm-ir/`, where each call that may raise is followed by one compare of the exception against null and a branch |
@@ -528,15 +528,15 @@ that the specification does not define.
 | FFI-04 | 0.5 | UT, E2E | `crates/typy-source/src/settings_file/libraries.rs` and `settings.rs` for `library-paths` and `[libraries]`; `crates/typy-build/src/library_argument.rs` for the linker's argument of each library on each target; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-04: a program that imports a TyPy library's binding, linked dynamically and statically, and a library the linker cannot find |
 | FFI-05 | 0.5 | UT, IT, E2E | `crates/typy-check/tests/integration/exports.rs` for each name `__all__` lists and each E0429; `crates/typy-tyir/tests/integration/library.rs` for the verifier and the text form; `crates/typy-codegen/tests/codegen.rs` and `src/header.rs` for the wrappers and the header; `crates/typy-runtime/src/int/fixed.rs` for the conversions; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-05, also comparing the refused names with what the runtime archive calls |
 | FFI-08 | 0.5 | UT, E2E | `crates/typy-codegen/src/binding.rs` for the binding and the stub; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for FFI-08 and FFI-04: CPython and a TyPy program call a library through its binding, and CPython 3.12 to 3.15 parse the binding and the stub |
-| FFI-09 | 1.0 | IT | `tests/conformance/ffi/FFI-09_*.py` |
-| FFI-10 | 1.0 | UT, IT | `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
-| FFI-11 | 1.0 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
+| FFI-09 | 0.13 | IT | `tests/conformance/ffi/FFI-09_*.py` |
+| FFI-10 | 0.13 | UT, IT | `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a `ctypes` use planned for 1.0; `tests/conformance/ffi/FFI-10_*.py` |
+| FFI-11 | 0.13 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` and `crates/typy-check/tests/integration/ctypes.rs` for each E0201 of a structure form planned for 1.0; `tests/conformance/ffi/FFI-11_*.py` |
 | FFI-12 | 0.6 | UT, E2E | `crates/typy-codegen/src/structure_abi.rs` for each target's classification against clang 19's lowering of the same C structures; `crates/typy-cli/tests/end_to_end/structures.rs` run for each target, under `qemu-aarch64` for AArch64, against CPython on x86_64 |
 | FFI-13 | 0.7 | UT, E2E | `crates/typy-codegen/src/foreign/stack_argument.rs` for the registers arguments take and each type's width and attribute on the stack; `crates/typy-codegen/tests/codegen.rs` for the arguments of one call on each target; `crates/typy-cli/tests/end_to_end/structures.rs` calling C functions with more narrow arguments than registers, on each architecture and on the `macos-15` job; the FFI-03 conformance test of integer types, whose C functions are wider than their declarations |
 | FFI-14 | 0.7 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for a library without a name; `tests/conformance/ffi/FFI-14_*.py` on Linux and on the `macos-15` job, and the tests of FFI-02 and FFI-03, which call the C and maths libraries through `CDLL(None)` |
 | FFI-15 | 0.10 | UT, E2E | a runtime test that records the stack limit on a thread made with a 256 KiB stack; an end-to-end test of a C host that calls a recursive export on such a thread and gets `RecursionError` |
-| FFI-06 | 1.0 | IT | `tests/conformance/ffi/FFI-06_*.py` |
-| FFI-07 | 1.0 | IT | `tests/conformance/ffi/FFI-07_*.py` |
+| FFI-06 | 0.13 | IT | `tests/conformance/ffi/FFI-06_*.py` |
+| FFI-07 | 0.13 | IT | `tests/conformance/ffi/FFI-07_*.py` |
 | DIA-01 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-01_*` |
 | DIA-02 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-02_*` |
 | DIA-03 | 0.1 | UT, IT | `typy-diagnostics` unit tests; `tests/golden/diagnostics/DIA-03_*` |

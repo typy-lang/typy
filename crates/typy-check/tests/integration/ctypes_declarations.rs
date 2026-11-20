@@ -21,7 +21,7 @@ fn a_declaration_ctypes_reads_otherwise_is_refused() {
             _fields_ = [(\"x\", ctypes.c_int)]\n",
             "E0201",
             "a `Structure` subclass with methods or class attributes other than one \
-            `_fields_` is planned for TyPy 1.0 (FFI-11)",
+            `_fields_` is planned for TyPy 0.13 (FFI-11)",
         ),
         (
             "import ctypes\n\n\nclass Point(ctypes.Structure):\n    _fields_ = [(\"x\",)]\n",
@@ -31,7 +31,7 @@ fn a_declaration_ctypes_reads_otherwise_is_refused() {
         (
             "import ctypes\n\nlibc = ctypes.pydll.LoadLibrary(None)\n",
             "E0201",
-            "`ctypes.pydll` is planned for TyPy 1.0 (FFI-10)",
+            "`ctypes.pydll` is planned for TyPy 0.13 (FFI-10)",
         ),
     ];
     for (source, code, message) in refused {

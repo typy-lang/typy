@@ -196,7 +196,7 @@ parameters as they are: `def held(self) -> T` would not fit a base
 method that returns `str`, E0404, as type checkers report.
 `isinstance(x, Box)` on a variable whose type is `Base` keeps that type,
 since which copy the object belongs to is known only when the program
-runs; narrowing it is planned for 1.0 (GEN-14), and so are the
+runs; narrowing it is planned for 0.13 (GEN-14), and so are the
 comparison methods of a generic dataclass derived from a dataclass,
 which need it. Pass `eq=False` to such a dataclass, or derive it from a
 class that is not a dataclass.
@@ -246,7 +246,7 @@ is E0404, since `Box[int].get` returns an `int`. The bare name of a
 generic class as a base, `class Sub(Box)`, is E0408, as in annotations.
 A class derived from a copy of a generic class that has class methods,
 and a dataclass derived from a copy of a generic dataclass, are planned
-for 1.0 (GEN-15).
+for 0.13 (GEN-15).
 
 ## Generic methods
 
@@ -298,7 +298,7 @@ run(Doubler())
 
 A generic method that overrides a method without type parameters, or
 one with another number of them, or one in a generic class, is planned
-for 1.0 (GEN-16).
+for 0.13 (GEN-16).
 
 A method of a generic class may take type parameters of its own. A call
 takes the class's from the instance's copy and solves the method's own
@@ -311,7 +311,7 @@ A class method may take type parameters of its own, and so may one
 whose parameter names a protocol: `Registry.make("r", 1.5)` runs the
 copy for a `float`, and a class derived from `Registry` gets copies of
 its own, as for any class method (GEN-09). It is called through its
-class; through an instance it is planned for 1.0 (GEN-16).
+class; through an instance it is planned for 0.13 (GEN-16).
 
 ## Generics of other modules
 
@@ -448,13 +448,13 @@ T]`, is described with the other [type aliases](types.md#type-aliases).
 Type parameters of a special method or a property, of a method that
 overrides or is overridden by one with other type parameters, and a
 class method with type parameters called through an instance, are
-planned for 1.0 (GEN-16). A class that names a protocol as its base,
+planned for 0.13 (GEN-16). A class that names a protocol as its base,
 properties, static methods, class methods, class variables and defaults
 of a protocol, a protocol in the signature of its own methods,
 assigning an attribute through a protocol value, and a value of a
-built-in type held as a protocol are planned for 1.0 (GEN-17). A class
+built-in type held as a protocol are planned for 0.13 (GEN-17). A class
 variable or a default whose
 annotation names a type parameter of its class (GEN-11), a generic
 exception class (GEN-12), a generic protocol (GEN-13), class methods and
 dataclass fields inherited through a copy (GEN-15), and `*Ts`, `**P` and
-defaults of type parameters (GEN-06) are planned for 1.0.
+defaults of type parameters (GEN-06) are planned for 0.13.

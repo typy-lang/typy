@@ -40,7 +40,7 @@ fn a_member_its_class_does_not_give_is_refused_with_the_reason() {
             def show(self) -> str:\n        return self.label()\n\n\nprint(Box(1).show())\n",
             "E0201",
             "calling the class method `label` of a generic class through an instance is \
-            planned for TyPy 1.0 (CLS-30)",
+            planned for TyPy 0.14 (CLS-30)",
         ),
         (
             "class A:\n    @staticmethod\n    def s(x: int) -> int:\n        return x\n\n\n\
@@ -61,7 +61,7 @@ fn a_member_its_class_does_not_give_is_refused_with_the_reason() {
             "E0201",
             "assigning `count`, a class variable of `Base`, through a variable that holds \
             a class derived from it, which gives that class one of its own in CPython, is \
-            planned for TyPy 1.0 (CLS-31)",
+            planned for TyPy 0.14 (CLS-31)",
         ),
         (
             "class A:\n    x = 1\n\n\nA.nope = 2\n",

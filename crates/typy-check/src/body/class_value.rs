@@ -355,7 +355,7 @@ impl BodyChecker<'_> {
                 format!(
                     "assigning `{}`, a class variable of `{owner}`, through a variable that \
                      holds a class derived from it, which gives that class one of its own in \
-                     CPython, is planned for TyPy 1.0 (CLS-31)",
+                     CPython, is planned for TyPy 0.14 (CLS-31)",
                     attribute.name
                 ),
             )

@@ -379,7 +379,7 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 attribute.span,
-                "assigning an attribute through a protocol value is planned for TyPy 1.0 (GEN-17)",
+                "assigning an attribute through a protocol value is planned for TyPy 0.13 (GEN-17)",
             )
             .with_rule(RuleId::GEN_17),
         );
@@ -407,7 +407,7 @@ impl BodyChecker<'_> {
                 .map(|(reason, _)| format!("it does not satisfy the protocol `{name}`: {reason}")),
             Type::Error | Type::Instance(_) | Type::Union(_) | Type::Optional(_) => None,
             other => Some(format!(
-                "{} held as the protocol `{name}` is planned for TyPy 1.0 (GEN-17)",
+                "{} held as the protocol `{name}` is planned for TyPy 0.13 (GEN-17)",
                 other.with_article()
             )),
         }

@@ -82,7 +82,7 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "def f[*Ts](x: int) -> int:\n    return x\n",
-            "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
+            "`*Ts` and `**P` type parameters are planned for TyPy 0.13 (GEN-06)",
         ),
         (
             "@d\ndef f() -> None:\n    pass\n",

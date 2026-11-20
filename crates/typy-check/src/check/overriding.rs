@@ -103,7 +103,7 @@ impl Override<'_> {
                             self.span,
                             format!(
                                 "an override that takes {} for `{}` where `{}` takes {}, with a \
-                             default of its own, is planned for TyPy 1.0 (CLS-34)",
+                             default of its own, is planned for TyPy 0.14 (CLS-34)",
                                 own.ty, own.name, self.base_name, base.ty
                             ),
                         )

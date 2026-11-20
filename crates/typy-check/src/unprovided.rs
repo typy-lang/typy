@@ -26,7 +26,7 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         "issubclass" => Some(planned("0.10", RuleId::CLS_19)),
         // As decorators and as `super().name` they are taken before a name is read; as values
         // they need functions as values.
-        "super" => Some(planned("1.0", RuleId::CLS_36)),
+        "super" => Some(planned("0.14", RuleId::CLS_36)),
         "property" | "staticmethod" | "classmethod" | "callable" | "map" | "filter" => {
             Some(planned("0.10", RuleId::FUN_08))
         }
@@ -196,7 +196,7 @@ mod tests {
     fn later_builtins_name_their_release_and_rule() {
         let cases = [
             ("issubclass", "0.10", RuleId::CLS_19),
-            ("super", "1.0", RuleId::CLS_36),
+            ("super", "0.14", RuleId::CLS_36),
             ("property", "0.10", RuleId::FUN_08),
             ("map", "0.10", RuleId::FUN_08),
         ];

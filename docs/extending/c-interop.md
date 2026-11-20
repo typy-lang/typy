@@ -314,7 +314,7 @@ function's argument, assigning a pointer's `contents`, and `ctypes`
 classes as values, in annotations, `isinstance` and `type` (FFI-10), so a
 function takes and returns the values of an object rather than the object.
 A library or a C function used as a value, stored, passed or printed, is
-planned for 1.0 too (FFI-09):
+planned for 0.13 too (FFI-09):
 
 <!-- typy-expect: rejected E0201 at 4:7 -->
 ```python

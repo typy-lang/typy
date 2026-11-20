@@ -763,7 +763,7 @@ impl BodyChecker<'_> {
             (
                 format!(
                     "calling the class method `{}` of a generic class through an instance is \
-                     planned for TyPy 1.0 (CLS-30)",
+                     planned for TyPy 0.14 (CLS-30)",
                     name.name
                 ),
                 RuleId::CLS_30,
@@ -772,7 +772,7 @@ impl BodyChecker<'_> {
             (
                 format!(
                     "calling the class method `{}`, which has type parameters, through an \
-                     instance is planned for TyPy 1.0 (GEN-16)",
+                     instance is planned for TyPy 0.13 (GEN-16)",
                     name.name
                 ),
                 RuleId::GEN_16,

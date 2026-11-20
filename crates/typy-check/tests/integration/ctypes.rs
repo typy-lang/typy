@@ -129,11 +129,11 @@ fn each_call_ctypes_would_refuse_is_an_error_where_it_is_compiled() {
         ),
         (
             "print(libc)\n",
-            "E0201 the library `libc` used other than to call its functions is planned for TyPy 1.0 (FFI-09)",
+            "E0201 the library `libc` used other than to call its functions is planned for TyPy 0.13 (FFI-09)",
         ),
         (
             "print(c_int)\n",
-            "E0201 the class `c_int` used as a value is planned for TyPy 1.0 (FFI-10)",
+            "E0201 the class `c_int` used as a value is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "x = ctypes.POINTER\n",
@@ -246,19 +246,19 @@ fn each_use_of_a_ctypes_object_ctypes_would_refuse_is_an_error_where_it_is_compi
         ),
         (
             "p = ctypes.pointer(c_int(1))\np.contents = c_int(2)\n",
-            "E0201 assigning a pointer's `contents` is planned for TyPy 1.0 (FFI-10)",
+            "E0201 assigning a pointer's `contents` is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "a = (c_int * 2)()\nprint(a[0:1])\n",
-            "E0201 a slice of a `ctypes` array or pointer is planned for TyPy 1.0 (FFI-10)",
+            "E0201 a slice of a `ctypes` array or pointer is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "a = (c_int * 2)()\na[0:1] = [1]\n",
-            "E0201 a slice of a `ctypes` array or pointer is planned for TyPy 1.0 (FFI-10)",
+            "E0201 a slice of a `ctypes` array or pointer is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "n = 2\nA = c_int * n\n",
-            "E0201 an array whose length is not an integer literal is planned for TyPy 1.0",
+            "E0201 an array whose length is not an integer literal is planned for TyPy 0.13",
         ),
         (
             "A = c_int * 5000000000\n",
@@ -266,19 +266,19 @@ fn each_use_of_a_ctypes_object_ctypes_would_refuse_is_an_error_where_it_is_compi
         ),
         (
             "A = (c_int * 2) * 3\n",
-            "E0201 an array of pointers or arrays is planned for TyPy 1.0 (FFI-10)",
+            "E0201 an array of pointers or arrays is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "ctypes.pointer(ctypes.pointer(c_int(1)))\n",
-            "E0201 a pointer to a pointer or to an array is planned for TyPy 1.0 (FFI-10)",
+            "E0201 a pointer to a pointer or to an array is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "ctypes.POINTER(c_int * 2)\n",
-            "E0201 a pointer to a pointer or to an array is planned for TyPy 1.0 (FFI-10)",
+            "E0201 a pointer to a pointer or to an array is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "ctypes.byref(c_int(1))\n",
-            "E0201 `ctypes.byref` other than as a C function's argument is planned for TyPy 1.0",
+            "E0201 `ctypes.byref` other than as a C function's argument is planned for TyPy 0.13",
         ),
         (
             "ctypes.sizeof(5)\n",
@@ -306,11 +306,11 @@ fn each_use_of_a_ctypes_object_ctypes_would_refuse_is_an_error_where_it_is_compi
         ),
         (
             "x = ctypes.c_char(1)\n",
-            "E0201 `ctypes.c_char` is planned for TyPy 1.0 (FFI-10)",
+            "E0201 `ctypes.c_char` is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "x = ctypes.CFUNCTYPE(None)\n",
-            "E0201 `ctypes.CFUNCTYPE` is planned for TyPy 1.0 (FFI-06)",
+            "E0201 `ctypes.CFUNCTYPE` is planned for TyPy 0.13 (FFI-06)",
         ),
         (
             "x = ctypes.Structure\n",
@@ -390,7 +390,7 @@ fn a_c_function_takes_an_object_by_reference_as_ctypes_does() {
         ),
         (
             "libc.abs(ctypes.byref(ctypes.pointer(c_int(1))))\n",
-            "E0201 `byref` of a pointer is planned for TyPy 1.0 (FFI-10)",
+            "E0201 `byref` of a pointer is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "libc.abs(ctypes.byref(5))\n",
@@ -494,11 +494,11 @@ fn each_use_of_a_structure_ctypes_would_refuse_is_an_error_where_it_is_compiled(
         ("print(Point()[0])\n", "E0401 a `Point` cannot be indexed"),
         (
             "class S(ctypes.Structure, Point):\n    pass\n",
-            "E0201 a `Structure` subclass with other bases is planned for TyPy 1.0 (FFI-11)",
+            "E0201 a `Structure` subclass with other bases is planned for TyPy 0.13 (FFI-11)",
         ),
         (
             "x = ctypes.Union\n",
-            "E0201 `ctypes.Union` is planned for TyPy 1.0 (FFI-11)",
+            "E0201 `ctypes.Union` is planned for TyPy 0.13 (FFI-11)",
         ),
         (
             "libc.labs(Box())\n",
@@ -510,11 +510,11 @@ fn each_use_of_a_structure_ctypes_would_refuse_is_an_error_where_it_is_compiled(
         ),
         (
             "class U(ctypes.Union):\n    pass\n",
-            "E0201 a `ctypes.Union` subclass is planned for TyPy 1.0 (FFI-11)",
+            "E0201 a `ctypes.Union` subclass is planned for TyPy 0.13 (FFI-11)",
         ),
         (
             "print(Point)\n",
-            "E0201 the class `Point` used as a value is planned for TyPy 1.0 (FFI-10)",
+            "E0201 the class `Point` used as a value is planned for TyPy 0.13 (FFI-10)",
         ),
     ] {
         let found = refused(&format!("{SHAPES}{source}"));

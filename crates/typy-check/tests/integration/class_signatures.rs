@@ -31,7 +31,7 @@ fn a_signature_that_does_not_fit_is_refused_with_the_reason() {
             return item\n\n\nprint(Derived().pick(\"a\"))\n",
             "E0201",
             "a generic method that overrides or is overridden by one with other type \
-            parameters, or in a generic class, is planned for TyPy 1.0 (GEN-16)",
+            parameters, or in a generic class, is planned for TyPy 0.13 (GEN-16)",
         ),
         (
             "from collections.abc import Callable\nfrom typing import Protocol\n\n\n\
@@ -56,7 +56,7 @@ fn a_signature_that_does_not_fit_is_refused_with_the_reason() {
             def bounds(self) -> Sized: ...\n",
             "E0201",
             "the protocol `Sized` in the signature of a protocol's method is planned for \
-            TyPy 1.0 (GEN-17)",
+            TyPy 0.13 (GEN-17)",
         ),
         (
             "class Counter:\n    count: int\n\n\nCounter.count = 1\n",

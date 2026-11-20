@@ -13,12 +13,12 @@ use crate::ctypes::{CData, CType, CtypesFunction, StructureClass};
 use crate::typed::{AssignTarget, CDataExpr, CDataPlace, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
-/// Returns the error for a use TyPy plans for 1.0 (FFI-10).
+/// Returns the error for a use TyPy plans for 0.13 (FFI-10).
 fn planned(span: Span, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        format!("{what} is planned for TyPy 1.0 (FFI-10)"),
+        format!("{what} is planned for TyPy 0.13 (FFI-10)"),
     )
     .with_rule(RuleId::FFI_10)
 }

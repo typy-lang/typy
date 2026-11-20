@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.104 |
+| Version | 1.105 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -332,16 +332,16 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-25 | A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance. | S | 0.5 | |
 | CLS-26 | `super(Class, instance)` shall be accepted with any class of the instance's chain of bases. | S | 0.5 | |
 | CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position. | S | 0.10 | |
-| CLS-28 | `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`. | C | 1.0 | |
-| CLS-29 | `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method. | C | 1.0 | |
-| CLS-30 | A class method of a generic class shall be callable through an instance. | C | 1.0 | |
-| CLS-31 | A class variable shall be assignable through a variable that holds a class derived from the class that gives it, such as `cls` in a class method, giving that class one of its own. | C | 1.0 | |
-| CLS-32 | An augmented assignment shall call the in-place method that only a class derived from its target's class defines, when the target holds an instance of that class. | C | 1.0 | |
-| CLS-33 | An operator or comparison method that may return both `None` and `NotImplemented` shall be accepted. | C | 1.0 | |
-| CLS-34 | An override whose parameter is held otherwise than its base method's, such as `int \| None` for `int`, shall be accepted with a default of its own for that parameter. | C | 1.0 | |
-| CLS-35 | A static method that overrides a method, or a method that overrides a static method, shall be accepted with a parameter or result held otherwise than the one it overrides. | C | 1.0 | |
-| CLS-36 | `super()` shall be usable as a value: held in a variable, passed and returned. | C | 1.0 | |
-| CLS-37 | A class derived from an abstract collection of `collections.abc`, such as `Sequence`, shall be accepted, with the mixin methods it inherits. | C | 1.0 | |
+| CLS-28 | `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`. | C | 0.14 | |
+| CLS-29 | `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method. | C | 0.14 | |
+| CLS-30 | A class method of a generic class shall be callable through an instance. | C | 0.14 | |
+| CLS-31 | A class variable shall be assignable through a variable that holds a class derived from the class that gives it, such as `cls` in a class method, giving that class one of its own. | C | 0.14 | |
+| CLS-32 | An augmented assignment shall call the in-place method that only a class derived from its target's class defines, when the target holds an instance of that class. | C | 0.14 | |
+| CLS-33 | An operator or comparison method that may return both `None` and `NotImplemented` shall be accepted. | C | 0.14 | |
+| CLS-34 | An override whose parameter is held otherwise than its base method's, such as `int \| None` for `int`, shall be accepted with a default of its own for that parameter. | C | 0.14 | |
+| CLS-35 | A static method that overrides a method, or a method that overrides a static method, shall be accepted with a parameter or result held otherwise than the one it overrides. | C | 0.14 | |
+| CLS-36 | `super()` shall be usable as a value: held in a variable, passed and returned. | C | 0.14 | |
+| CLS-37 | A class derived from an abstract collection of `collections.abc`, such as `Sequence`, shall be accepted, with the mixin methods it inherits. | C | 0.14 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
@@ -353,18 +353,18 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | GEN-03 | Generics shall compile to one copy per concrete type, with no run-time type information. | M | 0.4 | |
 | GEN-04 | Classes derived from `typing.Protocol` shall be satisfied by any class with matching methods, checked when the program is compiled. | M | 0.4 | |
 | GEN-05 | `isinstance` with a protocol shall be rejected. | M | 0.4 | |
-| GEN-06 | `*Ts` and `**P` type parameters, and defaults of type parameters, shall be accepted. | C | 1.0 | 8.10 |
+| GEN-06 | `*Ts` and `**P` type parameters, and defaults of type parameters, shall be accepted. | C | 0.13 | 8.10 |
 | GEN-07 | A generic function or class of another module shall be usable, made from its source as ADR-0016's interfaces carry it. | S | 0.5 | |
 | GEN-08 | A generic class shall be accepted with a base other than `object`, as the base of another class, and with class variables and defaults. | S | 0.5 | 8.10 |
 | GEN-09 | Type parameters shall be accepted on a method of a generic class, a special method, a property, a class method, and a method that overrides or is overridden. | S | 0.5 | 8.10 |
 | GEN-10 | A protocol shall be usable as the type of a variable, an attribute, a result and a container item outside a parameter, and of a parameter of a special method or a property. | S | 0.5 | 8.10 |
-| GEN-11 | A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted. | C | 1.0 | 8.10 |
-| GEN-12 | A generic class shall be accepted with an exception class as its base. | C | 1.0 | 8.10 |
-| GEN-13 | A generic protocol shall be accepted, satisfied by the classes whose members fit it for its type arguments. | C | 1.0 | 8.10 |
-| GEN-14 | `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes. | C | 1.0 | 8.10 |
-| GEN-15 | A class derived from a copy of a generic class shall inherit the generic class's class methods, and a dataclass derived from a copy of a generic dataclass its fields. | C | 1.0 | 8.10 |
-| GEN-16 | Type parameters shall be accepted on a special method, on a property, and on a method that overrides or is overridden by one with other type parameters or in a generic class, and a class method with type parameters shall be callable through an instance. | C | 1.0 | 8.10 |
-| GEN-17 | A protocol shall be usable as the base of a class, with properties, static methods, class methods, class variables and defaults, and in the signatures of its own methods; an attribute shall be assignable through a protocol value, and a value of a built-in type shall be held as a protocol. | C | 1.0 | 8.10 |
+| GEN-11 | A class variable or an attribute default of a generic class whose annotation names a type parameter of the class shall be accepted. | C | 0.13 | 8.10 |
+| GEN-12 | A generic class shall be accepted with an exception class as its base. | C | 0.13 | 8.10 |
+| GEN-13 | A generic protocol shall be accepted, satisfied by the classes whose members fit it for its type arguments. | C | 0.13 | 8.10 |
+| GEN-14 | `isinstance` and a class pattern with a generic class shall narrow a variable of a base's type to the copies of the class the program makes. | C | 0.13 | 8.10 |
+| GEN-15 | A class derived from a copy of a generic class shall inherit the generic class's class methods, and a dataclass derived from a copy of a generic dataclass its fields. | C | 0.13 | 8.10 |
+| GEN-16 | Type parameters shall be accepted on a special method, on a property, and on a method that overrides or is overridden by one with other type parameters or in a generic class, and a class method with type parameters shall be callable through an instance. | C | 0.13 | 8.10 |
+| GEN-17 | A protocol shall be usable as the base of a class, with properties, static methods, class methods, class variables and defaults, and in the signatures of its own methods; an attribute shall be assignable through a protocol value, and a value of a built-in type shall be held as a protocol. | C | 0.13 | 8.10 |
 
 ### 3.12 Exceptions (EXC)
 
@@ -467,12 +467,12 @@ direct calls and links the library when the program is built.
 | FFI-03 | The ctypes types `c_int8` to `c_uint64`, `c_int`, `c_long`, `c_size_t`, `c_ssize_t`, `c_float`, `c_double`, `c_bool`, `c_char_p`, `c_void_p`, `POINTER(T)` and `Structure` subclasses with a literal `_fields_` list shall be accepted, with the conversions and the wrap-around that ctypes defines. | M | 0.5 |
 | FFI-04 | Whether a library is linked statically or dynamically shall be set in `typy.toml`, not in the source. | M | 0.5 |
 | FFI-05 | A function that `__all__` of a module built with `--lib` lists shall be exported with an unmangled C symbol and the C types its annotations give, and the build shall write a matching C header (ADR-0032). | M | 0.5 |
-| FFI-06 | `ctypes.CFUNCTYPE` callbacks shall be accepted. | C | 1.0 |
-| FFI-07 | A C header shall be convertible into a module of ctypes declarations. | C | 1.0 |
+| FFI-06 | `ctypes.CFUNCTYPE` callbacks shall be accepted. | C | 0.13 |
+| FFI-07 | A C header shall be convertible into a module of ctypes declarations. | C | 0.13 |
 | FFI-08 | A library build shall write, beside the library and its C header, a `.pyi` stub of its exported functions and a `ctypes` module that loads the library and declares them, so CPython and TyPy programs call it with the same source (ADR-0032). | S | 0.5 |
-| FFI-09 | A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints. | C | 1.0 |
-| FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted. | C | 1.0 |
-| FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 1.0 |
+| FFI-09 | A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints. | C | 0.13 |
+| FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted. | C | 0.13 |
+| FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 0.13 |
 | FFI-12 | A `ctypes` structure passed to or returned from a C function by value shall follow the C calling convention of the target: System V on x86_64 Linux and AAPCS64 on AArch64 Linux. | M | 0.6 |
 | FFI-13 | A `ctypes` call shall pass each integer and `c_bool` argument as `libffi` passes it on the target, a 64-bit word widened by its type in a register and, on Apple's arm64, its own size on the stack, so a C function reads the values it reads under CPython. | M | 0.7 |
 | FFI-14 | A module-level `ctypes.CDLL(None)` or `ctypes.cdll.LoadLibrary(None)` shall declare the C library and the C maths library that every program links, whose functions it calls on every target, with no other library linked. | M | 0.7 |

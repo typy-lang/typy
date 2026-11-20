@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- Generics and `ctypes` features planned for 1.0 are now planned for 0.13
+  (GEN-06, GEN-11 to GEN-17, FFI-06, FFI-07, FFI-09 to FFI-11), and the
+  class rules planned for 1.0 for 0.14 (CLS-28 to CLS-37). The E0201
+  messages that refuse them name the new release.
 - The refusal of a default value other than a constant names EXP-20, the
   requirement that plans it for 1.0, not EXP-16, which TyPy meets.
 

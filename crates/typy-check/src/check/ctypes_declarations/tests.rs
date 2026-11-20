@@ -242,7 +242,7 @@ fn a_pointer_type_ctypes_has_that_typy_does_not_compile_is_refused() {
     for (source, message) in [
         (
             "lib.f.argtypes = [ctypes.POINTER(ctypes.POINTER(ctypes.c_int))]\n",
-            "E0201 a pointer to a pointer or to an array is planned for TyPy 1.0 (FFI-10)",
+            "E0201 a pointer to a pointer or to an array is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "lib.f.argtypes = [ctypes.POINTER(ctypes.c_int, 2)]\n",
@@ -325,11 +325,11 @@ fn each_part_of_a_structure_class_typy_does_not_compile_is_refused() {
     for (source, message) in [
         (
             "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int)]\n    def area(self) -> int:\n        return 0\n",
-            "E0201 a `Structure` subclass with methods or class attributes other than one `_fields_` is planned for TyPy 1.0 (FFI-11)",
+            "E0201 a `Structure` subclass with methods or class attributes other than one `_fields_` is planned for TyPy 0.13 (FFI-11)",
         ),
         (
             "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int, 3)]\n",
-            "E0201 a bit field is planned for TyPy 1.0 (FFI-11)",
+            "E0201 a bit field is planned for TyPy 0.13 (FFI-11)",
         ),
         (
             "@decorate\nclass S(ctypes.Structure):\n    pass\n",
@@ -357,15 +357,15 @@ fn each_part_of_a_structure_class_typy_does_not_compile_is_refused() {
         ),
         (
             "class S(ctypes.Structure):\n    _fields_ = [(\"x\", ctypes.c_int * n)]\n",
-            "E0201 an array whose length is not an integer literal is planned for TyPy 1.0",
+            "E0201 an array whose length is not an integer literal is planned for TyPy 0.13",
         ),
         (
             "class S(ctypes.Structure):\n    _fields_ = [(\"x\", (ctypes.c_int * 2) * 2)]\n",
-            "E0201 an array of pointers or arrays is planned for TyPy 1.0 (FFI-10)",
+            "E0201 an array of pointers or arrays is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "class S(ctypes.Structure):\n    pass\nclass T(S):\n    pass\n",
-            "E0201 a subclass of a `Structure` subclass is planned for TyPy 1.0 (FFI-11)",
+            "E0201 a subclass of a `Structure` subclass is planned for TyPy 0.13 (FFI-11)",
         ),
         (
             "class S(ctypes.Structure, metaclass=Meta):\n    pass\n",
@@ -397,7 +397,7 @@ fn each_part_of_a_structure_class_typy_does_not_compile_is_refused() {
         ),
         (
             "lib = ctypes.CDLL(\"lib.so\")\nlib.f.argtypes = [ctypes.POINTER(ctypes.c_int * 2)]\n",
-            "E0201 a pointer to a pointer or to an array is planned for TyPy 1.0 (FFI-10)",
+            "E0201 a pointer to a pointer or to an array is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "lib = ctypes.CDLL(\"lib.so\")\nlib.f.argtypes = [ctypes.POINTER(type=ctypes.c_int)]\n",

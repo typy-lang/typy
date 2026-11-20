@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.62 |
+| Version | 2.63 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -1234,7 +1234,7 @@ variable or a default of a generic class is one module variable, `Class.name`,
 which a copy's `ClassInfo`, cloned from the generic class's, names as the
 generic class does, so every copy shares it as every instance shares it in
 CPython. One whose annotation names a type parameter of the class, which
-`check::class::refuse_shared_parameter` finds, is E0201, planned for 1.0
+`check::class::refuse_shared_parameter` finds, is E0201, planned for 0.13
 (GEN-11), and `class_values` makes no module variable for it. A generic class
 may derive from a class of the program (GEN-08, ADR-0040): its
 `GenericClass::instance` holds the chain `class_types` gives it, and
@@ -1261,7 +1261,7 @@ a generic class derived from a copy the copy of that base for its own
 arguments, and `make_class_copies` adds the bridges of the copies it made once
 all are, since a base copy may be made after the copy that names it. A class
 derived from a copy whose generic class has class methods, and a dataclass
-derived from a copy of a generic dataclass, are E0201, planned for 1.0
+derived from a copy of a generic dataclass, are E0201, planned for 0.13
 (GEN-15). Since a class may derive from a copy with a higher ID,
 `lower::methods::MethodTables::new` lays out the tables with each base first,
 and the TyIR verifier walks a chain of bases as far as there are classes,
@@ -1287,12 +1287,12 @@ arguments, a place in their classes' methods under the key `name[arguments]`,
 which no Python name can be, so lowering's method tables dispatch a call through
 the base to the object's class's copy; the generic stand-ins themselves stay out
 of the tables. Other overrides of or by a generic method are E0201, planned for
-1.0 (GEN-16). A class method's own type parameters are resolved for each class's
+0.13 (GEN-16). A class method's own type parameters are resolved for each class's
 copy in `ClassMethodCopies::make`, which also lets a protocol parameter make it
 generic; a call through a class goes to `call_target_with` with the arguments of
 a copy of a generic class first, `copy_arguments_of`. Such a class method has no
 bridge, so a call through an instance is E0201, and so are type parameters of a
-special method or a property, from `later_generic_method`, all planned for 1.0
+special method or a property, from `later_generic_method`, all planned for 0.13
 (GEN-16). A method of a generic class with type parameters of its own is generic
 over the class's first and its own after them, two lists with two owners that
 `Program::substitute_each` replaces in turn; `finish_generic_class` keeps it out
@@ -1347,7 +1347,7 @@ is wanted takes the reason as its help, from `protocol_help`. Assigning an
 attribute through a protocol value, a class derived from a protocol, a
 protocol's properties, static and class methods, class variables and defaults,
 a protocol in its own methods' signatures, and a value of a built-in type held
-as a protocol are E0201, planned for 1.0 (GEN-17).
+as a protocol are E0201, planned for 0.13 (GEN-17).
 
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union
@@ -1650,7 +1650,7 @@ or result is held otherwise than the base's, such as `int | None` for `int`
 each argument, calls the override through the table, and widens the result.
 `MethodTables` puts the adapter in the base method's place and gives the
 override a place of its own, under which calls typed at its class find it; such
-a parameter with a default of its own is E0201, planned for 1.0 (CLS-34). A
+a parameter with a default of its own is E0201, planned for 0.14 (CLS-34). A
 call of a method on an instance is `TypedExprKind::Call` with `dispatch` set,
 and a call through `super()` has it clear. Calling an
 exception class without
@@ -1664,7 +1664,7 @@ leaves them to `OSError.__init__` for a class with an `__init__` of its own.
 method's instance, in any method (CLS-14, CLS-26): a `Call` of the method of
 the nearest base of that class on the instance with `dispatch` clear, E0414
 when no base of the program's has the method or outside a method, E0404 for
-a class outside the chain, and E0201, planned for 1.0, for another instance
+a class outside the chain, and E0201, planned for 0.14, for another instance
 (CLS-29). In `__init__`,
 `super().__init__(...)` calls the nearest base's `__init__`; with none, an
 exception class gets `TypedExprKind::SetArguments` and any other class nothing,
@@ -1705,7 +1705,7 @@ method tables hold the bridge in the static method's place, so when a class
 derived from the instance's static class defines the name again, as a static
 method or not, a call through the instance calls the bridge through the table
 (`through_static_bridge`). An override compares a static method as one that
-takes the instance; one held otherwise is E0201, planned for 1.0 (CLS-35). A
+takes the instance; one held otherwise is E0201, planned for 0.14 (CLS-35). A
 property's getter is a method of its name, recorded in `ClassInfo::properties`,
 and its setter the method `name.setter`, so both override and dispatch as
 methods do. `body::accessor` reads `instance.name` of a
@@ -1727,7 +1727,7 @@ generic a bridge, a function of the class method's name in
 `ClassInfo::methods` that takes the instance and the copy's other parameters
 and calls the copy with the class's type object, so a call through an
 instance dispatches to the bridge of the instance's class; a generic class's
-copies have none, and such a call is E0201, planned for 1.0 (CLS-30). An
+copies have none, and such a call is E0201, planned for 0.14 (CLS-30). An
 inherited copy's `Definition::copy_of`
 names the copy it repeats, and the checker drops the diagnostics of an
 inherited copy that the original reported. `Class.name(...)` calls the class's
@@ -1743,9 +1743,10 @@ through an instance of a `shared` class's chain calls the getter
 `name.class`, which `Program::add_class_variable_getters` gives each class of
 the chain once the first look has typed the variables, through the method
 table. An assignment through a variable that holds a class, such as `cls`, of
-a variable a base gives is E0201, planned for 1.0 (CLS-31). Comparison methods follow
-ADR-0026: `class_types` records in `InstanceClass::operators` which of `__eq__`,
-the ordering methods and `__hash__` a class defines or inherits, so
+a variable a base gives is E0201, planned for 0.14 (CLS-31). Comparison
+methods follow ADR-0026: `class_types` records in `InstanceClass::operators`
+which of `__eq__`, the ordering methods and `__hash__` a class defines or
+inherits, so
 `Type::can_order` and `Type::is_hashable` answer for instances, and a class
 with `__eq__` and no `__hash__` has no hash. A comparison method takes `self`
 and a value of a type that accepts its class, E0404 otherwise.
@@ -1770,7 +1771,7 @@ arithmetic, reflected, in-place or comparison name in a chain of bases where
 one says `return NotImplemented` returns `T | NotImplementedType`
 (`Type::may_give_way`); the call's type is the methods' result without it
 (`Type::implemented`). Such a method that also returns `None` is E0201,
-planned for 1.0 (CLS-33). `TypedExprKind::NotImplemented` reads the
+planned for 0.14 (CLS-33). `TypedExprKind::NotImplemented` reads the
 runtime's one object of the type, and `is` tests a result that may hold it.
 `TyirClass` holds `equal`, `order` and `hash`, and codegen fills the type
 object's slots with functions that call them; the `equal` slot compares by
@@ -1805,7 +1806,7 @@ may give way is the first step of an `OperatorCall` whose symbol is `+=`.
 `body::in_place::pinned_augmented` first holds the object and the key of an
 item or an attribute of an expression in hidden variables, so the target is
 evaluated once; an in-place method that only a class derived from the
-target's defines is E0201, planned for 1.0 (CLS-32). `body::container_method` calls
+target's defines is E0201, planned for 0.14 (CLS-32). `body::container_method` calls
 `__len__` for `len`, wrapped in `TypedExprKind::CheckedLength`, which lowers to
 `int_length` and raises CPython's `ValueError` or `OverflowError`;
 `__getitem__` for a subscript; `__setitem__` for `variable[key] = value`, as a
@@ -1855,7 +1856,7 @@ with the class's own `__hash__` is E0404. A field with
 and `__init__` takes its call as the field's default, which
 `SignatureParameter::default_call` holds, so a call that leaves the field out
 calls it each time (CLS-15). Other options of `field` and `@dataclass`, and
-a `default_factory` in a generic dataclass, are E0201, planned for 1.0
+a `default_factory` in a generic dataclass, are E0201, planned for 0.14
 (CLS-28). A frozen dataclass's
 `ClassInfo::frozen` makes assigning a field E0414 outside the `__init__` the
 expansion wrote. `check::type_alias` expands the module's `type` statements

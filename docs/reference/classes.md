@@ -135,7 +135,7 @@ has one in the override, which may differ: a call that leaves it out
 takes the default of the object's class, as in CPython. An override may
 take or return a type held differently from the base's, such as
 `int | None` where the base has `int`; with a default of its own for
-such a parameter it is planned for 1.0 (CLS-34).
+such a parameter it is planned for 0.14 (CLS-34).
 `__init__` is not compared, since it runs only on the class being made.
 
 <!-- typy-expect: rejected E0404 at 7:9 -->
@@ -192,7 +192,7 @@ so no attribute is read before it holds a value. `super()` outside a
 method is E0414. `super(Base, self)` names the enclosing class or one of
 its bases, and the method found is that of the nearest base of `Base`, as
 in CPython (CLS-26); with an instance other than `self` it is planned for
-1.0 (CLS-29).
+0.14 (CLS-29).
 
 A method may also be called through a class with the instance first,
 `Shape.describe(square)`, which runs the method that class holds or
@@ -373,13 +373,13 @@ that gives the class or one of its instances, which is evaluated first,
 as in CPython. A class method is called through its class, also a
 subclass defined in another module, which gets a copy of its own, and
 through an instance, which passes the instance's class as `cls`
-(CLS-25). Through an instance of a generic class it is planned for 1.0
+(CLS-25). Through an instance of a generic class it is planned for 0.14
 (CLS-30). Assigning a class variable through a subclass that inherits
 it gives the subclass a variable of its own, as in CPython: the
 subclass, its subclasses and their instances read it from then on, and
 the base keeps its own (CLS-25). Assigning it through a variable that
 holds such a subclass, such as `cls` in a class method, is planned for
-1.0 (CLS-31).
+0.14 (CLS-31).
 
 ## Comparison methods
 
@@ -465,7 +465,7 @@ expression is evaluated once, as in CPython (CLS-20). CPython calls the
 in-place method whatever `y` is, so an in-place method whose parameter
 does not take `y` is refused (E0404), never passed over for `__add__`.
 An in-place method that only a subclass of the target's class defines is
-planned for 1.0 (CLS-32).
+planned for 0.14 (CLS-32).
 
 ## Giving way with `NotImplemented`
 
@@ -515,7 +515,7 @@ method first, then the methods of `x + y`. A method that returns
 from the same base the return type `T | NotImplementedType`, so a direct
 call such as `a.__eq__(b)` may give `NotImplemented`, which
 `result is NotImplemented` tests. A method that may return both `None`
-and `NotImplemented` is planned for 1.0 (CLS-33), and `return
+and `NotImplemented` is planned for 0.14 (CLS-33), and `return
 NotImplemented` in any other function is E0405.
 
 ## Container methods
@@ -660,7 +660,7 @@ print(first, Path("b"), {Point(1, 2), Point(1, 2)})
 ```
 
 The other options of `field`, such as `repr` or `compare`, `kw_only` and
-`weakref_slot` are planned for 1.0 (CLS-28).
+`weakref_slot` are planned for 0.14 (CLS-28).
 
 ## Attributes are declared
 
