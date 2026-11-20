@@ -166,9 +166,10 @@ impl BodyChecker<'_> {
         if let Type::Union(members) = expected
             && value.ty != *expected
             && !members.contains(&value.ty)
-            && let Some(member) = members
-                .iter()
-                .find(|member| value.ty.is_assignable_to(member))
+            && let Some(member) = members.iter().find(|member| {
+                value.ty.is_assignable_to(member)
+                    || matches!(member, Type::TupleOf(item) if value.ty.fits_tuple_of(item))
+            })
             && matches!(
                 member,
                 Type::Iterable(_) | Type::Iterator(_) | Type::TupleOf(_)

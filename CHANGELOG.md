@@ -44,6 +44,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A fixed tuple, such as `(1, 2)`, passed or assigned where a union with a
+  `tuple[T, ...]` member is expected, such as `tuple[int, ...] | str`, is
+  accepted as that member, as CPython runs it. It was refused with E0404
+  or E0402 (TYP-14).
 - A generic function whose parameters or result name a type parameter
   inside a `Callable` or a `Generator`, such as `def apply[T](value: T,
   change: Callable[[T], T]) -> T` or a generic generator that yields `T`,

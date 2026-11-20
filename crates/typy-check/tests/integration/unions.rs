@@ -173,3 +173,32 @@ fn an_operation_on_a_union_variable_is_checked_for_each_member() {
         assert_eq!(with_shapes(body), vec![code.to_string()], "{body}");
     }
 }
+
+#[test]
+fn a_fixed_tuple_takes_the_member_of_a_union_that_holds_any_number_of_its_items() {
+    let source = concat!(
+        "def show(values: tuple[int, ...] | str) -> None:\n",
+        "    print(values)\n",
+        "def first(values: tuple[int, ...] | tuple[str, str]) -> None:\n",
+        "    print(values)\n",
+        "pair = (3, 4)\n",
+        "show((1, 2))\n",
+        "show(())\n",
+        "show(pair)\n",
+        "show('a')\n",
+        "first((1, 2, 3))\n",
+        "first(('a', 'b'))\n",
+        "kept: tuple[int, ...] | str = (5,)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn a_fixed_tuple_of_other_items_is_no_member_of_such_a_union() {
+    let source = concat!(
+        "def show(values: tuple[int, ...] | str) -> None:\n",
+        "    print(values)\n",
+        "show((1, 'a'))\n",
+    );
+    assert_eq!(app(source), ["E0404"]);
+}
