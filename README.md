@@ -30,11 +30,12 @@ These are the goals of TyPy 1.0, as the
 
 ## Status
 
-TyPy 0.8.0 runs on x86_64 and 64-bit Arm (AArch64) Linux, where it builds
+TyPy 0.9.0 runs on x86_64 and 64-bit Arm (AArch64) Linux, where it builds
 programs for either with `typy build --target`, and on macOS 11 or later
 on Apple silicon, where it builds programs for macOS. It checks, builds and
 runs programs made of modules, functions as values, nested functions
-with closures and `nonlocal`, `lambda` expressions, classes with
+with closures and `nonlocal`, `lambda` expressions, generator functions
+and generator expressions, `*args` and `**kwargs`, classes with
 inheritance, dataclasses and statements over `int`, `float`,
 `str`, `bytes`, `bool`, `None`, lists, tuples, dicts, sets, optional values
 and unions, with comprehensions, assignment expressions, f-strings, `%`
@@ -47,10 +48,9 @@ the program's modules, packages and PEP 810 lazy imports; the `math` and
 libraries through `ctypes`, with objects, pointers, arrays and structures.
 `typy build --lib` builds a module as a static or shared C library with a
 C header and a Python binding. Programs print what CPython prints,
-including the traceback of an uncaught exception. Generators come in
-0.9; the
-[language reference](https://typy-lang.org/reference/) lists what each
-release accepts.
+including the traceback of an uncaught exception. Decorators come in
+0.10; the [language reference](https://typy-lang.org/reference/) lists
+what each release accepts.
 
 ## Quick start
 
@@ -58,22 +58,22 @@ TyPy runs on x86_64 and AArch64 Linux with glibc 2.39 or later, such as
 Ubuntu 24.04 or Debian 13, and on macOS 11 or later on Apple silicon, and
 needs a C toolchain: `cc` on Linux, and Xcode's Command Line Tools on a
 Mac. Download the archive for your machine from the
-[0.8.0 release](https://github.com/typy-lang/typy/releases/tag/v0.8.0)
+[0.9.0 release](https://github.com/typy-lang/typy/releases/tag/v0.9.0)
 and unpack it. On Linux, `uname -m` prints the machine, `x86_64` or
 `aarch64`:
 
 ```sh
-tar -xzf "typy-0.8.0-$(uname -m)-unknown-linux-gnu.tar.gz"
-export PATH="$PWD/typy-0.8.0-$(uname -m)-unknown-linux-gnu/bin:$PATH"
+tar -xzf "typy-0.9.0-$(uname -m)-unknown-linux-gnu.tar.gz"
+export PATH="$PWD/typy-0.9.0-$(uname -m)-unknown-linux-gnu/bin:$PATH"
 ```
 
 On a Mac, an archive a browser downloaded is quarantined, so clear the
 mark first:
 
 ```sh
-xattr -d com.apple.quarantine typy-0.8.0-aarch64-apple-darwin.tar.gz
-tar -xzf typy-0.8.0-aarch64-apple-darwin.tar.gz
-export PATH="$PWD/typy-0.8.0-aarch64-apple-darwin/bin:$PATH"
+xattr -d com.apple.quarantine typy-0.9.0-aarch64-apple-darwin.tar.gz
+tar -xzf typy-0.9.0-aarch64-apple-darwin.tar.gz
+export PATH="$PWD/typy-0.9.0-aarch64-apple-darwin/bin:$PATH"
 ```
 
 Then run a program:
