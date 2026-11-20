@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.65 |
+| Version | 2.66 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -1082,11 +1082,11 @@ The builtins of one iterable (LIB-02), `sorted`, `sum`, `any`, `all`, and
 `min` and `max` of one argument, add `TypedExprKind::IterableBuiltin {
 builtin, iterable, option }`. The option is the one optional value each
 takes: `reverse`, a `bool`, for `sorted`; `start`, by position or keyword,
-for `sum`; `default`, of the item type, for `min` and `max`. `key` needs a
-function value and is E0201, planned for 1.0 (FUN-05); any other keyword is
-E0404. `iterated_item` gives the item type of the iterable, which `for` also
-uses: a list's item type, E0201 for a `str` or a tuple until they can be
-iterated later in 0.2, and E0411 for anything else. `sorted`, `min` and
+for `sum`; `default`, of the item type, for `min` and `max`. `key` takes a
+function value (FUN-05); any other keyword is E0404. `iterated_item` gives
+the item type of the iterable, which `for` also uses: a list's item type,
+E0201 for a `str` or a tuple until they can be iterated later in 0.2,
+and E0411 for anything else. `sorted`, `min` and
 `max` need items that order. `sum` adds `int` or `float` items; a
 `list[float]` needs a `float` start, E0404, because CPython returns the
 `int` 0 for an empty list without one, a type the call could not have. A
@@ -1894,7 +1894,7 @@ its name and hashes it by identity, and `typy_rt_type_alias_name` and
 (`TypedExprKind::TypeAliasPart`). Calling an alias and `isinstance` with
 one are E0401, as CPython raises `TypeError`; an alias a function or a
 class defines, an alias given its type arguments, and `__value__` and
-`__type_params__` read as values are E0201, planned for 1.0 (TYP-18)
+`__type_params__` read as values are E0201, planned for 0.10 (TYP-18)
 (SMT-12). `Final` follows TYP-08:
 `body::locals::declare` records each `Final` variable in
 `Program::final_variables` with the name its declaration assigns, and `assign`
@@ -2018,7 +2018,7 @@ gives `TracebackType` and `ModuleType`, as `AnnotationName`s that
 `resolve_import` binds for annotations only (TYP-15): a name imported from
 them, or a name bound to one of the modules, such as `typing.Iterable`,
 enters `AnnotationScope::names` or `standard`, and its use as a value is
-E0201, planned for 1.0 (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
+E0201, planned for 0.10 (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
 `TracebackType` is `Type::Traceback` and `ModuleType` is `Type::AnyModule`,
 a module whose attributes are unknown, E0412. `Iterable[T]` is
 `Type::Iterable(T)`: any built-in iterable or iterator whose items have

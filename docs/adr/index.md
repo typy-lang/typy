@@ -71,7 +71,7 @@ supersedes it.
 | [ADR-0063](0063-compile-a-generator-as-a-resumable-function-with-its-frame-in-its-object.md) | Compile a generator as a resumable function with its frame in its object | Accepted | 2026-11-19 |
 | [ADR-0064](0064-close-a-generator-freed-while-suspended-at-its-yield.md) | Close a generator freed while suspended at its yield | Superseded by ADR-0069 | 2026-11-19 |
 | [ADR-0065](0065-give-each-iterable-type-iteration-entries-the-runtime-calls.md) | Give each iterable type iteration entries the runtime calls | Accepted | 2026-11-19 |
-| [ADR-0066](0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md) | Hold an abstract collection as the union of its built-in types | Accepted | 2026-11-19 |
+| [ADR-0066](0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md) | Hold an abstract collection as the union of its built-in types | Superseded by ADR-0086 | 2026-11-19 |
 | [ADR-0067](0067-type-what-a-yield-receives-as-the-send-type-or-none.md) | Type what a `yield` receives as the send type or `None` | Accepted | 2026-11-19 |
 | [ADR-0068](0068-give-the-caller-back-its-handled-exception-when-a-generator-step-stops.md) | Give the caller back its handled exception when a generator step stops | Accepted | 2026-11-19 |
 | [ADR-0069](0069-close-freed-generators-from-a-queue-after-the-call-that-dropped-them.md) | Close freed generators from a queue after the call that dropped them | Accepted | 2026-11-19 |
@@ -81,3 +81,15 @@ supersedes it.
 | [ADR-0073](0073-bind-the-arguments-of-a-call-with-unpacking-when-the-program-runs.md) | Bind the arguments of a call with unpacking when the program runs | Accepted | 2026-11-20 |
 | [ADR-0074](0074-define-a-stable-abi-for-typy-modules-at-1-0.md) | Define a stable ABI for TyPy modules at 1.0 | Accepted | 2026-11-20 |
 | [ADR-0075](0075-read-the-stack-of-each-thread-a-library-runs-on-from-the-thread.md) | Read the stack of each thread a library runs on from the thread | Accepted | 2026-11-20 |
+| [ADR-0076](0076-give-a-function-value-the-identity-of-the-function-it-stands-for.md) | Give a function value the identity of the function it stands for | Accepted | 2026-11-20 |
+| [ADR-0077](0077-type-a-built-in-used-as-a-value-by-the-callable-it-fills.md) | Type a built-in used as a value by the `Callable` it fills | Accepted | 2026-11-20 |
+| [ADR-0078](0078-make-map-and-filter-iterator-objects-of-the-runtime.md) | Make `map` and `filter` iterator objects of the runtime | Accepted | 2026-11-20 |
+| [ADR-0079](0079-bind-a-method-value-to-the-method-the-receivers-own-class-runs.md) | Bind a method value to the method the receiver's own class runs | Accepted | 2026-11-20 |
+| [ADR-0080](0080-call-a-function-with-defaults-or-args-through-an-adapter.md) | Call a function with defaults or `*args` through an adapter | Accepted | 2026-11-20 |
+| [ADR-0081](0081-check-a-nested-function-of-a-generic-function-in-each-copy.md) | Check a nested function of a generic function in each copy | Accepted | 2026-11-20 |
+| [ADR-0082](0082-bind-a-decorated-functions-name-to-what-its-decorators-return.md) | Bind a decorated function's name to what its decorators return | Accepted | 2026-11-20 |
+| [ADR-0083](0083-describe-each-built-in-so-calls-with-unpacking-bind-when-they-run.md) | Describe each built-in so calls with unpacking bind when they run | Accepted | 2026-11-20 |
+| [ADR-0084](0084-let-type-c-hold-c-or-a-class-derived-from-it.md) | Let `type[C]` hold `C` or a class derived from it | Accepted | 2026-11-20 |
+| [ADR-0085](0085-hold-a-named-tuple-as-an-instance-of-a-class-derived-from-tuple.md) | Hold a named tuple as an instance of a class derived from `tuple` | Accepted | 2026-11-20 |
+| [ADR-0086](0086-hold-an-abstract-collection-as-its-built-in-types-range-included.md) | Hold an abstract collection as its built-in types, `range` included | Accepted | 2026-11-20 |
+| [ADR-0087](0087-make-typing-values-constants-written-only-where-the-oracles-agree.md) | Make typing values constants, written only where the oracles agree | Accepted | 2026-11-20 |

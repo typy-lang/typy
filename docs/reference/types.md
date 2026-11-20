@@ -359,8 +359,8 @@ print(Score, Score.__name__, Score.__module__, type(Score), kinds[0] is Score)
 
 As in CPython, calling an alias, or giving it to `isinstance`, is E0401.
 An alias a function or a class defines read as a value, whose text
-CPython 3.14 changed, an alias given its type arguments as a value, and
-an alias's `__value__` and `__type_params__` are planned for 1.0
+CPython 3.15 changed, an alias given its type arguments as a value, and
+an alias's `__value__` and `__type_params__` are planned for 0.10
 (TYP-18). Two aliases compare with `is`; `==` between them is E0407, as
 for module objects.
 

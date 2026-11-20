@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.22 |
+| Version | 1.23 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -323,10 +323,11 @@ that the specification does not define.
 | TYP-15 | 0.3 | IT | `tests/conformance/typ/TYP-15_*.py` |
 | TYP-16 | 0.5 | IT | `tests/conformance/typ/TYP-16_*.py` |
 | TYP-17 | 0.5 | IT | `tests/conformance/typ/TYP-17_*.py` |
-| TYP-18 | 0.10 | IT | `tests/conformance/typ/TYP-18_*.py` |
+| TYP-18 | 0.10 | UT, IT | `typy-check` tests of each kind of typing value, its equality and identity, and each written form refused below the floor that writes it alike; `tests/conformance/typ/TYP-18_*.py`, with `# typy-python: 3.14` and `3.15` for the forms only those oracles write alike |
 | TYP-19 | 1.0 | IT | `tests/conformance/typ/TYP-19_*.py` |
 | TYP-20 | 0.9 | UT, IT | `typy-check` tests of the classes that fit `Iterator[T]` and `Iterable[T]`, and of those that do not; `tests/conformance/typ/TYP-20_*.py`, one function given each kind of iterator, also in the sanitizer run |
 | TYP-21 | 0.9 | UT, IT | `typy-check` tests of `Generator` in `isinstance` and a class pattern, and of an `Iterable[T]` read as an `Iterator[T]` after a test; `tests/conformance/typ/TYP-21_*.py` |
+| TYP-22 | 1.0 | UT, IT | `typy-check` tests of each refusal while it is planned; `tests/conformance/typ/TYP-22_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -362,8 +363,9 @@ that the specification does not define.
 | EXP-16 | 0.1 | IT | `tests/conformance/exp/EXP-16_*.py` |
 | EXP-17 | 0.9 | UT, IT | `typy-source` tests of a starred item; `typy-check` tests of the element types of `*args` and `**kwargs`, of the arguments each takes and refuses, and of each unpacking; runtime tests of `unpack` and of `call_check`, `call_merge` and `call_name` against CPython 3.15's messages; `typy-check` tests of each argument a call unpacks and of each it refuses; `typy-driver` tests that lower each form, pack `*args` and `**kwargs` and bind a call that unpacks; `tests/conformance/exp/EXP-17_*.py`, among them the order in which a call evaluates its arguments |
 | EXP-18 | 1.0 | IT | `tests/conformance/exp/EXP-18_*.py` |
-| EXP-19 | 0.10 | IT | `typy-check` tests of each call that refuses unpacking as planned; `tests/conformance/exp/EXP-19_*.py` |
+| EXP-19 | 0.10 | UT, IT | Runtime tests of the call check against each built-in's description, with its message style; `typy-check` tests of `max(*xs)` by item type and of `**` through a function value refused as planned; `tests/conformance/exp/EXP-19_*.py` for built-ins, `print(**options)`, function values and exception classes |
 | EXP-20 | 1.0 | UT | `typy-check` subset test of the refusal while it is planned; a conformance program of each kind of default |
+| EXP-21 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/exp/EXP-21_*.py` |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py`, a list, a `str`, a range, a dict and generators unpacked with CPython 3.15's messages |
 | SMT-03 | 0.1 | IT | `tests/conformance/smt/SMT-03_*.py` |
@@ -392,14 +394,18 @@ that the specification does not define.
 | FUN-03 | 0.8 | UT, IT | `typy-check` tests of binding arguments to keyword-only and positional-only parameters; `tests/conformance/fun/FUN-03_*.py` |
 | FUN-04 | 0.8 | UT, IT | `typy-check` and `typy-lower` tests of each variable's capture, by value or in a cell, of recursion and of mutual recursion; `tests/conformance/fun/FUN-04_*.py`, also in the sanitizer run, which shows each closure, cell and shared environment freed (NFR-07, NFR-08) |
 | FUN-05 | 0.8 | UT, IT | `typy-codegen` tests of a function object, its descriptor and a call through a value; `tests/conformance/fun/FUN-05_*.py` for identity, equality, hashing and `repr`, bound methods and `key`, also in the sanitizer run |
-| FUN-06 | 0.10 | IT | `tests/conformance/fun/FUN-06_*.py` |
+| FUN-06 | 0.10 | UT, IT | `typy-check` tests of the order of evaluation, the type of the bound name, a keyword argument through it, and a method or class decorator refused as planned; `tests/conformance/fun/FUN-06_*.py` for wrappers, factories, registries, generic decorators, a result that is no function, recursion through the wrapper and a decorator that raises |
 | FUN-07 | 0.9 | UT, IT | `typy-check` tests that a generator of each annotation yields and returns its types, and that `send`, `throw` and `close` are only for `Generator`; runtime tests of `send`, `throw` and `close` in each state and of the exception a step hands back to its caller; `tests/conformance/fun/FUN-07_*.py`, CPython's errors of a running, finished or just started generator and the context of an exception raised while one is suspended inside an `except` clause included, also in the sanitizer run |
-| FUN-08 | 0.10 | IT | `tests/conformance/fun/FUN-08_*.py` |
-| FUN-09 | 0.10 | IT | `tests/conformance/fun/FUN-09_*.py` |
-| FUN-10 | 0.10 | IT | `tests/conformance/fun/FUN-10_*.py` |
+| FUN-08 | 0.10 | UT, IT | `typy-check` tests of each built-in against `Callable` types it fits and does not fit, and of a value with nothing expected; `typy-codegen` test of the identity key in a descriptor; `tests/conformance/fun/FUN-08_*.py` for keys, stored values, bound and unbound methods of built-in types, and their identity, equality, hash and `repr` |
+| FUN-09 | 0.10 | UT, IT | `typy-check` tests of each kind of method value; `tests/conformance/fun/FUN-09_*.py` for class methods through a class and an instance, static methods a subclass defines again, protocol methods and overrides held otherwise, with their identity, equality, hash and `repr` |
+| FUN-10 | 0.10 | UT, IT | `typy-check` tests of substitution through `Callable` and `Generator`, and that the passes with opaque types make no code; `tests/conformance/fun/FUN-10_*.py` for nested functions, `lambda` and generator expressions in generic functions and functions with protocol parameters, nested generic functions and their qualified names |
 | FUN-11 | 0.9 | UT, IT, E2E | Runtime tests of closing in each state, of the queue of freed generators and of one that yields again; `tests/conformance/fun/FUN-11_*.py`, with `break`, a temporary, a container, an instance, `with`, nested generators, a variable an exception keeps, a module variable at the end, `close()` and a generator that yields again, in CPython's order, also in the sanitizer run; `crates/typy-cli/tests/end_to_end/generators.rs` for what standard error shows of an exception while one closes |
 | FUN-12 | 1.0 | IT | `tests/conformance/fun/FUN-12_*.py` |
-| FUN-13 | 0.10 | IT | `typy-check` tests of each value with `*args` or `**kwargs` refused as planned; `tests/conformance/fun/FUN-13_*.py` |
+| FUN-13 | 0.10 | UT, IT | `typy-check` tests of the fit of each kind of parameter list to a `Callable`; `tests/conformance/fun/FUN-13_*.py` for defaults, `*args`, `**kwargs`, `lambda *values`, closures and bound methods, with the identity of the original |
+| FUN-14 | 0.10 | UT, IT | `typy-check` tests of each built-in type against `Callable` types it fits and does not fit; `tests/conformance/fun/FUN-14_*.py` for `map`, `sorted` and `max` with types as keys, and their `repr` |
+| FUN-15 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-15_*.py` |
+| FUN-16 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-16_*.py` |
+| FUN-17 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned, including a property read through its class; `tests/conformance/fun/FUN-17_*.py` |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |
@@ -424,7 +430,7 @@ that the specification does not define.
 | CLS-24 | 0.5 | IT | `tests/conformance/cls/CLS-24_*.py` |
 | CLS-25 | 0.5 | IT | `tests/conformance/cls/CLS-25_*.py` |
 | CLS-26 | 0.5 | IT | `tests/conformance/cls/CLS-26_*.py` |
-| CLS-27 | 0.10 | IT | `tests/conformance/cls/CLS-27_*.py` |
+| CLS-27 | 0.10 | UT, IT | `typy-check` tests of each error of a class statement with CPython's text, a field assignment and `_replace` with an unknown name; runtime tests of hash, equality and order between a named tuple and a plain tuple; `tests/conformance/cls/CLS-27_*.py` for construction, defaults, members, patterns, generic named tuples and subclasses |
 | CLS-28 | 0.14 | IT | `tests/conformance/cls/CLS-28_*.py` |
 | CLS-29 | 0.14 | IT | `tests/conformance/cls/CLS-29_*.py` |
 | CLS-30 | 0.14 | IT | `tests/conformance/cls/CLS-30_*.py` |
@@ -435,8 +441,13 @@ that the specification does not define.
 | CLS-35 | 0.14 | IT | `tests/conformance/cls/CLS-35_*.py` |
 | CLS-36 | 0.14 | IT | `tests/conformance/cls/CLS-36_*.py` |
 | CLS-37 | 0.14 | IT | `tests/conformance/cls/CLS-37_*.py` |
-| CLS-18 | 0.10 | IT | `tests/conformance/cls/CLS-18_*.py` |
-| CLS-19 | 0.10 | IT | `tests/conformance/cls/CLS-19_*.py` |
+| CLS-18 | 0.10 | UT, IT | `typy-check` tests of `type[C]` assignment, narrowing on each branch, and a call through a `type[C]` refused as planned; `tests/conformance/cls/CLS-18_*.py` for classes in variables, `type(x)`, tuples of classes at run time, unions written in the call and class patterns |
+| CLS-19 | 0.10 | UT, IT | Runtime test of `derives_from` on two type objects; `typy-check` tests of the constant answers and of the floor of `issubclass(list[int], list)`; `tests/conformance/cls/CLS-19_*.py` |
+| CLS-38 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-38_*.py` |
+| CLS-39 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned, including `type(c)()`; `tests/conformance/cls/CLS-39_*.py` |
+| CLS-40 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-40_*.py` |
+| CLS-41 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-41_*.py` |
+| CLS-42 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-42_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
@@ -507,9 +518,11 @@ that the specification does not define.
 | LIB-17 | 0.5 | IT | `tests/conformance/lib/LIB-17_*.py` |
 | LIB-18 | 1.0 | IT | `tests/conformance/lib/LIB-18_*.py` |
 | LIB-19 | 1.0 | IT | `tests/conformance/lib/LIB-19_*.py` |
-| LIB-20 | 0.10 | UT, IT | `typy-check` tests of each abstract collection's members and operations; `tests/conformance/lib/LIB-20_*.py` |
+| LIB-20 | 0.10 | UT, IT | `typy-check` tests of each abstract collection's members, `range` included, its operations, slices, covariance of instance items and the names planned for later; `tests/conformance/lib/LIB-20_*.py` |
 | LIB-21 | 1.0 | IT | `tests/conformance/lib/LIB-21_*.py` |
 | LIB-22 | 0.7 | UT, IT | `crates/typy-source/src/settings.rs` for `sys.platform` of each operating system; `crates/typy-driver/tests/integration/pipeline.rs` for the platform each target gives; `tests/conformance/lib/LIB-22_*.py` on Linux and on the `macos-15` job |
+| LIB-23 | 0.10 | UT, IT | Runtime tests of `map` and `filter` objects that step on after the function raises; `typy-check` tests of their types, `strict=` below floor 3.14 and `callable`; `tests/conformance/lib/LIB-23_*.py` |
+| LIB-24 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/lib/LIB-24_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
