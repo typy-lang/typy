@@ -471,6 +471,17 @@ Module
 }
 
 #[test]
+fn a_string_annotation_that_does_not_parse_stays_a_string() {
+    match body("x: \"list[\" = 1\n").remove(0) {
+        Stmt::AnnAssign { annotation, .. } => assert!(
+            matches!(&annotation, Expr::Constant { value: Constant::Str(text), .. } if text == "list["),
+            "{annotation:?}"
+        ),
+        other => panic!("not an annotated assignment: {other:?}"),
+    }
+}
+
+#[test]
 fn remaining_statement_and_expression_kinds_are_kept() {
     let source = "\
 async def a():
@@ -482,6 +493,7 @@ async def a():
 def g():
     yield 1
     yield from h
+    yield
 try:
     pass
 except* E:
@@ -503,7 +515,14 @@ f(*args)
         &parse(&file(source), PythonFloor::V3_12).unwrap(),
         &file(source),
     );
-    for kind in ["AsyncFunctionDef", "TryStar", "Slice", "SetComp", "Starred"] {
+    for kind in [
+        "AsyncFunctionDef",
+        "TryStar",
+        "Slice",
+        "SetComp",
+        "Starred",
+        "YieldFrom",
+    ] {
         assert!(dumped.contains(kind), "{kind} missing from\n{dumped}");
     }
     let Stmt::FunctionDef { body: inner, .. } = &statements[1] else {
@@ -521,8 +540,18 @@ f(*args)
                 value: Expr::YieldFrom { .. },
                 ..
             },
+            Stmt::Expr {
+                value: Expr::Yield { value: None, .. },
+                ..
+            },
         ]
     ));
+    // A bare `yield` is a line of its own, with no value below it.
+    let yields: Vec<&str> = dumped
+        .lines()
+        .filter(|line| line.trim_start().starts_with("Yield "))
+        .collect();
+    assert_eq!(yields.len(), 2, "{dumped}");
 }
 
 #[test]

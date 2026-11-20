@@ -71,6 +71,19 @@ mod tests {
     use super::library_argument;
 
     #[test]
+    fn an_archive_name_drops_only_releases_of_numbers() {
+        for (stem, archive) in [
+            ("libtools.3", "libtools.a"),
+            ("libtools.1.2", "libtools.a"),
+            ("libtools.a", "libtools.a"),
+            ("libtools.beta.3", "libtools.beta.a"),
+            ("libtools.", "libtools..a"),
+        ] {
+            assert_eq!(super::archive_of(stem), archive, "{stem}");
+        }
+    }
+
+    #[test]
     fn gnu_ld_links_a_library_by_its_file_name_or_its_archive() {
         for target in [
             TargetTriple::X86_64LinuxGnu,

@@ -3,8 +3,8 @@ use super::result::{
     typy_rt_generator_has_result, typy_rt_generator_result, typy_rt_generator_set_result,
 };
 use super::{
-    FINISHED, GeneratorDescriptor, GeneratorObject, NEW, PREFIX, SUSPENDED, advance, current,
-    generator_repr, typy_rt_generator_close, typy_rt_generator_close_dropped,
+    FINISHED, GeneratorDescriptor, GeneratorObject, NEW, NONE_VALUE, PREFIX, SUSPENDED, VALUE,
+    advance, current, generator_repr, typy_rt_generator_close, typy_rt_generator_close_dropped,
     typy_rt_generator_new, typy_rt_generator_send, typy_rt_generator_throw,
 };
 use crate::exception::{
@@ -120,6 +120,26 @@ fn smt_11_a_generator_yields_each_item_then_stops() {
 }
 
 #[test]
+fn smt_11_a_loop_steps_a_generator_through_the_iterator_functions() {
+    use crate::iterator::{typy_rt_iterator_advance, typy_rt_iterator_item};
+    let fields = FIELDS;
+    let layout = frame_layout(&fields);
+    let found = descriptor(two_items, &layout);
+    // SAFETY: the descriptor and its layout live for the whole test.
+    unsafe {
+        let generator = typy_rt_generator_new(&raw const found);
+        let iterator = generator.cast::<crate::iterator::IteratorObject>();
+        let mut items = Vec::new();
+        while typy_rt_iterator_advance(iterator, word(0).cast_signed()).value {
+            items.push(typy_rt_iterator_item(iterator));
+        }
+        assert_eq!(items, [word(10), word(20)]);
+        crate::refcount::typy_rt_decrement(generator.cast());
+    }
+    release_names(&found);
+}
+
+#[test]
 fn smt_11_a_running_generator_and_an_escaping_stop_iteration_raise_as_cpython_does() {
     let fields = FIELDS;
     let layout = frame_layout(&fields);
@@ -152,6 +172,23 @@ fn smt_11_a_running_generator_and_an_escaping_stop_iteration_raise_as_cpython_do
         }
         release_names(&found);
     }
+    // While the caller handles an exception, the `RuntimeError` keeps only its cause.
+    let found = descriptor(stopping, &layout);
+    let caller = raise_bare(ExceptionKind::KeyError);
+    // SAFETY: the descriptor, its layout and the caller's exception live for the whole test.
+    unsafe {
+        let previous = typy_rt_exception_enter(caller);
+        let generator = typy_rt_generator_new(&raw const found);
+        let raised = advance(generator, word(1).cast_signed()).exception;
+        assert_eq!((*raised).kind(), ExceptionKind::RuntimeError);
+        assert!((*raised).context.is_null());
+        assert_eq!((*(*raised).cause).kind(), ExceptionKind::StopIteration);
+        crate::refcount::typy_rt_decrement(raised.cast());
+        crate::refcount::typy_rt_decrement(generator.cast());
+        typy_rt_exception_leave(previous);
+        crate::refcount::typy_rt_decrement(caller.cast());
+    }
+    release_names(&found);
 }
 
 #[test]
@@ -213,13 +250,15 @@ fn smt_11_a_generator_writes_its_qualified_name_and_address() {
     release_names(&found);
 }
 
-/// A body that yields 0, then each value `send` gives, and ends when `next()` resumes it.
+/// A body that yields 0, then each value `send` gives, or -1 for `send(None)`, and ends when
+/// `next()` resumes it.
 unsafe extern "C" fn echoing(generator: *mut GeneratorObject) -> *mut ExceptionObject {
     // SAFETY: the runtime passes the live generator whose step is running.
     let object = unsafe { &mut *generator };
     let item = match (object.point, object.received) {
         (0, _) => word(0),
-        (_, 1) => object.sent,
+        (_, VALUE) => object.sent,
+        (_, NONE_VALUE) => word(-1),
         _ => return core::ptr::null_mut(),
     };
     object.current = item;
@@ -354,6 +393,9 @@ fn fun_07_send_gives_its_value_to_the_step_and_returns_the_next_item() {
         let echoed = typy_rt_generator_send(generator, word(5), false);
         assert!(echoed.exception.is_null());
         assert_eq!(current(generator), word(5));
+        let nothing = typy_rt_generator_send(generator, 0, true);
+        assert!(nothing.exception.is_null());
+        assert_eq!(current(generator), word(-1));
         // `next()` resumes it with nothing received, so its body ends.
         let ended = advance(generator, word(1).cast_signed());
         expect_raised(ended.exception, ExceptionKind::StopIteration, None);

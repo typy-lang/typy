@@ -251,6 +251,13 @@ fn smt_11_yield_from_delegates_and_gives_what_the_generator_returns() {
     ] {
         assert!(found.contains(line), "{line} missing from\n{found}");
     }
+    // A `yield from` statement receives nothing back.
+    let found = dump(
+        "from collections.abc import Generator\n\n\ndef inner() -> Generator[int, None, None]:\n    \
+         yield 1\n\n\ndef outer() -> Generator[int, None, None]:\n    yield from inner()\n",
+    );
+    assert!(found.contains("DelegatedItem : int"), "{found}");
+    assert!(!found.contains("DelegatedResult"), "{found}");
 }
 
 #[test]

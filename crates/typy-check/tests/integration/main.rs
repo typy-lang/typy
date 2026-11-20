@@ -1,16 +1,23 @@
 //! The integration tests of `typy-check`, one module per area, built as one test program so the
 //! crate links its tests once.
 
+mod call_arguments;
 mod call_unpacking;
 mod checker;
 mod class_bodies;
+mod class_members;
+mod class_signatures;
 mod common;
+mod control_flow;
 mod ctypes;
+mod ctypes_declarations;
+mod declarations;
 mod edge_cases;
 mod exception_parts;
 mod exports;
 mod final_names;
 mod function_values;
+mod generator_types;
 mod generators;
 mod generics;
 mod iterator_classes;
@@ -22,6 +29,7 @@ mod modules;
 mod nested_functions;
 mod nonlocal_statement;
 mod open;
+mod operands;
 mod operators;
 mod parameters;
 mod percent;

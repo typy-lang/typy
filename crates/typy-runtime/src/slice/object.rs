@@ -347,6 +347,10 @@ mod tests {
             assert!(!slice_equal(one.cast(), other.cast()));
             // `hash(slice(None, 5, None))` in CPython 3.12 to 3.15.
             assert_eq!(slice_hash(other.cast()), 1_765_991_802_173_826_621);
+            // These bounds bring the sum to -1, which CPython gives as 1546275796.
+            let summed = typy_rt_slice_new(word(6), word(2), word(737_508_419_540_398_855));
+            assert_eq!(slice_hash(summed.cast()), 1_546_275_796);
+            crate::refcount::typy_rt_decrement(summed.cast());
             assert_eq!(inline_value(typy_rt_slice_bound(one, word(1))), 2);
             assert_eq!(typy_rt_slice_bound(one, word(2)), 0);
             for slice in [one, same, other] {
@@ -424,29 +428,57 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "building a 4300-digit integer takes hours under Miri; the same code runs in the other tests"
+    )]
+    fn a_bound_of_more_than_4300_digits_is_not_written() {
+        let mut big = crate::int::value::Integer::from_i128(1);
+        let ten = crate::int::value::Integer::from_i128(10);
+        for _ in 0..4300 {
+            big = big.multiply(&ten);
+        }
+        let bound = big.into_word();
+        // SAFETY: the slice takes its own reference to the word; the word, the slice and the
+        // exception are released here.
+        unsafe {
+            let slice = typy_rt_slice_new(bound, 0, 0);
+            crate::refcount::typy_rt_int_decrement(bound);
+            let written = slice_repr(slice.cast());
+            assert!(written.value.is_null());
+            let error = written.exception;
+            assert_eq!((*error).class().name(), "ValueError");
+            crate::refcount::typy_rt_decrement(error.cast());
+            crate::refcount::typy_rt_decrement(slice.cast());
+        }
+    }
+
+    #[test]
     fn indices_hold_each_bound_inside_a_length_past_an_inline_int() {
         let length = "9".repeat(30);
         let below = format!("-{}", "9".repeat(31));
-        // The bounds of each slice, with the start and the stop CPython gives for `length`.
+        // The bounds of each slice, with the start, the stop and the step CPython gives for
+        // `length`.
         let cases = [
-            ((Some("1"), Some("3"), None), ("1", "3")),
+            ((Some("1"), Some("3"), None), ("1", "3", "1")),
             (
                 (None, None, Some("-1")),
-                ("999999999999999999999999999998", "-1"),
+                ("999999999999999999999999999998", "-1", "-1"),
             ),
             (
                 (Some("-5"), None, None),
                 (
                     "999999999999999999999999999994",
                     "999999999999999999999999999999",
+                    "1",
                 ),
             ),
             (
                 (Some(length.as_str()), Some(below.as_str()), Some("-2")),
-                ("999999999999999999999999999998", "-1"),
+                ("999999999999999999999999999998", "-1", "-2"),
             ),
         ];
-        for ((start, stop, step), (from, to)) in cases {
+        for ((start, stop, step), (from, to, by)) in cases {
             let bound = |text: Option<&str>| text.map_or(0, number);
             let given = number(&length);
             // SAFETY: every word is live, and every object made here is released here.
@@ -455,8 +487,9 @@ mod tests {
                 let found = (
                     decimal(typy_rt_slice_index(slice, given, word(0)).value),
                     decimal(typy_rt_slice_index(slice, given, word(1)).value),
+                    decimal(typy_rt_slice_index(slice, given, word(2)).value),
                 );
-                assert_eq!(found, (from.to_owned(), to.to_owned()));
+                assert_eq!(found, (from.to_owned(), to.to_owned(), by.to_owned()));
                 crate::refcount::typy_rt_int_decrement(given);
                 crate::refcount::typy_rt_decrement(slice.cast());
             }

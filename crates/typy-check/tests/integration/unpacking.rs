@@ -21,6 +21,11 @@ fn exp_17_a_display_and_a_target_unpack_any_iterable() {
     ] {
         assert!(found.contains(line), "{line} missing from\n{found}");
     }
+    let found = dump("values = [1, 2]\nfirst, second = values\n");
+    assert!(
+        found.contains("Assign unpack (first: int, second: int)"),
+        "{found}"
+    );
 }
 
 #[test]

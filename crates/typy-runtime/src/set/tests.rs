@@ -356,6 +356,9 @@ fn operations_with_the_same_set_follow_cpython() {
         release(joined);
         update(set, set, 0);
         assert_eq!(repr(set), "{1, 2, 3}");
+        // A merge reads the set it would resize, so a set merged into itself is left alone.
+        super::algebra::merge(set, set);
+        assert_eq!(repr(set), "{1, 2, 3}");
         update(set, set, 3);
         assert_eq!(repr(set), "set()");
         with_int(4, |item| typy_rt_set_add(set, item));
@@ -529,6 +532,19 @@ fn methods_with_a_dict_take_cpythons_steps() {
 }
 
 /// Runs each case of a set method with another collection that `make` builds from its items.
+#[test]
+fn a_set_four_times_larger_than_a_dict_is_copied_before_its_keys_are_removed() {
+    check_methods(
+        &[(
+            "difference",
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9],
+            &[1],
+            "{2, 3, 4, 5, 6, 7, 8, 9}",
+        )],
+        |values| address(int_keys(values)),
+    );
+}
+
 fn check_methods(cases: &[(&str, &[i128], &[i128], &str)], make: fn(&[i128]) -> u64) {
     for (method, base, other, expected) in cases {
         let set = ints(base);

@@ -53,13 +53,15 @@ fn floats_hash_as_equal_ints_do() {
 #[test]
 fn tuples_combine_their_items_as_cpython_does() {
     let one = 1;
-    let cases: [(&[i64], i64); 6] = [
+    let cases: [(&[i64], i64); 7] = [
         (&[], 5_740_354_900_026_072_187),
         (&[one], -6_644_214_454_873_602_895),
         (&[1, 2], -3_550_055_125_485_641_917),
         (&[NONE], 9_181_102_132_670_838_864_u64.cast_signed()),
         (&[1, 0], -5_164_621_852_614_943_976),
         (&[-2], 8_078_679_518_589_016_365),
+        // These items bring the sum to -1, which CPython gives as 1546275796.
+        (&[17, -1_555_522_700_513_432_331], 1_546_275_796),
     ];
     for (items, expected) in cases {
         assert_eq!(

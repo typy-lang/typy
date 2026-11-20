@@ -33,7 +33,7 @@ fn division_by_zero_raises_for_every_division() {
 
 #[test]
 fn floor_division_and_modulo_follow_the_sign_of_the_divisor() {
-    let cases: [(f64, f64, f64, f64); 9] = [
+    let cases: [(f64, f64, f64, f64); 11] = [
         (-7.5, 2.0, -4.0, 0.5),
         (7.5, -2.0, -4.0, -0.5),
         (7.5, 2.0, 3.0, 1.5),
@@ -43,6 +43,19 @@ fn floor_division_and_modulo_follow_the_sign_of_the_divisor() {
         (3.0, INF, 0.0, 3.0),
         (-3.0, INF, -1.0, INF),
         (0.1, 0.01, 10.0, 3.469_446_951_953_614e-18),
+        // `fmod` leaves a quotient just below a whole number, which rounds up to it.
+        (
+            5.383_005_305_434_341,
+            0.000_876_251_833_281_687_8,
+            6143.0,
+            0.000_190_293_584_932_748_74,
+        ),
+        (
+            -8_362.899_784_084_602,
+            0.050_393_007_622_902_886,
+            -165_954.0,
+            0.021_402_966_623_188_746,
+        ),
     ];
     for (left, right, quotient, remainder) in cases {
         assert!(

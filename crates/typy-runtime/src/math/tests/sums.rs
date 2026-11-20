@@ -50,6 +50,52 @@ fn bools(values: &[bool]) -> *mut ListObject {
     list
 }
 
+/// An item of an `int | float` list: an `int` by its decimal digits, or a `float`.
+enum Mixed {
+    Int(String),
+    Float(f64),
+}
+
+/// Returns a new `int | float` list, whose items are a tag, then a slot for each member.
+fn mixed(items: &[Mixed]) -> *mut ListObject {
+    use crate::list::ItemType;
+    use crate::tuple::{Field, TupleType};
+    let field = |kind: ItemKind, offset: u32| Field {
+        kind: kind as u32,
+        offset,
+        tuple: core::ptr::null(),
+    };
+    let fields = Box::leak(Box::new([
+        field(ItemKind::Int, 0),
+        field(ItemKind::Int, 8),
+        field(ItemKind::Float, 16),
+    ]));
+    let union = Box::leak(Box::new(TupleType {
+        size: 24,
+        length: 3,
+        fields: fields.as_ptr(),
+    }));
+    let list = new_list(ItemType::of(ItemKind::Union as u32, union), items.len());
+    let tag = |member: i64| crate::word::inline(member).unwrap().cast_unsigned();
+    for item in items {
+        let (block, word) = match item {
+            Mixed::Int(digits) => {
+                let word = int_word(digits);
+                ([tag(0), word.cast_unsigned(), 0], Some(word))
+            }
+            Mixed::Float(value) => ([tag(1), tag(0), value.to_bits()], None),
+        };
+        // SAFETY: the list is live and copies the union, taking its own reference to an `int`.
+        unsafe {
+            crate::list::typy_rt_list_append(list, block.as_ptr().expose_provenance() as u64);
+            if let Some(word) = word {
+                crate::refcount::typy_rt_int_decrement(word);
+            }
+        }
+    }
+    list
+}
+
 fn release(list: *mut ListObject) {
     // SAFETY: the test holds the only reference.
     unsafe { crate::refcount::typy_rt_decrement(list.cast()) };
@@ -515,6 +561,24 @@ fn sumprod_adds_exact_int_pairs_before_a_float_joins_the_total() {
         "sumprod of small ints",
     );
     for list in [p, q, x, y, small, other] {
+        release(list);
+    }
+}
+
+#[test]
+fn prod_and_sumprod_raise_when_an_int_too_large_for_a_float_meets_one() {
+    let huge = || Mixed::Int("9".repeat(400));
+    let overflow = Err(("OverflowError", "int too large to convert to float"));
+    // `prod([1.5, 10**400])`: the product is a `float` by the time the `int` comes.
+    let values = mixed(&[Mixed::Float(1.5), huge()]);
+    let one = crate::word::inline(1).unwrap();
+    // SAFETY: the list is live, and the start is an `int` word.
+    check(unsafe { math_prod_mixed(values, one) }, &overflow, "prod");
+    // `sumprod([10**400, 1.5], [1, 1])`: the exact total meets the `float` of the last pair.
+    let (p, q) = (mixed(&[huge(), Mixed::Float(1.5)]), ints(&["1", "1"]));
+    // SAFETY: both lists are live.
+    check(unsafe { math_sumprod_float(p, q) }, &overflow, "sumprod");
+    for list in [values, p, q] {
         release(list);
     }
 }
