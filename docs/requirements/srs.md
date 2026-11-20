@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.101 |
+| Version | 1.102 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -524,7 +524,7 @@ cache, unless a row says otherwise.
 | NFR-08 | A program without reference cycles shall free all its memory before exit. | 0.1 | Leak checker on every run test |
 | NFR-09 | The compiler shall not crash on any input; an internal error shall be reported as `E9xxx` with a hint to report it. | 0.1 | Fuzzing for 30 minutes before each release, zero crashes |
 | NFR-10 | Every requirement in section 3 shall have at least one accepted and one rejected test program, and every run test shall run alike on each oracle version from its Python floor up. | 0.1 | Conformance suite in CI |
-| NFR-11 | Line and branch coverage of the compiler and runtime shall be at least 95 percent. | 0.1 | Coverage gate in CI |
+| NFR-11 | Line and branch coverage of the compiler and runtime shall be at least 96 percent. | 0.10 | Coverage gate in CI |
 | NFR-12 | An object header shall take at most 8 bytes. | 0.2 | Layout test |
 | NFR-13 | A `list[int]` of one million small values shall use at most 8.5 MB. | 0.2 | Layout test of the runtime's list |
 | NFR-14 | The compiler shall use at most 1 GB of memory to build a 10,000-line project. | 1.0 | Benchmark with budget |

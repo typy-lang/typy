@@ -58,12 +58,12 @@ test-e2e: runtime ## Run the end-to-end tests of the typy executable
 	@$(EXEC) cargo nextest run -p typy-cli --test end_to_end --locked
 
 test-all: test miri ## Run every test level that runs on each commit, and Miri
-coverage: build ## Run the tests with coverage; fail below 95 percent of lines (NFR-11)
+coverage: build ## Run the tests with coverage; fail below 96 percent of lines (NFR-11)
 	@$(EXEC) cargo llvm-cov nextest --workspace --locked --status-level fail \
-		--final-status-level fail --fail-under-lines 95 --summary-only \
+		--final-status-level fail --fail-under-lines 96 --summary-only \
 		--ignore-filename-regex 'typy-conformance/'
 
-coverage-branches: build ## Measure line and branch coverage with nightly; fail below 95 percent of either (NFR-11)
+coverage-branches: build ## Measure line and branch coverage with nightly; fail below 96 percent of either (NFR-11)
 	@$(EXEC) scripts/coverage-branches.sh
 
 sweep: dev ## Delete the build outputs Cargo keeps but no build uses: older copies of each crate and test program, and caches, untouched for 12 hours

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.61 |
+| Version | 2.62 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -133,7 +133,7 @@ Within the code:
   return.
 - Line and branch coverage is measured with `cargo-llvm-cov` over the whole
   workspace, the runtime included, and counts the `typy` executable when
-  tests run it as a subprocess. CI fails below 95 percent (NFR-11).
+  tests run it as a subprocess. CI fails below 96 percent (NFR-11).
 
 ## 4. typy-diagnostics
 

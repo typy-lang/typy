@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.15 |
+| Version | 1.16 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -229,7 +229,7 @@ A release ships when all of these hold:
    release.
 2. Every S or C requirement of the release passes, or the specification
    moves it to a later release, saying so.
-3. Line and branch coverage is at least 95 percent (NFR-11).
+3. Line and branch coverage is at least 96 percent (NFR-11).
 4. The sanitizer and Miri runs report nothing (NFR-07, NFR-08).
 5. Fuzzing has run 30 minutes with no new crash (NFR-09).
 6. Every numbered non-functional requirement whose release has been reached
@@ -557,7 +557,7 @@ that the specification does not define.
 | NFR-08 | 0.1 | IT | `tests/sanitized.rs`: the conformance suite under LeakSanitizer |
 | NFR-09 | 0.1 | Fuzz | `make fuzz`, target `stages` over parsing, checking and lowering; 30 minutes with zero crashes before a release |
 | NFR-10 | 0.1 | IT | Coverage report of `typy-conformance`: an accepted and a rejected test per requirement |
-| NFR-11 | 0.1 | CI gate | `make coverage-branches`, run by `make check`: `cargo llvm-cov` with the pinned nightly over the compiler and runtime crates, with subprocesses, at least 95 percent of lines and of branches (97.6 and 95.1 in 0.1) |
+| NFR-11 | 0.10 | CI gate | `make coverage-branches`, run by `make check`: `cargo llvm-cov` with the pinned nightly over the compiler and runtime crates, with subprocesses, at least 96 percent of lines and of branches (97.6 and 95.1 in 0.1, 97.9 and 97.2 when the gate rose to 96) |
 | NFR-12 | 0.2 | UT | `typy-runtime` layout test: `size_of::<ObjectHeader>() == 8` |
 | NFR-13 | 0.2 | UT | `typy-runtime` list test: a million `int` values appended one at a time; the list and its buffer take at most 8.5 MB |
 | NFR-14 | 1.0 | Benchmark | `tests/bench/build_time.py`: peak memory of each build within 1 GB |

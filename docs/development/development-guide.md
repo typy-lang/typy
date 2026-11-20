@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.25 |
+| Version | 0.26 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -86,8 +86,8 @@ The `macos-15` job of CI does the same on every pull request.
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
 | `make test` | Runs the unit tests with `cargo nextest` |
-| `make coverage` | Runs the tests with coverage on the stable toolchain and fails below 95 percent of lines |
-| `make coverage-branches` | Runs the tests with coverage on the pinned nightly toolchain and fails below 95 percent of lines or of branches (NFR-11); `make check` runs it |
+| `make coverage` | Runs the tests with coverage on the stable toolchain and fails below 96 percent of lines |
+| `make coverage-branches` | Runs the tests with coverage on the pinned nightly toolchain and fails below 96 percent of lines or of branches (NFR-11); `make check` runs it |
 | `make test-int` | Runs the integration tests: the conformance suite and its sanitizer run, the golden files and the pipeline |
 | `make test-e2e` | Runs the end-to-end tests of the `typy` executable |
 | `make test-all` | Runs `make test` and `make miri` |
