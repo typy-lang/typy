@@ -130,7 +130,7 @@ impl BodyChecker<'_> {
 
     /// Checks what `raise` or `from` names: an exception, or an exception class, which is
     /// called with no arguments, as CPython does.
-    fn exception_operand(&mut self, operand: &Expr, what: &str) -> TypedExpr {
+    pub(super) fn exception_operand(&mut self, operand: &Expr, what: &str) -> TypedExpr {
         let value = self.expression(operand);
         let value = self.through_union_base(value);
         match &value.ty {

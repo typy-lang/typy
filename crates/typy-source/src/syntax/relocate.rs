@@ -284,6 +284,16 @@ impl Expr {
                 target.span = span;
                 value.relocate(span);
             }
+            Self::Yield { value, span: at } => {
+                *at = span;
+                if let Some(value) = value {
+                    value.relocate(span);
+                }
+            }
+            Self::YieldFrom { value, span: at } | Self::Starred { value, span: at } => {
+                *at = span;
+                value.relocate(span);
+            }
             Self::Lambda {
                 parameters,
                 body,
@@ -343,6 +353,11 @@ impl Expr {
                 relocate_expressions(values, span);
             }
             Self::ListComp {
+                element,
+                generators,
+                span: at,
+            }
+            | Self::GeneratorExp {
                 element,
                 generators,
                 span: at,

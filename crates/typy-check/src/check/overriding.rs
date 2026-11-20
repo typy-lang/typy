@@ -3,6 +3,8 @@
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 
+use typy_source::syntax::ParameterKind;
+
 use crate::typed::FunctionSignature;
 use crate::types::Type;
 
@@ -43,6 +45,17 @@ impl Override<'_> {
             )));
         }
         for (own, base) in own.iter().zip(base).skip(1) {
+            // A call through the base packs the arguments of `*args` and `**kwargs` as the
+            // base's parameters say (EXP-17).
+            if own.kind != base.kind && (own.kind.is_variadic() || base.kind.is_variadic()) {
+                return Err(self.mismatch(format!(
+                    "`{}` takes `{}` where `{}`, which it overrides, takes `{}`",
+                    self.name,
+                    written(own),
+                    self.base_name,
+                    written(base)
+                )));
+            }
             if own.name != base.name {
                 return Err(self.mismatch(format!(
                     "`{}` names a parameter `{}` where `{}`, which it overrides, names it `{}`",
@@ -103,6 +116,16 @@ impl Override<'_> {
                 .with_rule(RuleId::CLS_04),
         )
     }
+}
+
+/// Returns a parameter as its definition writes it: `*args`, `**kwargs` or its name.
+fn written(parameter: &crate::typed::SignatureParameter) -> String {
+    let stars = match parameter.kind {
+        ParameterKind::VarPositional => "*",
+        ParameterKind::VarKeyword => "**",
+        _ => "",
+    };
+    format!("{stars}{}", parameter.name)
 }
 
 /// Returns true when a value of one type is held as one of the other: the same type, or two

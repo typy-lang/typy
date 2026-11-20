@@ -111,7 +111,10 @@ impl Aliases {
             Operation::StoreGlobal { value, .. }
             | Operation::SetField { value, .. }
             | Operation::SetCapture { value, .. }
-            | Operation::CellSet { value, .. } => {
+            | Operation::CellSet { value, .. }
+            // A generator's frame and item outlive the step that stores them (ADR-0063).
+            | Operation::SetGeneratorArgument { value, .. }
+            | Operation::SetGeneratorItem { item: value, .. } => {
                 escaping.push(*value);
             }
             // C may keep what it is given; no instance converts to a C type, so this is a
@@ -157,6 +160,13 @@ impl Aliases {
             | Operation::Field { .. }
             | Operation::NewClosure { .. }
             | Operation::Capture { .. }
+            | Operation::NewGenerator { .. }
+            | Operation::GeneratorArgument { .. }
+            | Operation::GeneratorClosure { .. }
+            | Operation::GeneratorThrown { .. }
+            | Operation::GeneratorReceived { .. }
+            | Operation::GeneratorSent { .. }
+            | Operation::GeneratorCaller { .. }
             | Operation::NewCell { .. }
             | Operation::CellGet { .. }
             | Operation::CellBound { .. }
@@ -198,7 +208,10 @@ impl Aliases {
                 ),
             },
             Terminator::Return(value) | Terminator::ReturnError(value) => escaping.push(*value),
-            Terminator::Branch { .. } | Terminator::Unreachable => {}
+            Terminator::Branch { .. }
+            | Terminator::Unreachable
+            | Terminator::Resume { .. }
+            | Terminator::Yield { .. } => {}
         }
     }
 }

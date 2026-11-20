@@ -109,7 +109,7 @@ impl ItemType {
     /// # Safety
     ///
     /// `item` is a live item of this optional type.
-    unsafe fn is_none(self, item: u64) -> bool {
+    pub(crate) unsafe fn is_none(self, item: u64) -> bool {
         match self.kind {
             ItemKind::OptionalFloat => item == NONE_FLOAT,
             ItemKind::OptionalBool => item == 2,

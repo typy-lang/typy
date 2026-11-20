@@ -37,8 +37,9 @@ impl BodyChecker<'_> {
             return Ok(None);
         };
         Ok(Some(vec![match name {
-            AnnotationName::Iterable => self.abstract_class(AbstractClass::Iterable),
-            AnnotationName::Iterator => self.abstract_class(AbstractClass::Iterator),
+            AnnotationName::Iterable(_) => self.abstract_class(AbstractClass::Iterable),
+            AnnotationName::Iterator(_) => self.abstract_class(AbstractClass::Iterator),
+            AnnotationName::Generator(_) => self.abstract_class(AbstractClass::Generator),
             AnnotationName::Builtin(builtin) => match TypeObjectOf::named(builtin) {
                 Some(class) => class,
                 None => return Ok(None),
@@ -69,6 +70,25 @@ impl BodyChecker<'_> {
             }
             _ => return Ok(None),
         }]))
+    }
+
+    /// Returns how a class pattern's class names an alias of `typing`, which is no class, so
+    /// CPython raises `TypeError` for the pattern; `None` for anything else (TYP-17, TYP-21).
+    pub(super) fn typing_alias(&self, expression: &Expr) -> Option<&'static str> {
+        use crate::check::Origin;
+        Some(match self.standard_name(expression)? {
+            AnnotationName::Iterable(Origin::Typing) => "Iterable",
+            AnnotationName::Iterator(Origin::Typing) => "Iterator",
+            AnnotationName::Generator(Origin::Typing) => "Generator",
+            AnnotationName::Builtin("list") => "List",
+            AnnotationName::Builtin("dict") => "Dict",
+            AnnotationName::Builtin("set") => "Set",
+            AnnotationName::Builtin("tuple") => "Tuple",
+            AnnotationName::Builtin(_) => "Type",
+            AnnotationName::Optional => "Optional",
+            AnnotationName::Union => "Union",
+            _ => return None,
+        })
     }
 
     /// Returns the name of `typing` or `collections.abc` an expression names: an imported name,
@@ -134,6 +154,7 @@ impl BodyChecker<'_> {
         let methods: &[&str] = match kind {
             AbstractClass::Iterable => &["__iter__"],
             AbstractClass::Iterator => &["__iter__", "__next__"],
+            AbstractClass::Generator => &["__iter__", "__next__", "send", "throw", "close"],
         };
         let implementers = (0..self.program.classes.len())
             .map(|index| ClassId(super::program::id(index)))

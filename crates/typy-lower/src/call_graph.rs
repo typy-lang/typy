@@ -96,8 +96,29 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 assign_target(target, callees);
                 expression(value, callees);
             }
-            TypedStmt::Expr { value, .. } => {
+            TypedStmt::Expr { value, .. }
+            | TypedStmt::Return {
+                value: Some(value), ..
+            } => expression(value, callees),
+            TypedStmt::Yield {
+                value, received, ..
+            } => {
                 expression(value, callees);
+                if let Some(received) = received {
+                    statements(std::slice::from_ref(received.as_ref()), callees);
+                }
+            }
+            TypedStmt::YieldFrom {
+                source,
+                item,
+                received,
+                ..
+            } => {
+                expression(source, callees);
+                expression(item, callees);
+                if let Some(received) = received {
+                    statements(std::slice::from_ref(received.as_ref()), callees);
+                }
             }
             TypedStmt::FunctionDef { captures, .. } => {
                 for capture in captures {
@@ -116,9 +137,6 @@ fn statements(body: &[TypedStmt], callees: &mut BTreeSet<FunctionId>) {
                 statements(body, callees);
                 statements(orelse, callees);
             }
-            TypedStmt::Return {
-                value: Some(value), ..
-            } => expression(value, callees),
             TypedStmt::With {
                 manager,
                 protocol,
@@ -227,9 +245,9 @@ fn assign_target(target: &AssignTarget, callees: &mut BTreeSet<FunctionId>) {
             callees.insert(*reify);
             assign_target(target, callees);
         }
-        AssignTarget::Tuple(targets) => {
-            for target in targets {
-                assign_target(target, callees);
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for nested in target.nested() {
+                assign_target(nested, callees);
             }
         }
         AssignTarget::Slice {
@@ -378,6 +396,25 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         TypedExprKind::Dict { keys, values } => {
             for value in keys.iter().chain(values) {
                 expression(value, callees);
+            }
+        }
+        TypedExprKind::Spread { parts, .. } => {
+            for part in parts {
+                match part {
+                    typy_check::SpreadPart::Item(item) => expression(item, callees),
+                    typy_check::SpreadPart::Each(source) => loop_source(source, callees),
+                }
+            }
+        }
+        TypedExprKind::DictSpread(parts) => {
+            for part in parts {
+                match part {
+                    typy_check::DictPart::Entry(key, value) => {
+                        expression(key, callees);
+                        expression(value, callees);
+                    }
+                    typy_check::DictPart::Merge(dict) => expression(dict, callees),
+                }
             }
         }
         TypedExprKind::ListOf(source)
@@ -543,6 +580,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::FunctionValue(_)
         | TypedExprKind::Capture(_)
         | TypedExprKind::RunningFunction
+        | TypedExprKind::Received
+        | TypedExprKind::DelegatedItem
+        | TypedExprKind::DelegatedResult
         | TypedExprKind::CellRead(_)
         | TypedExprKind::CellObject(_)
         | TypedExprKind::CapturedCell(_)
@@ -550,6 +590,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ForeignLibrary(_)
         | TypedExprKind::SysValue(_) => {}
         TypedExprKind::AsIterable(inner)
+        | TypedExprKind::AsIterator(inner)
         | TypedExprKind::Named { value: inner, .. }
         | TypedExprKind::CaptureOf { closure: inner, .. } => {
             expression(inner, callees);

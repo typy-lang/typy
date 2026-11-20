@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.46 |
+| Version | 2.58 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-19 |
+| Last updated | 2026-11-20 |
 
 ## 1. Purpose and scope
 
@@ -445,7 +445,8 @@ nodes of the features it adds, as 0.2 does for `Expr::Set`, a set
 display, `Expr::Dict`, a dict display whose `keys` hold `None` for a `**`
 item, as CPython's `ast.Dict` does, and `Expr::ListComp`, `SetComp` and
 `DictComp`, whose clauses are `Comprehension` values as CPython's
-`ast.comprehension`.
+`ast.comprehension`; 0.9 converts `Expr::GeneratorExp` with the same
+parts (EXP-15), and `Expr::Starred`, a `*value` item (EXP-17).
 `elif` chains become nested `If` nodes, as
 in CPython's `ast`. An integer literal keeps its value as decimal digits,
 so literals of any size survive conversion (DAT-01).
@@ -659,17 +660,69 @@ two types are equal when their structure is. `Dict`, `Set`, `Bytes` and
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `parameters` | `Vec<SignatureParameter>` | empty | Each with `name`, `ty`, `default: Option<TypedConstant>`, `default_call` and `kind`, the parser's `ParameterKind`: `Normal`, `PositionalOnly` before `/` or `KeywordOnly` after `*` |
+| `parameters` | `Vec<SignatureParameter>` | empty | Each with `name`, `ty`, `default: Option<TypedConstant>`, `default_call` and `kind`, the parser's `ParameterKind`: `Normal`, `PositionalOnly` before `/`, `KeywordOnly` after `*`, `VarPositional` for `*args`, whose `ty` is `tuple[T, ...]`, or `VarKeyword` for `**kwargs`, whose `ty` is `dict[str, T]` |
 | `returns` | `Type` | none | `NoneType` for `-> None` |
 
 A default value is a constant in 0.1, which makes "evaluated once, when the
 function is defined" (EXP-16) hold trivially. `BodyChecker::bind_to` binds
 each call's arguments to parameter positions, so TyIR and code generation
-see positions alone: a positional argument fills the parameter of its index
-among those that are not keyword-only, which Python puts last, and a
-keyword fills the parameter it names unless that is positional-only. A
-positional argument past the others, or a keyword for a positional-only
-parameter, is E0404 under FUN-03, where CPython raises `TypeError`.
+see positions alone. `body/binding.rs` says where each goes: a positional
+argument fills the parameter of its index among those that take one by
+position, which Python puts first, then `*args`; a keyword fills the
+parameter it names unless that is positional-only or variadic, then
+`**kwargs`. A positional argument past the others, or a keyword no
+parameter takes, is E0404 under FUN-03 and TYP-01, where CPython raises
+`TypeError`. Each `Argument` holds its parameter's index, and an argument
+`**kwargs` takes also holds its `keyword`; one `*args` or `**kwargs`
+takes is converted to the item type, so a call may hold several arguments
+of one variadic parameter, in source order (EXP-17). The generic solver
+pairs each argument with the type `body/binding.rs` gives it, so `T` of
+`*items: T` is solved from the items. An override keeps the variadic
+parameters of the method it overrides, E0404 (CLS-04), and a function,
+nested function or method with one read as a value, or a `lambda` with
+one, is E0201, planned for 0.10 (FUN-13).
+
+An `isinstance` test of an abstract class of `collections.abc` or `typing`,
+`Iterable`, `Iterator` or `Generator`, is decided by its static type when
+it can be, and otherwise tested by `MemberTest`s: the classes of the
+program that define the class's methods, and for `Iterator` the runtime's
+iterators, generators and files, for `Generator` its generators, each by
+the type ID in its header (TYP-17, TYP-21). A true test of an
+`Iterable[T]` against `Iterator` or `Generator` reads it as an
+`Iterator[T]`. A class pattern's test never matches only when the value
+and each member of a union decide so. `AnnotationName` keeps whether a
+name of both modules came from `typing`, whose names a class pattern
+refuses, E0401, as CPython raises `TypeError`.
+
+`iterator_fits.rs` holds, for one check, what the instances of each
+iterator or iterable class are, which `body/iterator_class.rs` finds
+once the methods' signatures are known: a class whose `__next__` and
+`__iter__` take the instance alone, and whose `__iter__` returns an
+instance of the class or of a base, is an `Iterator[T]` of `__next__`'s
+result, and a class whose `__iter__` returns an `Iterator[T]`, a generator
+or an instance of such an iterator class is an `Iterable[T]`.
+`Type::is_assignable_to` and `Type::iterable_item` read it, as they read
+the classes that satisfy protocols; `TypedProgram` keeps both tables, and
+`ProgramScope` puts them back while lowering reads the program's types. A
+value converted to an `Iterator[T]` becomes `AsIterator`; a `for` over a class
+whose `__iter__` returns an iterator of another kind goes over the call of
+`__iter__` (TYP-20).
+
+A call with `*value` or `**value` goes through `body/call_expression.rs`,
+which keeps it when `bind_to` or `print` binds it and otherwise refuses it
+with E0201, planned for 0.10 (EXP-19). `Argument::passed` says how each
+argument reaches its parameter: `Position`, `Name`, `Keyword` for one
+`**kwargs` takes, `Items` for the items of a tuple of a fixed number of
+items `*` unpacks, each bound as a positional argument, `Tail` for the
+list of every positional value from the first `*iterable` of unknown
+length on, `Entries` for a `**dict`, and `Default` for a default a call
+makes. `body/unpacked_arguments.rs` gives the tail one type: that of the
+parameters it may reach when they share one, which each part must hold
+its values alike to, E0404, or else the first value's, which each part
+must hold alike, E0409, and which must fit each parameter it may reach,
+E0404; the dicts share one value type,
+which fits each parameter a keyword may still fill. Such a call binds when
+it runs (ADR-0073).
 
 A function of the program read without a call, by its name or as
 `module.name`, is `TypedExprKind::FunctionValue(id)`, of the type
@@ -716,7 +769,7 @@ method no subclass defines again is its function after the object is
 evaluated. A class method, a static method a subclass defines again, a
 method read through a protocol value, and an override a subclass holds
 otherwise than its base, which only an adapter reaches, are planned for
-0.9 under FUN-09; a method with type parameters of its own or a
+0.10 under FUN-09; a method with type parameters of its own or a
 keyword-only parameter is E0202, as a function is. An assignment to a
 method of an instance is E0414.
 
@@ -787,8 +840,51 @@ cell variables, also an `except` clause's, whose symbol is the clause's
 own. A cell's type is the variable's once the body around the `def` is
 checked, since an assignment after the `def` may give it. A nested
 function with type parameters, or in a generic function, is planned for
-0.9 (FUN-10). A call of a local variable before an assignment gives it a
+0.10 (FUN-10). A call of a local variable before an assignment gives it a
 type is read first, so it is E0306.
+
+`body/generator.rs` checks generator functions (SMT-11, FUN-07, ADR-0063).
+A function whose body has a `yield` or a `yield from`, outside the
+functions and classes it defines, is a generator function, and
+`BodyChecker::generator` holds its `GeneratorTypes { yields, sends,
+returns }` from its annotation: `Type::Generator { yields, sends, returns
+}` of `Generator[Y, S, R]`, which names all three, or `Iterator[Y]` and
+`Iterable[Y]`, whose `S` and `R` are `None`; any other annotation is
+E0405. `yield value` and a bare `yield`, which gives `None`, are
+`TypedStmt::Yield { value }`, the value converted to `Y`, E0405 when it
+does not fit. A generator's end returns, so it is never E0405 for
+reaching it, and `TypedFunction::generator` keeps the types for the
+lowering. `Generator[Y, S, R]` is assignable to `Iterator[Y]` and
+`Iterable[Y]`, the same object, and `sequence` and `next` take a
+generator as its `Iterator[Y]` through `Upcast`, so loops, `iter()`,
+`next()` and every builtin of an iterable read it as an iterator.
+`target = yield value`, also annotated, is `TypedStmt::Yield { value,
+received }`: `received` is the assignment, checked with
+`BodyChecker::received` holding `TypedExprKind::Received`, of type `S |
+None` (ADR-0067), which the checker's `Expr::Yield` arm gives as the
+assignment's value; the assignment's checks report a target that does
+not fit, E0402 with a help about `None` for a variable. `send`, `throw`
+and `close` are `Method::GeneratorSend`, `GeneratorThrow` and
+`GeneratorClose`, of `Type::Generator` alone: `send` takes an `S`,
+converted to it, and E0404 for `None` names `next(generator)` in its
+help; `throw` takes what `raise` takes, a class called with no
+arguments; `send` and `throw` give `Y`. The same names on an
+`Iterator[Y]` are E0412 under FUN-07, with a help that names
+`Generator[Y, S, R]`. A `return value` in a generator is checked against
+`R` and converted to it, and a generator whose `R` cannot be `None` must
+not reach its end. `body/yield_from.rs` checks `yield from source` as
+`TypedStmt::YieldFrom { source, item, received }` (ADR-0072): the source
+is read as a loop reads it, an `Iterator` as it is and any other iterable
+as an `Iterable`, its items must fit `Y`, a generator source's `S` must
+hold what the generator is sent, and `item` is `DelegatedItem` converted
+to `Y`; in `target = yield from source`, `received` assigns
+`DelegatedResult`, the source's `R`, or `None` for any other iterable. The
+subset walker accepts a `yield` as a
+statement, `yield value` or `target = yield value`, and the same of
+`yield from`; one inside a larger
+expression or a `lambda` is E0201, planned for 1.0 (FUN-12), and one
+outside a function or inside a comprehension is CPython's `SyntaxError`,
+E0103.
 
 `body/lambda.rs` checks a `lambda` (EXP-14) as a nested function of one
 `return` statement, `<lambda>`, whose `__qualname__` is
@@ -813,6 +909,37 @@ comprehension's variable that a `lambda` in it reads is a cell variable
 of the function. At module level, `ClosureScope::of_module` captures only
 such a comprehension variable, since a module variable is a global that
 every function reads as it is.
+
+`body/generator_expression.rs` checks a generator expression (EXP-15) as
+a nested generator function, `<genexpr>`, of one parameter, `.0`, the
+iterator `iterator_of` makes of the first iterable where the expression
+stands; its body, which `check_body_of` checks, is a `for` over `.0`, a
+`for` over each later iterable and an `if` for each condition, around
+`yield element`. `ClosureScope` notes it as it notes a `lambda`, reading
+the first iterable outside and binding `.0` inside. The item type is the
+one an expected `Iterable`, `Iterator` or `Generator` gives, or else the
+element's, which `settle_yields` gives the signature and the generator
+types once the body is checked. The value is `TypedExprKind::CallValue`
+of the `Lambda` with the iterator, of type `Generator[Y, None, None]`. An
+assignment expression inside one is E0201, planned for 1.0 (EXP-18), and
+one inside a generic function E0201 (FUN-10).
+
+The subset walker accepts a starred item in a list, set or tuple display
+and in an unpacking target, and refuses it anywhere else with CPython's
+`SyntaxError`, E0103: `can't use starred expression here`, `multiple
+starred expressions in assignment` and `starred assignment target must
+be in a list or tuple`. `body/spread.rs` checks a display with `*` as
+`Spread { kind, parts }`, each part an item or the `LoopSource` of an
+iterable; the items have the type the context expects or the first
+item's, and an iterable's values must be held alike, the same type, the
+optional of a type other than a tuple, or a base class, E0409. A dict
+display with `**` is `DictSpread`, whose dicts must have its key and
+value types. `body/unpacking.rs` checks a target of several elements
+over anything but a tuple of as many items: a starred target over a
+tuple takes the items between the others, which share one type, E0308
+otherwise, and any iterable gives every target its item type and a
+starred one a list of it, as `AssignTarget::Unpack { before, rest, after,
+item }` (SMT-02, EXP-17).
 
 `body/key_argument.rs` checks the `key` of `sorted`, `min` and `max`, also
 of `min` and `max` of several values, and of `list.sort`: a function value
@@ -1921,10 +2048,8 @@ listed, may be one when a listed class derives from it, and is not
 otherwise. `isinstance_test` replaces the abstract class in the checks it
 leaves for the program's run with the listed classes, so lowering never
 meets it. A bare `Optional`, `ClassVar` or `Final`, and a subscripted
-generic, are E0401, as CPython raises `TypeError`; a bare `Union` is
-E0202, since the oracle versions differ; and an `Iterable[T]` value tested
-against `Iterator` is E0201, planned for 1.0 (LIB-20), since a built-in
-iterator it may hold has no class of the program.
+generic, are E0401, as CPython raises `TypeError`; and a bare `Union` is
+E0202, since the oracle versions differ.
 
 A class may define `__enter__`, taking only the instance, and `__exit__`,
 taking the instance and three parameters that may be left without
@@ -2343,6 +2468,51 @@ the flag, `CellSet` stores a value, taking over its reference, and
 replaces. Escape analysis lets every stored capture and every value stored
 in a cell escape, since either may outlive the function that made it
 (MEM-03).
+A generator is `TyirType::GENERATOR`, type ID 27, which `Upcast` holds as
+an `ITERATOR` (ADR-0063). A generator function lowers to two functions:
+its own, which `NewGenerator { function }` makes the generator of the
+resume function `function` in, `SetGeneratorArgument` stores each
+argument in, the closure first, taking over its reference, and which
+returns the generator as its annotation's type; and the resume function,
+appended after the program's functions, which takes the generator and
+whose `TyirFunction::generator` is its `GeneratorFrame { arguments,
+closure, yields, frame }`, `frame` the tuple of the arguments then every
+slot. Its entry reads the closure with `GeneratorClosure` and ends in
+`Terminator::Resume { generator, start, points }`, which continues in
+`start` for the first step, where the prologue takes each argument with
+`GeneratorArgument`, or in the block after the `yield` the generator
+stopped at. `yield value` stores the value's bits with `SetGeneratorItem`
+and ends the step in `Terminator::Yield { generator, resume }`. Since the
+blocks after the yields are successors of the entry alone, the
+definitions check rejects a value of one step used in another, so only
+slots outlive a yield. Every resume function may raise, and no instance
+is placed in its frame (MEM-03). The block after a `yield` inside an
+`except` clause first makes the clause's exception the one being handled
+again with `ExceptionEnter` (ADR-0068); then `GeneratorThrown` takes what
+`throw` or `close` gave the step, which `ExceptionThrow` raises there
+when it is not `None`; then the assignment of `received` runs, whose
+`Received` is `None` unless `GeneratorReceived` says `send` gave a
+value, read with `GeneratorSent` as an `S` and wrapped as `S | None`. In
+a resume function a clause keeps its exception in a hidden slot, a
+`finally` block run for a pending exception keeps that one in a hidden
+slot and goes on with it when the block ends, and
+`Cleanup::Handling::previous` is `None`: leaving the clause restores the
+exception of the clause around it, or `GeneratorCaller`, the one the
+step's caller handles. `send` passes the bits of its value and whether
+it is `None` to `RuntimeFunction::GeneratorSend`, `throw` hands its
+exception over to `GeneratorThrow`, and both then read the item the step
+yielded as `next()` does; `close` calls `GeneratorClose`. `return value`
+hands the value's bits to `GeneratorSetResult`, then runs the cleanups
+and returns. `yield from` keeps the source's iterator in a hidden slot
+under `Cleanup::Iterator`, calls `GeneratorDelegate(generator, iterator,
+first)` for each step and branches on its answer: when the source
+yielded, the generator yields `item`, whose `DelegatedItem` is the
+iterator's current item, and resumes at the next delegation step, which
+makes the clause's exception the one handled again and leaves `thrown`
+to the runtime; when the source ended, `received` runs, whose
+`DelegatedResult` is `None` for an `R` of `None`, or reads
+`GeneratorResult`, guarded by `GeneratorHasResult` when `R` is optional
+(ADR-0072).
 `Constant::MethodDescriptor(id)` is the address of method `id`'s bound
 method descriptor as bits, and `RuntimeFunction::MethodNew` makes a bound
 method of a descriptor and an instance, which escapes into it.
@@ -2532,14 +2702,18 @@ graph, symbol names and the string pool.
 | Sets | Every set operation is a runtime call that borrows its arguments; a set adds its own reference to an item it stores. A display creates the set, then adds each item in order. A display of three to thirty items that are all constants, literals, numbers with signs and tuples of them, is then copied, as CPython 3.15 merges the frozenset its compiler builds into a new set (OI-19). `set(s)` of a set copies it, which merges its table as CPython does; `set(source)` of any other source adds each value in order. Each operator and method takes CPython's steps: `\|` and `union` copy the set and extend the copy with each other collection, skipping the receiver itself; `&` and `intersection` intersect with each in turn, and with none copy; `-` and `difference` subtract the first and remove the items of the rest; `&=` and `intersection_update` replace the set's table with the intersection's. The in-place forms and the updating methods change the set, so every name that shares it sees the change. Another collection is passed as its address, a `Bits` value, since it may be a set or a list. `for` keeps the set, the next slot and its number of items in hidden slots; `typy_rt_set_next` returns the next active slot, or -1 at the end, and raises `RuntimeError` when the number of items changed, as CPython's set iterator does. `pop` gives an owned item. A set slot starts as the placeholder set |
 | Dicts | Every dict operation is a runtime call that borrows its arguments; a dict adds its own references to a key and a value it stores. A display creates the dict presized for its entries, as CPython's `BUILD_MAP` does, then sets each key and value in order. `d[k]` borrows the value, which gets its own reference when the dict is a temporary; `d[k] = v` evaluates the value, then the dict and the key. `get`, `setdefault` and `pop` give a value with a reference of its own, and `popitem` builds its pair from the key and value the dict gives up. `keys()`, `values()` and `items()` make a view object that holds the dict, so a view reads the dict as it changes and keeps its own type ID for `in`, `len` and its text, also inside a list or a tuple. `for` over a dict or a view keeps the source, the next entry, the number of entries when the loop began and the entries visited in hidden slots, and `typy_rt_dict_next` raises CPython's `RuntimeError` when the size or the keys changed. `\|` copies and updates, and `\|=` updates in place. A dict slot starts as the placeholder dict, and a view slot as null, which counting passes over, so a `return` lowered before a later loop adds its hidden view slot leaves nothing of that slot to release |
 | Comprehensions | A comprehension creates its list, set or dict, then lowers its clauses as loops, each around the next. A clause starts its iterator, binds its target and tests each condition, going back for the next value when one fails; the innermost loop evaluates the element and appends or adds it, or evaluates the key, then the value, and sets the entry, as CPython does. The collection is a temporary throughout, so an exception from an element releases it |
+| Variadic arguments | `call_arguments` in `packing.rs` evaluates a call's arguments in source order, each kept alive for the call, then packs those of the callee's `*args` into a new list sealed with `tuple_seal`, and those of `**kwargs` into a new dict with `dict_set`, each key a `str` constant, in order; a variadic parameter with no argument takes an empty one. Calls, nested calls, `New` and an exception's `__init__` go through it, and an exception keeps every positional argument in `args` before its `__init__` takes them packed, as `BaseException.__new__` does (EXP-17) |
+| Iterator classes | A class the checker finds an iterator or an iterable (`TypedClass::steps`, `iterates`) gives its `TyirClass` its `__next__` and `__iter__`, and code generation emits `typy.classN.next` and `typy.classN.iter`, which call the method and write its result into the slot the runtime gives, returning the exception the method raised or null; the type object also holds the item kind and layout of `__next__`'s result. `AsIterator` holds an instance as an `Iterator[T]`, the same object. A loop over an `Iterator[T]` or an `Iterable[T]` asks `iterable_iterator`, which calls an instance's `__iter__` and wraps an instance it gives in a runtime iterator of kind `Instance`, which holds each item until the next step and reads a `StopIteration` as the end; `next()` asks `iterator_stepper`, which wraps the instance without calling `__iter__`, and `iter()` of an `Iterable[T]` asks `iter`, which gives what `__iter__` returns as it is. An object held as an iterable or an iterator in a union, or read as an iterator after an `isinstance` test, is the same object, relabelled through its bits (TYP-20, TYP-21, ADR-0065) |
+| Calls that unpack | `bound_call.rs` evaluates the arguments in source order: each static one, the items of a fixed tuple, the tail's list, then each keyword, whose name `call_name` records, and each `**dict`, which `call_merge` merges, both raising CPython's `got multiple values for keyword argument`. `call_check` then checks the number of positional values and the names against the callee, read from a `str` description: the qualified name, the name with its module, and a line per parameter of its kind, whether it has a default, and its name. Each parameter takes its static argument, or the tail's item when the tail reaches it, else its entry in the merged dict, else its default, through `either` branches; `*args` takes the static extras and the rest of the tail, and `**kwargs` the keywords and entries no parameter took. `print` writes each value of a list a `*iterable` gives it, with a separator before every value but the first written (EXP-17, ADR-0073) |
+| Unpacking | A display with `*iterable`, `TypedExprKind::Spread`, makes an empty list or set of its item type, then appends or adds each item and each value of each iterable, read with `each_value` as a loop reads it; a tuple display seals its list with `tuple_seal`. A dict display with `**dict`, `DictSpread`, makes an empty dict, then sets each entry and merges each dict with `dict_update`, in order. `AssignTarget::Unpack` assigns a tuple of a fixed number of items item by item, and a new list of the items between the targets to a starred one; any other value goes to `unpack(source, kind, descriptor, before, after, starred)`, which gives a new list of its values, and each target takes its item with `list_get`, the last ones counted from the end, and a starred one the `list_slice` between, from left to right (SMT-02, EXP-17) |
 | Ranges | A `range` source evaluates its arguments once, in order, and raises `ValueError` for a step that is not a nonzero constant and is zero. It keeps a counter, a limit and the step, and gives each value with a reference of its own before the counter moves on. `reversed(range(...))` starts from `typy_rt_range_last` and steps back to `start - step`, as CPython's `range_reverse` does |
 | Classes | `Class(arguments)` evaluates the arguments, makes the instance, then calls `__init__` with the instance first. An attribute is read with `Field`, borrowed from the instance, and gets a reference of its own when the instance is a temporary. Assigning an attribute evaluates the value, then the instance, stores the value with `SetField` and releases the value the attribute held; `object.attribute op= value` reads the attribute once, with a reference of its own, before the value. `str` of an instance calls `__str__`, then `__repr__`, and `repr` calls `__repr__`; a class with neither is written by `typy_rt_instance_text`. `==`, `!=`, `is` and `is not` on instances are `Identical`, and an instance is true. A slot of a class type starts as `NoInstance` |
 | f-strings | The pieces are joined left to right with `str_concat`. A field evaluates its value; with a conversion it is written by `str`, `repr` or `repr` and `ascii`, and then formatted as a `str` when a specification follows. Without a conversion a field with no specification is `str(value)`, and one with a specification calls the formatter of the value's type: `format_int`, `format_bool` with the `bool` as an `int` word, `format_float` or `format_str`, an optional value branching on `IsNone`, and any other type `format_other` with its `str` and its type's name. The specification is itself an f-string, evaluated after the value, as CPython evaluates it |
-| `try` | The lowerer keeps a stack of `Cleanup`s. A `try` body pushes `Handlers { dispatch }`, so the error path of a call inside it releases the live temporaries, runs the cleanups opened inside the body and jumps to `dispatch` with the exception; an error path outside every `try` body releases the slots and returns the exception. `dispatch` tests the clauses in order with `exception_matches` against each class. A matching clause calls `exception_enter`, keeps the result, and stores the exception in its variable or holds it, then pushes `Handling { previous, exception }`. Leaving the clause, by its end, `return`, `break`, `continue` or an error, calls `exception_leave(previous)` and drops the exception: the variable is set to null and its value released. `break` and `continue` run the cleanups opened since their loop started, and `return` runs them all, after it has taken its own reference to the value it returns. An exception no clause matches takes the error path from after the `try`. `else` runs after the body, outside its clauses. A `finally` block pushes `Finally` with a copy of its statements, so every way out runs it: falling through lowers it after the rest, `return`, `break` and `continue` run it as a cleanup, and an error path runs it with the pending exception entered as the one being handled, so an exception the block raises takes it as its context and releases it, and otherwise leaves it and goes on. While a copy runs, only the cleanups outside the `try` are open. `return` holds its value as a live temporary while cleanups run, and an error path sets aside the temporaries it released before it runs any `finally` block. A function that returns a value ends in `unreachable` where its body ends, since the checker rejects one that can reach its end |
+| `try` | The lowerer keeps a stack of `Cleanup`s. A `try` body pushes `Handlers { dispatch }`, so the error path of a call inside it releases the live temporaries, runs the cleanups opened inside the body and jumps to `dispatch` with the exception; an error path outside every `try` body releases the slots and returns the exception. `dispatch` tests the clauses in order with `exception_matches` against each class. A matching clause calls `exception_enter`, keeps the result, and stores the exception in its variable or holds it, then pushes `Handling { previous, exception }`. Leaving the clause, by its end, `return`, `break`, `continue` or an error, calls `exception_leave(previous)` and drops the exception: the variable is set to null and its value released. `break` and `continue` run the cleanups opened since their loop started, and `return` runs them all, after it has taken its own reference to the value it returns. An exception no clause matches takes the error path from after the `try`. In a program with a generator function, the error path that leaves the function hands each variable holding an object other than a `str`, `bytes` or a type to the exception with `exception_keep`, and a failed call of the program's code hands it the arguments the caller owns, so they live as long as the exception, as CPython's traceback keeps the frames (ADR-0070). `else` runs after the body, outside its clauses. A `finally` block pushes `Finally` with a copy of its statements, so every way out runs it: falling through lowers it after the rest, `return`, `break` and `continue` run it as a cleanup, and an error path runs it with the pending exception entered as the one being handled, so an exception the block raises takes it as its context and releases it, and otherwise leaves it and goes on. While a copy runs, only the cleanups outside the `try` are open. `return` holds its value as a live temporary while cleanups run, and an error path sets aside the temporaries it released before it runs any `finally` block. A function that returns a value ends in `unreachable` where its body ends, since the checker rejects one that can reach its end |
 | Slice assignment | `AssignTarget::Slice` evaluates the value, then the list and its bounds, and calls `list_assign_slice` with the bounds and mask a slice read passes and the new items. The runtime copies the items, each with a reference of its own, before the list changes; a slice of step 1 replaces its run and moves the rest of the list, and any other step takes exactly as many items or raises `ValueError` (DAT-13) |
 | `del` | A list item calls `list_delete`, which raises `IndexError: list assignment index out of range` outside the list; a slice calls `list_delete_slice` with the bounds and mask a slice read passes, which compacts the list and releases what the slice selects; a dict key calls `dict_pop` and releases the value |
 | `with` | The manager is kept in a hidden slot, `__enter__` is called on it and its result bound to the target, and the body runs inside a `With` cleanup. Falling through, `return`, `break` and `continue` call `__exit__` with three `None` values. An exception calls it with `exception_class` of the exception, the exception and `traceback`, each wrapped as optional, while the exception is entered as the one being handled; when `__exit__` may suppress, a true result releases the exception and jumps after the `with`, and otherwise the exception goes on. An exception `__exit__` raises releases the first. A text file (`WithProtocol::TextFile`) enters as itself after `typy_rt_text_enter` checks that it is open, and leaving calls `typy_rt_text_close`, which suppresses nothing; an error of closing takes the exception being handled as its context. `str` and `repr` of an iterator or of the traceback call `object_repr` |
-| Iterators | `for` over a class keeps what `__iter__` returned in a hidden slot and calls `__next__` at each step through `call_next`, whose error path releases a `StopIteration` and leaves the loop, and takes the error path for any other exception. `iter()` calls `iterator_new` with the source, or a view's dict, the kind's code and, for a dict's items, the descriptor of the pair. `next()` calls `iterator_advance`, which raises `StopIteration` at the end when told to, and `iterator_item`, whose borrowed bits become a value with a reference of its own; with a default the two ends meet in a block whose parameter is the result. `for` over an iterator steps it the same way, and `type()` of one calls `object_type` |
+| Iterators | `for` over a class keeps what `__iter__` returned in a hidden slot and calls `__next__` at each step through `call_next`, whose error path releases a `StopIteration` and leaves the loop, and takes the error path for any other exception. `iter()` calls `iterator_new` with the source, or a view's dict, the kind's code and, for a dict's items, the descriptor of the pair. `next()` calls `iterator_advance`, which raises `StopIteration` at the end when told to, and `iterator_item`, whose borrowed bits become a value with a reference of its own; with a default the two ends meet in a block whose parameter is the result. `for` over an iterator steps it the same way, and `type()` of one calls `object_type`. Every loop, a comprehension's clause and a builtin that reads its iterable as a loop does push `Cleanup::Iterator` with the iterator's hidden slots while its body runs, so `return` and an error path release them, and release them where the loop ends: when it runs out, before its `else` clause, and after `break`, as CPython drops a loop's iterator; a generator the loop reads then closes (FUN-11, ADR-0069) |
 | `assert` | The test branches to the rest of the code when true; when false, the exception is built, which evaluates the message, and raised as by `raise`, in every build mode |
 | Exception classes | A class of the program derived from an exception class has a `TyirClass` whose `exception_base` names its base's type object, the runtime's or a class's, and whose `repr` and `str` are its own or its nearest base's methods. Its instances are exceptions: `NewException` with an `InitCall` evaluates the arguments in order, makes the exception with those written by position as its arguments, then calls `__init__` with it first. `Field` and `SetField` on an exception carry the class, since every exception has the type `exception`, and reach the attributes past the fixed part. `SetArguments` evaluates the arguments into a tuple and calls `exception_set_arguments` |
 | Exceptions | A call of an exception class evaluates the arguments in order into a tuple and calls `exception_new` with the class, the tuple's descriptor and its address; the runtime copies the tuple and retains its items, and the tuple is released. `raise` evaluates the exception, or calls `exception_handled` for a bare `raise`, sets the cause with `exception_set_cause`, null for `from None`, then invokes `exception_throw`, which always returns the exception as an error, so the call's error path adds the line of the `raise` to the traceback and releases what the frame owns; the normal block is unreachable. `str` and `repr` of an exception call `exception_text`, which goes through the class's `str` and `repr`, and `type(e)` calls `exception_class` |
@@ -2656,7 +2830,7 @@ comparisons, calls and counting, terminators, and emission.
 | Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
 | Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5, a `bytes` is 6, a set is 7, a dict is 8, a view of a dict is 9, a type object is 10 and an instance of a class is 11 |
 | Type objects | The runtime exports its type objects as `typy_rt_object` and `typy_rt_type_` followed by `int`, `float`, `bool`, `str`, `bytes`, `none`, `list`, `tuple`, `set`, `dict`, `dict_keys`, `dict_values`, `dict_items` or `type`, and its exception classes as `typy_rt_exception_` followed by the class name, such as `typy_rt_exception_ValueError`. The type `type` hashes a type object by identity and writes it as `<class 'name'>`, or `<class 'module.Name'>` for a class |
-| Exception class | A class derived from an exception class has a type object whose base is the runtime's class, such as `typy_rt_exception_ValueError`, or its base's `typy.classN`; whose `repr` and `str` are `typy_rt_exception_repr` and `typy_rt_exception_str` unless it or a base defines `__repr__` or `__str__`; and whose descriptor lays out its attributes after the exception's fixed part of `EXCEPTION_PREFIX`, 80 bytes |
+| Exception class | A class derived from an exception class has a type object whose base is the runtime's class, such as `typy_rt_exception_ValueError`, or its base's `typy.classN`; whose `repr` and `str` are `typy_rt_exception_repr` and `typy_rt_exception_str` unless it or a base defines `__repr__` or `__str__`; and whose descriptor lays out its attributes after the exception's fixed part of `EXCEPTION_PREFIX`, 96 bytes |
 | Traceback | One immortal object with the type ID 13 and the type `traceback`, exported as `typy_rt_traceback`, written as `<traceback object at 0x...>`; it holds no frames, which the exception keeps for its report (CST-10) |
 | Iterator | Header with the type ID 12, `kind` (0 list, 1 tuple, 2 `str`, 3 `bytes`, 4 set, 5 dict keys, 6 dict values, 7 dict items, 8 an ASCII `str`, 9 a range, 10 a range past a C `long`), `source`, null once exhausted, `position`, `length` and `visited` for the checks of a set or dict, `current`, the borrowed item of the last step, `held`, a `str` iterator's current string, `number`, a range iterator's current `int` word, and `pair_type` and `pair` for a dict's items. Its type object has CPython's name, such as `list_iterator` or `dict_itemiterator`. The compiler gives a range kind 9, and the runtime makes it 10, `longrange_iterator`, when the start, stop, step or length does not fit a C `long`, as CPython does |
 | Range | Header with the type ID 14, then `start`, `stop`, `step` and `length`, four `int` words the range owns, so a range reaches past 64 bits as CPython's does. Its type object `typy_rt_type_range` is true when the range is not empty, hashes and compares as CPython's `range_hash` and `range_richcompare` do, by length, then first value, then step, and is written `range(0, 3)` or `range(0, 9, 3)`. A range slot starts as null (DAT-17) |
@@ -2667,7 +2841,7 @@ comparisons, calls and counting, terminators, and emission.
 | Cell | Header with the type ID 26, `layout: ptr` to the tuple descriptor of its value and its flag, then that tuple. `typy_rt_cell_new(layout)` makes one with every byte zero, no value; freeing it releases the value through the descriptor. `typy_rt_free_variable_unbound(name)` returns `NameError: cannot access free variable 'NAME' where it is not associated with a value in enclosing scope`, as CPython 3.12 to 3.15 word it (FUN-04) |
 | Bound method | Header with the type ID 25, `descriptor: ptr`, then `instance: ptr`, the one capture, which it holds a reference to. `typy_rt_method_new(descriptor, instance)` makes one, and freeing it releases the instance. The method's descriptor, `typy.method.descriptor.N`, has the code `typy.method_thunk.` and the method's symbol, which reads the instance from the bound method and calls the method with it first. The type `method`, `typy_rt_type_method`, is equal for one descriptor and one instance, hashes the two addresses, and writes `<bound method QUALNAME of REPR>`, the instance through its type's `repr`, whose exception it passes on (FUN-05) |
 | Call through a value | Generated code loads the descriptor from the object, then the code, and calls it with the object first, then the arguments, in the raising form. The code of a function of the program is the thunk `typy.thunk.` and its symbol, which calls the function directly: one that may raise in a tail call, one that cannot with its result paired with a null exception |
-| Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one with a copy of the arguments, whose items it retains |
+| Exception | Header, `class: ptr` at the offset an instance keeps its class, `message: ptr` to the `str` the runtime gave it or null, `arguments_type: ptr` to the tuple descriptor of the arguments the program built it with or null, `arguments: ptr` to them or null when there are none, the traceback with the objects it keeps, `cause: ptr`, `context: ptr` and `suppress_context: u64`, then a class's attributes as its descriptor lays them out (ADR-0013). `typy_rt_exception_new(class, arguments_type, arguments)` makes one with a copy of the arguments, whose items it retains |
 | `str` object | Header, `length: u64` in code points, `kind: u32` (1, 2 or 4 bytes per code point), 4 bytes of padding, then the code points |
 | Large integer | Header, `sign_and_length: i32`, 4 bytes of padding, then that many `u64` limbs, least significant first |
 | Constants | Strings, `bytes` and large integers are immortal static objects in read-only memory; a `bytes` constant is a one-byte `str` object with the `bytes` type ID |
@@ -2675,7 +2849,8 @@ comparisons, calls and counting, terminators, and emission.
 | A function that may raise | Returns `{ result, exception }`, or only the exception when it returns nothing; a null exception means none was raised. A runtime function's `bool` result is one byte in either form, and its `float` result in this form is the 64 bits of the double, `{ i64, ptr }`, the runtime's `RaisingFloat`, which every target returns in two integer registers; generated code bitcasts the bits back (ADR-0053). The entry function always uses this form |
 | A function that cannot raise | Returns its result directly |
 | `invoke` | When the exception is not null, generated code calls `typy_rt_traceback_add(exception, function, file, line)` with C strings, then takes the error path |
-| Entry | The runtime's `main` calls `__typy_main`, the body of `__main__` |
+| Dropped generators | In a program with a generator function, after every `decrement`, every call of a runtime function that takes an object other than a `str`, `bytes` or a type, and the release of the frame blocks, generated code loads `typy_rt_generator_dropped` and calls `typy_rt_generator_close_dropped()` when it is not null, so a generator a release dropped closes before the next operation (FUN-11, ADR-0069) |
+| Entry | The runtime's `main` calls `__typy_main`, the body of `__main__`, and at the end `__typy_finish`, `TyirModule::finish`, both with external linkage. In a program with a generator function `__typy_finish` unbinds and releases every module variable, `__main__`'s first in the order its code binds them, then each other module's, the last to run first, so a generator one holds closes at exit, as CPython clears its modules (FUN-11, ADR-0071) |
 | Runtime functions | `typy_rt_` and the name from TyIR's `RuntimeFunction`, plus `increment`, `decrement`, `int_increment`, `int_decrement`, `int_add`, `int_subtract`, `int_multiply`, `int_and`, `int_or`, `int_xor`, `int_negate`, `int_invert`, `int_compare`, `traceback_add`, `exception_raise`, `exception_enter`, `exception_leave` and `exception_matches`, with the C calling convention. TyIR's `ExceptionNew`, `ExceptionSetCause`, `ExceptionThrow`, `ExceptionHandled`, `ExceptionClass` and `ExceptionText` are `exception_new(class, descriptor, arguments)`, `exception_set_cause(exception, cause)`, `exception_throw(exception)`, `exception_handled()`, `exception_class(exception)` and `exception_text(exception, repr)`; each borrows its arguments |
 
 In 0.1 every `int` operation calls the runtime. Inline fast paths for
@@ -3000,6 +3175,8 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
 | `CDataClass` | `name: *const u8`, `name_length: u64`, `kind: u32`, `ctype: u32`, `size: u64`, `item: *const CDataClass`, `length: u64` | A `ctypes` class the compiler emits once: `kind` 0 for a scalar of C type `ctype`, numbered as `CType`, 1 for a pointer, 2 for an array of `length` items of `item`, and 3 for a structure, whose name holds its module (ADR-0048, ADR-0049) |
 | `FunctionObject` | Header, `descriptor: *const FunctionDescriptor`, then a nested function's captures | A function object under the type ID 24, which the compiler emits immortal for a function of a module, and which each `def` of a nested function makes; its type `function` hashes by identity and writes `<function QUALNAME at 0x...>` (FUN-04, FUN-05) |
+| `GeneratorObject` | Header, `descriptor: *const GeneratorDescriptor`, `state: u32`, `point: u32`, `current: u64`, `sent: u64`, `thrown: *mut ExceptionObject`, `result: *mut u8`, the owned one-item tuple of what the body returned, or null, `held: *mut u8`, `received: u64`, `caller: *mut ExceptionObject`, `dropped: *mut GeneratorObject`, then the frame | A generator under the type ID 27 (ADR-0063). `typy_rt_generator_new` makes one not started with its frame zero. A step, which `typy_rt_iterator_advance`, `typy_rt_generator_send`, `typy_rt_generator_throw` and `typy_rt_generator_close` take after checking the stack, releases the current item, marks it running, notes the exception being handled in `caller`, calls the descriptor's `step`, the resume code, and makes `caller` the one being handled again (ADR-0068); the code marks it suspended at a `yield`, and a step that ends any other way finishes it. `send` sets `received` and `sent`, and refuses a value other than `None` before the start with `TypeError`; `throw` hands its exception to `thrown`, and raises it at once, finishing the generator, before the start or after the end; `close` gives `GeneratorExit` to `thrown`, returns null when the body ends or raises it, and `RuntimeError: generator ignored GeneratorExit` when the body yields again. `send` and `throw` raise `StopIteration` when the body ends, with the body's result as its argument, and so does `next()`; a loop releases the result. `received` is 1 for a value `send` gave, 2 for `None`, and 0 for `next()`. `typy_rt_generator_set_result` keeps a returned value that is not `None`, and `typy_rt_generator_delegate` resumes the iterator of a `yield from` as the delegating generator was resumed, closing a generator source first on `GeneratorExit` and raising CPython 3.12's `AttributeError` for a value sent to an iterator that is no generator; `typy_rt_generator_has_result` and `typy_rt_generator_result` give a source's result, the second `TypeError` when it holds none (ADR-0072). `typy_rt_generator_hold` makes a yielded item its current one, an inline item copied into `held`. Freeing one not started or finished releases its current item, the arguments its frame still holds, and the rest of its frame unless its body ended. Freeing a suspended one puts it at the end of the queue of dropped generators, linked through `dropped`, whose first entry is the export `typy_rt_generator_dropped`; `typy_rt_generator_close_dropped` takes the whole queue and closes each generator in order, then frees it, writing an exception the closing raised as `Exception ignored in: <generator object NAME at 0x...>` with its traceback and last line, and freeing one that yielded again as `ABANDONED`, without closing it a second time (FUN-11, ADR-0069). Running again inside its own step is `ValueError: generator already executing`, and a `StopIteration` its body raises becomes `RuntimeError: generator raised StopIteration` raised from it |
+| `GeneratorDescriptor` | `name`, `qualified_name`, `step`, `frame: *const TupleType`, `arguments: u64`, `item_kind: u64`, `item_tuple: *const TupleType`, `result: *const TupleType` | What the compiler emits once for each generator function, `typy.generator.descriptor.N`: its resume code, the layout of its frame, how many of the frame's fields are arguments, how its items are held, and the one-item tuple of its result, null for an `R` of `None` |
 | `CellObject` | Header, `layout: *const TupleType`, then the value and its flag | A cell under the type ID 26, which a function makes for each of its variables a nested function shares; it owns a reference to its value (FUN-04) |
 | `MethodObject` | Header, `descriptor: *const FunctionDescriptor`, `instance: *mut ObjectHeader` | A bound method under the type ID 25, made at each read of a method through an instance; it owns a reference to the instance (FUN-05) |
 | `FunctionDescriptor` | `name: *const StrObject`, `qualified_name: *const StrObject`, `code: *const c_void`, `captures: *const TupleType` | What the compiler emits once for each function used as a value; `captures` lays out a nested function's captures, and is null for a function of a module |
@@ -3011,7 +3188,7 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 
 | Module | Behaviour |
 | --- | --- |
-| `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, flushes standard output and returns the exit status `sys::exit_status` gives |
+| `entry` | `main` keeps its arguments for `sys.argv`, records the stack limit, calls `__typy_main`, reports an uncaught exception, releases it and closes the generators it kept, through the hook making a generator installs, calls `__typy_finish`, closes the open files, flushes standard output and returns the exit status `sys::exit_status` gives |
 | `cdata` | `typy_rt_cdata_new(class)` makes an object, every byte zero; the getters and setters read and write a scalar of each C type, wrapping an `int` to its width; `typy_rt_cdata_pointer(class, target)` points to an object and keeps it; `typy_rt_cdata_from_address` makes a pointer of a C result; `typy_rt_cdata_contents` and `typy_rt_cdata_item` give an object over the target or an item, `ValueError: NULL pointer access` for a null pointer and `IndexError: invalid index` outside an array, which counts from its end when negative; `typy_rt_cdata_argument` gives the address a C function takes; `typy_rt_cdata_field` gives an object over a structure's field, `typy_rt_cdata_copy` copies an object's bytes into another of its class and keeps the source, and `typy_rt_cdata_set_pointer` writes a pointer field or item. The type object's slots give CPython's truth and `repr` (FFI-03, ADR-0048) |
 | `foreign` | `typy_rt_int_low_bits(word)` gives the low 64 bits of an `int` word in two's complement, and 0 for the word 0; `typy_rt_int_from_uint64`, `typy_rt_int_from_address` and `typy_rt_bytes_from_c_string` make a C result a TyPy value, null giving `None`; `typy_rt_ctypes_float_argument(word, position)` converts an `int` for a `c_double`, raising `ctypes.ArgumentError`, a class whose module is `ctypes`, with CPython's text for one too large (FFI-03, ADR-0047) |
 | `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |
@@ -3022,7 +3199,10 @@ installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
 | `math` | The functions behind the `math` module (LIB-05, ADR-0018), one `typy_rt_math_*` symbol each. A function of the C library runs inside CPython 3.15's `math_1` or `math_2` checks: a NaN from a number is `ValueError`, with the function's 3.15 message such as `expected a nonnegative input, got -1.0`, or `math domain error`, and an infinity from a finite number `OverflowError: math range error` where the function can overflow. `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose`, `hypot` and `dist`, with CPython's `vector_norm`, `gamma` and `lgamma`, with its Lanczos sum and its multiply-adds fused on AArch64 as the oracle's Clang build fuses them there, `fsum`, with Shewchuk's partials, and `sumprod`, with its machine-integer path, its triple-length path and the exact total it falls back to, are ported from `mathmodule.c`; `prod` of an `int` start keeps the exact product until its first `float` item, and each reads the member a union item holds (LIB-15), and `fmax` and `fmin` keep `x` when the two are equal, as the oracle's Clang build does. A logarithm of an `int` too large for a `float` is that of its top 55 bits, rounded once, plus its bit count times the logarithm of 2, by `fma`, as 3.15 does. `factorial` multiplies by halves, `isqrt` runs Newton's method from a power of two, `comb` and `perm` take exact running quotients, and `gcd` is Euclid's; each refuses what CPython refuses, with its message and its limit of a C `long`. The C functions are named with `#[link(name = "m")]`, so a Rust test binary of the runtime also calls the C library before `compiler_builtins` |
 | `string` | Every `str` and `bytes` object, and every constant one, keeps a zero unit after its data, so `typy_rt_bytes_data` gives C the object's own buffer as a string (ADR-0047). Creation, concatenation, repetition, indexing with negative indexes (DAT-11), slicing into a string as narrow as the code points it selects (DAT-12), length, the methods of LIB-03 that need no Unicode tables, with CPython's index adjustment for `start` and `end` and its rules for an empty substring, whitespace as `str.isspace` defines it, and the line breaks of `str.splitlines`, built through a `StrBuilder` that makes the new string as narrow as its widest code point, and the case methods and `is` tests. Their tables in `string/unicode/case_tables.rs` are read off CPython 3.15 itself, code point by code point, by `scripts/generate-unicode-tables.py`: for each property the code points where it changes, and for each case mapping runs of a constant difference over a stride of one or two, about 200 for each, with the few mappings to more than one code point listed apart. A program links only the tables its methods use. `lower` makes a capital sigma final sigma, when a cased code point comes before it and none after it, skipping case-ignorable ones, as CPython does; both properties are read from CPython by lowering a sigma beside each code point. `title` lowercases a code point after a cased one, comparison, `repr`, `chr` and `ord`. `repr` escapes the code points `str.isprintable` rejects, and `int()` and `float()` read the decimal digits of every script, from tables that `scripts/generate-unicode-tables.py` writes from CPython 3.15's Unicode 17.0 data (OI-15). The tables hold 676 boundaries up to U+FFFF as `u16`, 806 above it as `u32`, and 77 digit zeros, about 4.9 KB |
-| `list` | `typy_rt_list_new(kind, capacity, descriptor)`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is `list::listsort`, a port of CPython 3.15.2's `listsort` that calls `<` on the same items in the same order: natural runs that `count_run` finds, extended by binary insertion to the `minrun` that `minrun_next` spreads over the list, merged by the powersort strategy with galloping through a buffer of half the list; a comparison whose slot method raised ends it, the items a permutation of the input as CPython leaves them (OI-27). With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. A `tuple[T, ...]` is a list object whose header has the tuple type ID, 5, set by `typy_rt_tuple_seal` once its items are in: `repr` writes it between parentheses, `(1,)` for one item, its index error is `tuple index out of range` and `index` raises `tuple.index(x): x not in tuple`, and a slice, `+` or `*` of a tuple is a tuple. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list releases each item |
+| `list` | `typy_rt_list_new(kind, capacity, descriptor)`, `_append`, `_length`, `_get`, `_set`, `_equal`, `_contains`, `_repr`, `_slice`, `_pop`, `_insert`, `_extend`, `_remove`, `_index`, `_count`, `_clear`, `_copy`, `_reverse`, `_concat`, `_repeat`, `_compare`, `_sort`, `_extreme`, `_sum_int`, `_sum_float`, `_any` and `_all`. A list grows to `n + n/8 + 4` items while small and to `n + n/32 + 4` from 65,536 items, so a list of a million `int` values built one `append` at a time takes at most 8.5 MB (NFR-13). A position counts from the end when negative; one outside the list raises `IndexError: list index out of range`, or `list assignment index out of range`, and a large integer `cannot fit 'int' into an index-sized integer`. An `Object` item is compared and written by the type ID in its header, so a list of lists needs nothing from the compiler. `repr` joins the `repr` of each item once, in a string as wide as its widest piece. `pop` takes its index with an `int` flag, 1 when an index is given, so no `bool` crosses into the runtime as an argument, and returns the item with the reference the list held. `insert` clamps its position to the list, as CPython does. `extend` reads the other list's length first, so `xs.extend(xs)` doubles the list once. `clear` sets the length to zero before releasing the items, so an item's `drop` never sees a half-cleared list. `remove` and `index` raise `ValueError` with CPython 3.14's messages, `list.remove(x): x not in list` and `list.index(x): x not in list` (OI-14). `repeat` raises `OverflowError` for a count that does not fit an index. `compare` decides by the first unequal pair, then by length. `sort` is `list::listsort`, a port of CPython 3.15.2's `listsort` that calls `<` on the same items in the same order: natural runs that `count_run` finds, extended by binary insertion to the `minrun` that `minrun_next` spreads over the list, merged by the powersort strategy with galloping through a buffer of half the list; a comparison whose slot method raised ends it, the items a permutation of the input as CPython leaves them (OI-27). With `reverse` it reverses, sorts and reverses again, as CPython does, so equal items keep their order; a `nan` makes the order of a list depend on the algorithm, and CPython's own versions differ on it. `extreme` keeps the first item until a later one is less, for `min`, or greater, for `max`, so the first of equal items wins, and an empty list raises `ValueError: min() iterable argument is empty`. `sum_float` is CPython 3.12's compensated sum, Neumaier's improvement of Kahan's: each rounding error is collected and added once at the end unless it is not finite. A `tuple[T, ...]` is a list object whose header has the tuple type ID, 5, set by `typy_rt_tuple_seal` once its items are in: `repr` writes it between parentheses, `(1,)` for one item, its index error is `tuple index out of range` and `index` raises `tuple.index(x): x not in tuple`, and a slice, `+` or `*` of a tuple is a tuple. `typy_rt_placeholder_list` is an immortal empty list. Freeing a list, and `clear`, release the items last first, as CPython does, and so do a tuple's release and generated code's release of a tuple value; an instance releases its attributes first first, as CPython frees an instance's `__dict__`, so generators these drop close in CPython's order (FUN-11) |
+| `iterable_iterator`, `iterator_stepper`, `iter` | `typy_rt_iterable_iterator(source, pair)` makes the iterator a loop steps: a runtime iterator or a generator is its own, a built-in iterable gets one of its kind, and an instance's `iter` entry runs, an instance it gives being wrapped in an iterator of kind `Instance`; it gives back the exception `__iter__` raised. `typy_rt_iterator_stepper(source)` gives what `next()` steps, the iterator itself or a wrapper of an instance, and `typy_rt_iter(source, pair)` gives `iter()` of an `Iterable[T]`, what an instance's `__iter__` returns as it is. A wrapper's step calls the `next` entry into its slot, releasing the item it held first, and ends at a `StopIteration`, which `next()` without a default raises as it is (TYP-20, ADR-0065) |
+| `call_check`, `call_merge`, `call_name` | `typy_rt_call_check(description, positional, names)` checks a call that unpacks as CPython's `initialize_locals` does: each keyword in order, for a parameter a positional value filled, `got multiple values for argument`, for none, `got some positional-only arguments passed as keyword arguments` or `got an unexpected keyword argument` with CPython 3.15's `Did you mean`, found by its weighted edit distance of UTF-8 bytes; then too many positional values, then the missing positional and keyword-only arguments. `typy_rt_call_merge` merges a `**dict` into the call's entries, records each key, and copies the keys no parameter takes by name into `**kwargs`; `typy_rt_call_name` records a keyword. Both raise `got multiple values for keyword argument` with the name and module of the callee (EXP-17, ADR-0073) |
+| `unpack` | `typy_rt_unpack(source, kind, descriptor, before, after, starred)` reads the values of any iterable through its iterator into a new list of the kind given: every value when a target is starred, otherwise at most one past the targets, so an endless iterator ends. Too few values raise `ValueError: not enough values to unpack (expected N, got M)`, `expected at least N` with a starred target, and too many `too many values to unpack (expected N)`, with `, got M` for a list, a tuple or a dict, whose lengths are known, as CPython 3.15 words them (SMT-02, EXP-17) |
 | `format` | `typy_rt_format_int`, `_bool`, `_float`, `_str` and `_other` give `format(value, spec)` as f-strings call it (LEX-07), a port of CPython's `formatter_unicode.c`: the specification `[[fill]align][sign][z][#][0][width][grouping][.precision][type]` is read with CPython's checks and `ValueError` messages, the digits of a number are grouped by `,` or `_` with zeros added inside the groups when `0` pads it after its sign, and the number or text is padded and aligned. A `float` is written as `PyOS_double_to_string` writes it for `e`, `f`, `g` and `repr`, from digits rounded half to even on the exact value with large integers, as `_Py_dg_dtoa` rounds them, then laid out as `format_float_short` lays them out. A `bool` comes as an `int` word, and any other type as its `str` and its type's name, which an empty specification gives back and any other raises `TypeError`. `typy_rt_ascii` escapes every code point outside ASCII for `!a`. `scripts/generate-format-cases.py` writes the test table, 4,628 results that CPython 3.12 to 3.15 all give |
 | `message` | Builds an exception message of up to 1024 code points from text, numbers and `repr` of a string, so an error about a long input stays short |
 | `io` | Standard output is buffered in 8 KiB and flushed when full, at exit, and before anything is written to standard error. `string::write_utf8` writes a surrogate as each standard stream's handler in CPython's UTF-8 mode does: `Surrogates::Escape` writes U+DC80 to U+DCFF to standard output as the bytes 0x80 to 0xFF, and `Surrogates::Backslash` writes `\ud800` to standard error and in reports. `string::unescapable` finds the first surrogate outside U+DC80 to U+DCFF and the end of its run, where `typy_rt_write_stdout_checked` and a `write` to `sys.stdout` raise CPython's `UnicodeEncodeError` before writing any of the string (LEX-10) |

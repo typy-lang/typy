@@ -33,6 +33,7 @@ impl Program {
             TypedExprKind::Call {
                 function: length,
                 arguments: vec![Argument {
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: typed(TypedExprKind::Local(symbol), instance.clone()),
                 }],
@@ -82,6 +83,7 @@ impl Program {
             span,
             generic: false,
             named_targets: Vec::new(),
+            generator: None,
         }));
         self.classes[class.0 as usize]
             .methods

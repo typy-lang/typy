@@ -12,12 +12,14 @@ mod exception;
 mod exception_arguments;
 mod exports;
 mod generic;
+mod iterator_fits;
 mod library_version;
 mod math;
 mod method;
 mod open;
 mod percent_format;
 mod protocol_fits;
+pub use protocol_fits::ProgramScope;
 mod subset;
 mod sys;
 mod typed;
@@ -39,12 +41,13 @@ pub use open::OpenAccess;
 pub use sys::SysValue;
 pub use typed::{
     Argument, AssignTarget, Attribute, CDataExpr, CDataPlace, CapturedVariable, ClassId,
-    Conversion, EachMember, ExceptionPart, FStringPart, FileAttribute, FormattedValue, FunctionId,
-    FunctionSignature, Generator, ImportBinding, InitCall, IsInstanceTest, KeyedOperation,
-    LoopSource, MemberTest, OpenOptions, OperatorCall, OperatorKind, PartOperation,
-    PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
-    RaiseCause, RuntimeKind, SignatureParameter, Symbol, SymbolId, SymbolKind, TypedCase,
-    TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
-    TypedPattern, TypedProgram, TypedStmt, TypedTypeAlias, WithProtocol, dump,
+    Conversion, DictPart, EachMember, ExceptionPart, FStringPart, FileAttribute, FormattedValue,
+    FunctionId, FunctionSignature, Generator, GeneratorTypes, ImportBinding, InitCall,
+    IsInstanceTest, KeyedOperation, LoopSource, MemberTest, OpenOptions, OperatorCall,
+    OperatorKind, PartOperation, Passed, PercentConversion, PercentField, PercentNumber,
+    PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind, SignatureParameter, SpreadKind,
+    SpreadPart, Symbol, SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr,
+    TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt,
+    TypedTypeAlias, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

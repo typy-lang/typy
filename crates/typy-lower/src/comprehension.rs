@@ -87,8 +87,8 @@ impl FunctionLowerer<'_> {
 fn target_variables(target: &AssignTarget, variables: &mut Vec<SymbolId>) {
     match target {
         AssignTarget::Name(symbol) => variables.push(*symbol),
-        AssignTarget::Tuple(targets) => {
-            for each in targets {
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for each in target.nested() {
                 target_variables(each, variables);
             }
         }

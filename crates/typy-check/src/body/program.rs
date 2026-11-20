@@ -405,6 +405,7 @@ impl Program {
             span,
             generic: false,
             named_targets: Vec::new(),
+            generator: None,
         }));
         self.lazy_imports.insert(id, target);
         // A name a later lazy import binds again keeps its first function, which lowering
@@ -708,6 +709,7 @@ impl Program {
         self.class_copies.replace(snapshot.class_copies);
         self.protocol_values = snapshot.protocol_values;
         crate::protocol_fits::reset(&self.protocol_values.fits);
+        crate::iterator_fits::reset(&self.protocol_values.iterations);
         let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
         for (symbol, ty) in symbols.into_iter().zip(found) {
             self.symbols[symbol.0 as usize].ty = ty;
@@ -740,15 +742,9 @@ impl Program {
         symbol
     }
 
-    /// Returns the typed program, whose entry is the body of the module named `main`.
-    pub(crate) fn finish(self, main: &str) -> TypedProgram {
-        let entry = self
-            .modules
-            .iter()
-            .find(|module| module.name == main)
-            .map_or(FunctionId(0), |module| module.body);
-        let classes = self
-            .classes
+    /// Returns each class as the typed program holds it.
+    fn typed_classes(&self) -> Vec<TypedClass> {
+        self.classes
             .iter()
             .enumerate()
             .map(|(index, class)| {
@@ -804,9 +800,25 @@ impl Program {
                     span: class.span,
                     generic,
                     opaque,
+                    steps: !opaque
+                        && matches!(
+                            self.protocol_values.iterations.get(&class.id),
+                            Some(crate::iterator_fits::Iteration::Iterator(_))
+                        ),
+                    iterates: !opaque && self.protocol_values.iterations.contains_key(&class.id),
                 }
             })
-            .collect();
+            .collect()
+    }
+
+    /// Returns the typed program, whose entry is the body of the module named `main`.
+    pub(crate) fn finish(self, main: &str) -> TypedProgram {
+        let entry = self
+            .modules
+            .iter()
+            .find(|module| module.name == main)
+            .map_or(FunctionId(0), |module| module.body);
+        let classes = self.typed_classes();
         TypedProgram {
             symbols: self.symbols,
             functions: self.functions.into_iter().flatten().collect(),
@@ -834,6 +846,10 @@ impl Program {
             closures: self.closures,
             cells: self.cells,
             nonlocals: self.nonlocals,
+            fits: (
+                self.protocol_values.fits.clone(),
+                self.protocol_values.iterations.clone(),
+            ),
         }
     }
 }

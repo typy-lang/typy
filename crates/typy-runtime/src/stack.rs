@@ -18,6 +18,7 @@ static SIZE: ProgramCell<usize> = ProgramCell::new(0);
 
 /// Returns the stack pointer. The register is read, not the address of a local, because a
 /// sanitizer may keep locals on a separate fake stack, where the check would never fire.
+#[cfg(not(miri))]
 #[inline]
 fn stack_pointer() -> usize {
     let pointer: usize;
@@ -41,6 +42,15 @@ fn stack_pointer() -> usize {
         );
     }
     pointer
+}
+
+/// Returns the address of a local, which stands for the stack pointer under Miri: it runs no
+/// inline assembly and keeps no fake stack.
+#[cfg(miri)]
+#[inline]
+fn stack_pointer() -> usize {
+    let marker = 0_u8;
+    core::ptr::addr_of!(marker).addr()
 }
 
 /// Records the lowest address the stack may reach below the current stack pointer: `main`

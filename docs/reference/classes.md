@@ -247,7 +247,7 @@ as `if not isinstance(shape, Circle): return`, and in the right operand
 of `and`. When the checker can tell the answer, as for
 `isinstance(3, int)`, nothing is tested when the program runs; `bool`
 counts as `int`, as in CPython. A class held in a variable, and
-`issubclass`, are planned for 0.9 (CLS-18, CLS-19).
+`issubclass`, are planned for 0.10 (CLS-18, CLS-19).
 
 ## Class variables and defaults
 

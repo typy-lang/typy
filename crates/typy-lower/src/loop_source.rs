@@ -91,6 +91,47 @@ enum Iterator {
     },
 }
 
+impl Iterator {
+    /// Adds the hidden slots of the iterator to `found`, those of the iterators it combines
+    /// included.
+    fn slots(&self, found: &mut Vec<SlotId>) {
+        match self {
+            Self::Set {
+                set, slot, length, ..
+            } => found.extend([*set, *slot, *length]),
+            Self::Dict {
+                source,
+                position,
+                length,
+                visited,
+                ..
+            } => found.extend([*source, *position, *length, *visited]),
+            Self::Range {
+                counter,
+                limit,
+                stride,
+                ..
+            } => found.extend([*counter, *limit, *stride]),
+            Self::Sequence {
+                sequence, position, ..
+            } => found.extend([*sequence, *position]),
+            Self::Enumerate { count, inner, .. } => {
+                found.push(*count);
+                inner.slots(found);
+            }
+            Self::Object { iterator, .. } | Self::Protocol { iterator, .. } => {
+                found.push(*iterator);
+            }
+            Self::Zip { inners, strict, .. } => {
+                for inner in inners {
+                    inner.slots(found);
+                }
+                found.extend(strict.iter());
+            }
+        }
+    }
+}
+
 impl FunctionLowerer<'_> {
     /// Lowers `for target in source`, with its body and `else` clause.
     pub(crate) fn for_each(
@@ -104,23 +145,41 @@ impl FunctionLowerer<'_> {
         let iterator = self.start_iterator(source, span);
         let header = self.builder.create_block();
         let otherwise = self.builder.create_block();
+        let broken = self.builder.create_block();
         let exit = self.builder.create_block();
         self.jump_to(header);
         self.builder.switch_to(header);
+        let held = self.open_iterator(&iterator);
         let value = self.next_value(&iterator, otherwise, span);
         self.assign_target(target, value, span);
         self.loops.push(LoopTargets {
-            break_target: exit,
+            break_target: broken,
             continue_target: header,
             cleanups: self.cleanups.len(),
         });
         self.statements(body);
         self.loops.pop();
         self.jump_to(header);
+        self.cleanups.pop();
+        // The iterator goes when the loop ends, before its `else` clause, as in CPython.
         self.builder.switch_to(otherwise);
+        self.release_hidden(&held, span);
         self.statements(orelse);
         self.jump_to(exit);
+        self.builder.switch_to(broken);
+        self.release_hidden(&held, span);
+        self.jump_to(exit);
         self.builder.switch_to(exit);
+    }
+
+    /// Opens the cleanup that releases what `iterator` holds on a way out of its loop's body,
+    /// and returns its hidden slots. The caller pops the cleanup when the body is lowered.
+    fn open_iterator(&mut self, iterator: &Iterator) -> Vec<SlotId> {
+        let mut held = Vec::new();
+        iterator.slots(&mut held);
+        self.cleanups
+            .push(crate::function::Cleanup::Iterator(held.clone()));
+        held
     }
 
     /// Returns `list(source)`, a new list of every value the source gives. A list is copied
@@ -160,6 +219,7 @@ impl FunctionLowerer<'_> {
         let exit = self.builder.create_block();
         self.jump_to(header);
         self.builder.switch_to(header);
+        let held = self.open_iterator(&iterator);
         let value = self.next_value(&iterator, exit, span);
         self.assign_target(&first.target, value, span);
         for condition in &first.conditions {
@@ -176,7 +236,9 @@ impl FunctionLowerer<'_> {
         }
         self.generate(rest, span, innermost);
         self.jump_to(header);
+        self.cleanups.pop();
         self.builder.switch_to(exit);
+        self.release_hidden(&held, span);
     }
 
     /// Returns `value in source` for an instance without `__contains__`: the value, held in
@@ -201,6 +263,7 @@ impl FunctionLowerer<'_> {
         let result = self.builder.add_block_parameter(join, TyirType::Bool);
         self.jump_to(header);
         self.builder.switch_to(header);
+        let held = self.open_iterator(&iterator);
         let item = self.next_value(&iterator, missing, span);
         self.assign_name(each, item, span);
         let tested = self.expression(test);
@@ -211,6 +274,7 @@ impl FunctionLowerer<'_> {
             then: found,
             otherwise: header,
         });
+        self.cleanups.pop();
         for (block, answer) in [(found, !negated), (missing, negated)] {
             self.builder.switch_to(block);
             let answer = self.constant(Constant::Bool(answer), span);
@@ -220,6 +284,7 @@ impl FunctionLowerer<'_> {
             });
         }
         self.builder.switch_to(join);
+        self.release_hidden(&held, span);
         Self::borrowed(result, TyirType::Bool)
     }
 
@@ -229,18 +294,32 @@ impl FunctionLowerer<'_> {
         &mut self,
         source: &LoopSource,
         span: Span,
-        mut visit: impl FnMut(&mut Self, Lowered),
+        visit: impl FnMut(&mut Self, Lowered),
     ) {
         let iterator = self.start_iterator(source, span);
+        self.each_of(&iterator, span, visit);
+    }
+
+    /// Calls `visit` with each value of the started `iterator`, which is released after the
+    /// call, then releases what the iterator holds.
+    fn each_of(
+        &mut self,
+        iterator: &Iterator,
+        span: Span,
+        mut visit: impl FnMut(&mut Self, Lowered),
+    ) {
         let header = self.builder.create_block();
         let exit = self.builder.create_block();
         self.jump_to(header);
         self.builder.switch_to(header);
-        let value = self.next_value(&iterator, exit, span);
+        let held = self.open_iterator(iterator);
+        let value = self.next_value(iterator, exit, span);
         visit(self, value);
         self.release(value, span);
         self.jump_to(header);
+        self.cleanups.pop();
         self.builder.switch_to(exit);
+        self.release_hidden(&held, span);
     }
 
     /// Calls `visit` with each item of the list `list`, of items of type `item`, as `for`
@@ -304,15 +383,9 @@ impl FunctionLowerer<'_> {
             let started = self.start_iterator(source, span);
             (started, between(self))
         };
-        let header = self.builder.create_block();
-        let exit = self.builder.create_block();
-        self.jump_to(header);
-        self.builder.switch_to(header);
-        let value = self.next_value(&iterator, exit, span);
-        visit(self, &given, value);
-        self.release(value, span);
-        self.jump_to(header);
-        self.builder.switch_to(exit);
+        self.each_of(&iterator, span, |lowerer, value| {
+            visit(lowerer, &given, value);
+        });
         given
     }
 
@@ -353,9 +426,15 @@ impl FunctionLowerer<'_> {
                 }
             }
             LoopSource::Items(sequence) if let typy_check::Type::Iterator(item) = &sequence.ty => {
-                let iterator = self.kept(sequence, "iterator", span);
+                // The loop asks the iterator for its iterator, which runs an instance's
+                // `__iter__` and steps it through a wrapper (TYP-20).
+                let lowered = self.expression(sequence);
+                let made = self.iterable_iterator(lowered, item, span);
+                self.release(lowered, span);
+                let slot = self.hidden_slot("iterator", TyirType::ITERATOR);
+                self.store(slot, made, span);
                 Iterator::Object {
-                    iterator,
+                    iterator: slot,
                     item: self.lowered_type(item),
                 }
             }

@@ -100,7 +100,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     }
 
     /// Releases the attributes of the instance each frame block holds, before the function
-    /// returns.
+    /// returns, then closes the generators that dropped (FUN-11).
     pub(crate) fn release_frames(&mut self) -> Result<(), CodegenError> {
         if self.frames.is_empty() {
             return Ok(());
@@ -116,6 +116,6 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         for block in blocks {
             self.builder.build_call(release, &[block.into()], "")?;
         }
-        Ok(())
+        self.close_dropped()
     }
 }

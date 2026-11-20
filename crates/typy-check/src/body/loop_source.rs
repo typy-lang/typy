@@ -11,7 +11,8 @@ use crate::types::Type;
 
 impl BodyChecker<'_> {
     /// Returns the builtin a call names, with its arguments, when no local or program function
-    /// of that name hides it, as the call would resolve it.
+    /// of that name hides it, as the call would resolve it. A call that unpacks with `*` or
+    /// `**` is checked as a call, which refuses it (EXP-19).
     pub(super) fn called_builtin<'call>(
         &self,
         expression: &'call Expr,
@@ -28,7 +29,10 @@ impl BodyChecker<'_> {
         let Expr::Name { id, .. } = function.as_ref() else {
             return None;
         };
-        if self.locals.contains_key(id) || self.program.function_ids.contains_key(id) {
+        if self.locals.contains_key(id)
+            || self.program.function_ids.contains_key(id)
+            || super::call_expression::unpacking(arguments, keywords).is_some()
+        {
             return None;
         }
         Some((Builtin::named(id)?, arguments, keywords))
@@ -50,17 +54,7 @@ impl BodyChecker<'_> {
                 return (LoopSource::Items(items), item);
             }
             let sequence = self.sequence(iter);
-            if sequence.ty.class_id().is_some() {
-                return self.protocol_source(sequence, user);
-            }
-            // A `ctypes` array gives the value of each item, or an object over a structure
-            // item (FFI-03).
-            if let Type::CData(crate::ctypes::CData::Array(item, _)) = &sequence.ty {
-                let item = item.result_type();
-                return (LoopSource::Items(sequence), item);
-            }
-            let item = self.iterated_item(&sequence, user);
-            return (LoopSource::Items(sequence), item);
+            return self.sequence_source(sequence, user);
         };
         let span = iter.span();
         let source = match builtin {
@@ -71,6 +65,26 @@ impl BodyChecker<'_> {
         };
         let ty = source.item_type();
         (source, ty)
+    }
+
+    /// Returns the source of a loop over the checked `sequence`, read as `sequence_of` reads
+    /// it, with the type of what each step gives.
+    pub(super) fn sequence_source(
+        &mut self,
+        sequence: TypedExpr,
+        user: &str,
+    ) -> (LoopSource, Type) {
+        if sequence.ty.class_id().is_some() {
+            return self.protocol_source(sequence, user);
+        }
+        // A `ctypes` array gives the value of each item, or an object over a structure item
+        // (FFI-03).
+        if let Type::CData(crate::ctypes::CData::Array(item, _)) = &sequence.ty {
+            let item = item.result_type();
+            return (LoopSource::Items(sequence), item);
+        }
+        let item = self.iterated_item(&sequence, user);
+        (LoopSource::Items(sequence), item)
     }
 
     /// Checks iterating over an instance: its class's `__iter__` gives an instance of a class
@@ -95,6 +109,30 @@ impl BodyChecker<'_> {
             return (LoopSource::Items(iterable), Type::Error);
         };
         let iterator = self.program.signatures[iter.0 as usize].returns.clone();
+        // `__iter__` may return an iterator of another kind, such as a generator, which the
+        // loop then goes over as an `Iterator[T]` (TYP-20).
+        if let Type::Iterator(item) | Type::Generator { yields: item, .. } = &iterator {
+            let item = item.as_ref().clone();
+            let owner = self.program.signatures[iter.0 as usize]
+                .parameters
+                .first()
+                .map(|parameter| parameter.ty.clone());
+            let span = iterable.span;
+            let call = Self::typed(
+                TypedExprKind::Call {
+                    function: iter,
+                    arguments: vec![crate::typed::Argument {
+                        parameter: 0,
+                        passed: crate::typed::Passed::Position,
+                        value: Self::converted(iterable, owner.as_ref()),
+                    }],
+                    dispatch: true,
+                },
+                iterator.clone(),
+                span,
+            );
+            return (LoopSource::Items(Self::as_iterator(call)), item);
+        }
         let next = iterator
             .class_id()
             .and_then(|class| self.program.method(class, "__next__"));
@@ -263,8 +301,23 @@ impl BodyChecker<'_> {
 
     /// Checks a sequence a loop reads. A fixed tuple whose items have one type is read as a
     /// `tuple[T, ...]` (DAT-14).
+    /// Returns `value` as an iterator of what it yields when it is a generator, which loops,
+    /// `iter()` and `next()` step through the iterator protocol, the same object (ADR-0065).
+    pub(super) fn as_iterator(value: TypedExpr) -> TypedExpr {
+        let Type::Generator { yields, .. } = &value.ty else {
+            return value;
+        };
+        let iterator = Type::Iterator(yields.clone());
+        Self::converted(value, Some(&iterator))
+    }
+
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        let value = Self::version_tuple(self.expression(expression));
+        Self::sequence_of(Self::version_tuple(self.expression(expression)))
+    }
+
+    /// Returns the checked `value` as the sequence a loop reads, as `sequence` does.
+    pub(super) fn sequence_of(value: TypedExpr) -> TypedExpr {
+        let value = Self::as_iterator(value);
         let Type::Tuple(items) = &value.ty else {
             return value;
         };

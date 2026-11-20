@@ -2,7 +2,7 @@
 # the Markdown under docs/ (DOC-05, ADR-0050). Every setting here is one that
 # Material for MkDocs 9.8 also reads, so either tool builds the site from
 # this file. scripts/build-docs.sh builds it in strict mode into site/.
-site_name: TyPy 0.8 documentation
+site_name: TyPy 0.9 documentation
 site_url: https://typy-lang.org/
 site_description: >-
   TyPy compiles a strict, typed subset of standard Python ahead of time to
@@ -85,6 +85,7 @@ nav:
   - Home: index.md
   - What's new:
       - whatsnew/index.md
+      - What's new in TyPy 0.9: whatsnew/0.9.md
       - What's new in TyPy 0.8: whatsnew/0.8.md
       - What's new in TyPy 0.7: whatsnew/0.7.md
       - What's new in TyPy 0.6: whatsnew/0.6.md
@@ -188,6 +189,17 @@ nav:
           - adr/0060-make-a-function-value-an-object-of-its-code-and-its-captures.md
           - adr/0061-capture-by-value-unless-the-variable-is-assigned-after-the-capture.md
           - adr/0062-store-attributes-and-tuple-items-in-decreasing-order-of-alignment.md
+          - adr/0063-compile-a-generator-as-a-resumable-function-with-its-frame-in-its-object.md
+          - adr/0064-close-a-generator-freed-while-suspended-at-its-yield.md
+          - adr/0065-give-each-iterable-type-iteration-entries-the-runtime-calls.md
+          - adr/0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md
+          - adr/0067-type-what-a-yield-receives-as-the-send-type-or-none.md
+          - adr/0068-give-the-caller-back-its-handled-exception-when-a-generator-step-stops.md
+          - adr/0069-close-freed-generators-from-a-queue-after-the-call-that-dropped-them.md
+          - adr/0070-keep-the-variables-of-each-function-an-exception-leaves-with-it.md
+          - adr/0071-release-the-module-variables-when-a-program-with-generators-ends.md
+          - adr/0072-delegate-yield-from-one-step-at-a-time-through-the-runtime.md
+          - adr/0073-bind-the-arguments-of-a-call-with-unpacking-when-the-program-runs.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

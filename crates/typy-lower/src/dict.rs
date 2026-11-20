@@ -123,7 +123,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns a value of type `ty` made from the bits a runtime function gave.
-    fn value_of_bits(&mut self, bits: ValueId, ty: TyirType, span: Span) -> ValueId {
+    pub(crate) fn value_of_bits(&mut self, bits: ValueId, ty: TyirType, span: Span) -> ValueId {
         self.builder
             .push_value(Operation::FromBits { bits, ty }, ty, span)
     }

@@ -1,7 +1,9 @@
 //! Owned and borrowed values, and the reference counting of slots (ADR-0001).
 
+use std::collections::BTreeSet;
+
 use typy_diagnostics::Span;
-use typy_tyir::{Operation, SlotId, TyirType, ValueId};
+use typy_tyir::{Operation, SlotId, TyirType, TypeId, ValueId};
 
 use crate::function::FunctionLowerer;
 
@@ -156,6 +158,46 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Releases the slots as an exception leaves the function. In a program with generators,
+    /// each variable whose value may reach a generator goes with the exception instead, which
+    /// keeps it until the exception goes, as CPython's traceback keeps the frame, so a
+    /// generator it holds closes then (FUN-11, ADR-0070).
+    pub(crate) fn leave_frame(&mut self, exception: ValueId, span: Span) {
+        if self.unwinding == Unwinding::Releases {
+            self.release_slots(span);
+            return;
+        }
+        let variables: BTreeSet<SlotId> = self.slots.values().copied().collect();
+        for index in 0..self.builder.slot_count() {
+            let slot = SlotId(u32::try_from(index).unwrap_or(u32::MAX));
+            let ty = self.builder.slot_type(slot);
+            if self.borrowed.contains(&slot) || !self.counted(ty) {
+                continue;
+            }
+            let value = self.builder.push_value(Operation::Load(slot), ty, span);
+            if variables.contains(&slot) && kept_by_traceback(ty) {
+                self.keep_with(exception, value, span);
+            } else {
+                self.builder.push(Operation::Decrement(value), span);
+            }
+        }
+    }
+
+    /// Hands the reference the function holds to `value` over to the traceback of
+    /// `exception`.
+    pub(crate) fn keep_with(&mut self, exception: ValueId, value: ValueId, span: Span) {
+        let bits = self
+            .builder
+            .push_value(Operation::ToBits(value), TyirType::Bits, span);
+        self.builder.push(
+            Operation::CallRuntime {
+                function: typy_tyir::RuntimeFunction::ExceptionKeep,
+                arguments: vec![exception, bits],
+            },
+            span,
+        );
+    }
+
     /// Releases every owned temporary that is live, without forgetting them, on an error path.
     pub(crate) fn release_live_temporaries(&mut self, span: Span) {
         for value in self.temporaries.clone() {
@@ -163,8 +205,40 @@ impl FunctionLowerer<'_> {
         }
     }
 
+    /// Releases the values the hidden slots `slots` hold, leaving each its zero value, which
+    /// releasing again passes over.
+    pub(crate) fn release_hidden(&mut self, slots: &[SlotId], span: Span) {
+        for slot in slots {
+            if self.counted(self.builder.slot_type(*slot)) {
+                let held = self.take_slot(*slot, span);
+                self.release(held, span);
+            }
+        }
+    }
+
     /// Adds a hidden slot for a value the lowering itself keeps, such as a loop counter.
     pub(crate) fn hidden_slot(&mut self, name: &str, ty: TyirType) -> SlotId {
         self.builder.add_slot(format!("${name}"), ty)
     }
+}
+
+/// Returns true when a value of type `ty` is an object that may reach a generator, which an
+/// exception keeps for the frame it leaves: any object but a `str`, `bytes` or a type, or an
+/// optional one. A tuple held inline is released at once.
+pub(crate) fn kept_by_traceback(ty: TyirType) -> bool {
+    match ty {
+        TyirType::Object(id) | TyirType::Optional(typy_tyir::OptionalBase::Object(id)) => {
+            !matches!(id, TypeId::STR | TypeId::BYTES | TypeId::TYPE)
+        }
+        _ => false,
+    }
+}
+
+/// What an error path that leaves a function does with the function's variables (ADR-0070).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Unwinding {
+    /// It releases them: the program has no generator, whose closing could show when.
+    Releases,
+    /// It hands those that may reach a generator to the exception, which keeps them.
+    Keeps,
 }

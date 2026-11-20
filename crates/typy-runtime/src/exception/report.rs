@@ -2,7 +2,7 @@
 
 use super::ExceptionObject;
 use crate::io::{flush_stdout, write_stderr};
-use crate::string::{Surrogates, write_utf8};
+use crate::string::{StrObject, Surrogates, write_utf8};
 
 /// The number of identical entries in a row a traceback shows before it counts the rest, as
 /// CPython's `TB_RECURSIVE_CUTOFF`; a deep recursion then prints a few lines, not one per frame.
@@ -24,6 +24,27 @@ pub(crate) unsafe fn report_uncaught(exception: *const ExceptionObject) {
     }
     // SAFETY: the caller's guarantee.
     unsafe { report_into(exception, &mut |bytes| write_stderr(bytes)) };
+}
+
+/// Writes an exception that closing a freed object raised, which nothing can catch, as
+/// CPython 3.12 writes it: `Exception ignored in: ` and the object's `repr`, then the
+/// exception's traceback and last line (FUN-11).
+///
+/// # Safety
+///
+/// `repr` points to a live `str` and `exception` to a live exception.
+pub(crate) unsafe fn report_ignored(repr: *mut StrObject, exception: *const ExceptionObject) {
+    flush_stdout();
+    if crate::io::standard_closed(crate::libc::STDERR) {
+        return;
+    }
+    write_stderr(b"Exception ignored in: ");
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        write_utf8(repr, Surrogates::Backslash, write_stderr);
+        write_stderr(b"\n");
+        report_one(exception, &mut |bytes| write_stderr(bytes));
+    }
 }
 
 /// The line between an exception and the one raised from it.

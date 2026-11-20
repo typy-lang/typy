@@ -14,6 +14,7 @@ pub enum ExceptionKind {
     AssertionError,
     AttributeError,
     EOFError,
+    GeneratorExit,
     ImportError,
     IndexError,
     KeyError,
@@ -32,11 +33,12 @@ pub enum ExceptionKind {
 impl ExceptionKind {
     /// Every kind, in the order of the variants.
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 17] = [
+    pub(crate) const ALL: [Self; 18] = [
         Self::ArgumentError,
         Self::AssertionError,
         Self::AttributeError,
         Self::EOFError,
+        Self::GeneratorExit,
         Self::ImportError,
         Self::IndexError,
         Self::KeyError,
@@ -60,6 +62,7 @@ impl ExceptionKind {
             Self::AssertionError => &classes::ASSERTION_ERROR,
             Self::AttributeError => &classes::ATTRIBUTE_ERROR,
             Self::EOFError => &classes::EOF_ERROR,
+            Self::GeneratorExit => &classes::GENERATOR_EXIT,
             Self::ImportError => &classes::IMPORT_ERROR,
             Self::NameError => &classes::NAME_ERROR,
             Self::IndexError => &classes::INDEX_ERROR,

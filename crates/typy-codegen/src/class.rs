@@ -235,6 +235,138 @@ fn truth_slot<'ctx>(
     Ok(function)
 }
 
+/// Returns the `next` and `iter` entries of class `index`, null when it has none, with the
+/// item kind and the layout of what `next` writes (TYP-20).
+fn iteration_entries<'ctx>(
+    shared: &mut Shared<'_, 'ctx>,
+    index: u32,
+    class: &typy_tyir::TyirClass,
+) -> Result<
+    (
+        PointerValue<'ctx>,
+        PointerValue<'ctx>,
+        u64,
+        PointerValue<'ctx>,
+    ),
+    CodegenError,
+> {
+    let pointer = shared.context.ptr_type(AddressSpace::default());
+    let (next, next_kind, next_tuple) = match class.next {
+        Some(method) => {
+            let item = shared.tyir.function(method).return_type;
+            let kind = crate::descriptor::kind_code(item, &shared.tyir.tuple_types)?;
+            let layout = match item {
+                TyirType::Tuple(id) | TyirType::Optional(typy_tyir::OptionalBase::Tuple(id)) => {
+                    crate::descriptor::tuple_descriptor(shared, id)?
+                }
+                _ => pointer.const_null(),
+            };
+            let entry = next_entry(shared, index, method, item)?;
+            (entry.as_global_value().as_pointer_value(), kind, layout)
+        }
+        None => (pointer.const_null(), 0, pointer.const_null()),
+    };
+    let iter = match class.iter {
+        Some(method) => iter_entry(shared, index, method)?
+            .as_global_value()
+            .as_pointer_value(),
+        None => pointer.const_null(),
+    };
+    Ok((next, iter, next_kind, next_tuple))
+}
+
+/// Returns the `next` entry of class `index`: it calls `__next__` and writes the item, with the
+/// reference the call gave, into the slot it is given, a word or a tuple's words, and returns
+/// null, or the exception `__next__` raised (TYP-20, ADR-0065).
+fn next_entry<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    index: u32,
+    method: typy_tyir::FunctionId,
+    item: TyirType,
+) -> Result<FunctionValue<'ctx>, CodegenError> {
+    let context = shared.context;
+    let pointer = context.ptr_type(AddressSpace::default());
+    let function = shared.module.add_function(
+        &format!("typy.class{index}.next"),
+        pointer.fn_type(&[pointer.into(), pointer.into()], false),
+        Some(Linkage::Private),
+    );
+    let builder = context.create_builder();
+    builder.position_at_end(context.append_basic_block(function, ""));
+    let (instance, slot) = (slot_parameter(function, 0)?, slot_parameter(function, 1)?);
+    let value = entry_call(shared, &builder, method, instance)?;
+    if crate::bits::holds_words(item) {
+        builder.build_store(slot, value)?;
+    } else {
+        let word = crate::bits::word_of(&builder, context.i64_type(), value, item)?;
+        builder.build_store(slot, word)?;
+    }
+    builder.build_return(Some(&pointer.const_null()))?;
+    Ok(function)
+}
+
+/// Returns the `iter` entry of class `index`: it calls `__iter__` and writes the iterator it
+/// returns into the slot it is given, and returns null, or the exception `__iter__` raised
+/// (TYP-20, ADR-0065).
+fn iter_entry<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    index: u32,
+    method: typy_tyir::FunctionId,
+) -> Result<FunctionValue<'ctx>, CodegenError> {
+    let context = shared.context;
+    let pointer = context.ptr_type(AddressSpace::default());
+    let function = shared.module.add_function(
+        &format!("typy.class{index}.iter"),
+        pointer.fn_type(&[pointer.into(), pointer.into()], false),
+        Some(Linkage::Private),
+    );
+    let builder = context.create_builder();
+    builder.position_at_end(context.append_basic_block(function, ""));
+    let (instance, slot) = (slot_parameter(function, 0)?, slot_parameter(function, 1)?);
+    let iterator = entry_call(shared, &builder, method, instance)?;
+    builder.build_store(slot, iterator)?;
+    builder.build_return(Some(&pointer.const_null()))?;
+    Ok(function)
+}
+
+/// Calls `method` on `instance` and returns its result; when it raises, the entry returns the
+/// exception.
+fn entry_call<'ctx>(
+    shared: &Shared<'_, 'ctx>,
+    builder: &inkwell::builder::Builder<'ctx>,
+    method: typy_tyir::FunctionId,
+    instance: PointerValue<'ctx>,
+) -> Result<BasicValueEnum<'ctx>, CodegenError> {
+    let result = builder
+        .build_call(shared.functions[method.0 as usize], &[instance.into()], "")?
+        .try_as_basic_value()
+        .basic()
+        .ok_or_else(|| CodegenError("an entry's method returns a value".to_owned()))?;
+    if !shared.raising[method.0 as usize] {
+        return Ok(result);
+    }
+    let context = shared.context;
+    let function = builder
+        .get_insert_block()
+        .and_then(inkwell::basic_block::BasicBlock::get_parent)
+        .ok_or_else(|| CodegenError("an entry is built inside its function".to_owned()))?;
+    let pair = result.into_struct_value();
+    let value = builder.build_extract_value(pair, 0, "")?;
+    let exception = builder
+        .build_extract_value(pair, 1, "")?
+        .into_pointer_value();
+    let failed = builder.build_is_not_null(exception, "")?;
+    let (raised, returned) = (
+        context.append_basic_block(function, ""),
+        context.append_basic_block(function, ""),
+    );
+    builder.build_conditional_branch(failed, raised, returned)?;
+    builder.position_at_end(raised);
+    builder.build_return(Some(&exception))?;
+    builder.position_at_end(returned);
+    Ok(value)
+}
+
 /// Returns the `equal` slot of class `index`: it calls `__eq__` when the other object is an
 /// instance of the class its parameter takes, and otherwise compares identities, as
 /// `NotImplemented` and CPython's fallback give (ADR-0026).
@@ -508,6 +640,11 @@ fn type_object_type(context: &inkwell::context::Context) -> StructType<'_> {
             pointer.into(),
             pointer.into(),
             pointer.into(),
+            // `next`, `iter`, the kind of the items `next` writes and their layout (TYP-20).
+            pointer.into(),
+            pointer.into(),
+            word.into(),
+            pointer.into(),
         ],
         false,
     )
@@ -588,6 +725,7 @@ pub(crate) fn type_object<'ctx>(
     };
     let repr = repr_function(shared, index)?;
     let str = str_function(shared, index)?;
+    let (next, iter, next_kind, next_tuple) = iteration_entries(shared, index, class)?;
     let header = context.const_struct(
         &[
             half.const_int(u64::from(IMMORTAL), false).into(),
@@ -610,6 +748,10 @@ pub(crate) fn type_object<'ctx>(
         fields.into(),
         str.into(),
         public.into(),
+        next.into(),
+        iter.into(),
+        word.const_int(next_kind, false).into(),
+        next_tuple.into(),
     ]);
     let methods: Vec<PointerValue<'ctx>> = class
         .methods

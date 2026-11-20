@@ -62,6 +62,14 @@ impl Analysis<'_> {
         live
     }
 
+    /// Returns what is live before a statement that evaluates `value` and drops it.
+    fn evaluated(&mut self, value: &TypedExpr, after: Live) -> Live {
+        let mut reads = Vec::new();
+        expression_reads(value, &mut reads);
+        self.stored_items(value, &reads, &after);
+        self.with_reads(after, &reads)
+    }
+
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     fn statement(&mut self, statement: &TypedStmt, after: &Live) -> Live {
         let mut after: Live = after.union(&self.escape).copied().collect();
@@ -73,7 +81,12 @@ impl Analysis<'_> {
                 }
                 expression_reads(value, &mut reads);
                 if let ([single], TypedExprKind::Local(symbol)) = (&targets[..], &value.kind)
-                    && !matches!(single, AssignTarget::Tuple(_) | AssignTarget::Slice { .. })
+                    && !matches!(
+                        single,
+                        AssignTarget::Tuple(_)
+                            | AssignTarget::Unpack { .. }
+                            | AssignTarget::Slice { .. }
+                    )
                 {
                     self.consider(*symbol, value.span, &reads, &after);
                 }
@@ -93,11 +106,31 @@ impl Analysis<'_> {
                 self.stored_items(value, &reads, &after);
                 self.with_reads(after, &reads)
             }
-            TypedStmt::Expr { value, .. } => {
-                let mut reads = Vec::new();
-                expression_reads(value, &mut reads);
-                self.stored_items(value, &reads, &after);
-                self.with_reads(after, &reads)
+            TypedStmt::Expr { value, .. } => self.evaluated(value, after),
+            TypedStmt::Yield {
+                value, received, ..
+            } => {
+                // The assignment of what the next step received runs after the `yield`.
+                let after = match received {
+                    Some(received) => self.statement(received, &after),
+                    None => after,
+                };
+                self.evaluated(value, after)
+            }
+            TypedStmt::YieldFrom {
+                source,
+                item,
+                received,
+                ..
+            } => {
+                // The items are read while the delegation runs, and the assignment of what
+                // it returned after it.
+                let after = match received {
+                    Some(received) => self.statement(received, &after),
+                    None => after,
+                };
+                let after = self.evaluated(item, after);
+                self.evaluated(source, after)
             }
             TypedStmt::Return { value, .. } => {
                 let mut reads = Vec::new();
@@ -379,8 +412,8 @@ fn target_reads(target: &AssignTarget, reads: &mut Vec<SymbolId>) {
             expression_reads(value, reads);
             target_reads(target, reads);
         }
-        AssignTarget::Tuple(targets) => {
-            for each in targets {
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for each in target.nested() {
                 target_reads(each, reads);
             }
         }
@@ -421,8 +454,8 @@ fn target_defines(target: &AssignTarget, live: &mut Live) {
         AssignTarget::Name(symbol) => {
             live.remove(symbol);
         }
-        AssignTarget::Tuple(targets) => {
-            for each in targets {
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for each in target.nested() {
                 target_defines(each, live);
             }
         }

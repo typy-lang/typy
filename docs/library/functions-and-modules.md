@@ -72,7 +72,7 @@ largest key. `key=None` is no key. `list.sort` orders a copy of the items
 and writes them back, so a key that raises leaves the list as it was, as
 in CPython; CPython leaves undefined what a key sees of the list while it
 is sorted, and in TyPy it sees the items unsorted. A built-in function as
-a key, such as `key=len`, is planned for 0.9 (FUN-08).
+a key, such as `key=len`, is planned for 0.10 (FUN-08).
 
 ## Formatting with `%`
 
@@ -140,7 +140,7 @@ A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
 A function of `math` is not a value yet: `f = math.sqrt` is planned for
-0.9 (FUN-08).
+0.10 (FUN-08).
 
 `fsum`, `dist`, `prod` and `sumprod` take iterables of `int`, `bool` or
 `float` items, and `gamma` and `lgamma` a real number, each with
@@ -180,7 +180,7 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` on every target; `"linux"` in a program built for Linux and `"darwin"` in one built for macOS |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
-| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.8.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.9.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,

@@ -68,3 +68,14 @@ supersedes it.
 | [ADR-0060](0060-make-a-function-value-an-object-of-its-code-and-its-captures.md) | Make a function value an object of its code and its captures | Accepted | 2026-11-18 |
 | [ADR-0061](0061-capture-by-value-unless-the-variable-is-assigned-after-the-capture.md) | Capture by value unless the variable is assigned after the capture | Accepted | 2026-11-18 |
 | [ADR-0062](0062-store-attributes-and-tuple-items-in-decreasing-order-of-alignment.md) | Store attributes and tuple items in decreasing order of alignment | Accepted | 2026-11-18 |
+| [ADR-0063](0063-compile-a-generator-as-a-resumable-function-with-its-frame-in-its-object.md) | Compile a generator as a resumable function with its frame in its object | Accepted | 2026-11-19 |
+| [ADR-0064](0064-close-a-generator-freed-while-suspended-at-its-yield.md) | Close a generator freed while suspended at its yield | Superseded by ADR-0069 | 2026-11-19 |
+| [ADR-0065](0065-give-each-iterable-type-iteration-entries-the-runtime-calls.md) | Give each iterable type iteration entries the runtime calls | Accepted | 2026-11-19 |
+| [ADR-0066](0066-hold-an-abstract-collection-as-the-union-of-its-built-in-types.md) | Hold an abstract collection as the union of its built-in types | Accepted | 2026-11-19 |
+| [ADR-0067](0067-type-what-a-yield-receives-as-the-send-type-or-none.md) | Type what a `yield` receives as the send type or `None` | Accepted | 2026-11-19 |
+| [ADR-0068](0068-give-the-caller-back-its-handled-exception-when-a-generator-step-stops.md) | Give the caller back its handled exception when a generator step stops | Accepted | 2026-11-19 |
+| [ADR-0069](0069-close-freed-generators-from-a-queue-after-the-call-that-dropped-them.md) | Close freed generators from a queue after the call that dropped them | Accepted | 2026-11-19 |
+| [ADR-0070](0070-keep-the-variables-of-each-function-an-exception-leaves-with-it.md) | Keep the variables of each function an exception leaves with it | Accepted | 2026-11-19 |
+| [ADR-0071](0071-release-the-module-variables-when-a-program-with-generators-ends.md) | Release the module variables when a program with generators ends | Accepted | 2026-11-19 |
+| [ADR-0072](0072-delegate-yield-from-one-step-at-a-time-through-the-runtime.md) | Delegate `yield from` one step at a time through the runtime | Accepted | 2026-11-19 |
+| [ADR-0073](0073-bind-the-arguments-of-a-call-with-unpacking-when-the-program-runs.md) | Bind the arguments of a call with unpacking when the program runs | Accepted | 2026-11-20 |

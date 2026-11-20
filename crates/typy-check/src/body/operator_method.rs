@@ -61,6 +61,7 @@ impl BodyChecker<'_> {
             TypedExprKind::Call {
                 function: method,
                 arguments: vec![Argument {
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: receiver,
                 }],

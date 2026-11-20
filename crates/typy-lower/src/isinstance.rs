@@ -2,7 +2,7 @@
 
 use typy_check::{IsInstanceTest, Type, TypedExpr};
 use typy_diagnostics::Span;
-use typy_tyir::{BoolOperator, Constant, Operation, RuntimeFunction, TyirType};
+use typy_tyir::{BoolOperator, Constant, Operation, TyirType};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -50,7 +50,7 @@ impl FunctionLowerer<'_> {
         &mut self,
         value: Lowered,
         always: bool,
-        checks: &[typy_check::TypeObjectOf],
+        checks: &[typy_check::MemberTest],
         span: Span,
     ) -> Lowered {
         if always || checks.is_empty() {
@@ -58,12 +58,8 @@ impl FunctionLowerer<'_> {
             return Self::borrowed(constant, TyirType::Bool);
         }
         let mut result = None;
-        for class in checks {
-            let object = self.bits(Self::borrowed(value.value, value.ty), span);
-            let class = self.type_object(class, span).value;
-            let found = self
-                .call_runtime(RuntimeFunction::IsInstance, vec![object, class], span)
-                .value;
+        for test in checks {
+            let found = self.member_found(value, test, span);
             result = Some(match result {
                 None => found,
                 Some(before) => self.builder.push_value(
@@ -87,6 +83,14 @@ impl FunctionLowerer<'_> {
         let value = self.expression(inner);
         if value.ty == ty {
             return value;
+        }
+        // An iterable found an iterator is the same object, held as one (TYP-21).
+        if value.ty == TyirType::ITERABLE && ty == TyirType::ITERATOR {
+            let bits = self.bits(value, span);
+            let iterator = self
+                .builder
+                .push_value(Operation::FromBits { bits, ty }, ty, span);
+            return self.transfer(value, iterator, ty);
         }
         let downcast = self.builder.push_value(
             Operation::Downcast {

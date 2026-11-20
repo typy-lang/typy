@@ -21,6 +21,7 @@ pub(super) fn module_variables(statements: &[Stmt], names: &mut BTreeMap<String,
                     bind(names, element);
                 }
             }
+            Expr::Starred { value, .. } => bind(names, value),
             _ => {}
         }
     }

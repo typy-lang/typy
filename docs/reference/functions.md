@@ -8,15 +8,106 @@
 | Recursion; running out of stack ends the program with `RecursionError` | FUN-02 |
 | Positional, keyword and default arguments, defaults evaluated once | EXP-16 |
 | Positional-only parameters before `/` and keyword-only parameters after `*`, bound as CPython binds them; a keyword for a positional-only parameter, or a positional argument past the others, is E0404 | FUN-03 |
+| `*args: T` and `**kwargs: T`, which take the arguments left over as a `tuple[T, ...]` and a `dict[str, T]` | EXP-17 |
+| `f(*iterable)` and `f(**dict)` in a call of the program's code, and `print(*iterable)`, bound as CPython binds them | EXP-17 |
 | A function of the program as a value of type `Callable[[A, ...], R]`: stored, passed, returned, called, compared and hashed | FUN-05, NFR-19 |
 | A method read through an instance as a bound method, and through its class as a function | FUN-05 |
 | A function defined inside a function, which reads the variables of the functions around it | FUN-04 |
+| A generator function, whose `yield` statements give its items one step at a time | SMT-11, FUN-07 |
+| `send`, `throw` and `close` of a `Generator[Y, S, R]`, and `received = yield value` | SMT-11, FUN-07 |
+| `yield from` any iterable, and `return value` of a `Generator[Y, S, R]` | SMT-11, FUN-07 |
+| A generator freed while suspended closes, running its `finally` blocks | FUN-11 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
-Decorators, generators, built-in functions as values, class methods and
-protocol methods as values, and nested functions of generic functions are
-planned for 0.9 (FUN-06 to FUN-10).
+Decorators, built-in functions as values, class methods and protocol
+methods as values, nested functions of generic functions, and functions
+with `*args` or `**kwargs` as values are planned for 0.10 (FUN-06, FUN-08
+to FUN-10, FUN-13).
+
+## Variable numbers of arguments
+
+A parameter written `*args: T` takes the positional arguments left after
+the other parameters as a `tuple[T, ...]`, and one written `**kwargs: T`
+takes the keyword arguments no other parameter names as a
+`dict[str, T]`, in the order the call gives them. The annotation is the
+type of each argument, as in `typing`. A call with nothing left for them
+gives an empty tuple and an empty dict:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(name: str, *tags: str, sep: str = ", ", **sizes: int) -> str:
+    parts = [name, sep.join(tags)]
+    for key in sizes:
+        parts.append(f"{key}={sizes[key]}")
+    return " | ".join(parts)
+
+
+print(describe("box"))
+print(describe("box", "red", "new", sep="/", width=2, height=3))
+```
+
+A call evaluates every argument in source order before it binds them, as
+CPython does, so a keyword that `**kwargs` takes and one a named
+parameter takes run in the order they are written. A keyword that names
+a positional-only parameter goes to `**kwargs`, and so does one that
+names `*args` or `**kwargs` itself.
+
+Methods, `__init__`, nested functions and generic functions take them
+too; a type parameter is solved from the arguments `*args` takes, as in
+`def first[T](*items: T) -> T`. An override keeps the `*args` and
+`**kwargs` of the method it overrides, E0404 (CLS-04). Reading such a
+function as a value, and `*args` or `**kwargs` in a `lambda`, are planned
+for 0.10 (FUN-13); call it from a `lambda` that takes the arguments the
+`Callable` passes. A call may also unpack its arguments; see
+[Unpacking in a call](#unpacking-in-a-call).
+
+## Unpacking in a call
+
+A call of a function, method or class of the program passes each value of
+an iterable written `*iterable` as a positional argument, and each entry
+of a `dict[str, T]` written `**dict` as a keyword argument, as CPython
+does. `print(*values)` writes each value:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(name: str, count: int = 1, *, unit: str = "item") -> str:
+    return f"{count} {unit}(s) of {name}"
+
+
+def total(*numbers: int) -> int:
+    return sum(numbers)
+
+
+def forward(*numbers: int) -> int:
+    return total(*numbers)
+
+
+order = ("apple", 3)
+options = {"unit": "box"}
+values = [1, 2, 3]
+print(describe(*order, **options))
+print(forward(*values), *values, sep=", ")
+```
+
+The items of a tuple of a fixed number of items bind as positional
+arguments would, and are checked as they are. The values of any other
+iterable, and the entries of a dict, bind when the call runs, and a call
+that does not fit raises CPython's `TypeError` with CPython 3.15's
+message, such as `pair() missing 1 required positional argument: 'b'`
+(ADR-0073). A call evaluates every positional argument, each `*iterable`
+read to its end, before its keyword arguments, as CPython does.
+
+From the first `*iterable` of unknown length on, the positional values
+have one type: the one the parameters they may reach share, which each
+value must fit, E0404, or else the first value's, which the others must
+have, E0409, and which must fit each of those parameters. The values of
+the `**` dicts
+have one type too, which must fit each parameter a keyword may still
+fill and the values of `**kwargs`. `*` and `**` in a call of a builtin
+other than `print`, of a function value, of a protocol method or of an
+exception class, and `**` in a call of `print`, are planned for 0.10
+(EXP-19).
 
 ## Nested functions
 
@@ -119,6 +210,186 @@ assigns a variable of the function around it after declaring it
 function again,
 also with a second `def`, is E0202, and a call of it before its `def`
 runs is E0306, where CPython raises `UnboundLocalError`.
+
+## Generators
+
+A function whose body has a `yield` is a generator function. A call of it
+runs none of its body: it gives a generator object, and each step, a turn
+of a `for` loop or a call of `next()`, runs the body from where it last
+stopped to its next `yield`, whose value is the step's item. The
+annotation names the type each `yield` gives, as `typing` reads it:
+`Iterator[T]`, `Iterable[T]` or `Generator[T, S, R]`, from
+`collections.abc` or `typing`. A generator is a value of that type, which
+`for`, `next()`, `list()`, `sum()`, `sorted()` and every function that
+takes an iterable accept:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Iterator
+
+
+def countdown(start: int) -> Iterator[int]:
+    while start > 0:
+        yield start
+        start -= 1
+
+
+def walk(depth: int) -> Iterator[str]:
+    yield "level " + str(depth)
+    if depth > 0:
+        for line in walk(depth - 1):
+            yield "  " + line
+
+
+print(list(countdown(3)), sum(countdown(4)))
+for line in walk(2):
+    print(line)
+```
+
+The generator's variables live in the generator object between steps,
+one allocation whatever the body does, and its `repr` is `<generator
+object NAME at 0x...>`, as in CPython. `next()` of a finished generator
+raises `StopIteration`; `next()` of a generator from inside its own step
+raises `ValueError`, and a `StopIteration` that escapes the body becomes
+`RuntimeError`, as CPython has it. A generator function annotated any
+other way is E0405, and a `yield` outside a function is E0103.
+
+### Sending values to a generator
+
+A generator annotated `Generator[Y, S, R]` has the methods of CPython's
+generators. `send(value)` resumes it with a value of type `S`, which an
+assignment of its `yield` receives, and returns the next item;
+`throw(exception)` raises the exception at the `yield` it stopped at;
+`close()` raises `GeneratorExit` there, so its `finally` blocks run. An
+`Iterator[Y]` or an `Iterable[Y]` has none of them, so a generator
+function you drive with `send` is annotated `Generator`:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Generator
+
+
+def running_total() -> Generator[int, int, None]:
+    total = 0
+    while True:
+        received = yield total
+        if received is not None:
+            total += received
+
+
+totals = running_total()
+print(next(totals))
+print(totals.send(5), totals.send(10))
+totals.close()
+```
+
+`next()` and a `for` loop resume a generator with `None`, and so does
+`send(None)`, so the `yield` of `received = yield total` gives
+`int | None`, and the program tests for `None` before it adds. Type
+checkers give it the type `int`; TyPy gives the type that holds every
+value CPython can give it (ADR-0067). A variable declared `int` that the
+`yield` is assigned to is E0402. `send` takes an `S` only, as type
+checkers have it, so a generator of `Generator[int, int, None]` starts
+with `next()`; `send(None)` to it is E0404. A value other than `None`
+sent before the first step raises `TypeError`, and `send` or `throw`
+after the body ends raises `StopIteration`, as in CPython.
+
+A generator suspended inside an `except` clause keeps the exception it
+handles: its caller does not see it, and the generator handles it again
+when it resumes, as CPython does (ADR-0068).
+
+### Delegating with `yield from`
+
+`yield from source` yields every item of `source`, any iterable, and
+passes on to a generator source what resumes your generator: a value
+`send` gives, an exception `throw` gives, and `close()`. A generator
+annotated `Generator[Y, S, R]` returns a value of type `R` with
+`return value`; `next()` then raises `StopIteration(value)`, and
+`result = yield from source` gets the value:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Generator
+
+
+def averaged() -> Generator[None, float, float]:
+    total = 0.0
+    count = 0
+    while count < 3:
+        value = yield
+        if value is not None:
+            total += value
+            count += 1
+    return total / count
+
+
+def report() -> Generator[None, float, None]:
+    average = yield from averaged()
+    print("average", average)
+
+
+reader = report()
+next(reader)
+for value in [1.0, 2.0, 6.0]:
+    try:
+        reader.send(value)
+    except StopIteration:
+        print("done")
+```
+
+The source's items must fit the `Y` your generator yields, and a
+generator source must receive what yours is sent: the same `S`, or one of
+them `S | None` of the other. A generator that returns nothing gives
+`None`, and so does `yield from` over any other iterable. A value sent on
+to an iterator that is not a generator raises `AttributeError`, as in
+CPython 3.12 (ADR-0072).
+
+### Closing a generator
+
+A generator you stop using before it ends still runs its `finally`
+blocks and the `__exit__` of its `with` statements. When its last
+reference goes while it is suspended, TyPy closes it, as CPython does:
+`GeneratorExit` is raised at its `yield`. A loop that leaves a generator
+early closes it before the statement after the loop:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Iterator
+
+
+def numbers() -> Iterator[int]:
+    try:
+        yield 1
+        yield 2
+    finally:
+        print("cleaned up")
+
+
+for number in numbers():
+    print(number)
+    break
+print("after the loop")
+```
+
+This prints `1`, `cleaned up`, then `after the loop`. A generator in a
+list, a dict, a tuple or an attribute closes when the container goes, in
+the order CPython closes them, and one never started runs nothing. A
+generator in a variable of a function that an exception leaves lives as
+long as the exception, as CPython's traceback keeps the function's
+variables: it closes when the `except` clause that handles the exception
+ends, or after the report of one nothing catches (ADR-0070). A generator
+still suspended in a module variable when the program ends closes then,
+after everything else the program printed: those of the main module
+first, in the order its code binds them, then those of the modules it
+imports (ADR-0071). An
+exception raised while a freed generator closes cannot reach your code:
+it is written to standard error after `Exception ignored in: <generator
+object NAME at 0x...>`, and the program goes on (FUN-11, ADR-0069).
+
+A `yield` is a statement in TyPy: `yield value`, `yield`, and
+`target = yield value`, also with an annotation. One inside a larger
+expression, such as `print((yield value))`, and a generator `lambda` are
+planned for 1.0 (FUN-12).
 
 ## Functions as values
 
@@ -241,8 +512,10 @@ These forms are refused:
 | A generic function as a value, which has one copy for each set of types | E0202 |
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
+| A function, nested function or method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.10 | E0201 (FUN-13) |
+| `*` or `**` in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and `**` in a call of `print`, planned for 0.10 | E0201 (EXP-19) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
-| A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.9 | E0201 (FUN-09) |
+| A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
 | A call of a value that is not a function, such as an `int` | E0401 |
 
 ## Example

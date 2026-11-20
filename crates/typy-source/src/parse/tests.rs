@@ -291,10 +291,7 @@ match v:
 
 #[test]
 fn expressions_beyond_the_release_keep_their_kind() {
-    let cases = [
-        ("(x for x in y)\n", NodeKind::GeneratorExp),
-        ("await x\n", NodeKind::Await),
-    ];
+    let cases = [("await x\n", NodeKind::Await)];
     for (source, expected) in cases {
         assert!(
             matches!(only_expression(source), Expr::Other { kind, .. } if kind == expected),
@@ -512,18 +509,20 @@ f(*args)
     let Stmt::FunctionDef { body: inner, .. } = &statements[1] else {
         panic!("not a function");
     };
-    let kinds: Vec<String> = inner
-        .iter()
-        .map(|statement| match statement {
-            Stmt::Other { kind, .. }
-            | Stmt::Expr {
-                value: Expr::Other { kind, .. },
+    // `yield` and `yield from` are converted in detail (SMT-11).
+    assert!(matches!(
+        inner.as_slice(),
+        [
+            Stmt::Expr {
+                value: Expr::Yield { value: Some(_), .. },
                 ..
-            } => kind.to_string(),
-            other => format!("{other:?}"),
-        })
-        .collect();
-    assert_eq!(kinds, ["Yield", "YieldFrom"]);
+            },
+            Stmt::Expr {
+                value: Expr::YieldFrom { .. },
+                ..
+            },
+        ]
+    ));
 }
 
 #[test]
@@ -1101,4 +1100,37 @@ fn lambda_keeps_its_parameters_and_its_body() {
         .collect();
     assert_eq!(names, [("a", false), ("b", true)]);
     assert!(matches!(*body, Expr::BinOp { .. }));
+}
+
+#[test]
+fn a_generator_expression_keeps_its_element_and_clauses() {
+    let Expr::GeneratorExp {
+        element,
+        generators,
+        ..
+    } = only_expression("(x * 2 for x in y if x for z in x)\n")
+    else {
+        panic!("not a generator expression");
+    };
+    assert!(matches!(*element, Expr::BinOp { .. }));
+    assert_eq!(generators.len(), 2);
+    assert_eq!(generators[0].ifs.len(), 1);
+    assert_eq!(generators[1].ifs.len(), 0);
+}
+
+#[test]
+fn a_starred_item_keeps_its_value_in_a_display_and_a_target() {
+    let Expr::List { elements, .. } = only_expression("[*a, b]\n") else {
+        panic!("not a list display");
+    };
+    assert!(
+        matches!(&elements[0], Expr::Starred { value, .. } if matches!(**value, Expr::Name { .. }))
+    );
+    let Stmt::Assign { targets, .. } = body("first, *rest = items\n").remove(0) else {
+        panic!("not an assignment");
+    };
+    let [Expr::Tuple { elements, .. }] = targets.as_slice() else {
+        panic!("not a tuple target");
+    };
+    assert!(matches!(elements[1], Expr::Starred { .. }));
 }

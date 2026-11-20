@@ -57,6 +57,8 @@ impl TypeId {
     /// capture it share (FUN-04, ADR-0061). Type ID 25 is a bound method's, which shares the
     /// `FUNCTION` type of TyIR.
     pub const CELL: Self = Self(26);
+    /// A generator object: its state, its current item and its frame (SMT-11, ADR-0063).
+    pub const GENERATOR: Self = Self(27);
     /// The first ID of the program's classes; class `n` of the module is this plus `n`.
     const FIRST_CLASS: u32 = 1 << 16;
 
@@ -159,6 +161,8 @@ impl TyirType {
     pub const FUNCTION: Self = Self::Object(TypeId::FUNCTION);
     /// A cell (FUN-04).
     pub const CELL: Self = Self::Object(TypeId::CELL);
+    /// A generator object (SMT-11).
+    pub const GENERATOR: Self = Self::Object(TypeId::GENERATOR);
 }
 
 impl fmt::Display for TyirType {
@@ -189,6 +193,7 @@ impl fmt::Display for TyirType {
             Self::Object(TypeId::CDATA) => formatter.write_str("cdata"),
             Self::Object(TypeId::FUNCTION) => formatter.write_str("function"),
             Self::Object(TypeId::CELL) => formatter.write_str("cell"),
+            Self::Object(TypeId::GENERATOR) => formatter.write_str("generator"),
             Self::Bits => formatter.write_str("bits"),
             Self::Object(id) if id.class_index().is_some() => {
                 write!(formatter, "class#{}", id.class_index().unwrap_or(0))

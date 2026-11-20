@@ -26,6 +26,7 @@ pub(crate) struct Statics<'ctx> {
     function_objects: BTreeMap<u32, PointerValue<'ctx>>,
     method_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     closure_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
+    generator_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -44,6 +45,7 @@ impl<'ctx> Statics<'ctx> {
             function_objects: BTreeMap::new(),
             method_descriptors: BTreeMap::new(),
             closure_descriptors: BTreeMap::new(),
+            generator_descriptors: BTreeMap::new(),
         }
     }
 
@@ -55,6 +57,16 @@ impl<'ctx> Statics<'ctx> {
     /// Records the descriptor of nested function `id`.
     pub(crate) fn add_closure_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
         self.closure_descriptors.insert(id, pointer);
+    }
+
+    /// Returns the descriptor of the resume function `id`, if it was emitted already (SMT-11).
+    pub(crate) fn generator_descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.generator_descriptors.get(&id).copied()
+    }
+
+    /// Records the descriptor of the resume function `id`.
+    pub(crate) fn add_generator_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.generator_descriptors.insert(id, pointer);
     }
 
     /// Returns the bound method descriptor of method `id`, if it was emitted already.

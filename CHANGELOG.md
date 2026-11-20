@@ -6,6 +6,100 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-20
+
+### Added
+
+- Generator functions: a function whose body has a `yield` statement makes
+  a generator when it is called, annotated `Iterator[T]`, `Iterable[T]` or
+  `Generator[T, S, R]` of `collections.abc` or `typing`. Each step, a turn
+  of `for` or a call of `next()`, runs the body to its next `yield`, and
+  `list()`, `sum()` and every builtin that takes an iterable take a
+  generator. The generator's variables live in one allocation between
+  steps, and `next()` of a running generator and a `StopIteration` its
+  body raises give CPython's `ValueError` and `RuntimeError` (SMT-11,
+  FUN-07, ADR-0063).
+- `send`, `throw` and `close` of a `Generator[Y, S, R]`, and
+  `received = yield value`, whose `yield` gives `S | None`, since
+  `next()` and `for` resume a generator with `None` (ADR-0067). A value
+  sent before the first step, a step after the end, and a generator that
+  yields after `close()` raise CPython's `TypeError`, `StopIteration` and
+  `RuntimeError` (SMT-11, FUN-07, FUN-11).
+- Unpacking any iterable into targets, `first, second = items`, checked
+  as the program runs with CPython 3.15's `ValueError`, and a starred
+  target that takes the rest as a list, `first, *rest = items` (SMT-02,
+  EXP-17).
+- `*iterable` in list, set and tuple displays, and `**dict` in dict
+  displays (EXP-17).
+- `*args: T` and `**kwargs: T` parameters, which take the arguments left
+  over as a `tuple[T, ...]` and a `dict[str, T]`, after every argument of
+  the call is evaluated in source order, as in CPython (EXP-17). A
+  function, nested function or method with them as a value, and a
+  `lambda` with them, are planned for 0.10 (FUN-13).
+- `Generator` of `typing` or `collections.abc` as the class of
+  `isinstance`, and of `collections.abc` in a class pattern, and a value
+  held as an `Iterable[T]` tested against `Iterator`, answered by the
+  object it holds; a true test reads it as an `Iterator[T]` (TYP-21).
+- A class whose `__next__` returns `T` and whose `__iter__` returns the
+  instance is an `Iterator[T]`, and a class whose `__iter__` returns an
+  iterator is an `Iterable[T]`, as `typing` reads the protocols: its
+  instances are passed and held where those are expected, and a loop,
+  `next()` and every builtin that reads an iterable call its methods as
+  CPython does (TYP-20, ADR-0065).
+- `*iterable` and `**dict` in a call of the program's functions, methods
+  and classes, and `*iterable` in `print`. A tuple of a fixed number of
+  items binds as its items would; anything else binds when the call runs,
+  with CPython 3.15's `TypeError` for a call that does not fit (EXP-17,
+  ADR-0073). Unpacking in a call of another builtin, of a function value,
+  of a protocol method or of an exception class is planned for 0.10
+  (EXP-19).
+- Generator expressions, `(element for target in source if condition)`:
+  a `Generator[Y, None, None]` whose first iterable runs where the
+  expression runs and the rest as it runs, reading the variables around it
+  as a nested function does (EXP-15). An assignment expression inside one
+  is planned for 1.0 (EXP-18).
+- `yield from` any iterable, passing on `send`, `throw` and `close()` to a
+  generator it delegates to, and `return value` in a generator annotated
+  `Generator[Y, S, R]`: `StopIteration(value)` ends it, and `result =
+  yield from source` gets the value (SMT-11, FUN-07, ADR-0072).
+- A generator freed while it is suspended is closed, as CPython closes
+  it: `break` out of a loop over it, the end of a function that holds it
+  and a container that drops it run its `finally` blocks and the
+  `__exit__` of its `with` statements, in CPython's order. An exception
+  raised meanwhile is written to standard error after `Exception ignored
+  in:`, and the program goes on (FUN-11, ADR-0069). A generator in a
+  variable of a function that an exception leaves closes when the
+  exception goes, as CPython's traceback keeps it (ADR-0070), and one in a
+  module variable closes when the program ends (ADR-0071).
+- A `yield` inside an `except` clause or a `finally` block. The exception
+  a suspended generator handles stays with it, so an exception its caller
+  raises meanwhile has the caller's own context, as in CPython (ADR-0068).
+
+### Fixed
+
+- A class pattern of `Iterator` over a union that holds an iterator, such
+  as `list[int] | Iterator[int]`, matches the iterator, where TyPy
+  reported that it never matches.
+- A generator or an iterator passed where a union holding an
+  `Iterable[T]` is expected no longer stops the compiler with an internal
+  error.
+- `bool()` of an iterator, and an iterator as the condition of `if` or
+  `while`, no longer stop the compiler with an internal error; an
+  iterator is true, as in CPython.
+
+### Changed
+
+- A class pattern that names `Iterable`, `Iterator`, `Generator`, `List`,
+  `Dict`, `Set`, `Tuple`, `Type`, `Optional` or `Union` of `typing` is
+  E0401, since CPython raises `TypeError` for it; name the class of
+  `collections.abc` or the built-in type instead.
+- `Sequence`, `Mapping` and the other abstract collections of
+  `collections.abc`, decorators, built-in functions, class methods and
+  protocol methods as values, nested functions inside generic functions,
+  `NamedTuple`, `isinstance` with a class held in a variable,
+  `issubclass`, and `typing` names as values are given as planned for
+  0.10, where TyPy 0.8 named 0.9.
+
 ## [0.8.0] - 2026-11-19
 
 ### Added
@@ -1296,7 +1390,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/typy-lang/typy/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/typy-lang/typy/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/typy-lang/typy/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/typy-lang/typy/compare/v0.5.0...v0.6.0

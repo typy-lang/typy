@@ -139,6 +139,20 @@ impl Dump<'_> {
                 let parts: Vec<String> = targets.iter().map(|target| self.target(target)).collect();
                 format!("({})", parts.join(", "))
             }
+            AssignTarget::Unpack {
+                before,
+                rest,
+                after,
+                ..
+            } => {
+                let mut parts: Vec<String> =
+                    before.iter().map(|target| self.target(target)).collect();
+                if let Some(rest) = rest {
+                    parts.push(format!("*{}", self.target(rest)));
+                }
+                parts.extend(after.iter().map(|target| self.target(target)));
+                format!("unpack ({})", parts.join(", "))
+            }
             AssignTarget::Item { list, .. } => format!("item of {}", list.ty),
             AssignTarget::Slice { list, .. } => format!("slice of {}", list.ty),
             AssignTarget::Entry { dict, .. } => format!("entry of {}", dict.ty),
@@ -181,6 +195,30 @@ impl Dump<'_> {
             TypedStmt::Expr { value, span } => {
                 self.line(depth, "Expr", *span);
                 self.expression(depth + 1, value);
+            }
+            TypedStmt::Yield {
+                value,
+                received,
+                span,
+            } => {
+                self.line(depth, "Yield", *span);
+                self.expression(depth + 1, value);
+                if let Some(received) = received {
+                    self.statement(depth + 1, received);
+                }
+            }
+            TypedStmt::YieldFrom {
+                source,
+                item,
+                received,
+                span,
+            } => {
+                self.line(depth, "YieldFrom", *span);
+                self.expression(depth + 1, source);
+                self.expression(depth + 1, item);
+                if let Some(received) = received {
+                    self.statement(depth + 1, received);
+                }
             }
             TypedStmt::Return { value, span } => {
                 self.line(depth, "Return", *span);
@@ -464,6 +502,11 @@ impl Dump<'_> {
             TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
             TypedExprKind::Capture(index) => format!("Capture {index}"),
             TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
+            TypedExprKind::Received => "Received".to_owned(),
+            TypedExprKind::DelegatedItem => "DelegatedItem".to_owned(),
+            TypedExprKind::Spread { kind, .. } => format!("Spread {kind:?}"),
+            TypedExprKind::DictSpread(_) => "DictSpread".to_owned(),
+            TypedExprKind::DelegatedResult => "DelegatedResult".to_owned(),
             TypedExprKind::CellRead(symbol) => {
                 format!("CellRead {}", self.program.symbol(*symbol).name)
             }
@@ -502,6 +545,7 @@ impl Dump<'_> {
             }
             .to_owned(),
             TypedExprKind::AsIterable(_) => "AsIterable".to_owned(),
+            TypedExprKind::AsIterator(_) => "AsIterator".to_owned(),
             TypedExprKind::MathCall { function, .. } => format!("MathCall {}", function.name()),
             TypedExprKind::SysValue(value) => format!("SysValue {value:?}"),
             TypedExprKind::ForeignLibrary(index) => {

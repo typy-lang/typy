@@ -137,7 +137,7 @@ fn each_call_ctypes_would_refuse_is_an_error_where_it_is_compiled() {
         ),
         (
             "x = ctypes.POINTER\n",
-            "E0201 using `ctypes.POINTER` as a value is planned for TyPy 0.9 (FUN-08)",
+            "E0201 using `ctypes.POINTER` as a value is planned for TyPy 0.10 (FUN-08)",
         ),
         (
             "def load() -> None:\n    other = ctypes.CDLL(\"libm.so.6\")\n",

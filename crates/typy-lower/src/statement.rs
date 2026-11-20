@@ -68,6 +68,7 @@ impl FunctionLowerer<'_> {
                         ),
                     },
                     typy_check::AssignTarget::Tuple(_)
+                    | typy_check::AssignTarget::Unpack { .. }
                     | typy_check::AssignTarget::CData { .. }
                     | typy_check::AssignTarget::Slice { .. }
                     | typy_check::AssignTarget::Lazy { .. }
@@ -80,6 +81,21 @@ impl FunctionLowerer<'_> {
                 let lowered = self.expression(value);
                 self.release(lowered, *span);
             }
+            TypedStmt::Yield {
+                value,
+                received,
+                span,
+            } => self.yield_value(value, received.as_deref(), *span),
+            TypedStmt::Return {
+                value: Some(value),
+                span,
+            } if self.generator.is_some() => self.generator_return(value, *span),
+            TypedStmt::YieldFrom {
+                source,
+                item,
+                received,
+                span,
+            } => self.yield_from(source, item, received.as_deref(), *span),
             TypedStmt::Return { value, span } => {
                 // A returned variable hands its slot's reference to the caller (MEM-04), unless
                 // an `except` clause is open, whose cleanup may release the variable's value.

@@ -57,4 +57,9 @@ pub struct TypedClass {
     /// Whether the class has no instances: a generic class, or a copy whose type arguments
     /// hold a type parameter, which is checked and never laid out (ADR-0028).
     pub opaque: bool,
+    /// Whether its instances are iterators, whose `__next__` the runtime calls (TYP-20).
+    pub steps: bool,
+    /// Whether its instances are iterators or iterables, whose `__iter__` the runtime calls
+    /// (TYP-20).
+    pub iterates: bool,
 }

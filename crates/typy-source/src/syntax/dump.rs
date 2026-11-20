@@ -498,15 +498,20 @@ impl Dump<'_> {
                 generators,
                 ..
             }
+            | Expr::GeneratorExp {
+                element,
+                generators,
+                ..
+            }
             | Expr::SetComp {
                 element,
                 generators,
                 ..
             } => {
-                let label = if matches!(expression, Expr::ListComp { .. }) {
-                    "ListComp"
-                } else {
-                    "SetComp"
+                let label = match expression {
+                    Expr::ListComp { .. } => "ListComp",
+                    Expr::GeneratorExp { .. } => "GeneratorExp",
+                    _ => "SetComp",
                 };
                 self.comprehension(depth, label, &[element], generators, span);
             }
@@ -522,6 +527,10 @@ impl Dump<'_> {
                 self.line(depth, &format!("Attribute {}", attribute.name), span);
                 self.expression(depth + 1, value);
             }
+            Expr::Starred { value, .. } => {
+                self.line(depth, "Starred", span);
+                self.expression(depth + 1, value);
+            }
             Expr::Slice {
                 lower, upper, step, ..
             } => {
@@ -532,6 +541,16 @@ impl Dump<'_> {
             }
             Expr::Named { target, value, .. } => {
                 self.line(depth, &format!("Named {}", target.name), span);
+                self.expression(depth + 1, value);
+            }
+            Expr::Yield { value, .. } => {
+                self.line(depth, "Yield", span);
+                if let Some(value) = value {
+                    self.expression(depth + 1, value);
+                }
+            }
+            Expr::YieldFrom { value, .. } => {
+                self.line(depth, "YieldFrom", span);
                 self.expression(depth + 1, value);
             }
             Expr::Lambda {

@@ -51,6 +51,12 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
                 self.invoke(*callee, arguments, *normal, *error, *span, current)?;
             }
             Terminator::Return(value) => self.return_value(Some(*value), None)?,
+            Terminator::Resume {
+                generator,
+                start,
+                points,
+            } => self.resume(*generator, *start, points)?,
+            Terminator::Yield { generator, resume } => self.suspend(*generator, *resume)?,
             Terminator::ReturnError(exception) => self.return_value(None, Some(*exception))?,
             Terminator::Unreachable => {
                 self.builder.build_unreachable()?;
@@ -171,10 +177,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             Callee::Runtime(function) => {
                 let runtime = runtime_function(self.shared.context, self.shared.module, function);
                 let arguments = self.arguments(arguments)?;
-                (
-                    self.builder.build_call(runtime, &arguments, "")?,
-                    function.signature().result,
-                )
+                let call = self.builder.build_call(runtime, &arguments, "")?;
+                if crate::operation::drops_objects(function) {
+                    self.close_dropped()?;
+                }
+                (call, function.signature().result)
             }
             Callee::Function(id) => {
                 let arguments = self.arguments(arguments)?;

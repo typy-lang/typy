@@ -603,7 +603,24 @@ fn setting_the_arguments_replaces_and_releases_the_old_ones() {
 }
 
 #[test]
-fn the_fixed_part_of_an_exception_is_eighty_bytes() {
+fn the_fixed_part_of_an_exception_is_ninety_six_bytes() {
     // The compiler's `EXCEPTION_PREFIX` places a class's attributes after this many bytes.
-    assert_eq!(super::PREFIX, 80);
+    assert_eq!(super::PREFIX, 96);
+}
+
+#[test]
+fn fun_11_a_traceback_keeps_what_a_frame_gave_it_until_the_exception_goes() {
+    let kept = from_str("variable");
+    let exception = raise(ExceptionKind::ValueError, "kept");
+    // SAFETY: both objects are live, and the test gives the traceback a reference of its own.
+    unsafe {
+        crate::refcount::typy_rt_increment(kept.cast());
+        super::typy_rt_exception_keep(exception, kept.expose_provenance() as u64);
+        // The bits of `None` keep nothing.
+        super::typy_rt_exception_keep(exception, 0);
+        assert_eq!((*kept).header.reference_count, 2);
+        crate::refcount::typy_rt_decrement(exception.cast());
+        assert_eq!((*kept).header.reference_count, 1);
+        crate::refcount::typy_rt_decrement(kept.cast());
+    }
 }

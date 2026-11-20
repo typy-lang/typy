@@ -164,6 +164,7 @@ impl BodyChecker<'_> {
             Err(error) => return error,
         };
         let mut all = vec![Argument {
+            passed: crate::typed::Passed::Position,
             parameter: 0,
             value: instance,
         }];
@@ -226,6 +227,7 @@ impl BodyChecker<'_> {
             match self.bind_arguments(function, 1, &qualified, arguments, keywords, span) {
                 Ok(bound) => {
                     let mut all = vec![Argument {
+                        passed: crate::typed::Passed::Position,
                         parameter: 0,
                         value: instance,
                     }];

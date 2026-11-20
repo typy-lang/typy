@@ -18,6 +18,9 @@ impl BodyChecker<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> TypedExpr {
+        if super::expression::has_starred(elements) {
+            return self.spread_display(crate::typed::SpreadKind::Set, elements, expected, span);
+        }
         let expected_item = match expected {
             Some(Type::Set(item)) => Some(item.as_ref().clone()),
             // The expected type already has its error, so the display gives no second one.

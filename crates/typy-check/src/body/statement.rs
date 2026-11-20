@@ -58,6 +58,34 @@ impl BodyChecker<'_> {
     #[allow(clippy::too_many_lines, reason = "one arm per statement kind")]
     pub(super) fn statement(&mut self, statement: &Stmt) -> Option<TypedStmt> {
         Some(match statement {
+            Stmt::Expr {
+                value: Expr::Yield { value, .. },
+                span,
+            } => self.yield_statement(value.as_deref(), *span),
+            Stmt::Assign {
+                value: value @ Expr::Yield { .. },
+                span,
+                ..
+            }
+            | Stmt::AnnAssign {
+                value: Some(value @ Expr::Yield { .. }),
+                span,
+                ..
+            } if self.received.is_none() => self.yield_assignment(statement, value, *span),
+            Stmt::Expr {
+                value: Expr::YieldFrom { value, .. },
+                span,
+            } => self.yield_from_statement(value, None, *span),
+            Stmt::Assign {
+                value: value @ Expr::YieldFrom { .. },
+                span,
+                ..
+            }
+            | Stmt::AnnAssign {
+                value: Some(value @ Expr::YieldFrom { .. }),
+                span,
+                ..
+            } if self.received.is_none() => self.yield_from_assignment(statement, value, *span),
             Stmt::Assign {
                 targets,
                 value,
@@ -618,7 +646,11 @@ impl BodyChecker<'_> {
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         self.check_instance_complete(span);
         self.check_stays_in_finally("return", span);
-        let expected = self.returns.clone().unwrap_or(Type::NoneType);
+        // A generator's `return value` gives the `R` of `Generator[Y, S, R]` (FUN-07).
+        let generator = self.generator.as_ref().map(|types| types.returns.clone());
+        let expected = generator
+            .clone()
+            .unwrap_or_else(|| self.returns.clone().unwrap_or(Type::NoneType));
         // A result of no known type, such as that of a `lambda` whose context gives none,
         // takes the value as it is (EXP-14).
         let known = (expected != Type::Error).then_some(&expected);
@@ -631,17 +663,30 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(405),
                 value.as_ref().map_or(span, |value| value.span),
                 format!(
-                    "this returns {}, but the function returns {expected}",
-                    actual.with_article()
+                    "this returns {}, but the {} returns {expected}",
+                    actual.with_article(),
+                    if generator.is_some() {
+                        "generator"
+                    } else {
+                        "function"
+                    }
                 ),
             )
             .with_rule(if expected == Type::Float && actual == Type::Int {
                 RuleId::TYP_09
+            } else if generator.is_some() {
+                RuleId::FUN_07
             } else {
                 RuleId::TYP_01
             });
             if let Some(help) = self.protocol_help(&actual, &expected) {
                 diagnostic = diagnostic.with_help(help);
+            }
+            if generator == Some(Type::NoneType) {
+                diagnostic = diagnostic.with_help(
+                    "a generator returns a value when it is annotated `-> Generator[Y, S, R]`, \
+                     whose `R` the value has",
+                );
             }
             if actual == Type::NotImplemented {
                 diagnostic = diagnostic.with_help(
@@ -661,6 +706,11 @@ impl BodyChecker<'_> {
             self.diagnostics.push(diagnostic);
         }
         self.assigned = None;
+        // A generator keeps the value as its result, held as the type it returns.
+        let value = match generator {
+            Some(returns) => value.map(|value| Self::converted(value, Some(&returns))),
+            None => value,
+        };
         TypedStmt::Return { value, span }
     }
 }
@@ -729,6 +779,7 @@ fn target_names<'tree>(target: &'tree Expr, names: &mut BTreeSet<&'tree str>) {
                 target_names(element, names);
             }
         }
+        Expr::Starred { value, .. } => target_names(value, names),
         _ => {}
     }
 }

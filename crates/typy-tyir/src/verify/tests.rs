@@ -29,6 +29,7 @@ fn module(function: TyirFunction) -> TyirModule {
         str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
+        finish: FunctionId(0),
         allocator: crate::module::TyirAllocator::default(),
         foreign_libraries: Vec::new(),
         foreign_functions: Vec::new(),
@@ -500,6 +501,7 @@ fn every_operation() -> TyirModule {
         str_points: Vec::new(),
         classes: Vec::new(),
         entry: FunctionId(0),
+        finish: FunctionId(0),
         allocator: crate::module::TyirAllocator::default(),
         foreign_libraries: Vec::new(),
         foreign_functions: Vec::new(),
@@ -1189,4 +1191,173 @@ fn fun_04_a_cell_of_another_layout_or_value_fails() {
         *cell = ValueId(0);
     }
     assert!(message(&not_a_cell).contains("the cell"));
+}
+
+/// A resume function that yields 1 and then 2, through a slot, or, with `crossing`, through a
+/// value of the first step that the second reads.
+fn resume_function(crossing: bool) -> TyirFunction {
+    let mut builder = FunctionBuilder::new(
+        FunctionId(0),
+        "_TY8__main__5count.<generator>",
+        "count",
+        TyirType::Unit,
+    );
+    builder.set_may_raise(true);
+    let generator = builder.add_parameter(TyirType::GENERATOR);
+    let slot = builder.add_slot("n", TyirType::Int);
+    let start = builder.create_block();
+    let resume = builder.create_block();
+    builder.switch_to(start);
+    let one = builder.push_value(
+        Operation::Constant(Constant::Int("1".to_owned())),
+        TyirType::Int,
+        span(),
+    );
+    builder.push(Operation::Store { slot, value: one }, span());
+    let item = builder.push_value(Operation::ToBits(one), TyirType::Bits, span());
+    builder.push(Operation::SetGeneratorItem { generator, item }, span());
+    builder.terminate(Terminator::Yield { generator, resume });
+    builder.switch_to(resume);
+    let kept = if crossing {
+        one
+    } else {
+        builder.push_value(Operation::Load(slot), TyirType::Int, span())
+    };
+    let item = builder.push_value(Operation::ToBits(kept), TyirType::Bits, span());
+    builder.push(Operation::SetGeneratorItem { generator, item }, span());
+    let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+    builder.terminate(Terminator::Return(unit));
+    builder.switch_to(BlockId(0));
+    builder.terminate(Terminator::Resume {
+        generator,
+        start,
+        points: vec![resume],
+    });
+    builder.set_generator(crate::function::GeneratorFrame {
+        arguments: Vec::new(),
+        closure: false,
+        yields: TyirType::Int,
+        frame: crate::types::TupleTypeId(0),
+        result: None,
+    });
+    builder.finish()
+}
+
+#[test]
+fn smt_11_a_resume_function_keeps_what_outlives_a_yield_in_its_slots() {
+    let mut valid = module(resume_function(false));
+    valid.tuple_types.intern_id(vec![TyirType::Int]);
+    assert_eq!(verify(&valid), Ok(()));
+    // A value of one step is gone in the next, which starts at the function's entry.
+    let mut crossing = module(resume_function(true));
+    crossing.tuple_types.intern_id(vec![TyirType::Int]);
+    let error = verify(&crossing).unwrap_err();
+    assert!(
+        error
+            .message
+            .contains("is used where its definition may not have run"),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn smt_11_a_yield_resumes_only_where_the_entry_says_and_only_a_resume_function_resumes() {
+    let mut function = resume_function(false);
+    if let Terminator::Resume { points, .. } = &mut function.blocks[0].terminator {
+        points.clear();
+    }
+    let error = verify(&module(function)).unwrap_err();
+    assert!(
+        error.message.contains("the entry does not list"),
+        "{error:?}"
+    );
+    let mut function = resume_function(false);
+    function.generator = None;
+    let error = verify(&module(function)).unwrap_err();
+    assert!(
+        error.message.contains("only a resume function resumes"),
+        "{error:?}"
+    );
+}
+
+/// A resume function whose second step reads what the step was given: the exception
+/// `throw` raises, whether `send` gave a value and its bits, and the exception the caller
+/// was handling; with `wrong`, each reads them from an `int` instead of the generator.
+fn resume_reads(wrong: bool) -> TyirModule {
+    let mut builder = FunctionBuilder::new(
+        FunctionId(0),
+        "_TY8__main__4echo.<generator>",
+        "echo",
+        TyirType::Unit,
+    );
+    builder.set_may_raise(true);
+    let generator = builder.add_parameter(TyirType::GENERATOR);
+    let start = builder.create_block();
+    let resume = builder.create_block();
+    builder.switch_to(start);
+    let one = builder.push_value(
+        Operation::Constant(Constant::Int("1".to_owned())),
+        TyirType::Int,
+        span(),
+    );
+    let item = builder.push_value(Operation::ToBits(one), TyirType::Bits, span());
+    builder.push(Operation::SetGeneratorItem { generator, item }, span());
+    builder.terminate(Terminator::Yield { generator, resume });
+    builder.switch_to(resume);
+    let reader = if wrong {
+        builder.push_value(
+            Operation::Constant(Constant::Int("2".to_owned())),
+            TyirType::Int,
+            span(),
+        )
+    } else {
+        generator
+    };
+    let exception = TyirType::Optional(crate::types::OptionalBase::Object(
+        crate::types::TypeId::EXCEPTION,
+    ));
+    builder.push_value(
+        Operation::GeneratorThrown { generator: reader },
+        exception,
+        span(),
+    );
+    builder.push_value(
+        Operation::GeneratorReceived { generator: reader },
+        TyirType::Bool,
+        span(),
+    );
+    builder.push_value(
+        Operation::GeneratorSent { generator: reader },
+        TyirType::Bits,
+        span(),
+    );
+    builder.push_value(
+        Operation::GeneratorCaller { generator: reader },
+        TyirType::Bits,
+        span(),
+    );
+    let unit = builder.push_value(Operation::Constant(Constant::Unit), TyirType::Unit, span());
+    builder.terminate(Terminator::Return(unit));
+    builder.switch_to(BlockId(0));
+    builder.terminate(Terminator::Resume {
+        generator,
+        start,
+        points: vec![resume],
+    });
+    builder.set_generator(crate::function::GeneratorFrame {
+        arguments: Vec::new(),
+        closure: false,
+        yields: TyirType::Int,
+        frame: crate::types::TupleTypeId(0),
+        result: None,
+    });
+    let mut module = module(builder.finish());
+    module.tuple_types.intern_id(Vec::new());
+    module
+}
+
+#[test]
+fn fun_07_a_step_reads_what_it_was_given_from_its_generator() {
+    assert_eq!(verify(&resume_reads(false)), Ok(()));
+    assert!(message(&resume_reads(true)).contains("the generator"));
 }

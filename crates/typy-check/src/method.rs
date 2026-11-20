@@ -213,6 +213,14 @@ pub enum Method {
     TextTell,
     /// `file.truncate(pos=None)`: cuts or extends the file to `pos` bytes or its position.
     TextTruncate,
+    /// `generator.send(value)`: resumes the generator, whose `yield` receives the value, and
+    /// returns what it yields next (FUN-07).
+    GeneratorSend,
+    /// `generator.throw(exception)`: raises the exception at the generator's `yield` and
+    /// returns what it yields next.
+    GeneratorThrow,
+    /// `generator.close()`: raises `GeneratorExit` at the generator's `yield` (FUN-11).
+    GeneratorClose,
 }
 
 /// The methods of `str` that `bytes` has too, with ASCII meaning.
@@ -393,6 +401,14 @@ impl Method {
                 _ => None,
             };
         }
+        if let Type::Generator { .. } = receiver {
+            return match name {
+                "send" => Some(Self::GeneratorSend),
+                "throw" => Some(Self::GeneratorThrow),
+                "close" => Some(Self::GeneratorClose),
+                _ => None,
+            };
+        }
         if let Type::TupleOf(_) = receiver {
             return match name {
                 "index" => Some(Self::TupleIndex),
@@ -503,7 +519,7 @@ impl Method {
             Self::TextReadline => "readline",
             Self::TextReadlines => "readlines",
             Self::TextWritelines => "writelines",
-            Self::TextClose => "close",
+            Self::TextClose | Self::GeneratorClose => "close",
             Self::TextFileno => "fileno",
             Self::TextIsatty => "isatty",
             Self::TextReadable => "readable",
@@ -512,6 +528,8 @@ impl Method {
             Self::TextSeek => "seek",
             Self::TextTell => "tell",
             Self::TextTruncate => "truncate",
+            Self::GeneratorSend => "send",
+            Self::GeneratorThrow => "throw",
         }
     }
 }

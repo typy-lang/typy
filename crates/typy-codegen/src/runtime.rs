@@ -33,6 +33,8 @@ pub(crate) enum Internal {
     IntCompare,
     /// Adds a traceback entry to an exception: function name, file name and line.
     TracebackAdd,
+    /// Closes the generators freed while suspended (FUN-11).
+    GeneratorCloseDropped,
 }
 
 impl Internal {
@@ -52,6 +54,7 @@ impl Internal {
             Self::IntInvert => "typy_rt_int_invert",
             Self::IntCompare => "typy_rt_int_compare",
             Self::TracebackAdd => "typy_rt_traceback_add",
+            Self::GeneratorCloseDropped => "typy_rt_generator_close_dropped",
         }
     }
 }
@@ -109,6 +112,7 @@ pub(crate) fn internal_function<'ctx>(
         Internal::IntIncrement | Internal::IntDecrement => {
             context.void_type().fn_type(&[word.into()], false)
         }
+        Internal::GeneratorCloseDropped => context.void_type().fn_type(&[], false),
         Internal::IntNegate | Internal::IntInvert => word.fn_type(&[word.into()], false),
         Internal::IntCompare => function_type(
             context,

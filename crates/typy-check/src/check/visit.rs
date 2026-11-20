@@ -94,7 +94,8 @@ pub(crate) fn visit_statement(statement: &Stmt, visit: &mut dyn FnMut(&Expr)) {
     }
 }
 
-pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) {
+#[allow(clippy::too_many_lines, reason = "one arm per expression kind")]
+pub(crate) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) {
     visit(expression);
     match expression {
         Expr::BoolOp { values, .. }
@@ -110,6 +111,11 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
             .iter()
             .for_each(|value| visit_expression(value, visit)),
         Expr::ListComp {
+            element,
+            generators,
+            ..
+        }
+        | Expr::GeneratorExp {
             element,
             generators,
             ..
@@ -145,7 +151,14 @@ pub(super) fn visit_expression(expression: &Expr, visit: &mut dyn FnMut(&Expr)) 
         Expr::UnaryOp { operand, .. } | Expr::Attribute { value: operand, .. } => {
             visit_expression(operand, visit);
         }
-        Expr::Named { value, .. } => visit_expression(value, visit),
+        Expr::Named { value, .. } | Expr::YieldFrom { value, .. } | Expr::Starred { value, .. } => {
+            visit_expression(value, visit);
+        }
+        Expr::Yield { value, .. } => {
+            if let Some(value) = value {
+                visit_expression(value, visit);
+            }
+        }
         // A `lambda`'s body is a scope of its own; its defaults are evaluated where it runs.
         Expr::Lambda { parameters, .. } => visit_defaults(parameters, visit),
         Expr::IfExp {

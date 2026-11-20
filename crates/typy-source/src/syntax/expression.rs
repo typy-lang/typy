@@ -96,6 +96,16 @@ pub enum Expr {
         value: Box<Expr>,
         span: Span,
     },
+    /// `yield` or `yield value`, which suspends a generator (SMT-11).
+    Yield {
+        value: Option<Box<Expr>>,
+        span: Span,
+    },
+    /// `yield from iterable`, which yields each item of the iterable (SMT-11).
+    YieldFrom {
+        value: Box<Expr>,
+        span: Span,
+    },
     /// `lambda parameters: body`, a function of one expression (EXP-14). Its parameters
     /// have no annotations.
     Lambda {
@@ -161,6 +171,17 @@ pub enum Expr {
         generators: Vec<Comprehension>,
         span: Span,
     },
+    /// `*value`, an iterable unpacked into a display or an unpacking target (EXP-17).
+    Starred {
+        value: Box<Expr>,
+        span: Span,
+    },
+    /// `(element for ...)`, a generator expression (EXP-15).
+    GeneratorExp {
+        element: Box<Expr>,
+        generators: Vec<Comprehension>,
+        span: Span,
+    },
     /// `{element for ...}`.
     SetComp {
         element: Box<Expr>,
@@ -207,6 +228,8 @@ impl Expr {
             | Self::IfExp { span, .. }
             | Self::Named { span, .. }
             | Self::Lambda { span, .. }
+            | Self::Yield { span, .. }
+            | Self::YieldFrom { span, .. }
             | Self::Compare { span, .. }
             | Self::Call { span, .. }
             | Self::Constant { span, .. }
@@ -219,6 +242,8 @@ impl Expr {
             | Self::Set { span, .. }
             | Self::Dict { span, .. }
             | Self::ListComp { span, .. }
+            | Self::GeneratorExp { span, .. }
+            | Self::Starred { span, .. }
             | Self::SetComp { span, .. }
             | Self::DictComp { span, .. }
             | Self::Attribute { span, .. }

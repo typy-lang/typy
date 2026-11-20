@@ -70,55 +70,40 @@ fn later_features_name_their_release_and_rule() {
     let cases = [
         (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 0.9 (FUN-06)",
+            "class decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
             "@decorated\nclass C[T]:\n    pass\n",
-            "class decorators are planned for TyPy 0.9 (FUN-06)",
-        ),
-        (
-            "x = {**y}\n",
-            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
+            "class decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
             "x = [i async for i in y]\n",
             "`async` and `await` are planned for a release after TyPy 1.0",
         ),
         (
-            "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 0.9 (EXP-15)",
-        ),
-        (
             "def f[*Ts](x: int) -> int:\n    return x\n",
             "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
         ),
         (
-            "x = (i for i in range(3))\n",
-            "generator expressions are planned for TyPy 0.9 (EXP-15)",
-        ),
-        (
             "@d\ndef f() -> None:\n    pass\n",
-            "decorators are planned for TyPy 0.9 (FUN-06)",
+            "decorators are planned for TyPy 0.10 (FUN-06)",
         ),
         (
-            "def f(*a: int) -> None:\n    pass\n",
-            "`*args` and `**kwargs` parameters are planned for TyPy 0.9 (EXP-17)",
+            "f = lambda *a: 0\n",
+            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.10 (FUN-13)",
         ),
         (
             "def f(a: int = g()) -> None:\n    pass\n",
             "default values other than constants are planned for TyPy 1.0 (EXP-16)",
         ),
         (
-            "print(*x)\n",
-            "unpacking with `*` are planned for TyPy 0.9 (EXP-17)",
+            "def f() -> None:\n    print((yield 1))\n",
+            "`yield` and `yield from` inside a larger expression are planned for TyPy 1.0 \
+             (FUN-12)",
         ),
         (
-            "print(**x)\n",
-            "unpacking with `**` are planned for TyPy 0.9 (EXP-17)",
-        ),
-        (
-            "def f() -> None:\n    yield 1\n",
-            "generators are planned for TyPy 0.9 (SMT-11)",
+            "def f() -> None:\n    g = lambda: (yield 1)\n",
+            "generator `lambda` expressions are planned for TyPy 1.0 (FUN-12)",
         ),
         (
             "async def f() -> None:\n    pass\n",
@@ -301,6 +286,47 @@ fn nonlocal_where_cpython_rejects_it_is_a_syntax_error() {
         (
             "def f() -> None:\n    x = 1\n    def g() -> None:\n        nonlocal x\n        \
              x = 2\n",
+            None,
+        ),
+    ];
+    for (source, expected) in cases {
+        let found: Vec<(String, String)> = diagnostics(source)
+            .into_iter()
+            .filter(|(code, _)| code == "E0103")
+            .collect();
+        match expected {
+            Some(message) => assert!(
+                found.iter().any(|(_, found)| found == message),
+                "{source:?} gave {found:?}"
+            ),
+            None => assert!(found.is_empty(), "{source:?} gave {found:?}"),
+        }
+    }
+}
+
+#[test]
+fn yield_where_cpython_rejects_it_is_a_syntax_error() {
+    let cases = [
+        ("yield 1\n", Some("'yield' outside function")),
+        (
+            "def f() -> list[int]:\n    return [(yield x) for x in []]\n",
+            Some("'yield' inside list comprehension"),
+        ),
+        (
+            "def f() -> set[int]:\n    return {(yield x) for x in []}\n",
+            Some("'yield' inside set comprehension"),
+        ),
+        (
+            "def f() -> dict[int, int]:\n    return {x: (yield x) for x in []}\n",
+            Some("'yield' inside dict comprehension"),
+        ),
+        ("def f() -> None:\n    yield 1\n    yield\n", None),
+        (
+            "def f() -> None:\n    x = yield 1\n    x: int = yield 1\n",
+            None,
+        ),
+        (
+            "def f() -> None:\n    yield from []\n    x = yield from []\n",
             None,
         ),
     ];

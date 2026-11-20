@@ -68,6 +68,25 @@ pub enum Terminator {
     ReturnError(ValueId),
     /// Marks a point that cannot be reached.
     Unreachable,
+    /// Starts a step of a generator, the entry of its resume function: the first step
+    /// continues in `start`, and a later one in the block after the `yield` it stopped at,
+    /// each a successor of this block alone, so no value lives across a yield (ADR-0063).
+    Resume {
+        /// The generator object.
+        generator: ValueId,
+        /// The block of the first step.
+        start: BlockId,
+        /// The block after each `yield`, in the order of the yields.
+        points: Vec<BlockId>,
+    },
+    /// Ends a step of a generator at a `yield`: the next step continues in `resume`, which
+    /// the function's `Resume` lists (ADR-0063).
+    Yield {
+        /// The generator object.
+        generator: ValueId,
+        /// The block the next step continues in.
+        resume: BlockId,
+    },
 }
 
 impl Terminator {
@@ -80,7 +99,13 @@ impl Terminator {
                 then, otherwise, ..
             } => vec![*then, *otherwise],
             Self::Invoke { normal, error, .. } => vec![*normal, *error],
-            Self::Return(_) | Self::ReturnError(_) | Self::Unreachable => Vec::new(),
+            Self::Resume { start, points, .. } => std::iter::once(*start)
+                .chain(points.iter().copied())
+                .collect(),
+            // The next step enters its block through the function's `Resume`.
+            Self::Return(_) | Self::ReturnError(_) | Self::Unreachable | Self::Yield { .. } => {
+                Vec::new()
+            }
         }
     }
 
@@ -90,7 +115,14 @@ impl Terminator {
         match self {
             Self::Jump { arguments, .. } | Self::Invoke { arguments, .. } => arguments.clone(),
             Self::Branch { condition, .. } => vec![*condition],
-            Self::Return(value) | Self::ReturnError(value) => vec![*value],
+            Self::Return(value)
+            | Self::ReturnError(value)
+            | Self::Resume {
+                generator: value, ..
+            }
+            | Self::Yield {
+                generator: value, ..
+            } => vec![*value],
             Self::Unreachable => Vec::new(),
         }
     }

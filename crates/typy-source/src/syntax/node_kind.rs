@@ -13,14 +13,10 @@ pub enum NodeKind {
     AsyncFunctionDef,
     AsyncWith,
     Await,
-    GeneratorExp,
     IpyEscapeCommand,
     NamedExpr,
-    Starred,
     TemplateStr,
     TryStar,
-    Yield,
-    YieldFrom,
 }
 
 impl fmt::Display for NodeKind {

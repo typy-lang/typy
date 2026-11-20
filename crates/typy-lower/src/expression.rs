@@ -185,18 +185,18 @@ impl FunctionLowerer<'_> {
             }
             TypedExprKind::Submodule(module) => self.submodule(module, span),
             // An iterable is the same object, so only its type changes.
-            TypedExprKind::AsIterable(inner) => {
+            TypedExprKind::AsIterable(inner) | TypedExprKind::AsIterator(inner) => {
+                let held = if let TypedExprKind::AsIterator(_) = expression.kind {
+                    TyirType::ITERATOR
+                } else {
+                    TyirType::ITERABLE
+                };
                 let lowered = self.expression(inner);
                 let bits = self.bits(lowered, span);
-                let value = self.builder.push_value(
-                    Operation::FromBits {
-                        bits,
-                        ty: TyirType::ITERABLE,
-                    },
-                    TyirType::ITERABLE,
-                    span,
-                );
-                self.transfer(lowered, value, TyirType::ITERABLE)
+                let value =
+                    self.builder
+                        .push_value(Operation::FromBits { bits, ty: held }, held, span);
+                self.transfer(lowered, value, held)
             }
             TypedExprKind::Binary {
                 left,
@@ -227,16 +227,7 @@ impl FunctionLowerer<'_> {
                 arguments,
                 dispatch,
             } => {
-                let values: Vec<(usize, Lowered)> = arguments
-                    .iter()
-                    .map(|argument| {
-                        let lowered = self.expression(&argument.value);
-                        (
-                            argument.parameter,
-                            self.kept_for_call(&argument.value, lowered, span),
-                        )
-                    })
-                    .collect();
+                let values = self.call_arguments(*function, arguments, *dispatch, span);
                 if *dispatch {
                     self.call_method(*function, values, ty, span)
                 } else {
@@ -255,6 +246,13 @@ impl FunctionLowerer<'_> {
             TypedExprKind::FunctionValue(function) => self.function_value(*function, span),
             TypedExprKind::Capture(index) => self.capture(*index, ty, span),
             TypedExprKind::RunningFunction => self.running_function(),
+            TypedExprKind::Received => self.received(ty, span),
+            TypedExprKind::DelegatedItem => self.delegated_item(ty, span),
+            TypedExprKind::Spread { kind, parts } => {
+                self.spread(*kind, parts, &expression.ty, span)
+            }
+            TypedExprKind::DictSpread(parts) => self.dict_spread(parts, &expression.ty, span),
+            TypedExprKind::DelegatedResult => self.delegated_result(ty, span),
             TypedExprKind::CellRead(symbol) => self.read_name(*symbol, span),
             TypedExprKind::CellObject(symbol) => self.cell_of(*symbol, span).0,
             TypedExprKind::CapturedCell(index) => {
@@ -277,16 +275,7 @@ impl FunctionLowerer<'_> {
             } => {
                 let closure_value = self.expression(closure);
                 let closure_value = self.kept_for_call(closure, closure_value, span);
-                let values: Vec<(usize, Lowered)> = arguments
-                    .iter()
-                    .map(|argument| {
-                        let lowered = self.expression(&argument.value);
-                        (
-                            argument.parameter,
-                            self.kept_for_call(&argument.value, lowered, span),
-                        )
-                    })
-                    .collect();
+                let values = self.call_arguments(*function, arguments, false, span);
                 let result = self.call_nested(*function, closure_value.value, values, ty, span);
                 self.release(closure_value, span);
                 result
@@ -468,18 +457,22 @@ impl FunctionLowerer<'_> {
             }
             // An instance's class decides its truth with `__bool__`, or with `__len__` when it
             // has no `__bool__`; without either, the instance is true (CLS-07), and so is a type
-            // object.
+            // object, and so are an iterator and a generator, which have no length.
             TyirType::Object(id) if id.class_index().is_some() => {
                 return self.instance_truth(lowered, id, span);
             }
             TyirType::Object(
-                typy_tyir::TypeId::TYPE | typy_tyir::TypeId::SLICE | typy_tyir::TypeId::FUNCTION,
+                typy_tyir::TypeId::TYPE
+                | typy_tyir::TypeId::SLICE
+                | typy_tyir::TypeId::FUNCTION
+                | typy_tyir::TypeId::ITERATOR
+                | typy_tyir::TypeId::GENERATOR,
             ) => {
                 return self.constant(Constant::Bool(true), span);
             }
             // The object's type tests it, as CPython's truth test does (TYP-14); a `ctypes`
-            // object's class decides (FFI-03).
-            TyirType::UNION | TyirType::CDATA => {
+            // object's class decides (FFI-03), and an iterable is any of its collections.
+            TyirType::UNION | TyirType::CDATA | TyirType::ITERABLE => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);
                 return self
                     .call_runtime(RuntimeFunction::ObjectIsTrue, vec![object], span)
@@ -685,7 +678,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns the value of the default `default` of `parameter`, held as the parameter is.
-    fn default_value(
+    pub(crate) fn default_value(
         &mut self,
         parameter: &SignatureParameter,
         default: Option<&TypedConstant>,
@@ -713,7 +706,7 @@ impl FunctionLowerer<'_> {
     /// Returns the default of parameter `index` of a call through the method table of the
     /// instance `instance`: that of the method of the instance's class, the nearest override
     /// of `function` whose class the instance is of, or `function`'s own.
-    fn dispatched_default(
+    pub(crate) fn dispatched_default(
         &mut self,
         function: FunctionId,
         index: usize,

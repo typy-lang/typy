@@ -511,6 +511,14 @@ traceback14:                                      ; preds = %b45
   br label %b48
 }
 
+define void @__typy_finish() {
+b0:
+  br label %b1
+
+b1:                                               ; preds = %b0
+  ret void
+}
+
 declare { ptr, ptr } @typy_rt_chr(i64)
 
 declare void @typy_rt_traceback_add(ptr, ptr, ptr, i32)

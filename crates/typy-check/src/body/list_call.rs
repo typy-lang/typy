@@ -198,12 +198,14 @@ impl BodyChecker<'_> {
         let text = self.expression(text);
         self.expect(&text, Type::Str, "the text `bytes` encodes");
         let mut bound = vec![Argument {
+            passed: crate::typed::Passed::Position,
             parameter: 0,
             value: self.codec_argument(&ParameterType::Codec, encoding, "the encoding of `bytes`"),
         }];
         if let Some(errors) = given[1] {
             let kind = ParameterType::Handler { decoding: false };
             bound.push(Argument {
+                passed: crate::typed::Passed::Position,
                 parameter: 1,
                 value: self.codec_argument(&kind, errors, "the errors of `bytes`"),
             });

@@ -2,7 +2,9 @@
 //! crate links its tests once.
 
 mod codes;
+mod generators;
 mod golden;
 mod lazy_imports;
 mod pipeline;
 mod size;
+mod unpacking;

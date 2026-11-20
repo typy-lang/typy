@@ -36,6 +36,9 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        if let Some(refused) = self.refused_variadic_value(function, name, span) {
+            return refused;
+        }
         let signature = &self.program.signatures[function.0 as usize];
         if let Some(parameter) = signature
             .parameters
@@ -62,6 +65,34 @@ impl BodyChecker<'_> {
             returns: Box::new(signature.returns.clone()),
         };
         Self::typed(TypedExprKind::FunctionValue(function), ty, span)
+    }
+
+    /// Returns E0201 when `function`, named `name`, has a `*args` or `**kwargs` parameter,
+    /// which a `Callable` does not yet reach, planned for 0.10 (FUN-13).
+    pub(super) fn refused_variadic_value(
+        &mut self,
+        function: FunctionId,
+        name: &str,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let parameter = self.program.signatures[function.0 as usize]
+            .parameters
+            .iter()
+            .find(|parameter| parameter.kind.is_variadic())?;
+        let stars = if parameter.kind == ParameterKind::VarPositional {
+            "*"
+        } else {
+            "**"
+        };
+        let message = format!(
+            "`{name}` takes `{stars}{}`, and a function with `*args` or `**kwargs` as a value is \
+             planned for TyPy 0.10 (FUN-13)",
+            parameter.name
+        );
+        let diagnostic = Diagnostic::new(DiagnosticCode::error(201), span, message)
+            .with_rule(RuleId::FUN_13)
+            .with_help("pass a `lambda` that calls it with the arguments the `Callable` passes");
+        Some(self.error(diagnostic, span))
     }
 
     /// Returns the call of the value the attribute at `index` of `receiver`'s class holds,

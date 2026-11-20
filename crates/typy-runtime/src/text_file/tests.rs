@@ -677,7 +677,8 @@ fn iterating_over_a_file_gives_its_lines_and_shows_the_file() {
     let file = scratch.open("lines.txt", "r", 0).unwrap();
     // SAFETY: the file and the iterator are live; each is released once.
     unsafe {
-        let iterator = crate::iterator::typy_rt_iterable_iterator(file.cast(), core::ptr::null());
+        let iterator =
+            crate::iterator::typy_rt_iterable_iterator(file.cast(), core::ptr::null()).value;
         let shown = take(repr_of_iterator(iterator));
         assert!(shown.starts_with("<_io.TextIOWrapper name='"), "{shown}");
         let mut lines = Vec::new();
@@ -704,7 +705,8 @@ fn iterating_over_standard_output_is_not_supported() {
     // SAFETY: standard output is a live text file; the iterator is released once.
     unsafe {
         let stdout = typy_rt_sys_stdout().cast_mut();
-        let iterator = crate::iterator::typy_rt_iterable_iterator(stdout.cast(), core::ptr::null());
+        let iterator =
+            crate::iterator::typy_rt_iterable_iterator(stdout.cast(), core::ptr::null()).value;
         let stepped =
             crate::iterator::typy_rt_iterator_advance(iterator, crate::word::inline(0).unwrap());
         assert_eq!(error_text(stepped.exception).1, "not readable");

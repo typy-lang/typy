@@ -61,6 +61,7 @@ impl Program {
                     span,
                 };
                 Argument {
+                    passed: crate::typed::Passed::Position,
                     parameter: index,
                     value: widened(read, &wanted.ty),
                 }
@@ -103,6 +104,7 @@ impl Program {
             span,
             generic: false,
             named_targets: Vec::new(),
+            generator: None,
         }));
         id
     }

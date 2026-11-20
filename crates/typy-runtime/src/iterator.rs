@@ -1,6 +1,7 @@
 //! Iterators that `iter()` makes of the built-in iterables: a source and a position, stepped
 //! with the source's own rules, as CPython's iterators are (CST-09, ADR-0014).
 
+mod instance;
 #[cfg(test)]
 mod tests;
 
@@ -44,6 +45,9 @@ pub(crate) enum IteratorKind {
     LongRange = 10,
     /// A text file, which gives its lines; CPython's file is its own iterator.
     TextFile = 11,
+    /// An instance of a class with `__next__`, stepped inside a loop or a call of `next()`
+    /// (TYP-20); the runtime alone makes it.
+    Instance = 12,
 }
 
 impl IteratorKind {
@@ -115,6 +119,8 @@ static RANGE_ITERATOR: TypeObject = iterator_type("range_iterator");
 static LONG_RANGE_ITERATOR: TypeObject = iterator_type("longrange_iterator");
 /// What `iter()` of a text file gives: CPython's file is its own iterator, so the type is
 /// named as the file's is.
+/// The type of the iterator that steps an instance, which only the runtime holds.
+static INSTANCE_ITERATOR: TypeObject = iterator_type("iterator");
 static TEXT_FILE_ITERATOR: TypeObject = TypeObject {
     module: "_io".as_ptr(),
     module_length: 3,
@@ -141,6 +147,7 @@ pub(crate) unsafe fn type_of(iterator: *const IteratorObject) -> &'static TypeOb
         IteratorKind::Range => &RANGE_ITERATOR,
         IteratorKind::LongRange => &LONG_RANGE_ITERATOR,
         IteratorKind::TextFile => &TEXT_FILE_ITERATOR,
+        IteratorKind::Instance => &INSTANCE_ITERATOR,
     }
 }
 
@@ -243,18 +250,101 @@ pub unsafe extern "C" fn typy_rt_iterator_new(
 /// Returns a new iterator over `source`, held as an `Iterable[T]`, of the kind its header
 /// says (TYP-15): a list, a tuple, a `str`, a `bytes`, a set, a dict, a view of a dict, which
 /// the iterator reads through its dict, or a range; an iterator gives itself, with a
-/// reference of its own. `pair_type` is the layout of the items of a view of items.
+/// reference of its own. `pair_type` is the layout of the items of a view of items. An
+/// instance of a class of the program gives what its `__iter__` returns, as a `for` loop
+/// asks CPython's `iter()`, and an instance that iterator is is stepped through a wrapper
+/// (TYP-20); the exception `__iter__` raises comes back.
 ///
 /// # Safety
 ///
 /// `source` points to a live object of one of those types, and `pair_type` is a live tuple
 /// descriptor when it is a view of items.
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_iterable_iterator(
+    source: *mut ObjectHeader,
+    pair_type: *const TupleType,
+) -> Raising<*mut IteratorObject> {
+    // SAFETY: the caller's guarantee; the header says what the object is.
+    unsafe {
+        if (*source).type_id == crate::header::INSTANCE_TYPE_ID {
+            let iterator = match instance::iter(source) {
+                Some(found) if !found.exception.is_null() => {
+                    return Raising::error(core::ptr::null_mut(), found.exception);
+                }
+                Some(found) => found.value,
+                None => {
+                    typy_rt_increment(source);
+                    source
+                }
+            };
+            if instance::steps(iterator) {
+                return Raising::ok(instance::wrap(iterator));
+            }
+            return Raising::ok(iterator.cast());
+        }
+        Raising::ok(builtin_iterator(source, pair_type))
+    }
+}
+
+/// Returns a new iterator that steps `source`, held as an `Iterator[T]`, for `next()`: the
+/// iterator itself, with a reference of its own, or a wrapper of an instance of a class with
+/// `__next__`, which `next()` calls without asking `__iter__` first, as CPython does (TYP-20).
+///
+/// # Safety
+///
+/// `source` points to a live iterator, generator or such an instance.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_iterator_stepper(
+    source: *mut ObjectHeader,
+) -> *mut IteratorObject {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        typy_rt_increment(source);
+        if instance::steps(source) {
+            return instance::wrap(source);
+        }
+    }
+    source.cast()
+}
+
+/// Returns `iter(source)` of a value held as an `Iterable[T]`: what the instance's `__iter__`
+/// returns, as it is, so `iter(it) is it` holds for an iterator class (TYP-20), or the
+/// iterator `typy_rt_iterable_iterator` makes of any other object.
+///
+/// # Safety
+///
+/// As for `typy_rt_iterable_iterator`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_iter(
+    source: *mut ObjectHeader,
+    pair_type: *const TupleType,
+) -> Raising<*mut ObjectHeader> {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        if (*source).type_id == crate::header::INSTANCE_TYPE_ID
+            && let Some(found) = instance::iter(source)
+        {
+            return found;
+        }
+        let made = typy_rt_iterable_iterator(source, pair_type);
+        Raising {
+            value: made.value.cast(),
+            exception: made.exception,
+        }
+    }
+}
+
+/// Returns a new iterator over a built-in iterable, of the kind its header says, or the
+/// iterator or generator itself, with a reference of its own.
+///
+/// # Safety
+///
+/// As for `typy_rt_iterable_iterator`, for an object of the runtime.
 #[allow(
     clippy::cast_ptr_alignment,
     reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
 )]
-pub unsafe extern "C" fn typy_rt_iterable_iterator(
+unsafe fn builtin_iterator(
     source: *mut ObjectHeader,
     pair_type: *const TupleType,
 ) -> *mut IteratorObject {
@@ -265,7 +355,8 @@ pub unsafe extern "C" fn typy_rt_iterable_iterator(
     // SAFETY: the caller's guarantee; the header says what the object is.
     unsafe {
         let (object, kind, pair) = match (*source).type_id {
-            ITERATOR_TYPE_ID => {
+            // An iterator, and a generator, is its own iterator.
+            ITERATOR_TYPE_ID | crate::header::GENERATOR_TYPE_ID => {
                 typy_rt_increment(source);
                 return source.cast();
             }
@@ -303,6 +394,17 @@ pub unsafe extern "C" fn typy_rt_iterator_advance(
     iterator: *mut IteratorObject,
     stop: i64,
 ) -> Raising<bool> {
+    // A generator steps through its own code (ADR-0065).
+    // SAFETY: every iterator starts with its header.
+    if unsafe { (*iterator.cast::<ObjectHeader>()).type_id } == crate::header::GENERATOR_TYPE_ID {
+        // SAFETY: the header says the object is a generator.
+        return unsafe { crate::generator::advance(iterator.cast(), stop) };
+    }
+    // SAFETY: the caller's guarantee.
+    if unsafe { (*iterator).kind } == IteratorKind::Instance {
+        // SAFETY: the kind says the iterator wraps an instance.
+        return unsafe { instance::advance(&mut *iterator, inline_value(stop) == 1) };
+    }
     // SAFETY: the caller's guarantee; the iterator owns a reference to its source.
     let stepped = unsafe { step(&mut *iterator) };
     match stepped {
@@ -333,8 +435,16 @@ pub unsafe extern "C" fn typy_rt_iterator_advance(
 /// `iterator` points to a live iterator whose last step found an item.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_iterator_item(iterator: *const IteratorObject) -> u64 {
-    // SAFETY: the caller's guarantee.
-    unsafe { (*iterator).current }
+    // SAFETY: the caller's guarantee; every iterator starts with its header.
+    unsafe {
+        if (*iterator.cast::<ObjectHeader>()).type_id == crate::header::GENERATOR_TYPE_ID {
+            return crate::generator::current(iterator.cast());
+        }
+        if (*iterator).kind == IteratorKind::Instance {
+            return instance::item(&mut *iterator.cast_mut());
+        }
+        (*iterator).current
+    }
 }
 
 /// Steps the iterator, and returns whether it found an item, or the exception its source's
@@ -356,6 +466,10 @@ unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::Except
     // SAFETY: the source is live and of the kind's type.
     unsafe {
         match iterator.kind {
+            // `typy_rt_iterator_advance` steps a wrapped instance itself.
+            IteratorKind::Instance => {
+                crate::libc::abort_with(b"typy runtime: an instance is stepped as a collection\n")
+            }
             IteratorKind::List | IteratorKind::Tuple => {
                 let list = &*source.cast::<ListObject>();
                 if position >= list.length {
@@ -492,6 +606,9 @@ pub(crate) unsafe fn destroy(iterator: *mut IteratorObject) {
     // SAFETY: the caller's guarantee.
     unsafe {
         let object = &mut *iterator;
+        if object.kind == IteratorKind::Instance && !object.source.is_null() {
+            instance::release_item(object);
+        }
         drop_source(object);
         if !object.held.is_null() {
             typy_rt_decrement(object.held.cast());

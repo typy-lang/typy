@@ -239,6 +239,42 @@ impl FunctionLowerer<'_> {
         self.builder.switch_to(read);
     }
 
+    /// Releases every module variable as the program ends: those of `__main__` first, then
+    /// those of each other module, the last to run first, each in the order its module's code
+    /// binds them, so a generator one holds closes, as CPython clears its modules at exit
+    /// (FUN-11, ADR-0071). Each is unbound, so code a closing runs that reads one raises
+    /// `NameError`.
+    pub(crate) fn release_module_variables(&mut self, span: Span) {
+        let program = self.program;
+        let main = program
+            .modules
+            .iter()
+            .find(|module| module.body == program.entry);
+        let others = program
+            .modules
+            .iter()
+            .rev()
+            .filter(|module| module.body != program.entry);
+        for module in main.into_iter().chain(others) {
+            let mut variables: Vec<SymbolId> = program
+                .function(module.body)
+                .locals
+                .iter()
+                .copied()
+                .filter(|symbol| self.module_globals.of.contains_key(symbol))
+                .collect();
+            // A variable only a function's `global` binds comes after those the code binds.
+            for (symbol, global) in &self.module_globals.of {
+                if global.owner == module.body && !variables.contains(symbol) {
+                    variables.push(*symbol);
+                }
+            }
+            for symbol in variables {
+                self.unbind_name(symbol, span);
+            }
+        }
+    }
+
     /// Unbinds a module variable: the value it held, if counted, is released and replaced by
     /// its type's zero value, so a later store can release what it replaces.
     pub(crate) fn unbind_name(&mut self, symbol: SymbolId, span: Span) {

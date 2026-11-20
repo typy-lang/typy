@@ -342,9 +342,9 @@ fn an_iterable_gives_the_iterator_its_header_calls_for() {
             (numbers, "range_iterator"),
         ];
         for (source, name) in cases {
-            let made = typy_rt_iterable_iterator(source, null);
+            let made = typy_rt_iterable_iterator(source, null).value;
             assert_eq!(type_name(made), name);
-            let again = typy_rt_iterable_iterator(made.cast(), null);
+            let again = typy_rt_iterable_iterator(made.cast(), null).value;
             assert_eq!(again, made, "an iterator gives itself");
             release(again);
             release(made);

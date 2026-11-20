@@ -133,6 +133,10 @@ impl BodyChecker<'_> {
             }
             return;
         }
+        if let Expr::Starred { value, .. } = target {
+            self.bind_local(value);
+            return;
+        }
         let Expr::Name { id, span } = target else {
             return;
         };
@@ -389,6 +393,14 @@ impl BodyChecker<'_> {
             }
             return self.assign(target, ty, value).map(AssignTarget::Name);
         };
+        let starred = elements
+            .iter()
+            .position(|element| matches!(element, Expr::Starred { .. }));
+        if let super::unpacking::Unpacking::Checked(unpacked) =
+            self.unpacking_target(elements, starred, &ty, value)
+        {
+            return unpacked;
+        }
         let items = match ty {
             Type::Tuple(items) if items.len() == elements.len() => items,
             Type::Error => vec![Type::Error; elements.len()],
@@ -702,6 +714,11 @@ impl BodyChecker<'_> {
                     (&value.kind, &existing)
                 {
                     diagnostic = diagnostic.with_fix(value.span, format!("{digits}.0"));
+                } else if matches!(value.kind, TypedExprKind::Received) {
+                    diagnostic = diagnostic.with_help(format!(
+                        "`next()` and a `for` loop resume a generator with `None`, so its \
+                         `yield` gives {ty}; declare `{id}: {ty}` and test it for `None`"
+                    ));
                 } else {
                     let help = self.protocol_help(&ty, &existing).unwrap_or_else(|| {
                         format!("assign {}, or use a new variable", existing.with_article())

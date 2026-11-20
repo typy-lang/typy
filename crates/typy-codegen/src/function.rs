@@ -29,6 +29,9 @@ pub(crate) struct Shared<'module, 'ctx> {
     pub(crate) lookup: &'module dyn SourceLookup,
     /// The target, whose C calling convention a structure passed by value follows (FFI-12).
     pub(crate) target: crate::target::TargetTriple,
+    /// Whether the program has generator functions, whose generators a release may drop
+    /// while suspended, so code closes them after each call that may release (FUN-11).
+    pub(crate) closes_generators: bool,
 }
 
 /// Emits the body of one function.
@@ -128,6 +131,14 @@ impl<'shared, 'module, 'ctx> FunctionEmitter<'shared, 'module, 'ctx> {
             }
         }
         self.builder.position_at_end(self.blocks[0]);
+        // A generator keeps its slots in its object, which outlives each step (ADR-0063).
+        if self.function.generator.is_some() {
+            let generator = self.value(*self.function.parameters.first().ok_or_else(|| {
+                CodegenError("a resume function takes its generator".to_owned())
+            })?)?;
+            self.slots = self.generator_slots(generator.into_pointer_value())?;
+            return self.prepare_frames();
+        }
         for (index, slot) in self.function.slots.iter().enumerate() {
             let pointer = match value_type(context, &self.shared.tyir.tuple_types, slot.ty) {
                 Some(ty) => Some(self.builder.build_alloca(ty, &format!("s{index}"))?),

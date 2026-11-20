@@ -105,6 +105,10 @@ pub(crate) fn generate(
         raising: &raising,
         lookup,
         target: target.triple,
+        closes_generators: module
+            .functions
+            .iter()
+            .any(|function| function.generator.is_some()),
     };
     for function in &module.functions {
         FunctionEmitter::emit(&mut shared, function)?;
@@ -182,7 +186,7 @@ fn declare_functions<'ctx>(
                 *raising,
                 false,
             );
-            let linkage = if function.id == module.entry {
+            let linkage = if function.id == module.entry || function.id == module.finish {
                 Linkage::External
             } else {
                 Linkage::Internal

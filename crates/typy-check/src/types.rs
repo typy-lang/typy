@@ -50,6 +50,16 @@ pub enum Type {
     Exception(ExceptionClass),
     /// An iterator that `iter()` makes, of the type of its items (ADR-0014).
     Iterator(Box<Type>),
+    /// `Generator[Y, S, R]`: a generator object that yields `Y`, is sent `S` and returns
+    /// `R`, which is an `Iterator[Y]` (FUN-07, ADR-0063).
+    Generator {
+        /// What each `yield` gives.
+        yields: Box<Type>,
+        /// What `send` passes, which a `yield` assigned to a target gives.
+        sends: Box<Type>,
+        /// What a `return` gives, the value of `StopIteration`.
+        returns: Box<Type>,
+    },
     /// `Iterable[T]`: any built-in iterable or iterator of items of type `T`, held as the
     /// object itself, which a loop or `iter()` reads through an iterator (TYP-15).
     Iterable(Box<Type>),
@@ -164,6 +174,9 @@ pub enum AbstractClass {
     Iterable,
     /// `Iterator`: a class with `__iter__` and `__next__`.
     Iterator,
+    /// `Generator`: a class with `__iter__`, `__next__`, `send`, `throw` and `close`, as
+    /// CPython's `__subclasshook__` reads it (TYP-21).
+    Generator,
 }
 
 impl TypeObjectOf {
@@ -206,6 +219,7 @@ impl TypeObjectOf {
             Type::Exception(_)
             | Type::Callable { .. }
             | Type::Iterator(_)
+            | Type::Generator { .. }
             | Type::Iterable(_)
             | Type::AnyModule
             | Type::TextFile
@@ -278,6 +292,10 @@ impl TypeObjectOf {
                 kind: AbstractClass::Iterator,
                 ..
             } => "Iterator",
+            Self::Abstract {
+                kind: AbstractClass::Generator,
+                ..
+            } => "Generator",
         }
     }
 }
@@ -399,6 +417,13 @@ impl Type {
             (Self::Optional(_), _) => self.matches(target) || self.is_upcast_to(target),
             (_, Self::Optional(inner)) => self.is_assignable_to(inner),
             (Self::Callable { .. }, Self::Callable { .. }) => self.fits_callable(target),
+            // A generator is an iterator of what it yields, held as the same object.
+            (Self::Generator { yields, .. }, Self::Iterator(item)) => yields.matches(item),
+            // So is an instance of an iterator class, whose item passes as it is (TYP-20).
+            (Self::Instance(class), Self::Iterator(item)) => matches!(
+                crate::iterator_fits::iteration(class.id),
+                Some(crate::iterator_fits::Iteration::Iterator(own)) if own.matches(item)
+            ),
             (_, Self::Iterable(item)) => self.iterable_item().is_some_and(|own| own.matches(item)),
             _ => self.matches(target),
         }
@@ -415,6 +440,7 @@ impl Type {
             (Self::Callable { .. }, Self::Callable { .. }) => {
                 !self.matches(target) && self.fits_callable(target)
             }
+            (Self::Generator { yields, .. }, Self::Iterator(item)) => yields.matches(item),
             (Self::Parameter(_), _) => *self != *target && self.is_assignable_to(target),
             // A union with `None` is an optional of the other members, so a union target
             // never holds `None`.
@@ -444,6 +470,22 @@ impl Type {
             | (Self::Optional(item), Self::Optional(other)) => item.matches(other),
             (Self::Dict(key, value), Self::Dict(other_key, other_value)) => {
                 key.matches(other_key) && value.matches(other_value)
+            }
+            (
+                Self::Generator {
+                    yields,
+                    sends,
+                    returns,
+                },
+                Self::Generator {
+                    yields: other_yields,
+                    sends: other_sends,
+                    returns: other_returns,
+                },
+            ) => {
+                yields.matches(other_yields)
+                    && sends.matches(other_sends)
+                    && returns.matches(other_returns)
             }
             (
                 Self::DictView(view, key, value),
@@ -481,6 +523,11 @@ impl Type {
             | Self::Set(item)
             | Self::Iterator(item)
             | Self::Iterable(item) => item.has_error(),
+            Self::Generator {
+                yields,
+                sends,
+                returns,
+            } => yields.has_error() || sends.has_error() || returns.has_error(),
             Self::Dict(key, value) | Self::DictView(_, key, value) => {
                 key.has_error() || value.has_error()
             }
@@ -528,6 +575,7 @@ impl Type {
                 Self::Union(_)
                 | Self::DictView(..)
                 | Self::Iterator(_)
+                | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
@@ -541,6 +589,7 @@ impl Type {
                 Self::Union(_)
                 | Self::DictView(..)
                 | Self::Iterator(_)
+                | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
@@ -597,6 +646,7 @@ impl Type {
                 | Self::Instance(..)
                 | Self::Exception(_)
                 | Self::Iterator(_)
+                | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
@@ -622,6 +672,7 @@ impl Type {
                 | Self::Instance(..)
                 | Self::Exception(_)
                 | Self::Iterator(_)
+                | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
@@ -709,6 +760,11 @@ impl Type {
             | Self::Dict(item, _)
             | Self::Iterator(item)
             | Self::Iterable(item) => Some(item.as_ref().clone()),
+            Self::Generator { yields, .. } => Some(yields.as_ref().clone()),
+            // An instance of an iterator or iterable class gives its class's items (TYP-20).
+            Self::Instance(class) => {
+                crate::iterator_fits::iteration(class.id).map(|each| each.item().clone())
+            }
             Self::DictView(view, key, value) => Some(view.item(key, value)),
             Self::Str => Some(Self::Str),
             Self::Bytes | Self::Range => Some(Self::Int),
@@ -846,6 +902,11 @@ impl fmt::Display for Type {
             Self::Instance(class) => write!(formatter, "{class}"),
             Self::Exception(class) => write!(formatter, "{class}"),
             Self::Iterator(item) => write!(formatter, "Iterator[{item}]"),
+            Self::Generator {
+                yields,
+                sends,
+                returns,
+            } => write!(formatter, "Generator[{yields}, {sends}, {returns}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
             Self::TypeAlias => formatter.write_str("TypeAliasType"),

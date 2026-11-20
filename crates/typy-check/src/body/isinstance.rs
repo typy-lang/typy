@@ -6,8 +6,8 @@ use typy_source::syntax::{Expr, Keyword};
 
 use super::BodyChecker;
 use crate::class_type::InstanceClass;
-use crate::typed::{IsInstanceTest, TypedExpr, TypedExprKind};
-use crate::types::{Type, TypeObjectOf};
+use crate::typed::{IsInstanceTest, MemberTest, RuntimeKind, TypedExpr, TypedExprKind};
+use crate::types::{AbstractClass, Type, TypeObjectOf};
 
 /// What a test of a value against one class gives, as far as the checker can tell.
 enum Outcome {
@@ -66,38 +66,6 @@ impl BodyChecker<'_> {
         classes: &[TypeObjectOf],
         span: Span,
     ) -> TypedExpr {
-        // An `Iterable[T]` value holds a collection or an iterator of the runtime, which no
-        // class of the program stands for (LIB-20).
-        let iterator = classes.iter().any(|class| {
-            matches!(
-                class,
-                TypeObjectOf::Abstract {
-                    kind: crate::types::AbstractClass::Iterator,
-                    ..
-                }
-            )
-        });
-        let held = match &value.ty {
-            Type::Optional(inner) => inner.as_ref(),
-            other => other,
-        };
-        if iterator
-            && held
-                .members()
-                .iter()
-                .any(|member| matches!(member, Type::Iterable(_)))
-        {
-            return self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "testing whether an `Iterable` value is an `Iterator` is planned for TyPy \
-                     0.9 (LIB-20)",
-                )
-                .with_rule(RuleId::LIB_20),
-                span,
-            );
-        }
         let inner = match &value.ty {
             Type::Optional(inner) => inner.as_ref().clone(),
             other => other.clone(),
@@ -108,7 +76,7 @@ impl BodyChecker<'_> {
                 .any(|class| matches!(class, TypeObjectOf::NoneType | TypeObjectOf::Object));
         let outcomes: Vec<Outcome> = classes.iter().map(|class| outcome(&inner, class)).collect();
         let always = outcomes.iter().any(|each| matches!(each, Outcome::Always));
-        let checks: Vec<TypeObjectOf> = classes
+        let checks: Vec<MemberTest> = classes
             .iter()
             .zip(&outcomes)
             .filter(|(_, outcome)| matches!(outcome, Outcome::Checked))
@@ -147,17 +115,29 @@ impl BodyChecker<'_> {
 
     /// Returns the classes a test against `class` asks about when the program runs: the class
     /// itself, or for `Iterable` and `Iterator` the classes that define their methods (TYP-17).
-    fn concrete_classes(&self, class: &TypeObjectOf) -> Vec<TypeObjectOf> {
-        match class {
-            TypeObjectOf::Abstract { implementers, .. } => implementers
-                .iter()
-                .map(|(id, _)| {
-                    let name = self.program.classes[id.0 as usize].name.clone();
-                    TypeObjectOf::Instance(*id, name)
-                })
-                .collect(),
-            other => vec![other.clone()],
+    fn concrete_classes(&self, class: &TypeObjectOf) -> Vec<MemberTest> {
+        let TypeObjectOf::Abstract { kind, implementers } = class else {
+            return vec![MemberTest::Class(class.clone())];
+        };
+        let mut tests: Vec<MemberTest> = implementers
+            .iter()
+            .map(|(id, _)| {
+                let name = self.program.classes[id.0 as usize].name.clone();
+                MemberTest::Class(TypeObjectOf::Instance(*id, name))
+            })
+            .collect();
+        // The runtime's own iterators, its generators and files are iterators, and its
+        // generators are generators, as their objects' headers say (TYP-17, TYP-21).
+        match kind {
+            AbstractClass::Iterator => tests.extend([
+                MemberTest::Kind(RuntimeKind::Iterator),
+                MemberTest::Kind(RuntimeKind::Generator),
+                MemberTest::Kind(RuntimeKind::File),
+            ]),
+            AbstractClass::Generator => tests.push(MemberTest::Kind(RuntimeKind::Generator)),
+            AbstractClass::Iterable => {}
         }
+        tests
     }
 
     /// Returns the classes the second argument names: a class or a tuple of them, each named
@@ -223,7 +203,7 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     each.span(),
                     "`isinstance` with a class held in a variable or computed is \
-                     planned for TyPy 0.9 (CLS-18)",
+                     planned for TyPy 0.10 (CLS-18)",
                 )
                 .with_rule(RuleId::CLS_18)
                 .with_help("name the class, or a tuple of classes, in the call"),
@@ -270,6 +250,19 @@ impl BodyChecker<'_> {
                 return None;
             }
             Type::Exception(crate::exception::common_base(&tested))
+        } else if let Type::Iterable(item) = inner
+            && classes.iter().all(|class| {
+                matches!(
+                    class,
+                    TypeObjectOf::Abstract {
+                        kind: AbstractClass::Iterator | AbstractClass::Generator,
+                        ..
+                    }
+                )
+            })
+        {
+            // An iterable found an iterator, or a generator, is read as an iterator (TYP-21).
+            Type::Iterator(item.clone())
         } else {
             let Type::Instance(own) = inner else {
                 return None;
@@ -433,10 +426,18 @@ fn abstract_outcome(
         | Type::Dict(..)
         | Type::DictView(..)
         | Type::Range => always(kind == AbstractClass::Iterable),
+        // A generator is all three; what an iterator holds, or an iterable, its object knows
+        // (TYP-21).
+        Type::Generator { .. } => Outcome::Always,
+        Type::Iterator(_) if kind == AbstractClass::Generator => Outcome::Checked,
+        Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_)
+            if kind == AbstractClass::Generator =>
+        {
+            Outcome::Never
+        }
         Type::Iterator(_) | Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => {
             Outcome::Always
         }
-        // An iterable may hold a collection or an iterator, which its object knows.
         Type::Iterable(_) if kind == AbstractClass::Iterable => Outcome::Always,
         Type::Iterable(_) => Outcome::Checked,
         Type::Instance(own) => {

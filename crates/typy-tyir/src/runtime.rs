@@ -205,11 +205,48 @@ pub enum RuntimeFunction {
     ExceptionMatches,
     ExceptionEnter,
     ExceptionLeave,
+    /// Keeps an object with an exception's traceback, which takes over the reference: a
+    /// variable of a function the exception leaves (FUN-11, ADR-0070).
+    ExceptionKeep,
     ExceptionSetArguments,
     IteratorNew,
     IterableIterator,
+    /// What `next()` steps for a value held as an `Iterator[T]`: the iterator itself, or a
+    /// wrapper of an instance of a class with `__next__` (TYP-20).
+    IteratorStepper,
+    /// `iter()` of a value held as an `Iterable[T]`: what an instance's `__iter__` returns, as
+    /// it is, or a new iterator (TYP-20).
+    Iter,
     IteratorAdvance,
     IteratorItem,
+    /// `generator.send(value)`: steps the generator with the value's bits and whether it is
+    /// `None`, then gives whether it yielded (SMT-11, ADR-0063).
+    GeneratorSend,
+    /// `generator.throw(exception)`: raises the exception at the generator's `yield`.
+    GeneratorThrow,
+    /// `generator.close()`: raises `GeneratorExit` at the generator's `yield` (FUN-11).
+    GeneratorClose,
+    /// `return value` of a generator's body: keeps the value's bits, owned, as its result.
+    GeneratorSetResult,
+    /// Whether an iterator is a generator that holds its body's return value.
+    GeneratorHasResult,
+    /// The bits of the return value an iterator's generator holds, borrowed; `TypeError`
+    /// when it holds none.
+    GeneratorResult,
+    /// One step of `yield from`: resumes the iterator as the generator was resumed, and
+    /// gives whether it yielded (SMT-11).
+    GeneratorDelegate,
+    /// The values of an iterable for unpacking targets, in a new list, with CPython's
+    /// `ValueError` when there are too few or too many (SMT-02, EXP-17).
+    Unpack,
+    /// Records a keyword name of a call that unpacks, with CPython's `TypeError` for one given
+    /// twice (EXP-17, ADR-0073).
+    CallName,
+    /// Merges the dict of a `**` argument into a call's keywords (EXP-17, ADR-0073).
+    CallMerge,
+    /// Checks a call that unpacks against its callee's parameters, with CPython's `TypeError`
+    /// (EXP-17, ADR-0073).
+    CallCheck,
     ObjectType,
     ObjectRepr,
     ObjectStr,
@@ -464,7 +501,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 361] = [
+    pub const ALL: [Self; 375] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -655,10 +692,24 @@ impl RuntimeFunction {
         Self::ExceptionMatches,
         Self::ExceptionEnter,
         Self::ExceptionLeave,
+        Self::ExceptionKeep,
         Self::ExceptionSetArguments,
         Self::IteratorNew,
         Self::IterableIterator,
+        Self::IteratorStepper,
+        Self::Iter,
         Self::IteratorAdvance,
+        Self::GeneratorSend,
+        Self::GeneratorThrow,
+        Self::GeneratorClose,
+        Self::GeneratorSetResult,
+        Self::GeneratorHasResult,
+        Self::GeneratorResult,
+        Self::GeneratorDelegate,
+        Self::Unpack,
+        Self::CallName,
+        Self::CallMerge,
+        Self::CallCheck,
         Self::IteratorItem,
         Self::ObjectType,
         Self::ObjectRepr,
@@ -1066,7 +1117,9 @@ impl RuntimeFunction {
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
             Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
             Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits, Int], Bool, false),
-            Self::ExceptionSetCause => signature(&[EXCEPTION, Bits], Unit, false),
+            Self::ExceptionSetCause | Self::ExceptionKeep => {
+                signature(&[EXCEPTION, Bits], Unit, false)
+            }
             Self::ExceptionThrow => signature(&[EXCEPTION], Unit, true),
             Self::ExceptionHandled => signature(&[], EXCEPTION, false),
             Self::ExceptionClass => signature(&[EXCEPTION], TYPE, false),
@@ -1080,8 +1133,25 @@ impl RuntimeFunction {
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
-            Self::IterableIterator => signature(&[TyirType::ITERABLE, Bits], ITERATOR, false),
+            // An instance's `__iter__` may raise (TYP-20).
+            Self::IterableIterator | Self::Iter => {
+                signature(&[TyirType::ITERABLE, Bits], ITERATOR, true)
+            }
+            Self::IteratorStepper => signature(&[ITERATOR], ITERATOR, false),
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
+            Self::GeneratorSend => signature(&[TyirType::GENERATOR, Bits, Bool], Bool, true),
+            Self::GeneratorThrow => signature(&[TyirType::GENERATOR, EXCEPTION], Bool, true),
+            Self::GeneratorClose => signature(&[TyirType::GENERATOR], Unit, true),
+            Self::GeneratorSetResult => signature(&[TyirType::GENERATOR, Bits], Unit, false),
+            Self::GeneratorHasResult => signature(&[ITERATOR], Bool, false),
+            Self::GeneratorResult => signature(&[ITERATOR], Bits, true),
+            Self::GeneratorDelegate => {
+                signature(&[TyirType::GENERATOR, ITERATOR, Bool], Bool, true)
+            }
+            Self::Unpack => signature(&[Bits, Int, Bits, Int, Int, Bool], LIST, true),
+            Self::CallName => signature(&[STR, DICT, STR], Unit, true),
+            Self::CallMerge => signature(&[STR, DICT, DICT, DICT, Bits], Unit, true),
+            Self::CallCheck => signature(&[STR, Int, Bits], Unit, true),
             Self::IteratorItem => signature(&[ITERATOR], Bits, false),
             Self::ObjectType => signature(&[Bits], TYPE, false),
             Self::ObjectRepr | Self::ObjectStr => signature(&[Bits], STR, true),
@@ -1428,10 +1498,24 @@ impl RuntimeFunction {
             Self::ExceptionMatches => "exception_matches",
             Self::ExceptionEnter => "exception_enter",
             Self::ExceptionLeave => "exception_leave",
+            Self::ExceptionKeep => "exception_keep",
             Self::ExceptionSetArguments => "exception_set_arguments",
             Self::IteratorNew => "iterator_new",
             Self::IterableIterator => "iterable_iterator",
+            Self::IteratorStepper => "iterator_stepper",
+            Self::Iter => "iter",
             Self::IteratorAdvance => "iterator_advance",
+            Self::GeneratorSend => "generator_send",
+            Self::GeneratorThrow => "generator_throw",
+            Self::GeneratorClose => "generator_close",
+            Self::GeneratorSetResult => "generator_set_result",
+            Self::GeneratorHasResult => "generator_has_result",
+            Self::GeneratorResult => "generator_result",
+            Self::GeneratorDelegate => "generator_delegate",
+            Self::Unpack => "unpack",
+            Self::CallName => "call_name",
+            Self::CallMerge => "call_merge",
+            Self::CallCheck => "call_check",
             Self::IteratorItem => "iterator_item",
             Self::ObjectType => "object_type",
             Self::ObjectRepr => "object_repr",

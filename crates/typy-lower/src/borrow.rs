@@ -14,8 +14,8 @@ fn target(assigned: &AssignTarget, found: &mut BTreeSet<SymbolId>) {
         AssignTarget::Name(symbol) => {
             found.insert(*symbol);
         }
-        AssignTarget::Tuple(targets) => {
-            for each in targets {
+        AssignTarget::Tuple(_) | AssignTarget::Unpack { .. } => {
+            for each in assigned.nested() {
                 target(each, found);
             }
         }
@@ -109,7 +109,17 @@ pub(crate) fn assigned_symbols(body: &[TypedStmt]) -> BTreeSet<SymbolId> {
                     statements(orelse, found);
                     statements(finalbody, found);
                 }
+                TypedStmt::Yield {
+                    received: Some(received),
+                    ..
+                }
+                | TypedStmt::YieldFrom {
+                    received: Some(received),
+                    ..
+                } => statements(std::slice::from_ref(received.as_ref()), found),
                 TypedStmt::Expr { .. }
+                | TypedStmt::Yield { .. }
+                | TypedStmt::YieldFrom { .. }
                 | TypedStmt::Delete { .. }
                 | TypedStmt::Assert { .. }
                 | TypedStmt::Return { .. }
@@ -143,7 +153,8 @@ pub(crate) fn outlives_call(expression: &TypedExpr) -> bool {
         | TypedExprKind::CapturedCellObject(_) => true,
         TypedExprKind::Wrap(inner)
         | TypedExprKind::Unwrap(inner)
-        | TypedExprKind::AsIterable(inner) => outlives_call(inner),
+        | TypedExprKind::AsIterable(inner)
+        | TypedExprKind::AsIterator(inner) => outlives_call(inner),
         _ => false,
     }
 }
@@ -180,6 +191,7 @@ pub(crate) fn is_quiet(expression: &TypedExpr) -> bool {
         | TypedExprKind::Upcast(operand)
         | TypedExprKind::Downcast(operand)
         | TypedExprKind::AsIterable(operand)
+        | TypedExprKind::AsIterator(operand)
         | TypedExprKind::Unary { operand, .. } => is_quiet(operand),
         TypedExprKind::ListItem {
             list: left,

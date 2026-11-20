@@ -33,6 +33,26 @@ pub struct TyirFunction {
     pub values: Vec<ValueInfo>,
     /// Every slot, indexed by `SlotId`.
     pub slots: Vec<Slot>,
+    /// The frame a generator's resume function keeps in its object, or `None` for any other
+    /// function (ADR-0063).
+    pub generator: Option<GeneratorFrame>,
+}
+
+/// What a generator's object holds between steps: the arguments its maker stores, then each
+/// slot of its resume function, laid out as one tuple (ADR-0063).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GeneratorFrame {
+    /// The types of the arguments, the closure of a nested generator function first.
+    pub arguments: Vec<TyirType>,
+    /// Whether the first argument is the closure, which every step reads and the object
+    /// keeps.
+    pub closure: bool,
+    /// The type of what a `yield` gives.
+    pub yields: TyirType,
+    /// The layout of the frame: the arguments, then the slots.
+    pub frame: crate::types::TupleTypeId,
+    /// The one-item tuple of what the body returns, or `None` when it returns `None`.
+    pub result: Option<crate::types::TupleTypeId>,
 }
 
 impl TyirFunction {

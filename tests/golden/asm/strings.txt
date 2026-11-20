@@ -723,37 +723,49 @@ __typy_main:
 	.size	__typy_main, .Lfunc_end0-__typy_main
 	.cfi_endproc
 
+	.globl	__typy_finish
+	.prefalign	4, .Lfunc_end1, nop
+	.type	__typy_finish,@function
+__typy_finish:
+	.cfi_startproc
+	jmp	.LBB1_1
+.LBB1_1:
+	retq
+.Lfunc_end1:
+	.size	__typy_finish, .Lfunc_end1-__typy_finish
+	.cfi_endproc
+
 	.hidden	typy_rt_heap_allocate
 	.globl	typy_rt_heap_allocate
-	.prefalign	4, .Lfunc_end1, nop
+	.prefalign	4, .Lfunc_end2, nop
 	.type	typy_rt_heap_allocate,@function
 typy_rt_heap_allocate:
 	.cfi_startproc
 	jmp	malloc@PLT
-.Lfunc_end1:
-	.size	typy_rt_heap_allocate, .Lfunc_end1-typy_rt_heap_allocate
+.Lfunc_end2:
+	.size	typy_rt_heap_allocate, .Lfunc_end2-typy_rt_heap_allocate
 	.cfi_endproc
 
 	.hidden	typy_rt_heap_reallocate
 	.globl	typy_rt_heap_reallocate
-	.prefalign	4, .Lfunc_end2, nop
+	.prefalign	4, .Lfunc_end3, nop
 	.type	typy_rt_heap_reallocate,@function
 typy_rt_heap_reallocate:
 	.cfi_startproc
 	jmp	realloc@PLT
-.Lfunc_end2:
-	.size	typy_rt_heap_reallocate, .Lfunc_end2-typy_rt_heap_reallocate
+.Lfunc_end3:
+	.size	typy_rt_heap_reallocate, .Lfunc_end3-typy_rt_heap_reallocate
 	.cfi_endproc
 
 	.hidden	typy_rt_heap_free
 	.globl	typy_rt_heap_free
-	.prefalign	4, .Lfunc_end3, nop
+	.prefalign	4, .Lfunc_end4, nop
 	.type	typy_rt_heap_free,@function
 typy_rt_heap_free:
 	.cfi_startproc
 	jmp	free@PLT
-.Lfunc_end3:
-	.size	typy_rt_heap_free, .Lfunc_end3-typy_rt_heap_free
+.Lfunc_end4:
+	.size	typy_rt_heap_free, .Lfunc_end4-typy_rt_heap_free
 	.cfi_endproc
 
 	.type	typy.global.0,@object

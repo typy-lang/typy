@@ -30,9 +30,11 @@ pub(crate) use methods::{
     typy_rt_list_insert, typy_rt_list_pop, typy_rt_list_remove,
 };
 pub(crate) use operations::join_reprs;
-pub(crate) use operations::{typy_rt_list_append, typy_rt_list_equal, typy_rt_list_repr};
 #[cfg(test)]
-pub(crate) use operations::{typy_rt_list_contains, typy_rt_list_new};
+pub(crate) use operations::typy_rt_list_contains;
+pub(crate) use operations::{
+    typy_rt_list_append, typy_rt_list_equal, typy_rt_list_new, typy_rt_list_repr,
+};
 pub(crate) use order::typy_rt_list_compare;
 #[cfg(test)]
 pub(crate) use order::{typy_rt_list_concat, typy_rt_list_repeat};
@@ -264,7 +266,9 @@ pub(crate) unsafe fn destroy(list: *mut ListObject) {
     // SAFETY: the list is live, and its first `length` items are initialised.
     unsafe {
         let item_type = (*list).item_type();
-        for index in 0..(*list).length {
+        // The last item goes first, as CPython frees a list's items, so generators the list
+        // drops close in CPython's order (FUN-11).
+        for index in (0..(*list).length).rev() {
             item_type.release((*list).item(index));
         }
         if !(*list).items.is_null() {

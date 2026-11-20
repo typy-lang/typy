@@ -436,6 +436,58 @@ impl Checker<'_> {
                 self.cell_value(*layout)?;
                 None
             }
+            Operation::NewGenerator { function } => {
+                self.generator_frame(*function)?;
+                Some(TyirType::GENERATOR)
+            }
+            Operation::SetGeneratorArgument {
+                generator,
+                function,
+                index,
+                value,
+            } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                let ty = self.generator_argument(*function, *index)?;
+                self.expect(*value, ty, "the argument")?;
+                None
+            }
+            Operation::GeneratorArgument {
+                generator,
+                function,
+                index,
+            } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                Some(self.generator_argument(*function, *index)?)
+            }
+            Operation::GeneratorClosure {
+                generator,
+                function,
+            } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                if !self.generator_frame(*function)?.closure {
+                    return Err(self.error(format!("fn{} keeps no closure", function.0)));
+                }
+                Some(TyirType::FUNCTION)
+            }
+            Operation::GeneratorThrown { generator } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                Some(TyirType::Optional(crate::types::OptionalBase::Object(
+                    TypeId::EXCEPTION,
+                )))
+            }
+            Operation::GeneratorReceived { generator } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                Some(TyirType::Bool)
+            }
+            Operation::GeneratorSent { generator } | Operation::GeneratorCaller { generator } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                Some(TyirType::Bits)
+            }
+            Operation::SetGeneratorItem { generator, item } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                self.expect(*item, TyirType::Bits, "the item")?;
+                None
+            }
             Operation::NewClosure { function, captures } => {
                 if self.module.functions.get(function.0 as usize).is_none() {
                     return Err(self.error(format!("fn{} does not exist", function.0)));
@@ -502,6 +554,10 @@ impl Checker<'_> {
             TyirType::Optional(crate::types::OptionalBase::Object(TypeId::UNION)),
         ) = (from, to)
         {
+            return true;
+        }
+        // A generator is an iterator, held as the same object (ADR-0063).
+        if (from, to) == (TyirType::GENERATOR, TyirType::ITERATOR) {
             return true;
         }
         let classes = match (from, to) {
@@ -644,6 +700,31 @@ impl Checker<'_> {
         Ok((result != TyirType::Unit).then_some(result))
     }
 
+    /// Returns the frame of the resume function `function`.
+    fn generator_frame(
+        &self,
+        function: crate::function::FunctionId,
+    ) -> Result<&crate::function::GeneratorFrame, VerifyError> {
+        self.module
+            .functions
+            .get(function.0 as usize)
+            .and_then(|found| found.generator.as_ref())
+            .ok_or_else(|| self.error(format!("fn{} is no resume function", function.0)))
+    }
+
+    /// Returns the type of the argument at `index` of the resume function `function`.
+    fn generator_argument(
+        &self,
+        function: crate::function::FunctionId,
+        index: u32,
+    ) -> Result<TyirType, VerifyError> {
+        self.generator_frame(function)?
+            .arguments
+            .get(index as usize)
+            .copied()
+            .ok_or_else(|| self.error(format!("fn{} has no argument {index}", function.0)))
+    }
+
     fn block_parameters(&self, block: BlockId) -> Result<Vec<TyirType>, VerifyError> {
         let target = self
             .function
@@ -720,6 +801,36 @@ impl Checker<'_> {
                 self.expect(*value, TyirType::EXCEPTION, "the returned exception")
             }
             Terminator::Unreachable => Ok(()),
+            Terminator::Resume {
+                generator,
+                start,
+                points,
+            } => {
+                if self.function.generator.is_none() {
+                    return Err(self.error("only a resume function resumes".to_owned()));
+                }
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                for block in std::iter::once(start).chain(points) {
+                    if !self.block_parameters(*block)?.is_empty() {
+                        return Err(self.error(format!("b{} is resumed with parameters", block.0)));
+                    }
+                }
+                Ok(())
+            }
+            Terminator::Yield { generator, resume } => {
+                self.expect(*generator, TyirType::GENERATOR, "the generator")?;
+                let listed = matches!(
+                    &self.function.blocks.first().map(|block| &block.terminator),
+                    Some(Terminator::Resume { points, .. }) if points.contains(resume)
+                );
+                if !listed {
+                    return Err(self.error(format!(
+                        "b{} is resumed after a yield the entry does not list",
+                        resume.0
+                    )));
+                }
+                Ok(())
+            }
         }
     }
 }

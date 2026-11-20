@@ -313,10 +313,20 @@ impl Converter<'_> {
                 generators: self.generators(&node.generators),
                 span: self.span(node.range),
             },
-            ast::Expr::Generator(node) => self.other(NodeKind::GeneratorExp, node.range),
+            ast::Expr::Generator(node) => Expr::GeneratorExp {
+                element: Box::new(self.expression(&node.elt)),
+                generators: self.generators(&node.generators),
+                span: self.span(node.range),
+            },
             ast::Expr::Await(node) => self.other(NodeKind::Await, node.range),
-            ast::Expr::Yield(node) => self.other(NodeKind::Yield, node.range),
-            ast::Expr::YieldFrom(node) => self.other(NodeKind::YieldFrom, node.range),
+            ast::Expr::Yield(node) => Expr::Yield {
+                value: node.value.as_deref().map(|value| self.boxed(value)),
+                span,
+            },
+            ast::Expr::YieldFrom(node) => Expr::YieldFrom {
+                value: self.boxed(&node.value),
+                span,
+            },
             ast::Expr::FString(node) => Expr::FString {
                 parts: node
                     .value
@@ -341,7 +351,10 @@ impl Converter<'_> {
                 attribute: self.identifier(&node.attr),
                 span: self.span(node.range),
             },
-            ast::Expr::Starred(node) => self.other(NodeKind::Starred, node.range),
+            ast::Expr::Starred(node) => Expr::Starred {
+                value: Box::new(self.expression(&node.value)),
+                span: self.span(node.range),
+            },
             ast::Expr::List(node) => Expr::List {
                 elements: node
                     .elts

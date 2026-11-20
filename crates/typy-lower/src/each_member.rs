@@ -65,6 +65,7 @@ impl FunctionLowerer<'_> {
             typy_check::MemberTest::Kind(kind) => {
                 let id = match kind {
                     typy_check::RuntimeKind::Iterator => typy_tyir::TypeId::ITERATOR,
+                    typy_check::RuntimeKind::Generator => typy_tyir::TypeId::GENERATOR,
                     typy_check::RuntimeKind::Traceback => typy_tyir::TypeId::TRACEBACK,
                     typy_check::RuntimeKind::Module => typy_tyir::TypeId::MODULE,
                     typy_check::RuntimeKind::File => typy_tyir::TypeId::TEXT_FILE,

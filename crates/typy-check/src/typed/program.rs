@@ -64,6 +64,13 @@ pub struct TypedProgram {
     /// The variables nested functions declare `nonlocal`, each a cell variable whose cell is
     /// the capture at this position of its function object, not a new one (SMT-09).
     pub nonlocals: std::collections::BTreeMap<SymbolId, u32>,
+    /// Each class and protocol it satisfies, and what the instances of each iterator or
+    /// iterable class are, which assignability reads; `ProgramScope` puts them back after
+    /// the check (ADR-0041, TYP-20).
+    pub(crate) fits: (
+        std::collections::BTreeSet<(super::ClassId, super::ClassId)>,
+        std::collections::BTreeMap<super::ClassId, crate::iterator_fits::Iteration>,
+    ),
 }
 
 /// One capture of a nested function: a copy of a variable's value, or the cell it lives in.

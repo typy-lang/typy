@@ -187,6 +187,7 @@ impl BodyChecker<'_> {
         let arguments: Vec<Argument> = bound
             .into_iter()
             .map(|(parameter, expression)| Argument {
+                passed: crate::typed::Passed::Position,
                 parameter,
                 value: self.method_argument(
                     method,
@@ -207,6 +208,7 @@ impl BodyChecker<'_> {
                     span,
                 );
                 arguments.push(Argument {
+                    passed: crate::typed::Passed::Position,
                     parameter: 1,
                     value: Self::converted(none, Some(&signature.result)),
                 });
@@ -238,6 +240,31 @@ impl BodyChecker<'_> {
             (Method::BytesDecode, _) => self.program.record_codec(false, true),
             _ => {}
         }
+    }
+
+    /// Checks the value `send` passes against `sends`, the type the generator receives, and
+    /// holds it as one, which the generator reads it as (FUN-07).
+    fn sent_value(&mut self, value: TypedExpr, sends: &Type) -> TypedExpr {
+        if value.ty == Type::NoneType && !value.ty.is_assignable_to(sends) {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    value.span,
+                    format!(
+                        "`value` of `send` must be {}, and this is None",
+                        sends.with_article()
+                    ),
+                )
+                .with_rule(RuleId::TYP_01)
+                .with_help(
+                    "start the generator with `next(generator)`; `send(None)` starts one that \
+                     receives `None`, as `Generator[Y, S | None, R]` does",
+                ),
+            );
+            return value;
+        }
+        self.expect(&value, sends.clone(), "`value` of `send`");
+        Self::converted(value, Some(sends))
     }
 
     pub(super) fn invalid_call(span: Span) -> TypedExpr {
@@ -375,19 +402,25 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        self.error(
-            Diagnostic::new(
-                DiagnosticCode::error(412),
-                name.span,
-                format!(
-                    "{} has no method `{}` in TyPy",
-                    receiver.with_article(),
-                    name.name
-                ),
-            )
-            .with_rule(RuleId::LIB_03),
-            span,
+        let mut diagnostic = Diagnostic::new(
+            DiagnosticCode::error(412),
+            name.span,
+            format!(
+                "{} has no method `{}` in TyPy",
+                receiver.with_article(),
+                name.name
+            ),
         )
+        .with_rule(RuleId::LIB_03);
+        if matches!(receiver, Type::Iterator(_) | Type::Iterable(_))
+            && matches!(name.name.as_str(), "send" | "throw" | "close")
+        {
+            diagnostic = diagnostic.with_rule(RuleId::FUN_07).with_help(
+                "only a `Generator[Y, S, R]` has `send`, `throw` and `close`; annotate the \
+                 generator function with it",
+            );
+        }
+        self.error(diagnostic, span)
     }
 
     /// Checks one argument against what its parameter accepts.
@@ -402,9 +435,13 @@ impl BodyChecker<'_> {
         match &parameter.ty {
             ParameterType::Exact(ty) => {
                 let value = self.expression_expecting(argument, Some(ty));
+                if method == Method::GeneratorSend {
+                    return self.sent_value(value, ty);
+                }
                 self.expect(&value, ty.clone(), &what);
                 value
             }
+            ParameterType::Exception => self.exception_operand(argument, "`throw`"),
             ParameterType::StrOrNone | ParameterType::IntOrNone => {
                 let value = self.expression(argument);
                 if !matches!(

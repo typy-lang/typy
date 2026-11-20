@@ -13,7 +13,7 @@ documents it.
 | [Exceptions](exceptions.md) | Raising, catching and `with`, and the built-in exception classes | EXC |
 | [Built-in functions and modules](functions-and-modules.md) | Builtins, methods of the built-in types, `%` formatting, `math`, `sys` and files | LIB |
 
-TyPy 0.8 provides these modules of the standard library:
+TyPy 0.9 provides these modules of the standard library:
 
 | Module | What TyPy provides | Described in |
 | --- | --- | --- |

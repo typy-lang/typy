@@ -115,7 +115,7 @@ pub unsafe extern "C" fn typy_rt_instance_off_stack(block: *mut InstanceObject) 
                 b"typy runtime: an instance in a frame is still held when its function returns\n",
             );
         }
-        crate::tuple::release((*(*block).class).fields, attributes(block));
+        release_attributes(block);
         (*block).header.type_id = 0;
     }
 }
@@ -126,9 +126,27 @@ pub unsafe extern "C" fn typy_rt_instance_off_stack(block: *mut InstanceObject) 
 ///
 /// `instance` points to a live instance that nothing else refers to.
 pub(crate) unsafe fn destroy(instance: *mut InstanceObject) {
-    // SAFETY: the caller's guarantee; the descriptor lays out the attributes.
-    unsafe { crate::tuple::release((*(*instance).class).fields, attributes(instance)) };
+    // SAFETY: the caller's guarantee.
+    unsafe { release_attributes(instance) };
     crate::allocator::free(instance.cast());
+}
+
+/// Drops a reference to every object the attributes of `instance` hold, the first attribute
+/// first, as CPython frees an instance's `__dict__`, so generators the instance drops close
+/// in CPython's order (FUN-11).
+///
+/// # Safety
+///
+/// `instance` points to a live instance whose attributes hold the references.
+unsafe fn release_attributes(instance: *mut InstanceObject) {
+    // SAFETY: the caller's guarantee; the descriptor lays out the attributes.
+    unsafe {
+        crate::tuple::release_first(
+            (*(*instance).class).fields,
+            attributes(instance),
+            usize::MAX,
+        );
+    }
 }
 
 /// Returns the class of an instance.

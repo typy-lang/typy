@@ -26,7 +26,7 @@ pub use kind::ExceptionKind;
         reason = "only `main` reports uncaught exceptions, and tests have no `main`"
     )
 )]
-pub(crate) use report::report_uncaught;
+pub(crate) use report::{report_ignored, report_uncaught};
 pub(crate) use text::{ExitCode, exit_code, typy_rt_exception_str};
 use traceback::Traceback;
 
@@ -375,6 +375,11 @@ pub unsafe extern "C" fn typy_rt_exception_enter(
     handled::replace(exception)
 }
 
+/// Returns the exception being handled, borrowed, or null.
+pub(crate) fn handled_exception() -> *mut ExceptionObject {
+    handled::get()
+}
+
 /// Ends an `except` clause, restoring the exception handled before it.
 ///
 /// # Safety
@@ -449,12 +454,37 @@ pub(crate) unsafe fn destroy(exception: *mut ExceptionObject) {
                 typy_rt_decrement(link.cast());
             }
         }
+        // A class's attributes go first first, as an instance's do (FUN-11).
         let fields = object.class().fields;
         if !fields.is_null() {
-            crate::tuple::release(fields, (exception.expose_provenance() + PREFIX) as u64);
+            crate::tuple::release_first(
+                fields,
+                (exception.expose_provenance() + PREFIX) as u64,
+                usize::MAX,
+            );
         }
     }
     free(exception.cast());
+}
+
+/// Keeps the object whose bits are `value` with the exception's traceback, which takes over
+/// the reference: a variable of a function the exception leaves, or an argument of the call
+/// that raised it, which CPython's traceback keeps alive with its frame (FUN-11, ADR-0070).
+/// The bits 0, `None`, keep nothing.
+///
+/// # Safety
+///
+/// `exception` points to a live exception, and `value` is 0 or the address of a live object
+/// whose reference the caller gives up.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_exception_keep(exception: *mut ExceptionObject, value: u64) {
+    if value == 0 {
+        return;
+    }
+    let object =
+        core::ptr::with_exposed_provenance_mut::<ObjectHeader>(usize::try_from(value).unwrap_or(0));
+    // SAFETY: the caller's guarantee.
+    unsafe { (*exception).traceback.keep(object) };
 }
 
 /// Adds the frame a raising call is in to the exception's traceback: function name, file name and line, as C strings.

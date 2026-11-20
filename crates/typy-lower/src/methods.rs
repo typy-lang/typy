@@ -12,6 +12,9 @@ pub(crate) struct Calls<'program> {
     pub(crate) methods: &'program MethodTables,
     /// Whether a method a type object's slot calls may raise (CLS-22, ADR-0039).
     pub(crate) raising_slots: bool,
+    /// Whether the program has generator functions, so an exception keeps the variables of
+    /// the functions it leaves, as CPython's traceback keeps their frames (ADR-0070).
+    pub(crate) keeps_frames: bool,
 }
 
 /// The method table of each class of the program, and the class and name of each method.

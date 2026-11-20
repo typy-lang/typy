@@ -334,8 +334,8 @@ fn binary_symbol(operator: BinaryOperator) -> &'static str {
 }
 
 /// Returns true when CPython defines the identity of every value of the type, as it does for
-/// instances, exceptions, iterators, modules, files, tracebacks and type objects, and for a
-/// union of such types (EXP-08, TYP-14).
+/// instances, exceptions, iterators, generators, modules, files, tracebacks and type objects,
+/// and for a union of such types (EXP-08, TYP-14).
 fn has_identity(ty: &Type) -> bool {
     match ty {
         Type::Union(members) => members.iter().all(has_identity),
@@ -344,6 +344,7 @@ fn has_identity(ty: &Type) -> bool {
             Type::Instance(..)
                 | Type::Exception(_)
                 | Type::Iterator(_)
+                | Type::Generator { .. }
                 | Type::Traceback
                 | Type::Module(_)
                 | Type::TypeAlias

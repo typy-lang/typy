@@ -145,7 +145,7 @@ fn fun_05_a_function_without_one_callable_type_is_not_a_value() {
         (
             "print(len)",
             "E0201",
-            "using `len` as a value is planned for TyPy 0.9 (FUN-08)",
+            "using `len` as a value is planned for TyPy 0.10 (FUN-08)",
         ),
     ];
     for (statement, code, message) in cases {
@@ -256,7 +256,7 @@ fn lib_17_the_typing_names_a_later_release_gives_are_planned_for_it() {
             found,
             [(
                 "E0201".to_owned(),
-                format!("`typing.{name}` is planned for TyPy 0.9 ({rule})"),
+                format!("`typing.{name}` is planned for TyPy 0.10 ({rule})"),
                 rule.to_owned()
             )]
         );
@@ -316,31 +316,31 @@ fn fun_09_the_methods_without_one_bound_value_yet_are_planned() {
     let cases = [
         (
             "class C:\n    @classmethod\n    def make(cls) -> int:\n        return 1\nf = C.make\n",
-            "`make` is a class method, and using one as a value is planned for TyPy 0.9 (FUN-09)",
+            "`make` is a class method, and using one as a value is planned for TyPy 0.10 (FUN-09)",
         ),
         (
             "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
              class D(B):\n    @staticmethod\n    def s() -> int:\n        return 2\nf = B().s\n",
             "`s` is a static method a subclass defines again, and using one as a value is \
-             planned for TyPy 0.9 (FUN-09)",
+             planned for TyPy 0.10 (FUN-09)",
         ),
         (
             "class B:\n    def v(self) -> int | None:\n        return None\n\
              class D(B):\n    def v(self) -> int:\n        return 1\nf = B().v\n",
             "`v` is a method a subclass overrides with other parameters or a result held \
-             otherwise, and using one as a value is planned for TyPy 0.9 (FUN-09)",
+             otherwise, and using one as a value is planned for TyPy 0.10 (FUN-09)",
         ),
         (
             "class B:\n    def v(self) -> int:\n        return 0\n\
              class D(B):\n    @staticmethod\n    def v() -> int:\n        return 1\nf = B().v\n",
             "`v` is a method a subclass overrides with other parameters or a result held \
-             otherwise, and using one as a value is planned for TyPy 0.9 (FUN-09)",
+             otherwise, and using one as a value is planned for TyPy 0.10 (FUN-09)",
         ),
         (
             "from typing import Protocol\nclass P(Protocol):\n    def n(self) -> int: ...\n\
              def f(p: P) -> None:\n    g = p.n\n",
             "`n` is a method of the protocol `P`, and using a protocol value's method as a \
-             value is planned for TyPy 0.9 (FUN-09)",
+             value is planned for TyPy 0.10 (FUN-09)",
         ),
     ];
     for (source, message) in cases {

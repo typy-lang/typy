@@ -5,13 +5,39 @@
 | Item | Rule |
 | --- | --- |
 | Assignment, annotated assignment and augmented assignment | SMT-01 |
-| Unpacking into several targets from a tuple or a list, nested as in Python | SMT-02 |
+| Unpacking into several targets from a tuple or any iterable, nested as in Python, with one starred target that takes the rest as a list | SMT-02, EXP-17 |
 | `pass`, `return`, `break` and `continue` | SMT-03 |
 | `raise` and `assert`, described in [Exceptions](../library/exceptions.md) | SMT-04, SMT-06 |
 | `del` of list items, list slices and dict keys | SMT-05 |
 | `global` in a function, for the module's variables | SMT-08 |
 | `nonlocal` in a nested function, for the variables of the functions around it | SMT-09 |
 | `type` at module level, described in [Types](types.md#type-aliases) | SMT-10 |
+
+## Unpacking
+
+Targets separated by commas take the values of the value assigned, in
+order. A tuple of a fixed number of items gives each target its own type,
+and the number of targets must match, E0308. Any other iterable, such as
+a list, a `str`, a range or a generator, gives every target its item type,
+and the number is checked as the program runs, with CPython 3.15's
+`ValueError`. One target may be starred, `*rest`, to take a list of the
+values the others leave:
+
+<!-- typy-expect: accepted -->
+```python
+first, *rest = [1, 2, 3]
+head, *middle, tail = "abcd"
+for key, *values in [["k", "v1", "v2"], ["j"]]:
+    print(key, values)
+print(first, rest, head, middle, tail)
+```
+
+A starred target over a tuple of a fixed number of items takes those
+between the others, which must share one type. As in CPython, a target
+without a star reads one value past the targets of an iterator to find
+too many, so an endless generator raises `ValueError` and does not hang.
+
+## Deleting
 
 `del` removes what each target names, in order: `del xs[i]` with
 `IndexError` outside the list, `del xs[a:b:c]` what the slice selects, and
@@ -27,6 +53,8 @@ ages = {"ann": 31, "bob": 27}
 del ages["bob"]
 print(queue, ages)
 ```
+
+## Variables of the module and of enclosing functions
 
 A function reads the variables of its module, and assigns them after
 `global`. A read before the module binds the variable raises

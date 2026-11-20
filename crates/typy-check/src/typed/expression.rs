@@ -25,8 +25,31 @@ pub struct TypedExpr {
 pub struct Argument {
     /// The index of the parameter in the callee's signature.
     pub parameter: usize,
+    /// How the value reaches the parameter.
+    pub passed: Passed,
     /// The value.
     pub value: TypedExpr,
+}
+
+/// How an argument reaches its parameter (EXP-17, ADR-0073).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Passed {
+    /// By its position, also into `*args`.
+    Position,
+    /// By the parameter's name.
+    Name,
+    /// By a keyword `**kwargs` takes, this one.
+    Keyword(String),
+    /// `*tuple` of a tuple of a fixed number of items: each item by its position, to the
+    /// parameter at the same place in this list.
+    Items(Vec<usize>),
+    /// A list of every positional value from the first `*iterable` of unknown length on,
+    /// bound from `parameter` on when the call runs.
+    Tail,
+    /// `**dict`: each entry by its key, bound when the call runs.
+    Entries,
+    /// The value of a default a call makes, used when no argument fills the parameter.
+    Default,
 }
 
 /// What an expression does.
@@ -76,6 +99,8 @@ pub enum TypedExprKind {
     },
     /// A built-in iterable or an iterator held as an `Iterable[T]`: the same object (TYP-15).
     AsIterable(Box<TypedExpr>),
+    /// An instance of an iterator class held as an `Iterator[T]`: the same object (TYP-20).
+    AsIterator(Box<TypedExpr>),
     /// `__name__`, which is `"__main__"` in the main module (STD-06).
     ModuleName,
     Binary {
@@ -451,6 +476,50 @@ pub enum TypedExprKind {
     /// which no path receives: the item of a union's tuple member that is too short for the
     /// position (DAT-08, ADR-0034).
     Raise(Box<TypedExpr>),
+    /// What a generator received at the `yield` its step resumed after: the value `send`
+    /// gave, or `None` when `next`, a `for` loop or `send(None)` resumed it (SMT-11).
+    Received,
+    /// The item the iterator a `yield from` delegates to yielded last (SMT-11).
+    DelegatedItem,
+    /// A list, set or tuple display that unpacks iterables with `*`: the collection gets each
+    /// part in order (EXP-17).
+    Spread {
+        kind: SpreadKind,
+        parts: Vec<SpreadPart>,
+    },
+    /// A dict display that unpacks dicts with `**`: the dict gets each part in order (EXP-17).
+    DictSpread(Vec<DictPart>),
+    /// What the generator a `yield from` delegated to returned, or `None` (FUN-07).
+    DelegatedResult,
+}
+
+/// The collection a display with `*` builds (EXP-17).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpreadKind {
+    /// `[*a, b]`.
+    List,
+    /// `{*a, b}`.
+    Set,
+    /// `(*a, b)`, a `tuple[T, ...]`.
+    Tuple,
+}
+
+/// One part of a display with `*`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SpreadPart {
+    /// An item.
+    Item(TypedExpr),
+    /// `*source`: each value of the source, as a `for` loop reads it.
+    Each(Box<super::statement::LoopSource>),
+}
+
+/// One part of a dict display with `**`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum DictPart {
+    /// `key: value`.
+    Entry(TypedExpr, TypedExpr),
+    /// `**dict`: each entry of the dict.
+    Merge(TypedExpr),
 }
 
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
@@ -459,6 +528,9 @@ pub enum TypedExprKind {
 pub struct PrintCall {
     /// The values printed, in order.
     pub values: Vec<TypedExpr>,
+    /// The positions of `values` that hold a list of the values of a `*iterable`, each
+    /// written as a value of its own (EXP-17).
+    pub each: Vec<usize>,
     /// What is written between two values.
     pub sep: Option<TypedExpr>,
     /// What is written after the last value.
@@ -574,9 +646,9 @@ pub struct IsInstanceTest {
     /// Whether every value of the static type that is not `None` is an instance of one of the
     /// classes.
     pub always: bool,
-    /// The classes the value's class decides, tested when the program runs, when `always` is
-    /// false.
-    pub checks: Vec<crate::types::TypeObjectOf>,
+    /// The classes the value's class decides, and the kinds of the runtime's own objects
+    /// that pass, tested when the program runs, when `always` is false.
+    pub checks: Vec<MemberTest>,
     /// The position, in the function's table of narrowed types, of the type a true test gives
     /// the variable the value reads, when it narrows one (TYP-07).
     pub narrowed: Option<u32>,
@@ -584,8 +656,8 @@ pub struct IsInstanceTest {
     /// tested class takes in every case (TYP-07, TYP-14).
     pub otherwise: Option<u32>,
     /// For a union, each member in order: whether every value of it is an instance of one of
-    /// the classes, and the classes its value's class decides (TYP-14).
-    pub members: Vec<(bool, Vec<crate::types::TypeObjectOf>)>,
+    /// the classes, and the tests its value's class decides (TYP-14).
+    pub members: Vec<(bool, Vec<MemberTest>)>,
 }
 
 /// What a call with a `key` does with the items of its list (FUN-05).
@@ -627,6 +699,8 @@ pub enum MemberTest {
 pub enum RuntimeKind {
     /// An iterator.
     Iterator,
+    /// A generator (TYP-21).
+    Generator,
     /// A traceback.
     Traceback,
     /// A module object.
@@ -664,6 +738,9 @@ impl TypedExpr {
             | TypedExprKind::CapturedCellObject(_)
             | TypedExprKind::ClassVariable(_)
             | TypedExprKind::NotImplemented
+            | TypedExprKind::Received
+            | TypedExprKind::DelegatedItem
+            | TypedExprKind::DelegatedResult
             | TypedExprKind::ForeignLibrary(_)
             | TypedExprKind::SysValue(_) => Vec::new(),
             TypedExprKind::Binary { left, right, .. }
@@ -719,6 +796,20 @@ impl TypedExpr {
             TypedExprKind::ListOf(source)
             | TypedExprKind::SetOf(source)
             | TypedExprKind::DictOf(source) => source.expressions(),
+            TypedExprKind::Spread { parts, .. } => parts
+                .iter()
+                .flat_map(|part| match part {
+                    SpreadPart::Item(item) => vec![item],
+                    SpreadPart::Each(source) => source.expressions(),
+                })
+                .collect(),
+            TypedExprKind::DictSpread(parts) => parts
+                .iter()
+                .flat_map(|part| match part {
+                    DictPart::Entry(key, value) => vec![key, value],
+                    DictPart::Merge(dict) => vec![dict],
+                })
+                .collect(),
             TypedExprKind::DictWith { source, entries } => source
                 .iter()
                 .flat_map(|source| source.expressions())
@@ -755,6 +846,7 @@ impl TypedExpr {
             | TypedExprKind::Downcast(inner)
             | TypedExprKind::Unwrap(inner)
             | TypedExprKind::AsIterable(inner)
+            | TypedExprKind::AsIterator(inner)
             | TypedExprKind::Lazy { value: inner, .. }
             | TypedExprKind::BoundMethod { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],

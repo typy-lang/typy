@@ -181,6 +181,10 @@ impl RuleId {
     pub const EXP_16: Self = Self("EXP-16");
     /// `*args` and `**kwargs` with annotated element types shall be accepted.
     pub const EXP_17: Self = Self("EXP-17");
+    /// An assignment expression inside a generator expression shall bind the variable of the function around it.
+    pub const EXP_18: Self = Self("EXP-18");
+    /// `*` and `**` shall be accepted in a call of a built-in function or method other than `print`, of a function value and of an exception class, and `**` in a call of `print`, binding as CPython binds them (ADR-0073).
+    pub const EXP_19: Self = Self("EXP-19");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
     /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
@@ -209,6 +213,9 @@ impl RuleId {
     pub const FUN_05: Self = Self("FUN-05");
     /// User-defined decorators whose types can be checked shall be accepted.
     pub const FUN_06: Self = Self("FUN-06");
+    /// A generator function shall be annotated to return `Generator[Y, S, R]`, `Iterator[Y]`
+    /// or `Iterable[Y]`, and its call shall give a generator object of that type.
+    pub const FUN_07: Self = Self("FUN-07");
     /// A built-in function or a method of a built-in type shall be a value where a `Callable` is expected.
     pub const FUN_08: Self = Self("FUN-08");
     /// A class method, a static method a subclass defines again, a protocol value's method and
@@ -217,6 +224,10 @@ impl RuleId {
     /// A nested function inside a generic function, and one with type parameters of its own,
     /// shall be accepted.
     pub const FUN_10: Self = Self("FUN-10");
+    /// A `yield` or `yield from` inside a larger expression shall be accepted.
+    pub const FUN_12: Self = Self("FUN-12");
+    /// A function, nested function, method or `lambda` with `*args` or `**kwargs` parameters shall be a value where a `Callable` is expected, taking the arguments the `Callable` passes.
+    pub const FUN_13: Self = Self("FUN-13");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -477,6 +488,8 @@ impl RuleId {
         Self::EXP_15,
         Self::EXP_16,
         Self::EXP_17,
+        Self::EXP_18,
+        Self::EXP_19,
         Self::FFI_01,
         Self::FFI_02,
         Self::FFI_03,
@@ -491,9 +504,12 @@ impl RuleId {
         Self::FUN_04,
         Self::FUN_05,
         Self::FUN_06,
+        Self::FUN_07,
         Self::FUN_08,
         Self::FUN_09,
         Self::FUN_10,
+        Self::FUN_12,
+        Self::FUN_13,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,

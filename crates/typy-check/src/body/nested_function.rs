@@ -95,7 +95,7 @@ impl BodyChecker<'_> {
     /// Checks a `def` in a function: its signature now, in the annotations of the function
     /// around it, and its body once that function's is checked. A nested function of a
     /// generic function, or with type parameters of its own, has a copy for each set of
-    /// types, which is planned for 0.9 (FUN-10).
+    /// types, which is planned for 0.10 (FUN-10).
     pub(super) fn nested_def(&mut self, statement: &Stmt) -> Option<TypedStmt> {
         let parts = FunctionParts::of(statement)?;
         let name = &parts.name.name;
@@ -106,7 +106,7 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     parts.name.span,
                     "a nested function with type parameters, or inside a generic function, is \
-                     planned for TyPy 0.9 (FUN-10)",
+                     planned for TyPy 0.10 (FUN-10)",
                 )
                 .with_rule(RuleId::FUN_10),
             );
@@ -424,7 +424,8 @@ impl BodyChecker<'_> {
     }
 
     /// Returns E0202 for a nested function with a keyword-only parameter read as a value,
-    /// since a `Callable` passes every argument by position.
+    /// since a `Callable` passes every argument by position, and E0201 for one with `*args`
+    /// or `**kwargs` (FUN-13).
     pub(super) fn refused_nested_value(
         &mut self,
         symbol: SymbolId,
@@ -435,6 +436,9 @@ impl BodyChecker<'_> {
             return None;
         }
         let function = *self.nested_functions.get(&symbol)?;
+        if let Some(refused) = self.refused_variadic_value(function, name, span) {
+            return Some(refused);
+        }
         let parameter = self.program.signatures[function.0 as usize]
             .parameters
             .iter()

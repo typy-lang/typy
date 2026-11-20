@@ -12,6 +12,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use typy_diagnostics::Span;
 use typy_source::syntax::{Comprehension, ExceptHandler, Expr, FStringPart, Parameter, Stmt};
 
+/// The parameter of a generator expression's function: the iterator of its first iterable.
+pub(super) const FIRST_ITERATOR: &str = ".0";
+
+/// The name of a generator expression's function, as CPython names it.
+pub(super) const GENERATOR_EXPRESSION: &str = "<genexpr>";
+
 /// What a function's nested functions capture of its own variables, and of those it captures
 /// itself.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -557,6 +563,7 @@ impl Names {
                     self.target_after(element, in_loop, after);
                 }
             }
+            Expr::Starred { value, .. } => self.target_after(value, in_loop, after),
             Expr::Subscript { value, index, .. } => {
                 self.expression(value, in_loop);
                 self.expression(index, in_loop);
@@ -597,6 +604,11 @@ impl Names {
                 body,
                 span,
             } => self.lambda(parameters, body, *span, in_loop),
+            Expr::Yield { value, .. } => {
+                if let Some(value) = value {
+                    self.expression(value, in_loop);
+                }
+            }
             Expr::Compare {
                 left, comparators, ..
             } => {
@@ -651,7 +663,16 @@ impl Names {
                 generators,
                 ..
             } => self.comprehension(&[&**key, &**value], generators, in_loop),
-            Expr::Attribute { value, .. } => self.expression(value, in_loop),
+            Expr::GeneratorExp {
+                element,
+                generators,
+                span,
+            } => self.generator_expression(element, generators, *span, in_loop),
+            Expr::Attribute { value, .. }
+            | Expr::YieldFrom { value, .. }
+            | Expr::Starred { value, .. } => {
+                self.expression(value, in_loop);
+            }
             Expr::Slice {
                 lower, upper, step, ..
             } => self.expressions(
@@ -682,6 +703,37 @@ impl Names {
         self.nested.push(NestedDef {
             span,
             name: "<lambda>".to_owned(),
+            free: inner.free(),
+            values: inner.value_free(),
+            assigned: inner.assigned_free(),
+        });
+    }
+
+    /// Notes a generator expression as a nested function of `.0`, the iterator of its first
+    /// iterable, which it reads where it runs, as CPython does (EXP-15).
+    fn generator_expression(
+        &mut self,
+        element: &Expr,
+        generators: &[Comprehension],
+        span: Span,
+        in_loop: bool,
+    ) {
+        if let Some(first) = generators.first() {
+            self.expression(&first.iter, in_loop);
+        }
+        let mut inner = Self::default();
+        inner.bind(FIRST_ITERATOR, 0, false);
+        for (position, generator) in generators.iter().enumerate() {
+            if position > 0 {
+                inner.expression(&generator.iter, true);
+            }
+            inner.target(&generator.target, true);
+            inner.expressions(&generator.ifs, true);
+        }
+        inner.expression(element, true);
+        self.nested.push(NestedDef {
+            span,
+            name: GENERATOR_EXPRESSION.to_owned(),
             free: inner.free(),
             values: inner.value_free(),
             assigned: inner.assigned_free(),
@@ -796,6 +848,7 @@ fn target_names(target: &Expr) -> Vec<String> {
         Expr::Tuple { elements, .. } | Expr::List { elements, .. } => {
             elements.iter().flat_map(target_names).collect()
         }
+        Expr::Starred { value, .. } => target_names(value),
         _ => Vec::new(),
     }
 }

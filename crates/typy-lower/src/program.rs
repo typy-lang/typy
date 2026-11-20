@@ -19,10 +19,19 @@ use crate::strings::StringPool;
 /// held in its frame (MEM-03). A function may raise when its lowered code contains an `invoke`,
 /// so lowering repeats until that set stops growing (detailed design section 9).
 pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
+    // A type's assignability reads which classes satisfy protocols and iterate (TYP-20).
+    let _tables = typy_check::ProgramScope::open(program);
     let recursive = recursive_functions(program);
     let methods = MethodTables::new(program);
     let families = methods.families();
-    let mut may_raise = vec![false; program.functions.len()];
+    // Each generator function's resume function comes after the program's functions
+    // (ADR-0063).
+    let generators: Vec<&typy_check::TypedFunction> = program
+        .functions
+        .iter()
+        .filter(|function| function.generator.is_some() && !function.generic)
+        .collect();
+    let mut may_raise = vec![false; program.functions.len() + generators.len()];
     let slot_methods: Vec<FunctionId> = program
         .classes
         .iter()
@@ -38,28 +47,25 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
         let mut tuple_types = TupleTypes::default();
         let mut cdata_classes = crate::cdata::CDataClasses::default();
         let module_globals = ModuleGlobals::new(program, &mut tuple_types);
-        let functions: Vec<_> = program
-            .functions
-            .iter()
-            .map(|function| {
-                FunctionLowerer::lower(
-                    program,
-                    function,
-                    &Calls {
-                        may_raise: &may_raise,
-                        methods: &methods,
-                        raising_slots,
-                    },
-                    crate::function::Tables {
-                        strings: &mut strings,
-                        tuple_types: &mut tuple_types,
-                        cdata_classes: &mut cdata_classes,
-                    },
-                    &module_globals,
-                    recursive.contains(&function.id),
-                )
-            })
-            .collect();
+        let calls = Calls {
+            may_raise: &may_raise,
+            methods: &methods,
+            raising_slots,
+            keeps_frames: !generators.is_empty(),
+        };
+        let functions = lower_functions(
+            program,
+            &generators,
+            &calls,
+            crate::function::Tables {
+                strings: &mut strings,
+                tuple_types: &mut tuple_types,
+                cdata_classes: &mut cdata_classes,
+            },
+            (&module_globals, &recursive),
+        );
+        // The function `main` calls at the end comes last (ADR-0071).
+        let finish = FunctionId(u32::try_from(functions.len() - 1).unwrap_or(u32::MAX));
         let found = raising_functions(&functions, &families);
         if found != may_raise {
             may_raise = found;
@@ -88,6 +94,7 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             tuple_types,
             classes,
             entry: FunctionId(program.entry.0),
+            finish,
             allocator: typy_tyir::TyirAllocator::default(),
             foreign_libraries: foreign_libraries(program),
             foreign_functions: foreign_functions(program, &mut cdata_classes),
@@ -114,6 +121,82 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             }
         };
     }
+}
+
+/// Returns the lowered functions of the program, in order, then the resume function of each
+/// generator function of `generators`, in order, whose own lowering makes its generator
+/// (ADR-0063), then the function `main` calls at the end (ADR-0071).
+fn lower_functions(
+    program: &TypedProgram,
+    generators: &[&typy_check::TypedFunction],
+    calls: &Calls<'_>,
+    tables: crate::function::Tables<'_>,
+    (module_globals, recursive): (
+        &ModuleGlobals,
+        &std::collections::BTreeSet<typy_check::FunctionId>,
+    ),
+) -> Vec<typy_tyir::TyirFunction> {
+    let crate::function::Tables {
+        strings,
+        tuple_types,
+        cdata_classes,
+    } = tables;
+    let resume_of = |position: usize| {
+        FunctionId(u32::try_from(program.functions.len() + position).unwrap_or(u32::MAX))
+    };
+    let mut functions: Vec<_> = program
+        .functions
+        .iter()
+        .map(|function| {
+            if let Some(position) = generators.iter().position(|each| each.id == function.id) {
+                return crate::generator::maker(
+                    program,
+                    function,
+                    resume_of(position),
+                    tuple_types,
+                );
+            }
+            FunctionLowerer::lower(
+                program,
+                (function, None),
+                calls,
+                crate::function::Tables {
+                    strings,
+                    tuple_types,
+                    cdata_classes,
+                },
+                module_globals,
+                recursive.contains(&function.id),
+            )
+        })
+        .collect();
+    for (position, function) in generators.iter().enumerate() {
+        functions.push(FunctionLowerer::lower(
+            program,
+            (function, Some(resume_of(position))),
+            calls,
+            crate::function::Tables {
+                strings,
+                tuple_types,
+                cdata_classes,
+            },
+            module_globals,
+            true,
+        ));
+    }
+    let finish = typy_check::FunctionId(u32::try_from(functions.len()).unwrap_or(u32::MAX));
+    functions.push(crate::finish::finish_function(
+        program,
+        calls,
+        crate::function::Tables {
+            strings,
+            tuple_types,
+            cdata_classes,
+        },
+        module_globals,
+        finish,
+    ));
+    functions
 }
 
 /// Returns whether each function may raise: one whose lowered code does, and each method of
@@ -336,6 +419,8 @@ fn tyir_class(
         order: slots.order,
         hash: slots.hash,
         truth: slots.truth,
+        next: method("__next__").filter(|_| class.steps),
+        iter: method("__iter__").filter(|_| class.iterates),
         base: class.base.map(|base| base.0),
         exception_base,
         os_error: class

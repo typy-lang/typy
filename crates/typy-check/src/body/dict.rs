@@ -20,6 +20,9 @@ impl BodyChecker<'_> {
         expected: Option<&Type>,
         span: Span,
     ) -> TypedExpr {
+        if keys.iter().any(Option::is_none) {
+            return self.dict_spread(keys, values, expected, span);
+        }
         let (expected_key, expected_value) = match expected {
             Some(Type::Dict(key, value)) => {
                 (Some(key.as_ref().clone()), Some(value.as_ref().clone()))

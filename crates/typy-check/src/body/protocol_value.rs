@@ -20,6 +20,8 @@ use crate::types::{Type, TypeObjectOf};
 pub(crate) struct ProtocolValues {
     /// Each pair of a class and a protocol it satisfies.
     pub(crate) fits: BTreeSet<(ClassId, ClassId)>,
+    /// What the instances of each iterator or iterable class are (TYP-20).
+    pub(crate) iterations: std::collections::BTreeMap<ClassId, crate::iterator_fits::Iteration>,
     /// The dispatcher of each member read through a protocol value, by protocol and name.
     pub(crate) dispatchers: BTreeMap<(ClassId, String), FunctionId>,
 }
@@ -223,6 +225,7 @@ impl Program {
             span,
             generic: false,
             named_targets: Vec::new(),
+            generator: None,
         }
     }
 
@@ -267,6 +270,7 @@ impl Program {
                 let method = self.method(class, name)?;
                 let own = &self.signatures[method.0 as usize];
                 let mut arguments = vec![Argument {
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: BodyChecker::converted(
                         object,
@@ -279,6 +283,7 @@ impl Program {
                     let value = typed(TypedExprKind::Local(*symbol), parameter.ty.clone());
                     let wanted = own.parameters.get(position).map(|each| &each.ty);
                     arguments.push(Argument {
+                        passed: crate::typed::Passed::Position,
                         parameter: position,
                         value: BodyChecker::converted(value, wanted),
                     });
@@ -326,7 +331,7 @@ impl BodyChecker<'_> {
             if info.method(&attribute.name).is_some() {
                 let message = format!(
                     "`{}` is a method of the protocol `{}`, and using a protocol value's method \
-                     as a value is planned for TyPy 0.9 (FUN-09)",
+                     as a value is planned for TyPy 0.10 (FUN-09)",
                     attribute.name, info.name
                 );
                 return self.error(
@@ -347,6 +352,7 @@ impl BodyChecker<'_> {
             TypedExprKind::Call {
                 function: getter,
                 arguments: vec![Argument {
+                    passed: crate::typed::Passed::Position,
                     parameter: 0,
                     value: object,
                 }],

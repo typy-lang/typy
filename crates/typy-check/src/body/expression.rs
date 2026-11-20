@@ -6,7 +6,7 @@ use typy_source::syntax::{BoolOperator, Constant, Expr};
 use super::BodyChecker;
 use super::flow::test_facts;
 use super::slice::Bounds;
-use crate::typed::{TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{SpreadKind, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -241,6 +241,14 @@ impl BodyChecker<'_> {
             Expr::ListComp { .. } | Expr::SetComp { .. } | Expr::DictComp { .. } => {
                 self.comprehension(expression, None)
             }
+            Expr::GeneratorExp {
+                element,
+                generators,
+                ..
+            } => self.generator_expression(element, generators, None, span),
+            Expr::Tuple { elements, .. } if has_starred(elements) => {
+                self.spread_display(SpreadKind::Tuple, elements, None, span)
+            }
             Expr::Tuple { elements, .. } => {
                 let elements: Vec<TypedExpr> = elements
                     .iter()
@@ -322,7 +330,7 @@ impl BodyChecker<'_> {
                             DiagnosticCode::error(201),
                             span,
                             "a type alias given its type arguments as a value is planned for \
-                             TyPy 0.9 (TYP-18)",
+                             TyPy 0.10 (TYP-18)",
                         )
                         .with_rule(RuleId::TYP_18),
                         span,
@@ -354,61 +362,17 @@ impl BodyChecker<'_> {
                 arguments,
                 keywords,
                 ..
-            } => match function.as_ref() {
-                // A module's declaration of a library holds nothing to evaluate (FFI-01).
-                _ if let Some(library) = self.foreign_library(span) => library,
-                Expr::Name {
-                    id,
-                    span: name_span,
-                } => self.call(id, *name_span, arguments, keywords, span),
-                Expr::Attribute {
-                    value, attribute, ..
-                } => self.method_call(value, attribute, arguments, keywords, span),
-                // A generic class given its type arguments, such as `Box[int](1)`.
-                Expr::Subscript { value, .. }
-                    if matches!(value.as_ref(), Expr::Name { id, .. }
-                        if self.program.class_ids.contains_key(id)) =>
-                {
-                    self.applied_class_call(function, arguments, keywords, span)
-                }
-                // A class `POINTER(T)` or `T * length` called where it is made (FFI-03), or a
-                // function value (FUN-05).
-                _ => {
-                    let class = self.expression_or_class(function);
-                    match class.ty {
-                        Type::CDataClass(class) => {
-                            self.cdata_new(&class, arguments, keywords, span)
-                        }
-                        Type::Error => {
-                            for argument in arguments {
-                                self.expression(argument);
-                            }
-                            TypedExpr { span, ..class }
-                        }
-                        Type::Callable { .. } => self.call_value(class, arguments, keywords, span),
-                        _ => {
-                            for argument in arguments {
-                                self.expression(argument);
-                            }
-                            self.error(
-                                Diagnostic::new(
-                                    DiagnosticCode::error(401),
-                                    function.span(),
-                                    format!("{} cannot be called", class.ty.with_article()),
-                                )
-                                .with_rule(RuleId::EXP_02),
-                                span,
-                            )
-                        }
-                    }
-                }
-            },
+            } => self.checked_call(function, arguments, keywords, span),
             Expr::List { elements, .. } => self.list_display(elements, None, span),
             Expr::Slice { .. } => self.misplaced_slice(span),
             Expr::Attribute {
                 value, attribute, ..
             } => self.attribute(value, attribute, span),
             Expr::FString { parts, .. } => self.fstring(parts, span),
+            Expr::Yield { .. } | Expr::YieldFrom { .. } => self.received_value(span),
+            // The subset check accepts `*value` only in a display or a target, which check it
+            // themselves.
+            Expr::Starred { .. } => Self::invalid_call(span),
             // The subset check refuses every other expression, and a quoted expression is
             // only read as an annotation.
             Expr::Quoted { .. } | Expr::Other { .. } => Self::typed(
@@ -557,4 +521,11 @@ pub(super) fn literal_position(index: &Expr) -> Option<i128> {
         } => literal_position(operand).map(|value| -value),
         _ => None,
     }
+}
+
+/// Returns true when a display has a `*value` item (EXP-17).
+pub(super) fn has_starred(elements: &[Expr]) -> bool {
+    elements
+        .iter()
+        .any(|element| matches!(element, Expr::Starred { .. }))
 }

@@ -61,8 +61,10 @@ pub(crate) static NO_PARAMETERS: BTreeMap<String, Type> = BTreeMap::new();
 /// (TYP-15, CST-10, ADR-0015).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AnnotationName {
-    Iterator,
-    Iterable,
+    Iterator(Origin),
+    Iterable(Origin),
+    /// `Generator[Y, S, R]`, the type of a generator object (FUN-07).
+    Generator(Origin),
     TracebackType,
     ModuleType,
     /// `typing.ClassVar`, which declares a class variable in a class body (CLS-11).
@@ -88,6 +90,14 @@ pub(crate) enum AnnotationName {
     Callable,
 }
 
+/// The module a name of both `typing` and `collections.abc` comes from: the class of
+/// `collections.abc`, or the alias of `typing`, which no class pattern takes (TYP-17, TYP-21).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Origin {
+    Typing,
+    Abc,
+}
+
 /// The modules that give names for annotations only in 0.3.
 pub(crate) const ANNOTATION_MODULES: [&str; 4] =
     ["typing", "collections.abc", "types", "dataclasses"];
@@ -95,8 +105,15 @@ pub(crate) const ANNOTATION_MODULES: [&str; 4] =
 /// Returns the annotation name `name` of the module `module`, if TyPy 0.3 gives it.
 pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName> {
     match (module, name) {
-        ("typing" | "collections.abc", "Iterator") => Some(AnnotationName::Iterator),
-        ("typing" | "collections.abc", "Iterable") => Some(AnnotationName::Iterable),
+        ("typing" | "collections.abc", "Iterator") => {
+            Some(AnnotationName::Iterator(origin(module)))
+        }
+        ("typing" | "collections.abc", "Iterable") => {
+            Some(AnnotationName::Iterable(origin(module)))
+        }
+        ("typing" | "collections.abc", "Generator") => {
+            Some(AnnotationName::Generator(origin(module)))
+        }
         ("typing" | "collections.abc", "Callable") => Some(AnnotationName::Callable),
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
@@ -112,6 +129,15 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         _ => None,
+    }
+}
+
+/// Returns where a name of both `typing` and `collections.abc` comes from.
+fn origin(module: &str) -> Origin {
+    if module == "typing" {
+        Origin::Typing
+    } else {
+        Origin::Abc
     }
 }
 
@@ -159,11 +185,11 @@ fn standard_annotation(
 ) -> Option<Type> {
     Some(match annotation {
         Expr::Subscript { value, index, .. }
-            if let Some(name @ (AnnotationName::Iterator | AnnotationName::Iterable)) =
+            if let Some(name @ (AnnotationName::Iterator(_) | AnnotationName::Iterable(_))) =
                 standard_name(value, scope) =>
         {
             let item = Box::new(annotation_type(index, scope, diagnostics));
-            if name == AnnotationName::Iterator {
+            if let AnnotationName::Iterator(_) = name {
                 Type::Iterator(item)
             } else {
                 Type::Iterable(item)
@@ -173,6 +199,14 @@ fn standard_annotation(
             if standard_name(value, scope) == Some(AnnotationName::Callable) =>
         {
             super::callable_annotation::callable_annotation(index, *span, scope, diagnostics)
+        }
+        Expr::Subscript { value, index, .. }
+            if matches!(
+                standard_name(value, scope),
+                Some(AnnotationName::Generator(_))
+            ) =>
+        {
+            generator_annotation(index, scope, diagnostics)
         }
         // `List[int]` is `list[int]`, read as the built-in type is (LIB-17).
         Expr::Subscript { value, index, span }
@@ -280,7 +314,7 @@ fn bare_standard(
         }
         AnnotationName::TracebackType => Type::Traceback,
         AnnotationName::ModuleType => Type::AnyModule,
-        AnnotationName::Iterator | AnnotationName::Iterable => {
+        AnnotationName::Iterator(_) | AnnotationName::Iterable(_) => {
             diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(408),
@@ -291,7 +325,44 @@ fn bare_standard(
             );
             Type::Error
         }
+        AnnotationName::Generator(_) => {
+            diagnostics.push(generator_form(annotation.span()));
+            Type::Error
+        }
     }
+}
+
+/// Returns the type `Generator[Y, S, R]` names: what it yields, what it is sent and what it
+/// returns, each given, as CPython 3.12 needs them (FUN-07).
+fn generator_annotation(
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let Expr::Tuple { elements, span } = index else {
+        diagnostics.push(generator_form(index.span()));
+        return Type::Error;
+    };
+    let [yields, sends, returns] = elements.as_slice() else {
+        diagnostics.push(generator_form(*span));
+        return Type::Error;
+    };
+    Type::Generator {
+        yields: Box::new(annotation_type(yields, scope, diagnostics)),
+        sends: Box::new(annotation_type(sends, scope, diagnostics)),
+        returns: Box::new(annotation_type(returns, scope, diagnostics)),
+    }
+}
+
+/// Returns E0408 for a `Generator` annotation without its three types.
+fn generator_form(span: typy_diagnostics::Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(408),
+        span,
+        "a `Generator` annotation names what it yields, what it is sent and what it returns, \
+         such as `Generator[int, None, None]`",
+    )
+    .with_rule(RuleId::FUN_07)
 }
 
 /// Returns the type `Optional[T]`, which is `T | None`, or `Union[A, B, ...]`, which is

@@ -1,9 +1,11 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
 mod accessor;
+mod binding;
 mod builtin_call;
 mod builtin_module;
 mod call;
+mod call_expression;
 mod cdata;
 mod class;
 mod class_bridge;
@@ -22,6 +24,8 @@ mod dict_call;
 mod each_member;
 mod foreign_call;
 mod function_value;
+mod generator;
+mod generator_expression;
 mod generic_call;
 mod generic_copy;
 mod override_adapter;
@@ -43,6 +47,7 @@ mod in_place;
 mod isinstance;
 mod iterable_call;
 mod iterator;
+mod iterator_class;
 mod key_argument;
 mod lambda;
 mod list;
@@ -75,6 +80,7 @@ mod round_call;
 mod set;
 mod slice;
 mod slice_object;
+mod spread;
 mod statement;
 mod super_call;
 mod sys_call;
@@ -83,8 +89,11 @@ mod type_object;
 mod typing_class;
 mod union;
 mod union_loop;
+mod unpacked_arguments;
+mod unpacking;
 mod version_info;
 mod view_operator;
+mod yield_from;
 
 pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
@@ -147,6 +156,11 @@ pub(crate) struct BodyChecker<'program> {
     finally_loops: Vec<usize>,
     /// The module variables the function declares `global`, which it assigns (SMT-08).
     global_names: BTreeSet<String>,
+    /// The types of the generator function whose body this is, or `None` for any other body
+    /// (FUN-07, ADR-0063).
+    generator: Option<crate::typed::GeneratorTypes>,
+    /// What the `yield` of `target = yield value` gives the assignment being checked (SMT-11).
+    received: Option<TypedExpr>,
     /// The variables of the functions around it that a nested function declares `nonlocal`,
     /// each its own variable whose cell is the captured one (SMT-09).
     nonlocal_names: BTreeMap<String, SymbolId>,
@@ -172,6 +186,8 @@ pub(crate) struct BodyChecker<'program> {
     /// The variables read or captured through their cells, among them an `except` clause's,
     /// whose name leaves the body's names when the clause ends.
     used_cells: BTreeSet<SymbolId>,
+    /// The calls with `*` or `**` that bound their arguments, by their spans (ADR-0073).
+    unpacking_calls: Vec<Span>,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -203,6 +219,8 @@ impl<'program> BodyChecker<'program> {
             finally_loops: Vec::new(),
             global_names: BTreeSet::new(),
             nonlocal_names: BTreeMap::new(),
+            generator: None,
+            received: None,
             local_aliases: BTreeSet::new(),
             class_allowed: false,
             qualified_name: String::new(),
@@ -212,6 +230,7 @@ impl<'program> BodyChecker<'program> {
             nested_functions: BTreeMap::new(),
             reading_function: false,
             used_cells: BTreeSet::new(),
+            unpacking_calls: Vec::new(),
         }
     }
 
@@ -295,24 +314,10 @@ impl<'program> BodyChecker<'program> {
         let body = checker.statements(&statements);
         checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
-        if checker.assigned.is_some()
-            && !protocol
-            && returns != Type::NoneType
-            && returns != Type::Error
-        {
-            checker.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(405),
-                    definition.span,
-                    format!(
-                        "`{}` can reach its end without returning {}",
-                        definition.name,
-                        returns.with_article()
-                    ),
-                )
-                .with_rule(RuleId::TYP_01),
-            );
+        if !protocol {
+            checker.check_end(definition, &returns);
         }
+        let generator = checker.generator.take();
         let named_targets = std::mem::take(&mut checker.named_targets);
         checker.settle_closures();
         let pending = std::mem::take(&mut checker.pending);
@@ -335,11 +340,36 @@ impl<'program> BodyChecker<'program> {
             span: definition.span,
             generic,
             named_targets,
+            generator,
         });
         if !cells.is_empty() {
             program.cells.insert(function, cells);
         }
         Self::check_nested(program, pending, diagnostics);
+    }
+
+    /// Reports a function that can reach its end without returning the value its annotation
+    /// names; for a generator, the `R` of `Generator[Y, S, R]` (FUN-07).
+    fn check_end(&mut self, definition: &Definition<'_>, returns: &Type) {
+        let returns = match &self.generator {
+            Some(types) => types.returns.clone(),
+            None => returns.clone(),
+        };
+        if self.assigned.is_none() || returns == Type::NoneType || returns == Type::Error {
+            return;
+        }
+        self.diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(405),
+                definition.span,
+                format!(
+                    "`{}` can reach its end without returning {}",
+                    definition.name,
+                    returns.with_article()
+                ),
+            )
+            .with_rule(RuleId::TYP_01),
+        );
     }
 
     /// Returns the variables of the body that live in a cell: those its nested functions
@@ -358,7 +388,7 @@ impl<'program> BodyChecker<'program> {
 
     /// Notes the function's `__qualname__`, what its nested functions capture, and, for a
     /// nested function, what it captures itself (FUN-04) and the variables it declares
-    /// `nonlocal` (SMT-09).
+    /// `nonlocal` (SMT-09); and whether it is a generator function, with its types (FUN-07).
     fn enter_closure(
         &mut self,
         definition: &Definition<'_>,
@@ -378,6 +408,7 @@ impl<'program> BodyChecker<'program> {
         self.closure_scope = closure_scope::ClosureScope::of(&names, body, &enclosing);
         self.closure = closure;
         self.declare_nonlocals(body);
+        self.generator = self.generator_types(definition, body);
     }
 
     /// Checks the module body and stores it in the program as its entry function.
@@ -424,6 +455,7 @@ impl<'program> BodyChecker<'program> {
             span,
             generic: false,
             named_targets,
+            generator: None,
         }));
         entry
     }
