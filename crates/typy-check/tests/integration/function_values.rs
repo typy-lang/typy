@@ -578,3 +578,31 @@ fn fun_08_a_method_of_a_builtin_type_takes_that_type_first() {
         );
     }
 }
+
+#[test]
+fn fun_08_a_function_of_math_or_sys_takes_the_callable_its_context_expects() {
+    let source = concat!(
+        "import math\n",
+        "import sys\n",
+        "from collections.abc import Callable\n",
+        "from math import sqrt as root\n",
+        "floor_of: Callable[[float], int] = math.floor\n",
+        "square_root: Callable[[float], float] = root\n",
+        "limit: Callable[[], int] = sys.getrecursionlimit\n",
+        "print(sorted([2.5, -1.5], key=math.fabs), square_root is math.sqrt, limit())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn fun_08_a_function_of_a_module_a_function_imports_is_a_value() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def measure() -> int:\n",
+        "    import math as numbers\n",
+        "    floor_of: Callable[[float], int] = numbers.floor\n",
+        "    return floor_of(2.5)\n",
+        "print(measure())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}

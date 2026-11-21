@@ -118,8 +118,8 @@ fn names_of_sys_typy_does_not_have_give_their_codes() {
         ),
         (
             "import sys\nf = sys.exit\n",
-            "E0201",
-            "using `sys.exit` as a value is planned for TyPy 0.10 (FUN-08)",
+            "E0203",
+            "`sys.exit` as a value needs the `Callable` type its context expects",
         ),
     ] {
         assert_eq!(

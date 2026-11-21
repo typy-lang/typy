@@ -137,10 +137,20 @@ pub(crate) struct Program {
     pub(super) derived_classes: BTreeSet<crate::check::class_index::ClassKey>,
     /// The hidden function of each built-in function used as a value, by its module, its
     /// name and the parameter types of its `Callable` (FUN-08, ADR-0077).
-    builtin_values: Vec<(String, String, Vec<Type>, FunctionId)>,
+    builtin_values: Vec<BuiltinValueEntry>,
     /// The operator and comparison methods that return `T | NotImplementedType` (CLS-21).
     pub(crate) giving_way: crate::check::not_implemented::GivingWay,
 }
+
+/// A hidden function of a built-in used as a value: the module that made it, the built-in's
+/// name, the parameter types of its `Callable`, the function and what it stands for (FUN-08).
+type BuiltinValueEntry = (
+    String,
+    String,
+    Vec<Type>,
+    FunctionId,
+    crate::typed::BuiltinValue,
+);
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
 pub(crate) struct Snapshot {
@@ -387,10 +397,10 @@ impl Program {
     pub(super) fn builtin_value(&self, name: &str, parameters: &[Type]) -> Option<FunctionId> {
         self.builtin_values
             .iter()
-            .find(|(module, each, types, _)| {
+            .find(|(module, each, types, ..)| {
                 *module == self.module && each == name && types.as_slice() == parameters
             })
-            .map(|(.., function)| *function)
+            .map(|(_, _, _, function, _)| *function)
     }
 
     /// Keeps `function`, the hidden function that calls the built-in `name` with arguments of
@@ -400,9 +410,15 @@ impl Program {
         name: &str,
         parameters: Vec<Type>,
         function: FunctionId,
+        kind: crate::typed::BuiltinValue,
     ) {
-        self.builtin_values
-            .push((self.module.clone(), name.to_owned(), parameters, function));
+        self.builtin_values.push((
+            self.module.clone(),
+            name.to_owned(),
+            parameters,
+            function,
+            kind,
+        ));
     }
 
     pub(super) fn next_function(&self) -> FunctionId {
@@ -734,7 +750,7 @@ impl Program {
             .retain(|function, _| *function < first_new);
         // The hidden functions of built-ins the look made are made again (FUN-08).
         self.builtin_values
-            .retain(|(.., function)| *function < first_new);
+            .retain(|(_, _, _, function, _)| *function < first_new);
         self.functions.truncate(snapshot.functions);
         self.signatures.truncate(snapshot.signatures);
         self.classes.truncate(snapshot.first_class);
@@ -883,14 +899,7 @@ impl Program {
             builtin_values: self
                 .builtin_values
                 .iter()
-                .map(|(_, name, _, function)| {
-                    let kind = if name.contains('.') {
-                        crate::typed::BuiltinValue::Method
-                    } else {
-                        crate::typed::BuiltinValue::Function
-                    };
-                    (*function, kind)
-                })
+                .map(|(_, _, _, function, kind)| (*function, *kind))
                 .collect(),
             cells: self.cells,
             nonlocals: self.nonlocals,

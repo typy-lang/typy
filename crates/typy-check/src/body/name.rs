@@ -157,6 +157,13 @@ impl BodyChecker<'_> {
         if let Some(builtin) = self.unbound_builtin_function(id, span) {
             return Some(self.builtin_without_context(builtin, span));
         }
+        let read = typy_source::syntax::Expr::Name {
+            id: id.to_owned(),
+            span,
+        };
+        if self.module_function_named(&read).is_some() {
+            return Some(self.module_function_without_context(id, span));
+        }
         if !self.program.module_functions.contains_key(id) && Builtin::named(id).is_none() {
             return None;
         }

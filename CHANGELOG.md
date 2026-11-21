@@ -20,6 +20,10 @@ All notable changes to TyPy are recorded here. The format follows
   `Callable` is expected, such as `sorted(words, key=str.lower)` or `add:
   Callable[[list[int], int], None] = list.append`, written `<method 'lower'
   of 'str' objects>`, of the type `method_descriptor` (FUN-08).
+- A function of `math` or `sys` is a value where a `Callable` is expected,
+  such as `sorted(values, key=math.fabs)` or `root: Callable[[float],
+  float] = math.sqrt`, written `<built-in function sqrt>`; with no
+  `Callable` expected it is E0203, where it was planned (FUN-08).
 - Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
   of its files, with their SHA-256, and of the crates and libraries the
   compiler holds, with their licences; a copy is published beside the

@@ -139,8 +139,10 @@ print(math.frexp(8.0), math.degrees(math.pi), math.log10(10**400))
 A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
-A function of `math` is not a value yet: `f = math.sqrt` is planned for
-0.10 (FUN-08).
+A function of `math` or `sys` is a value where a `Callable` is expected,
+such as `sorted(values, key=math.fabs)` or `root: Callable[[float], float]
+= math.sqrt`, written `<built-in function sqrt>`; with no `Callable`
+expected it is E0203 (FUN-08).
 
 `fsum`, `dist`, `prod` and `sumprod` take iterables of `int`, `bool` or
 `float` items, and `gamma` and `lgamma` a real number, each with

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.71 |
+| Version | 2.72 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -926,8 +926,12 @@ built-in type read through the type, such as `str.upper` or `list.append`,
 is the hidden function `return value0.method(value1, ...)`, named
 `str.upper`, whose first parameter must be of that type, else E0404; its
 `TyirFunction::stands_for` is `BuiltinMethod`, and its object takes the
-type ID 29. The hidden functions of one built-in share the descriptor of
-the first as their identity (ADR-0076). Where nothing is expected, `chr`
+type ID 29. A function of `math` or `sys`, read as `math.sqrt` through any
+variable bound to the module or as a name a `from` import of the module
+binds, is the hidden function `import math` and `return math.sqrt(value0,
+...)`, named `sqrt`, so it reads the module wherever the program's import
+stands. The hidden functions of one built-in share the descriptor of the
+first as their identity (ADR-0076). Where nothing is expected, `chr`
 is `Callable[[int], str]` and `ord` `Callable[[str], int]`, and any other
 built-in function, and a method such as `str.upper`, is E0203. A built-in
 compared with a function value takes that value's type.

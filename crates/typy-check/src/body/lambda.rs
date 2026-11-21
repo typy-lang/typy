@@ -207,13 +207,14 @@ impl BodyChecker<'_> {
         Some(given[..parameters.len()].to_vec())
     }
 
-    /// Returns the type of the body of the `lambda` `function`, which no context gave, and
-    /// gives its signature that result.
+    /// Returns the type of the value the last statement of `function` returns, the body of a
+    /// `lambda` or of a hidden function of a built-in, which no context gave, and gives its
+    /// signature that result.
     pub(super) fn settle_lambda_result(&mut self, function: crate::typed::FunctionId) -> Type {
         let index = function.0 as usize;
         let returns = self.program.functions[index]
             .as_ref()
-            .and_then(|typed| match typed.body.first() {
+            .and_then(|typed| match typed.body.last() {
                 Some(TypedStmt::Return {
                     value: Some(value), ..
                 }) => Some(value.ty.clone()),

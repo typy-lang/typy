@@ -824,8 +824,9 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Reads `module.name` of a built-in module: a value as it is, while a function is a value
-    /// only from 0.10 (FUN-08); a refusal points at the name.
+    /// Reads `module.name` of a built-in module: a value as it is, a function of `math` or
+    /// `sys` where a `Callable` is expected (FUN-08), and a `ctypes` function not as a value
+    /// yet; a refusal points at the name.
     pub(super) fn builtin_attribute(
         &mut self,
         module: &str,
@@ -838,6 +839,12 @@ impl BodyChecker<'_> {
             Ok(BuiltinName::Function(super::builtin_module::ModuleFunction::CtypesType(ty))) => {
                 Self::cdata_class(crate::ctypes::CData::Scalar(ty), span)
             }
+            Ok(BuiltinName::Function(
+                super::builtin_module::ModuleFunction::Math(_)
+                | super::builtin_module::ModuleFunction::Exit
+                | super::builtin_module::ModuleFunction::GetRecursionLimit
+                | super::builtin_module::ModuleFunction::SetRecursionLimit,
+            )) => self.module_function_without_context(&format!("{module}.{name}"), attribute.span),
             Ok(BuiltinName::Function(_)) => self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),

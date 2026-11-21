@@ -4,14 +4,16 @@
 //! written as CPython writes the built-in.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::{Expr, Identifier, ParameterKind, Stmt};
+use typy_source::syntax::{Alias, Expr, Identifier, ParameterKind, Stmt};
 
 use super::BodyChecker;
+use super::builtin_module::{BuiltinName, ModuleFunction};
 use crate::builtin::Builtin;
 use crate::check::Definition;
 use crate::method::Method;
 use crate::typed::{
-    FunctionId, FunctionSignature, SignatureParameter, TypedConstant, TypedExpr, TypedExprKind,
+    BuiltinValue, FunctionId, FunctionSignature, SignatureParameter, TypedConstant, TypedExpr,
+    TypedExprKind,
 };
 use crate::types::{Type, TypeObjectOf};
 
@@ -26,14 +28,46 @@ enum Called<'name> {
         class: &'name str,
         method: &'name str,
     },
+    /// A function of a module TyPy provides, such as `math.sqrt`, called with every argument
+    /// after the hidden function imports the module itself.
+    Module {
+        module: &'name str,
+        name: &'name str,
+    },
 }
 
-impl Called<'_> {
-    /// Returns the name the hidden function keeps: `len`, or `str.upper` for a method.
-    fn qualified_name(self) -> String {
+impl<'name> Called<'name> {
+    /// Returns the name a module's hidden functions are kept by: `len`, `str.upper` or
+    /// `math.sqrt`.
+    fn key(self) -> String {
         match self {
             Self::Function(name) => name.to_owned(),
             Self::Method { class, method } => format!("{class}.{method}"),
+            Self::Module { module, name, .. } => format!("{module}.{name}"),
+        }
+    }
+
+    /// Returns the `__qualname__` CPython gives the built-in: `len`, `str.upper` or `sqrt`.
+    fn qualified_name(self) -> String {
+        match self {
+            Self::Module { name, .. } => name.to_owned(),
+            other => other.key(),
+        }
+    }
+
+    /// Returns the `__name__` CPython gives the built-in: `len`, `upper` or `sqrt`.
+    const fn short_name(self) -> &'name str {
+        match self {
+            Self::Function(name) | Self::Module { name, .. } => name,
+            Self::Method { method, .. } => method,
+        }
+    }
+
+    /// Returns what the hidden function stands for.
+    const fn kind(self) -> BuiltinValue {
+        match self {
+            Self::Method { .. } => BuiltinValue::Method,
+            Self::Function(_) | Self::Module { .. } => BuiltinValue::Function,
         }
     }
 }
@@ -49,6 +83,13 @@ impl BodyChecker<'_> {
         parameters: &[Type],
         returns: Option<&Type>,
     ) -> Option<TypedExpr> {
+        if let Some((module, name)) = self.module_function_named(expression) {
+            let called = Called::Module {
+                module: &module,
+                name,
+            };
+            return Some(self.builtin_value(called, expression.span(), parameters, returns));
+        }
         match expression {
             Expr::Name { id, span } => {
                 let builtin = self.unbound_builtin_function(id, *span)?;
@@ -114,9 +155,53 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns true when `expression` names a built-in function, or a method of a built-in
-    /// type read through the type, that the program does not bind.
+    /// Returns the module and the name of the function of `math` or `sys` that `expression`
+    /// names: `math.sqrt` after any `import math`, or `sqrt` after a `from math import sqrt`
+    /// of the module; `None` for any other expression, a `ctypes` function among them.
+    pub(super) fn module_function_named(
+        &self,
+        expression: &Expr,
+    ) -> Option<(String, &'static str)> {
+        let function = match expression {
+            Expr::Name { id, span } => {
+                if self.locals.contains_key(id) || self.closure_read(id, *span).is_some() {
+                    return None;
+                }
+                *self.program.module_functions.get(id)?
+            }
+            Expr::Attribute {
+                value, attribute, ..
+            } => {
+                let module = self.module_of(value)?;
+                match self
+                    .program
+                    .builtin_lookup(&module, &attribute.name, attribute.span)
+                {
+                    Ok(BuiltinName::Function(function)) => function,
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        let (module, name) = match function {
+            ModuleFunction::Math(function) => ("math", function.name()),
+            ModuleFunction::Exit => ("sys", "exit"),
+            ModuleFunction::GetRecursionLimit => ("sys", "getrecursionlimit"),
+            ModuleFunction::SetRecursionLimit => ("sys", "setrecursionlimit"),
+            ModuleFunction::LoadLibrary
+            | ModuleFunction::CtypesType(_)
+            | ModuleFunction::Ctypes(_) => return None,
+        };
+        Some((module.to_owned(), name))
+    }
+
+    /// Returns true when `expression` names a built-in function, a method of a built-in type
+    /// read through the type, or a function of `math` or `sys`, that the program does not
+    /// bind otherwise.
     pub(super) fn names_builtin(&self, expression: &Expr) -> bool {
+        if self.module_function_named(expression).is_some() {
+            return true;
+        }
         match expression {
             Expr::Name { id, span } => self.unbound_builtin_function(id, *span).is_some(),
             Expr::Attribute {
@@ -130,6 +215,28 @@ impl BodyChecker<'_> {
             },
             _ => false,
         }
+    }
+
+    /// Returns E0203 for a function of `math` or `sys`, `written` as the program names it,
+    /// read where no `Callable` is expected, since its arguments may be of several types.
+    pub(super) fn module_function_without_context(
+        &mut self,
+        written: &str,
+        span: Span,
+    ) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(203),
+                span,
+                format!("`{written}` as a value needs the `Callable` type its context expects"),
+            )
+            .with_rule(RuleId::FUN_08)
+            .with_help(format!(
+                "annotate the variable with the types you call it with, such as \
+                 `change: Callable[[float], float] = {written}`"
+            )),
+            span,
+        )
     }
 
     /// Returns the built-in function `id` names where the program binds nothing of that name.
@@ -190,7 +297,7 @@ impl BodyChecker<'_> {
         parameters: &[Type],
         returns: Option<&Type>,
     ) -> TypedExpr {
-        let name = called.qualified_name();
+        let name = called.key();
         let function = match self.program.builtin_value(&name, parameters) {
             Some(function) => function,
             None => match self.make_builtin_value(called, span, parameters) {
@@ -259,44 +366,10 @@ impl BodyChecker<'_> {
         };
         self.program.signatures.push(signature.clone());
         self.program.functions.push(None);
-        let read = |each: &String| Expr::Name {
-            id: each.clone(),
-            span,
-        };
-        let (short_name, target, arguments) = match called {
-            Called::Function(name) => (
-                name.to_owned(),
-                Expr::Name {
-                    id: name.to_owned(),
-                    span,
-                },
-                names.iter().map(read).collect(),
-            ),
-            Called::Method { method, .. } => (
-                method.to_owned(),
-                Expr::Attribute {
-                    value: Box::new(read(&names[0])),
-                    attribute: Identifier {
-                        name: method.to_owned(),
-                        span,
-                    },
-                    span,
-                },
-                names[1..].iter().map(read).collect(),
-            ),
-        };
-        let statements = [Stmt::Return {
-            value: Some(Expr::Call {
-                function: Box::new(target),
-                arguments,
-                keywords: Vec::new(),
-                span,
-            }),
-            span,
-        }];
+        let statements = hidden_body(called, &names, span);
         let qualified_name = called.qualified_name();
         let definition = Definition {
-            name: short_name,
+            name: called.short_name().to_owned(),
             qualified_name: qualified_name.clone(),
             class: None,
             takes_instance: false,
@@ -318,9 +391,76 @@ impl BodyChecker<'_> {
             return None;
         }
         self.program
-            .add_builtin_value(&qualified_name, parameters.to_vec(), function);
+            .add_builtin_value(&called.key(), parameters.to_vec(), function, called.kind());
         Some(function)
     }
+}
+
+/// Returns the body of the hidden function of `called` whose parameters are `names`: the
+/// call's `return`, after an import of the module for a function of a module, so it reads
+/// the module wherever the program's own import stands.
+fn hidden_body(called: Called<'_>, names: &[String], span: Span) -> Vec<Stmt> {
+    let read = |each: &String| Expr::Name {
+        id: each.clone(),
+        span,
+    };
+    let attribute = |value: Expr, name: &str| Expr::Attribute {
+        value: Box::new(value),
+        attribute: Identifier {
+            name: name.to_owned(),
+            span,
+        },
+        span,
+    };
+    let (target, arguments): (Expr, Vec<Expr>) = match called {
+        Called::Function(name) => (
+            Expr::Name {
+                id: name.to_owned(),
+                span,
+            },
+            names.iter().map(read).collect(),
+        ),
+        Called::Method { method, .. } => (
+            attribute(read(&names[0]), method),
+            names[1..].iter().map(read).collect(),
+        ),
+        Called::Module { module, name } => (
+            attribute(
+                Expr::Name {
+                    id: module.to_owned(),
+                    span,
+                },
+                name,
+            ),
+            names.iter().map(read).collect(),
+        ),
+    };
+    let import = match called {
+        Called::Module { module, .. } => Some(Stmt::Import {
+            names: vec![Alias {
+                name: Identifier {
+                    name: module.to_owned(),
+                    span,
+                },
+                as_name: None,
+            }],
+            is_lazy: false,
+            span,
+        }),
+        Called::Function(_) | Called::Method { .. } => None,
+    };
+    import
+        .into_iter()
+        .chain([Stmt::Return {
+            value: Some(Expr::Call {
+                function: Box::new(target),
+                arguments,
+                keywords: Vec::new(),
+                span,
+            }),
+            span,
+        }])
+        .collect()
 }
 
 /// Returns a type of the values of the built-in type `class` whose methods TyPy gives, to look
