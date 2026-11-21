@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.98 |
+| Version | 2.99 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -678,9 +678,10 @@ takes is converted to the item type, so a call may hold several arguments
 of one variadic parameter, in source order (EXP-17). The generic solver
 pairs each argument with the type `body/binding.rs` gives it, so `T` of
 `*items: T` is solved from the items. An override keeps the variadic
-parameters of the method it overrides, E0404 (CLS-04), and a nested
-function or method with one read as a value, or a `lambda` with one, is
-E0201, planned for 0.11 (FUN-19).
+parameters of the method it overrides, E0404 (CLS-04). A nested function,
+a method or a `lambda` with one, read as a value, takes the `Callable` its
+context expects through an adapter, and one with `*args` or `**kwargs` is
+E0203 where none is expected (FUN-19, `body/callable_adapter.rs`).
 
 An `isinstance` test of an abstract class of `collections.abc` or `typing`,
 `Iterable`, `Iterator` or `Generator`, is decided by its static type when
@@ -941,7 +942,8 @@ planned (FUN-15, CLS-38); it meets no other decorated function.
 ADR-0077). Where a `Callable[[A1, ..., An], R]` is expected, which
 `lambda` passes on for any expression that is no `lambda`, a name of a
 built-in function the program binds nothing to becomes the hidden function
-`return name(value0, ..., valueN)` of parameters `A1` to `An`, checked with
+`return name(<value0>, ..., <valueN>)` of parameters `A1` to `An`, whose
+names no program can write (`hidden_parameters`), checked with
 `check_body_of` as a `lambda` is; its result takes the call's type and
 must match `R`, else E0404, and a call the built-in refuses is reported at
 the name. `Program::builtin_value` keeps one hidden function for each
@@ -974,11 +976,49 @@ planned for 0.14 (FUN-16). The hidden functions of one built-in share the
 descriptor of the first as their identity (ADR-0076). A function of the
 module with a default, `*args`, `**kwargs` or a keyword-only parameter,
 read where a `Callable` of another number of parameters is expected, is
-the hidden adapter `return name(value0, ...)`, which binds the call as any
-call (FUN-13, ADR-0080); its `stands_for` is `Adapter` of the function, so
-codegen gives its descriptor that function's descriptor as identity and
-its qualified name. Read where nothing is expected, one with `*args` or
-`**kwargs` is E0203. A class method read as a value (FUN-09, ADR-0079) is
+the hidden adapter `return name(<value0>, ...)`, which binds the call as
+any call (FUN-13, ADR-0080); its `stands_for` is `Adapter` of the function,
+so codegen gives its descriptor that function's descriptor as identity,
+and `Program::name_adapters` gives it that function's names once every
+function is checked. Read where nothing is expected, one with `*args` or
+`**kwargs` is E0203.
+
+`body/callable_adapter.rs` fits a nested function, a method or a `lambda`
+to the `Callable` its context expects in the same way (FUN-19, ADR-0080).
+`needs_adapter` holds when a function, after the parameters a value binds,
+has a default, `*args`, `**kwargs` or a keyword-only parameter, and its
+parameters are not the `Callable`'s one for one; one that fits exactly
+keeps its own value. A nested function in reach (`function_held`) becomes
+`closure_adapter`: a hidden nested function of the `Callable`'s parameters
+whose one capture, made by `Closure::adapting` under the function's own
+name, holds the function object, so its body `return add(<value0>, ...)`
+is a `CallNested` that binds as a call by name does. The value is
+`TypedExprKind::Lambda { function: adapter, captures: [original] }`, read
+as the original is read for a call, so a capture of it never refuses it.
+Its `stands_for` is `Adapter` of the original; codegen gives a closure
+descriptor of that kind a null identity, and the runtime's `identity_of`
+reads such a closure's first capture in its place, so two adapters of one
+function are one function to `is`, `==` and `hash`. A method becomes
+`Called::Direct`, a hidden function whose body calls the method by the
+name `<function N Class.name>`, which `call` reads back with
+`direct_function` and calls with `call_function`, so it calls that very
+method whatever the program names. Read through its class, or as a static
+method, the hidden function takes the `Callable`'s parameters; read
+through an instance, `BoundMethod` or `ChosenFunction` holds, for the
+method of each class the instance may be of, one that takes what the
+method binds first, the instance or for a class method the class, so a
+class method's copy is called as it is. `expected_method` carries the
+`Callable` to the read of the attribute, and `lambda` keeps an outer one
+while the object is read. A method read through a protocol value notes an
+`AdaptedRead` under a name of its own; `Program::write_adapted_reads`
+gives each class that satisfies the protocol its method's adapter, and the
+adapter of the dispatcher stands when none does. A `lambda` types a
+parameter past the `Callable`'s positions, or a keyword-only one, by its
+default, and `*args` by the positions past the others, which have one
+type, else E0409; then it is adapted as a nested function is. `**kwargs`
+in a `lambda` is E0203, since a `Callable` passes no keywords.
+
+A class method read as a value (FUN-09, ADR-0079) is
 `TypedExprKind::BoundMethod` with `binds_class`: read through a class, of
 that class's copy, binding the type object; read through an instance, of
 the copy of each class from the static class down, the last whose test

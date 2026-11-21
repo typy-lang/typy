@@ -19,7 +19,7 @@ use crate::types::{Type, TypeObjectOf};
 
 /// The built-in a hidden function calls.
 #[derive(Clone, Copy)]
-enum Called<'name> {
+pub(super) enum Called<'name> {
     /// A built-in function, such as `len`, called with every argument.
     Function(&'name str),
     /// A built-in type, such as `int`, called with every argument (FUN-14).
@@ -27,6 +27,14 @@ enum Called<'name> {
     /// A function of the module, `name`, called with every argument by position, so its
     /// defaults, `*args` and `**kwargs` take what the `Callable` does not pass (FUN-13).
     Adapter {
+        name: &'name str,
+        qualified: &'name str,
+        function: FunctionId,
+    },
+    /// A method, `qualified`, called directly with every argument by position, so its
+    /// defaults, `*args` and `**kwargs` take what the `Callable` does not pass: read through
+    /// its class, a static method, or bound, when the first argument is what it binds (FUN-19).
+    Direct {
         name: &'name str,
         qualified: &'name str,
         function: FunctionId,
@@ -51,7 +59,9 @@ impl<'name> Called<'name> {
     fn key(self) -> String {
         match self {
             Self::Function(name) | Self::Type(name) => name.to_owned(),
-            Self::Adapter { function, .. } => format!("<adapter {}>", function.0),
+            Self::Adapter { function, .. } | Self::Direct { function, .. } => {
+                format!("<adapter {}>", function.0)
+            }
             Self::Method { class, method } => format!("{class}.{method}"),
             Self::Module { module, name, .. } => format!("{module}.{name}"),
         }
@@ -61,7 +71,9 @@ impl<'name> Called<'name> {
     fn qualified_name(self) -> String {
         match self {
             Self::Module { name, .. } => name.to_owned(),
-            Self::Adapter { qualified, .. } => qualified.to_owned(),
+            Self::Adapter { qualified, .. } | Self::Direct { qualified, .. } => {
+                qualified.to_owned()
+            }
             other => other.key(),
         }
     }
@@ -72,7 +84,8 @@ impl<'name> Called<'name> {
             Self::Function(name)
             | Self::Type(name)
             | Self::Module { name, .. }
-            | Self::Adapter { name, .. } => name,
+            | Self::Adapter { name, .. }
+            | Self::Direct { name, .. } => name,
             Self::Method { method, .. } => method,
         }
     }
@@ -82,8 +95,21 @@ impl<'name> Called<'name> {
         match self {
             Self::Method { .. } => BuiltinValue::Method,
             Self::Type(_) => BuiltinValue::Type,
-            Self::Adapter { function, .. } => BuiltinValue::Adapter(function),
+            Self::Adapter { function, .. } | Self::Direct { function, .. } => {
+                BuiltinValue::Adapter(function)
+            }
             Self::Function(_) | Self::Module { .. } => BuiltinValue::Function,
+        }
+    }
+
+    /// Returns the rule a value of the hidden function follows.
+    const fn rule(self) -> RuleId {
+        match self {
+            Self::Adapter { .. } => RuleId::FUN_13,
+            Self::Direct { .. } => RuleId::FUN_19,
+            Self::Function(_) | Self::Type(_) | Self::Method { .. } | Self::Module { .. } => {
+                RuleId::FUN_08
+            }
         }
     }
 }
@@ -180,24 +206,11 @@ impl BodyChecker<'_> {
         if self.program.generic(function).is_some() {
             return None;
         }
-        // Only a function with a default, `*args`, `**kwargs` or a keyword-only parameter
-        // takes another number of arguments than it names; any other keeps its own type.
-        let signature = &self.program.signatures[function.0 as usize];
-        let flexible = signature.parameters.iter().any(|parameter| {
-            parameter.default.is_some()
-                || !matches!(
-                    parameter.kind,
-                    ParameterKind::PositionalOnly | ParameterKind::Normal
-                )
-        });
-        let exact = signature.parameters.len() == parameters.len()
-            && signature.parameters.iter().all(|parameter| {
-                matches!(
-                    parameter.kind,
-                    ParameterKind::PositionalOnly | ParameterKind::Normal
-                )
-            });
-        if !flexible || exact {
+        if !super::callable_adapter::needs_adapter(
+            &self.program.signatures[function.0 as usize],
+            0,
+            parameters,
+        ) {
             return None;
         }
         let qualified = self.program.functions[function.0 as usize]
@@ -484,15 +497,14 @@ impl BodyChecker<'_> {
     /// and `returns`, made the first time the module needs it, as a value. A call the built-in
     /// refuses is reported at `span`, and a result that does not pass unchanged as `returns`
     /// is E0404 (NFR-19).
-    fn builtin_value(
+    pub(super) fn builtin_value(
         &mut self,
         called: Called<'_>,
         span: Span,
         parameters: &[Type],
         returns: Option<&Type>,
     ) -> TypedExpr {
-        let name = called.key();
-        let function = match self.program.builtin_value(&name, parameters) {
+        let function = match self.program.builtin_value(&called.key(), parameters) {
             Some(function) => function,
             None => match self.make_builtin_value(called, span, parameters) {
                 Some(function) => function,
@@ -514,12 +526,13 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(404),
                     span,
                     format!(
-                        "`{name}` called with {} gives {}, and this `Callable` returns {wanted}",
+                        "`{}` called with {} gives {}, and this `Callable` returns {wanted}",
+                        called.qualified_name(),
                         argument_types(parameters),
                         result.with_article()
                     ),
                 )
-                .with_rule(RuleId::FUN_08),
+                .with_rule(called.rule()),
                 span,
             );
         }
@@ -540,24 +553,8 @@ impl BodyChecker<'_> {
         parameters: &[Type],
     ) -> Option<FunctionId> {
         let function = self.program.next_function();
-        let names: Vec<String> = (0..parameters.len())
-            .map(|index| format!("value{index}"))
-            .collect();
-        let signature = FunctionSignature {
-            parameters: names
-                .iter()
-                .zip(parameters)
-                .map(|(each, ty)| SignatureParameter {
-                    name: each.clone(),
-                    ty: ty.clone(),
-                    default: None,
-                    default_call: None,
-                    kind: ParameterKind::PositionalOnly,
-                })
-                .collect(),
-            // The result takes the call's type once the body is checked.
-            returns: Type::Error,
-        };
+        let names = hidden_parameters(parameters.len());
+        let signature = hidden_signature(&names, parameters);
         self.program.signatures.push(signature.clone());
         self.program.functions.push(None);
         let statements = hidden_body(called, &names, span);
@@ -614,6 +611,17 @@ fn hidden_body(called: Called<'_>, names: &[String], span: Span) -> Vec<Stmt> {
             },
             names.iter().map(read).collect(),
         ),
+        Called::Direct {
+            qualified,
+            function,
+            ..
+        } => (
+            Expr::Name {
+                id: direct_callee(function, qualified),
+                span,
+            },
+            names.iter().map(read).collect(),
+        ),
         Called::Method { method, .. } => (
             attribute(read(&names[0]), method),
             names[1..].iter().map(read).collect(),
@@ -641,9 +649,11 @@ fn hidden_body(called: Called<'_>, names: &[String], span: Span) -> Vec<Stmt> {
             is_lazy: false,
             span,
         }),
-        Called::Function(_) | Called::Type(_) | Called::Adapter { .. } | Called::Method { .. } => {
-            None
-        }
+        Called::Function(_)
+        | Called::Type(_)
+        | Called::Adapter { .. }
+        | Called::Direct { .. }
+        | Called::Method { .. } => None,
     };
     import
         .into_iter()
@@ -673,7 +683,7 @@ pub(super) fn receiver_of(class: &TypeObjectOf) -> Option<Type> {
 }
 
 /// Returns the types of a call's arguments as a message writes them: `an int and a str`.
-fn argument_types(parameters: &[Type]) -> String {
+pub(super) fn argument_types(parameters: &[Type]) -> String {
     match parameters {
         [] => "no arguments".to_owned(),
         [one] => one.with_article(),
@@ -687,4 +697,45 @@ fn argument_types(parameters: &[Type]) -> String {
             last.with_article()
         ),
     }
+}
+
+/// Returns the names of the parameters of a hidden function of `count` parameters, which no
+/// name of the program can be, so the body reads its arguments whatever the program names.
+pub(super) fn hidden_parameters(count: usize) -> Vec<String> {
+    (0..count).map(|index| format!("<value{index}>")).collect()
+}
+
+/// Returns the signature of a hidden function whose parameters, `names`, take `parameters` by
+/// position, and whose result takes the call's type once its body is checked.
+pub(super) fn hidden_signature(names: &[String], parameters: &[Type]) -> FunctionSignature {
+    FunctionSignature {
+        parameters: names
+            .iter()
+            .zip(parameters)
+            .map(|(each, ty)| SignatureParameter {
+                name: each.clone(),
+                ty: ty.clone(),
+                default: None,
+                default_call: None,
+                kind: ParameterKind::PositionalOnly,
+            })
+            .collect(),
+        returns: Type::Error,
+    }
+}
+
+/// Returns the name a hidden function's body calls `function`, shown as `qualified`, by: a
+/// name no program can write, which a call reads back (FUN-19).
+fn direct_callee(function: FunctionId, qualified: &str) -> String {
+    format!("<function {} {qualified}>", function.0)
+}
+
+/// Returns the function and the name to show of a name `direct_callee` made, or `None` for
+/// any other name.
+pub(super) fn direct_function(name: &str) -> Option<(FunctionId, &str)> {
+    let (number, qualified) = name
+        .strip_prefix("<function ")?
+        .strip_suffix('>')?
+        .split_once(' ')?;
+    Some((FunctionId(number.parse().ok()?), qualified))
 }

@@ -193,6 +193,11 @@ fn descriptor<'ctx>(
         // An adapter stands for the function it calls, whose descriptor of the same kind is
         // its identity: a bound method of it is equal to one of the method itself (FUN-09).
         StandsFor::Adapter(original) if kind == "method" => method_descriptor(shared, original)?,
+        // A nested function's adapter stands for the function object it captures first, which
+        // the runtime reads where the identity would be (FUN-19, ADR-0080).
+        StandsFor::Adapter(_) if kind == "closure" => {
+            context.ptr_type(AddressSpace::default()).const_null()
+        }
         StandsFor::Adapter(original) => {
             function_object(shared, original)?;
             shared

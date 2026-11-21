@@ -3,6 +3,7 @@
 
 mod call_arguments;
 mod call_unpacking;
+mod callable_adapters;
 mod casts;
 mod checker;
 mod class_bodies;

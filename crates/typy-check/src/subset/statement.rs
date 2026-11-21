@@ -38,21 +38,6 @@ impl Walker {
     /// Checks a `lambda`: its parameters as a function's, and its body in a scope of its own,
     /// as CPython reads it.
     pub(super) fn lambda(&mut self, parameters: &[Parameter], body: &Expr) {
-        // A `lambda` is always a value, and a `Callable` does not yet reach `*args` or
-        // `**kwargs`.
-        if let Some(variadic) = parameters
-            .iter()
-            .find(|parameter| parameter.kind.is_variadic())
-        {
-            self.report(
-                variadic.span,
-                planned(
-                    "`*args` and `**kwargs` in a `lambda`",
-                    "0.11",
-                    RuleId::FUN_19,
-                ),
-            );
-        }
         self.parameters(parameters);
         let names = parameters
             .iter()

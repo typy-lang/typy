@@ -47,9 +47,11 @@ whose subclass defines it again as a static method, or overrides it with a
 parameter or a result held otherwise, such as `int | None` for `int`: the
 value has the type of the method read, and calls the object's own method.
 
-A nested function or a method with `*args` or `**kwargs` as a value is
-planned for 0.11 (FUN-19), and so is a nested function with type parameters of its
-own (FUN-18). A class of the program as a `Callable` is planned for 0.14
+A nested function, a method or a `lambda` with defaults, `*args` or
+`**kwargs` is a value where a `Callable` is expected that its parameters
+take; see [Variable numbers of arguments](#variable-numbers-of-arguments)
+(FUN-19). A nested function with type parameters of its own is planned for
+0.11 (FUN-18), and a class of the program as a `Callable` for 0.14
 (FUN-16).
 
 ## Decorators
@@ -125,10 +127,43 @@ module with defaults, `*args` or `**kwargs` is a value where a `Callable`
 is expected that its parameters take, such as `apply(total, 2, 3)` or
 `twice: Callable[[int], int] = scale` with `by: int = 2`; it is called
 with the `Callable`'s arguments by position, and stays the same function
-to `is` and `==` (FUN-13). Read where nothing is expected, it is E0203. A
-nested function or a method with them as a value, and `*args` or
-`**kwargs` in a `lambda`, are planned for 0.11 (FUN-19). A call may also
-unpack its arguments; see [Unpacking in a call](#unpacking-in-a-call).
+to `is` and `==` (FUN-13). Read where nothing is expected, it is E0203.
+
+So is a nested function, a method read through an instance, a class or a
+protocol value, and a `lambda` (FUN-19). A keyword-only parameter with a
+default takes its default. The value is the function itself to `is`,
+`==`, `hash` and `repr`: `obj.scale` is still a bound method of the
+object's own class. In a `lambda`, `*args` holds the arguments past the
+other parameters, which have one type, and a parameter past them takes
+its default:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable
+
+
+def apply(function: Callable[[int], int], value: int) -> int:
+    return function(value)
+
+
+class Meter:
+    def scale(self, value: int, extra: int = 0) -> int:
+        return value * 2 + extra
+
+
+def outer(base: int) -> int:
+    def add(value: int, *more: int) -> int:
+        return value + base + sum(more)
+
+    by_three = apply(lambda value, by=3: value * by, 4)
+    return apply(add, 1) + apply(Meter().scale, 2) + by_three
+
+
+print(outer(10))
+```
+
+A call may also unpack its arguments; see
+[Unpacking in a call](#unpacking-in-a-call).
 
 ## Unpacking in a call
 
@@ -589,10 +624,13 @@ These forms are refused:
 | `Callable[..., R]`, which takes any arguments, and `Callable` without its types | E0408 |
 | A keyword argument through a function value, such as `f(value=1)`, since a `Callable` names no parameters | E0404 |
 | A generic function as a value, which has one copy for each set of types | E0202 |
-| A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
-| A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
-| A nested function or a method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.11 | E0201 (FUN-19) |
+| A function or a method with a keyword-only parameter read where no `Callable` is expected, since a `Callable` passes every argument by position | E0202 |
+| A function or a method whose keyword-only parameter has no default, where a `Callable` is expected | E0404 |
+| A method with type parameters of its own as a value | E0202 |
 | A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
+| A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
+| A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
+| `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
 | `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and such `**` in a call of `print`, planned for 0.11 | E0201 (EXP-22) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
 | A property read through its class as a value, such as `Box.v`, which is a `property` object, planned for 1.0 | E0201 (FUN-17) |

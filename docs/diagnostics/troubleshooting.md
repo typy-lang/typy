@@ -146,8 +146,12 @@ Every parameter except `self` needs an annotation (TYP-01). Write the
 type, such as `def area(width: float) -> float:`. A `lambda` parameter
 takes its type from the `Callable` its context expects, such as
 `double: Callable[[int], int] = lambda n: n * 2`, so a `lambda` with a
-parameter where none is expected, or with more parameters than the
-expected `Callable` passes, gives E0203 too (EXP-14).
+parameter where none is expected, or with a parameter past those the
+expected `Callable` passes that has no default, gives E0203 too (EXP-14).
+A `lambda` with `**kwargs`, which a `Callable` never fills, gives E0203,
+and so does a nested function or a method with `*args` or `**kwargs` read
+where no `Callable` is expected, such as `loose = meter.total`; annotate
+the variable with the `Callable` you call it as (FUN-19).
 
 This program gives E0203:
 

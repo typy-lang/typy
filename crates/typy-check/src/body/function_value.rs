@@ -67,8 +67,9 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::FunctionValue(function), ty, span)
     }
 
-    /// Returns E0201 when `function`, named `name`, has a `*args` or `**kwargs` parameter,
-    /// which a `Callable` does not yet reach, planned for 0.11 (FUN-19).
+    /// Returns E0203 when `function`, named `name`, has a `*args` or `**kwargs` parameter and
+    /// is read where no `Callable` is expected: its own type has no `Callable` spelling, so it
+    /// takes the one its context expects (FUN-19, ADR-0080).
     pub(super) fn refused_variadic_value(
         &mut self,
         function: FunctionId,
@@ -85,13 +86,16 @@ impl BodyChecker<'_> {
             "**"
         };
         let message = format!(
-            "`{name}` takes `{stars}{}`, and a function with `*args` or `**kwargs` as a value is \
-             planned for TyPy 0.11 (FUN-19)",
+            "`{name}` takes `{stars}{}`, so as a value it needs the `Callable` type its context \
+             expects",
             parameter.name
         );
-        let diagnostic = Diagnostic::new(DiagnosticCode::error(201), span, message)
+        let diagnostic = Diagnostic::new(DiagnosticCode::error(203), span, message)
             .with_rule(RuleId::FUN_19)
-            .with_help("pass a `lambda` that calls it with the arguments the `Callable` passes");
+            .with_help(
+                "annotate the variable with the types you call it with, such as \
+                 `Callable[[int, int], int]`",
+            );
         Some(self.error(diagnostic, span))
     }
 

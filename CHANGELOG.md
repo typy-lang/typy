@@ -26,6 +26,14 @@ All notable changes to TyPy are recorded here. The format follows
   `|` and `^` of two bools still give a bool (DAT-19). They were E0406,
   which now refuses only `~` of a bool, which CPython deprecates and Python
   3.16 removes.
+- A nested function, a method or a `lambda` with defaults, `*args` or
+  `**kwargs` is a value where a `Callable` is expected that its parameters
+  take, as a function of a module is since 0.10: `apply(add, 1)` with a
+  nested `def add(value: int, *more: int)`, `sorted(items,
+  key=Meter().scale)`, a method read through a class or a protocol value,
+  and `lambda value, by=3: value * by` or `lambda *values: sum(values)`
+  (FUN-19). The value is the function itself to `is`, `==`, `hash` and
+  `repr`. These were E0201.
 
 ### Changed
 
@@ -41,6 +49,9 @@ All notable changes to TyPy are recorded here. The format follows
   the floor 3.15, `[*row for row in rows]`, `frozendict` and
   `math.integer` are refused as planned for 0.12 (EXP-23, DAT-18,
   LIB-26).
+- A nested function or a method with `*args` or `**kwargs` read where no
+  `Callable` is expected is E0203, with the help to annotate the variable,
+  as a function of a module is; it was E0201.
 - The help of E0204, a missing return annotation, and of E0410, an empty
   `[]`, `{}` or `set()` without an annotation, names 0.12, which infers
   them (TYP-26, TYP-27).

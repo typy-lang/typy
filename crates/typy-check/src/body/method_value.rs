@@ -5,6 +5,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Identifier, ParameterKind};
 
 use super::BodyChecker;
+use super::callable_adapter::Expected;
 use crate::typed::{ClassId, FunctionId, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -29,13 +30,18 @@ impl BodyChecker<'_> {
         if self.class_method_named(class, &name.name) {
             return self.class_method_value_of(object, class, name, span);
         }
-        if let Some(refused) = self.refused_method_value(class, name, span) {
+        if let Some(refused) = self.refused_method_value((class, true), name, span) {
             return refused;
         }
         let method = self
             .program
             .method(class, &name.name)
             .unwrap_or(FunctionId(0));
+        let is_static = self.is_static_method(class, &name.name);
+        if let Some(expected) = self.adapted_callable(method, usize::from(!is_static), span) {
+            let read = (name.name.as_str(), span);
+            return self.adapted_instance_method(object, (class, method), read, &expected);
+        }
         let mut overrides = self.overrides_of(class, &name.name, false);
         // A subclass whose override is held otherwise is bound through an adapter to the
         // signature of the method read, which takes what the method takes (FUN-09, CLS-04).
@@ -49,7 +55,6 @@ impl BodyChecker<'_> {
                 };
             }
         }
-        let is_static = self.is_static_method(class, &name.name);
         if is_static && overrides.is_empty() {
             let value = self.function_value(method, &name.name, span);
             return Self::after(object, value);
@@ -109,7 +114,7 @@ impl BodyChecker<'_> {
         name: &Identifier,
         span: Span,
     ) -> TypedExpr {
-        if let Some(refused) = self.refused_method_value(class, name, span) {
+        if let Some(refused) = self.refused_method_value((class, false), name, span) {
             return refused;
         }
         if self.class_method_named(class, &name.name) {
@@ -119,17 +124,51 @@ impl BodyChecker<'_> {
             .program
             .method(class, &name.name)
             .unwrap_or(FunctionId(0));
-        let value = self.function_value(method, &name.name, span);
+        let value = match self.adapted_callable(method, 0, span) {
+            Some((parameters, returns)) => self.adapted_function_value(
+                (class, method),
+                &name.name,
+                (&parameters, returns.as_ref()),
+                span,
+            ),
+            None => self.function_value(method, &name.name, span),
+        };
         Self::after(object, value)
+    }
+
+    /// Returns `object.name` of `method`, the method `name` of `class`, through an adapter to
+    /// the `Callable` `expected` of the method of each class the object may be an instance of
+    /// (FUN-19): one that binds the object for a method, and one called directly for a static
+    /// method.
+    fn adapted_instance_method(
+        &mut self,
+        object: TypedExpr,
+        (class, method): (ClassId, FunctionId),
+        (name, span): (&str, Span),
+        expected: &Expected,
+    ) -> TypedExpr {
+        let methods: Vec<(ClassId, FunctionId)> = std::iter::once((class, method))
+            .chain(self.overrides_of(class, name, false))
+            .collect();
+        let binds: Box<[ClassId]> = methods
+            .iter()
+            .map(|(each, _)| *each)
+            .filter(|each| !self.is_static_method(*each, name))
+            .collect();
+        if binds.len() == methods.len() {
+            return self.adapted_bound_method(object, (methods, false), name, expected, span);
+        }
+        self.adapted_chosen_function(object, (methods, binds), name, expected, span)
     }
 
     /// Returns the error for a method that is no value of one `Callable` type: a property,
     /// whose value through its class is a `property` object, planned for 1.0 (FUN-17); a method
-    /// with type parameters of its own or a keyword-only parameter, E0202; and one with
-    /// `*args` or `**kwargs`, planned for 0.11 (FUN-19), as for a function.
+    /// with type parameters of its own, E0202; and, where no `Callable` its context expects
+    /// takes it through an adapter (FUN-19), one with a keyword-only parameter, E0202, or with
+    /// `*args` or `**kwargs`, E0203, as for a function.
     fn refused_method_value(
         &mut self,
-        class: ClassId,
+        (class, through_instance): (ClassId, bool),
         name: &Identifier,
         span: Span,
     ) -> Option<TypedExpr> {
@@ -164,6 +203,10 @@ impl BodyChecker<'_> {
             );
         }
         let method = self.program.method(class, &name.name)?;
+        let skip = usize::from(through_instance && !self.is_static_method(class, &name.name));
+        if self.adapted_callable(method, skip, span).is_some() {
+            return None;
+        }
         if let Some(refused) = self.refused_variadic_value(method, &qualified, name.span) {
             return Some(refused);
         }
@@ -285,7 +328,19 @@ impl BodyChecker<'_> {
         } else {
             Vec::new()
         };
-        let methods = std::iter::once((class, copy)).chain(overrides).collect();
+        let methods: Vec<(ClassId, FunctionId)> =
+            std::iter::once((class, copy)).chain(overrides).collect();
+        if let Some(expected) = self.adapted_callable(copy, 1, span) {
+            let bound = (methods, through_instance);
+            return self.adapted_bound_method(object, bound, &name.name, &expected, span);
+        }
+        let qualified = format!(
+            "{}.{}",
+            self.program.classes[class.0 as usize].name, name.name
+        );
+        if let Some(refused) = self.refused_variadic_value(copy, &qualified, name.span) {
+            return refused;
+        }
         Self::typed(
             TypedExprKind::BoundMethod {
                 object: Box::new(object),

@@ -56,6 +56,21 @@ impl Closure {
         captures.into_iter().map(|(_, captured)| captured).collect()
     }
 
+    /// Returns the closure of an adapter whose one capture, `name`, holds the function object
+    /// of `original`, of type `ty`, which a call by that name runs (FUN-19, ADR-0080).
+    pub(super) fn adapting(name: &str, original: FunctionId, ty: Type) -> Self {
+        let captured = Captured {
+            position: 0,
+            ty,
+            cell: false,
+            function: Some(original),
+        };
+        Self {
+            captures: BTreeMap::from([(name.to_owned(), captured)]),
+            ..Self::default()
+        }
+    }
+
     /// Returns the position and the value type of the captured cell of the variable `name`.
     pub(super) fn captured_cell(&self, name: &str) -> Option<(u32, Type)> {
         let captured = self.captures.get(name).filter(|captured| captured.cell)?;
@@ -210,9 +225,10 @@ impl BodyChecker<'_> {
         let mut values = Vec::new();
         // The function's own name reads the running object inside it, so it is no capture.
         for (position, each) in captured.iter().filter(|each| *each != name).enumerate() {
+            // A nested function is captured as it is, whatever a `Callable` takes of it.
             let (read, cell) = match self.cell_of(each, span) {
                 Some(cell) => (cell, true),
-                None => (self.name(each, span), false),
+                None => (self.local_function(each, span), false),
             };
             closure.captures.insert(
                 each.clone(),
@@ -308,7 +324,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the nested function the variable `name` holds when a `def` alone binds it.
-    fn function_held(&self, name: &str) -> Option<FunctionId> {
+    pub(super) fn function_held(&self, name: &str) -> Option<FunctionId> {
         if let Some(symbol) = self.locals.get(name) {
             return self.nested_functions.get(symbol).copied();
         }
@@ -416,18 +432,19 @@ impl BodyChecker<'_> {
             })
     }
 
-    /// Returns the read of the variable `symbol`, named `name`, that holds a nested function,
-    /// for a call of it: an error when the call may come before its `def` runs (TYP-12).
-    fn local_function(&mut self, name: &str, span: Span) -> TypedExpr {
+    /// Returns the read of the variable named `name` that holds a nested function, for a call,
+    /// a capture or an adapter of it, which take it whatever its parameters: an error when
+    /// the read may come before its `def` runs (TYP-12).
+    pub(super) fn local_function(&mut self, name: &str, span: Span) -> TypedExpr {
         self.reading_function = true;
         let read = self.name(name, span);
         self.reading_function = false;
         read
     }
 
-    /// Returns E0202 for a nested function with a keyword-only parameter read as a value,
-    /// since a `Callable` passes every argument by position, and E0201 for one with `*args`
-    /// or `**kwargs` (FUN-13).
+    /// Returns E0202 for a nested function with a keyword-only parameter read where no
+    /// `Callable` is expected, since a `Callable` passes every argument by position, and E0203
+    /// for one with `*args` or `**kwargs` (FUN-19).
     pub(super) fn refused_nested_value(
         &mut self,
         symbol: SymbolId,

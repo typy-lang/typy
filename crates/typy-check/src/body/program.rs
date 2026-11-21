@@ -872,7 +872,8 @@ impl Program {
     }
 
     /// Returns the typed program, whose entry is the body of the module named `main`.
-    pub(crate) fn finish(self, main: &str) -> TypedProgram {
+    pub(crate) fn finish(mut self, main: &str) -> TypedProgram {
+        self.name_adapters();
         let entry = self
             .modules
             .iter()
@@ -926,6 +927,30 @@ impl Program {
 }
 
 impl Program {
+    /// Gives each adapter of a function to a `Callable` the names of the function it stands
+    /// for, which its `repr`, `__name__` and `__qualname__` show (FUN-13, FUN-19, ADR-0080).
+    fn name_adapters(&mut self) {
+        let adapters: Vec<(FunctionId, FunctionId)> = self
+            .builtin_values
+            .iter()
+            .filter_map(|(_, _, _, adapter, kind)| match kind {
+                crate::typed::BuiltinValue::Adapter(original) => Some((*adapter, *original)),
+                _ => None,
+            })
+            .collect();
+        for (adapter, original) in adapters {
+            let Some(names) = self.functions[original.0 as usize]
+                .as_ref()
+                .map(|typed| (typed.name.clone(), typed.qualified_name.clone()))
+            else {
+                continue;
+            };
+            if let Some(typed) = &mut self.functions[adapter.0 as usize] {
+                (typed.name, typed.qualified_name) = names;
+            }
+        }
+    }
+
     /// Returns each adapter of an override with the override it stands for, whose identity
     /// its bound methods take (FUN-09, ADR-0079).
     fn override_adapters(&self) -> Vec<(FunctionId, crate::typed::BuiltinValue)> {

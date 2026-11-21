@@ -73,6 +73,10 @@ impl BodyChecker<'_> {
         if let ("<hash>", [value]) = (name, arguments) {
             return self.hash_of(value, span);
         }
+        // A hidden function calls the method it adapts directly (FUN-19).
+        if let Some((function, shown)) = super::builtin_value::direct_function(name) {
+            return self.call_function(function, shown, arguments, keywords, span);
+        }
         if let Some(function) = self.program.function_ids.get(name).copied() {
             let call = self.call_function(function, name, arguments, keywords, span);
             return self.through_lazy(name, call);
