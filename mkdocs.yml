@@ -226,6 +226,8 @@ nav:
           - adr/0093-expand-enum-and-abc-classes-in-the-checker.md
           - adr/0094-bind-the-operations-of-an-any-value-when-the-program-runs.md
           - adr/0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md
+          - adr/0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md
+          - adr/0097-check-the-standard-librarys-signatures-against-typeshed.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

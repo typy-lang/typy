@@ -3,8 +3,8 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy research: newer Python and a typed standard library |
-| Version | 0.1 |
-| Status | Draft |
+| Version | 1.0 |
+| Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
 
@@ -168,14 +168,14 @@ the two in step without that.
 
 ## 8. Questions for the requirements
 
-The requirements specification holds these questions as open issues.
+The requirements specification resolved these questions on 2026-11-21.
 
-| ID | Question |
-| --- | --- |
-| OI-38 | In which release do template strings become a planned feature, from the floor 3.14? |
-| OI-39 | In which releases do `Literal`, `@overload`, `Self`, `TypeGuard`, `TypeIs` and `TypedDict` come, and does `Self` move from after 1.0? |
-| OI-40 | In which release do PEP 798's unpacking in comprehensions, `frozendict` and `math.integer` come, from the floor 3.15? |
-| OI-41 | In which release does the `typy-stdlib` crate start, with which modules first, and are its signatures checked against typeshed? |
+| ID | Question | Answer |
+| --- | --- | --- |
+| OI-38 | In which release do template strings become a planned feature, from the floor 3.14? | 0.13 (LEX-12) |
+| OI-39 | In which releases do `Literal`, `@overload`, `Self`, `TypeGuard`, `TypeIs` and `TypedDict` come, and does `Self` move from after 1.0? | 0.12 for all but `TypedDict`, which comes in 0.13; `Self` moves (TYP-28 to TYP-32) |
+| OI-40 | In which release do PEP 798's unpacking in comprehensions, `frozendict` and `math.integer` come, from the floor 3.15? | 0.12 (EXP-23, DAT-18, LIB-26) |
+| OI-41 | In which release does the `typy-stdlib` crate start, with which modules first, and are its signatures checked against typeshed? | 0.12, with the first group, compared with typeshed in a test (LIB-27, ADR-0097) |
 
 ## 9. References
 

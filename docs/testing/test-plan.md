@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.30 |
+| Version | 1.31 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -307,6 +307,7 @@ that the specification does not define.
 | LEX-09 | 0.1 | IT | `tests/conformance/lex/LEX-09_*.py` |
 | LEX-10 | 0.5 | IT | `tests/conformance/lex/LEX-10_*.py` |
 | LEX-11 | 0.3 | UT, IT, E2E | `crates/typy-source/src/parse/tests.rs` for each limit just inside and just past it; `crates/typy-tyir/src/verify/tests.rs` for a function of 100000 blocks; `crates/typy-cli/tests/end_to_end/nesting.rs` for a program as deep as CPython compiles and each refusal; `tests/conformance/lex/LEX-11_*.py` |
+| LEX-12 | 0.13 | UT, IT | `typy-check` tests of the floor 3.14 and of the refusal below it; runtime tests of a template's parts; `tests/conformance/lex/LEX-12_*.py` for `strings`, `interpolations`, `values`, iteration and `+` |
 | TYP-01 | 0.1 | IT | `tests/conformance/typ/TYP-01_*.py` |
 | TYP-02 | 0.1 | IT | `tests/conformance/typ/TYP-02_*.py` |
 | TYP-03 | 0.1 | IT | `tests/conformance/typ/TYP-03_*.py` |
@@ -334,6 +335,11 @@ that the specification does not define.
 | TYP-25 | 0.13 | UT, IT | `typy-check` tests of the refusal while it is planned; runtime tests of binding an attribute, an operator and a call by type, with the cache; `tests/conformance/typ/TYP-25_*.py` for each operation and each error CPython raises |
 | TYP-26 | 0.12 | UT, IT | `typy-check` tests of a result inferred from one `return`, from several, and from none, and of each case that keeps the annotation; `tests/conformance/typ/TYP-26_*.py` |
 | TYP-27 | 0.12 | UT, IT | `typy-check` tests of each statement that fills an empty list, dict or set, and of a read before it; `tests/conformance/typ/TYP-27_*.py` |
+| TYP-28 | 0.12 | UT, IT | `typy-check` tests of each literal kind, of a constant that passes and one that does not, and of narrowing by `==`, `in` and `match`; `tests/conformance/typ/TYP-28_*.py` |
+| TYP-29 | 0.12 | UT, IT | `typy-check` tests of a call that matches each signature, one that matches none, and a body that breaks a signature; `tests/conformance/typ/TYP-29_*.py` |
+| TYP-30 | 0.12 | UT, IT | `typy-check` tests of `Self` through a base and a derived class; `tests/conformance/typ/TYP-30_*.py` |
+| TYP-31 | 0.12 | UT, IT | `typy-check` tests of narrowing after a `TypeGuard` and a `TypeIs` call, and of `TypeIs`'s narrowing in the `else` branch; `tests/conformance/typ/TYP-31_*.py` |
+| TYP-32 | 0.13 | UT, IT | `typy-check` tests of each key kind and of a missing or unknown key; `tests/conformance/typ/TYP-32_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -351,6 +357,7 @@ that the specification does not define.
 | DAT-15 | 0.2 | IT | `tests/conformance/dat/DAT-15_*.py` |
 | DAT-16 | 0.3 | IT | `tests/conformance/dat/DAT-16_*.py` |
 | DAT-17 | 0.3 | IT | `tests/conformance/dat/DAT-17_*.py` |
+| DAT-18 | 0.12 | UT, IT | `typy-check` tests of each refused change and of the floor 3.15; `tests/conformance/dat/DAT-18_*.py` for its methods, `\|`, hashing and text |
 | EXP-01 | 0.1 | IT | `tests/conformance/exp/EXP-01_*.py` |
 | EXP-02 | 0.1 | IT | `tests/conformance/exp/EXP-02_*.py` |
 | EXP-03 | 0.1 | IT | `tests/conformance/exp/EXP-03_*.py` |
@@ -373,6 +380,7 @@ that the specification does not define.
 | EXP-20 | 1.0 | UT | `typy-check` subset test of the refusal while it is planned; a conformance program of each kind of default |
 | EXP-21 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/exp/EXP-21_*.py` |
 | EXP-22 | 0.11 | UT, IT | Runtime tests of the call check against each built-in's description, with its message style; `typy-check` tests of `max(*xs)` by item type and of the refusals while they are planned; `tests/conformance/exp/EXP-22_*.py` for built-ins, `print(**options)`, function values and exception classes |
+| EXP-23 | 0.12 | UT, IT | `typy-check` tests of each comprehension kind with unpacking and of the floor 3.15; `tests/conformance/exp/EXP-23_*.py` |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py`, a list, a `str`, a range, a dict and generators unpacked with CPython 3.15's messages |
 | SMT-03 | 0.1 | IT | `tests/conformance/smt/SMT-03_*.py` |
@@ -536,6 +544,8 @@ that the specification does not define.
 | LIB-23 | 0.10 | UT, IT | Conformance tests of `map` and `filter` objects that step on after the function raises, and of `strict=` from floor 3.14; `typy-check` tests of their types, of each refused call with CPython's text, `strict=` below floor 3.14 and `callable`; `tests/conformance/lib/LIB-23_*.py` |
 | LIB-24 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/lib/LIB-24_*.py` |
 | LIB-25 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/lib/LIB-25_*.py` |
+| LIB-26 | 0.12 | UT, IT | `typy-check` tests of the floor 3.15; `tests/conformance/lib/LIB-26_*.py` for each function |
+| LIB-27 | 0.12 | UT, IT | The typeshed comparison test of each module's signatures; `tests/conformance/lib/LIB-27_*.py` comparing each module with CPython's |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
@@ -548,6 +558,7 @@ that the specification does not define.
 | MEM-08 | 0.5 | UT, IT, E2E | `crates/typy-source/src/settings_file/allocator/tests.rs` for each wrong `[allocator]` table; `crates/typy-codegen/tests/codegen.rs` for the hooks; `crates/typy-build/src/linker.rs` for the library's place among the arguments; `crates/typy-cli/tests/end_to_end/allocator.rs` for a program built with a counting allocator, one that has no memory, and a library the linker cannot find |
 | MEM-10 | 1.0 | UT, IT | `crates/typy-tyir/src/escape/tests.rs`; `tests/conformance/mem/MEM-10_*.py` under sanitizers |
 | MEM-11 | 0.8 | UT, IT | `typy-codegen` tests of the order of each layout and of every descriptor's offsets against LLVM's; the conformance programs, whose output shows the declared order |
+| MEM-12 | 1.0 | UT, IT | Runtime tests of counting in the owning thread and in another, and of freeing when both counts reach zero; the conformance programs on one thread |
 | MEM-09 | 0.3 | UT, IT | `crates/typy-lower/tests/integration/moves.rs` for each store that moves and each read that must not; `crates/typy-runtime/src/moved_tests.rs` for the counts of each moved store; `tests/conformance/mem/MEM-09_*.py` under sanitizers |
 | FFI-01 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each way of naming `ctypes` and loading a library; `tests/conformance/ffi/FFI-01_*.py` against CPython 3.12 to 3.15 |
 | FFI-02 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each E0430 of a declaration; `tests/conformance/ffi/FFI-02_*.py` for calls declared in time, too early, without a `restype`, and with an argument of the wrong type |
@@ -603,6 +614,7 @@ that the specification does not define.
 | NFR-24 | 0.11 | Corpus | the corpus of `mypy --strict` modules, pinned by commit, checked, built and run against CPython in the release workflow, its share compared with the last release's |
 | NFR-25 | 0.10 | Release check | `scripts/check-sbom.py`, run by `make dist` on each host: fails when the archive's `sbom.cdx.json` misses a file of the archive or lists it with another SHA-256, misses a crate `cargo tree` gives for the compiler or the runtime, or misses LLVM or the Rust standard library |
 | NFR-26 | 0.10 | Release check | the publish job of `release.yml` attests each archive with `actions/attest-build-provenance` and runs `gh attestation verify` on each before it creates the release, and again on the x86-64 archive it downloads back |
+| NFR-27 | 1.0 | Benchmark | The benchmark suite built with biased and with plain counts, compared on one thread against the 2% budget |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

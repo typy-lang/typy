@@ -101,3 +101,5 @@ supersedes it.
 | [ADR-0093](0093-expand-enum-and-abc-classes-in-the-checker.md) | Expand `enum` and `abc` classes in the checker | Accepted | 2026-11-21 |
 | [ADR-0094](0094-bind-the-operations-of-an-any-value-when-the-program-runs.md) | Bind the operations of an `Any` value when the program runs | Accepted | 2026-11-21 |
 | [ADR-0095](0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md) | Follow each CPython version from its final release to its end of life | Accepted | 2026-11-21 |
+| [ADR-0096](0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md) | Run threads in parallel over shared objects with biased reference counts | Accepted | 2026-11-21 |
+| [ADR-0097](0097-check-the-standard-librarys-signatures-against-typeshed.md) | Check the standard library's signatures against typeshed | Accepted | 2026-11-21 |

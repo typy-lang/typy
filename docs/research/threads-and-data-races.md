@@ -3,8 +3,8 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy research: threads and data races |
-| Version | 0.1 |
-| Status | Draft |
+| Version | 1.0 |
+| Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
 
@@ -193,9 +193,11 @@ change atomically only for the objects the checker sees shared.
 
 ## 10. Questions for the requirements
 
-| ID | Question |
-| --- | --- |
-| OI-31 | Which concurrency model does TyPy take, and does safe code promise freedom from data races? |
+The requirements specification resolved this question on 2026-11-21.
+
+| ID | Question | Answer |
+| --- | --- | --- |
+| OI-31 | Which concurrency model does TyPy take, and does safe code promise freedom from data races? | Free threads over shared objects with biased counts and container locks, memory safe under any interleaving, without a promise of freedom from data races; the header takes biased counting's fields before 1.0 (MEM-12, NFR-27, ADR-0096) |
 
 ## 11. References
 
