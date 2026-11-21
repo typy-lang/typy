@@ -502,6 +502,7 @@ impl Dump<'_> {
                 self.program.function(*function).qualified_name
             ),
             TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
+            TypedExprKind::CallValueUnpacked { .. } => "CallValueUnpacked".to_owned(),
             TypedExprKind::Capture(index) => format!("Capture {index}"),
             TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
             TypedExprKind::Received => "Received".to_owned(),

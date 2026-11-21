@@ -101,6 +101,7 @@ mod union;
 mod union_loop;
 mod unpacked_arguments;
 mod unpacking;
+mod value_unpacking;
 mod version_info;
 mod view_operator;
 mod yield_from;

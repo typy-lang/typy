@@ -207,6 +207,8 @@ impl RuleId {
     pub const EXP_19: Self = Self("EXP-19");
     /// A default value other than a constant, such as `-1`, a tuple or a call, shall be accepted and evaluated once, when the function is defined.
     pub const EXP_20: Self = Self("EXP-20");
+    /// `**` shall be accepted in a call of a function value, binding the keywords by the names of the function the value holds, as CPython binds them.
+    pub const EXP_21: Self = Self("EXP-21");
     /// `*` of any iterable and `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print`, of a method through a protocol value and of an exception class, `*` in a call of a function value, and `**` in a call of `print`.
     pub const EXP_22: Self = Self("EXP-22");
     /// A list, set or generator comprehension whose element is `*iterable`, and a dict comprehension whose element is `**mapping` (PEP 798), shall unpack each into the result, under a Python floor of 3.15 or later.
@@ -571,6 +573,7 @@ impl RuleId {
         Self::EXP_18,
         Self::EXP_19,
         Self::EXP_20,
+        Self::EXP_21,
         Self::EXP_22,
         Self::EXP_23,
         Self::FFI_01,

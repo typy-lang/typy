@@ -2,7 +2,7 @@
 
 use typy_check::{ClassId, FunctionId, MemberTest, SymbolId, TypeObjectOf, TypedExpr};
 use typy_diagnostics::Span;
-use typy_tyir::{Callee, Constant, Operation, RuntimeFunction, TyirType};
+use typy_tyir::{Callee, Constant, IntOperator, Operation, RuntimeFunction, TyirType};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -278,6 +278,77 @@ impl FunctionLowerer<'_> {
             .collect();
         let value = self.invoke(Callee::Value, values, ty, span);
         let result = self.produced(value, ty);
+        for argument in lowered.into_iter().rev() {
+            self.release(argument, span);
+        }
+        self.release(function, span);
+        result
+    }
+
+    /// Lowers a call through the function value `callee` with `*` (EXP-22): the values
+    /// before the first `*`, then the list `rest` of the others, whose length the runtime
+    /// checks against the `Callable`'s parameters left, raising `TypeError` otherwise; then
+    /// the call takes the list's items as its last arguments.
+    pub(crate) fn call_value_unpacked(
+        &mut self,
+        callee: &TypedExpr,
+        (fixed, rest): (&[TypedExpr], &TypedExpr),
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let parameters: Vec<typy_check::Type> = callee
+            .ty
+            .callable_parts()
+            .map(|(parameters, _)| parameters.to_vec())
+            .unwrap_or_default();
+        let function = self.expression(callee);
+        let function = self.kept_for_call(callee, function, span);
+        let lowered: Vec<Lowered> = fixed
+            .iter()
+            .map(|argument| {
+                let value = self.expression(argument);
+                self.kept_for_call(argument, value, span)
+            })
+            .collect();
+        let list = self.expression(rest);
+        let length = self.call_runtime(RuntimeFunction::ListLength, vec![list.value], span);
+        let before = self.constant(Constant::Int(fixed.len().to_string()), span);
+        let given = self.builder.push_value(
+            Operation::IntBinary {
+                operator: IntOperator::Add,
+                left: before,
+                right: length.value,
+            },
+            TyirType::Int,
+            span,
+        );
+        self.release(length, span);
+        let expected = self.constant(Constant::Int(parameters.len().to_string()), span);
+        let object = self.bits(Self::borrowed(function.value, function.ty), span);
+        self.call_runtime(
+            RuntimeFunction::ValueArity,
+            vec![object, expected, given],
+            span,
+        );
+        let items: Vec<Lowered> = parameters[fixed.len().min(parameters.len())..]
+            .iter()
+            .enumerate()
+            .map(|(offset, parameter)| {
+                let wanted = self.lowered_type(parameter);
+                let index = self.constant(Constant::Int(offset.to_string()), span);
+                let bits =
+                    self.call_runtime(RuntimeFunction::ListGet, vec![list.value, index], span);
+                let value = self.value_of_bits(bits.value, wanted, span);
+                Self::borrowed(value, wanted)
+            })
+            .collect();
+        let values = std::iter::once(function.value)
+            .chain(lowered.iter().map(|argument| argument.value))
+            .chain(items.iter().map(|item| item.value))
+            .collect();
+        let value = self.invoke(Callee::Value, values, ty, span);
+        let result = self.produced(value, ty);
+        self.release(list, span);
         for argument in lowered.into_iter().rev() {
             self.release(argument, span);
         }

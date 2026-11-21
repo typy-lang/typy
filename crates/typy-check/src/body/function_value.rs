@@ -175,6 +175,22 @@ impl BodyChecker<'_> {
             {
                 self.expression(argument);
             }
+            // `**` binds by the names of the function the value holds, which its `Callable`
+            // type does not carry (ADR-0083).
+            if keyword.name.is_none() {
+                self.unpacking_calls.push(span);
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        keyword.span,
+                        "`**` in a call of a function value, which binds by the names of the \
+                         function it holds, is planned for TyPy 1.0 (EXP-21)",
+                    )
+                    .with_rule(RuleId::EXP_21)
+                    .with_help("pass the values by position"),
+                    span,
+                );
+            }
             let written = keyword
                 .name
                 .as_ref()
@@ -193,6 +209,13 @@ impl BodyChecker<'_> {
                 .with_help("pass the argument by position"),
                 span,
             );
+        }
+        // `*` binds when the program runs, against the `Callable`'s parameters (EXP-22).
+        if arguments
+            .iter()
+            .any(|argument| matches!(argument, typy_source::syntax::Expr::Starred { .. }))
+        {
+            return self.call_value_unpacked(callee, (parameters, returns), arguments, span);
         }
         if arguments.len() != parameters.len() {
             for argument in arguments {

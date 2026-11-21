@@ -98,11 +98,10 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 #[test]
 fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
     let planned = "`*` and `**` of a value only the run knows in a call of a builtin other \
-                   than `print`, of a function value, of a protocol method or of an exception \
-                   class are planned for TyPy 0.11 (EXP-22)";
+                   than `print`, of a protocol method or of an exception class are planned for \
+                   TyPy 0.11 (EXP-22)";
     for call in [
         "print(max(*[1, 2]))\n",
-        "f = pair\nprint(f(*[1, 2]))\n",
         "options = {\"sep\": \"-\"}\nprint(**options)\n",
         "for each in zip(*[[1]]):\n    pass\n",
         "class Failure(Exception):\n    pass\n\n\nerror = Failure(*[\"a\"])\n",
@@ -226,4 +225,63 @@ fn exp_17_a_generic_call_solves_what_it_can_from_unpacked_arguments() {
                    def first[T](*items: T) -> T:\n    return items[0]\n\n\n\
                    print(named(**[1]))\nprint(first(*[1], unknown=1))\n";
     assert_ne!(messages(program).len(), 0, "{program}");
+}
+
+#[test]
+fn exp_22_a_function_value_takes_star_and_checks_the_count_when_it_runs() {
+    for call in [
+        "f = pair\nvalues = [1, 2]\nprint(f(*values), f(1, *values[1:]), f(*(i for i in range(2))))\n",
+        "from collections.abc import Callable\n\n\n\
+         def run(g: Callable[[int, int], int], xs: set[int]) -> int:\n    return g(*xs, *xs)\n",
+    ] {
+        let source = format!("{PAIR}{call}");
+        assert_eq!(messages(&source), Vec::new(), "{source}");
+    }
+    let found = crate::common::dump(&format!("{PAIR}f = pair\nprint(f(*[1, 2]))\n"));
+    assert!(found.contains("CallValueUnpacked"), "{found}");
+}
+
+#[test]
+fn exp_22_a_function_value_refuses_what_one_list_cannot_bind() {
+    let mixed = "from collections.abc import Callable\n\n\n\
+                 def run(g: Callable[[int, str], int], xs: list[int]) -> int:\n    return g(*xs)\n";
+    let refusals = [
+        (
+            mixed,
+            "E0404",
+            "`*` in a call of a value of type Callable[[int, str], int] may give a value to \
+             parameters of more than one type, which one list cannot hold",
+        ),
+        (
+            "f = pair\nprint(f(*[\"a\"]))\n",
+            "E0404",
+            "`*` gives values of type str, and the parameters take int",
+        ),
+        (
+            "f = pair\nprint(f(1, 2, 3, *[4]))\n",
+            "E0404",
+            "a value of type Callable[[int, int], int] takes 2 arguments, and more are given",
+        ),
+        (
+            "f = pair\nprint(f(*[1], 2.5))\n",
+            "E0404",
+            "a value after `*` must be an int, and this is a float",
+        ),
+        (
+            "f = pair\noptions = {\"a\": 1}\nprint(f(**options))\n",
+            "E0201",
+            "`**` in a call of a function value, which binds by the names of the function it \
+             holds, is planned for TyPy 1.0 (EXP-21)",
+        ),
+    ];
+    for (body, code, message) in refusals {
+        let source = format!("{PAIR}{body}");
+        let found = messages(&source);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
+            "{source}: {found:?}"
+        );
+    }
 }

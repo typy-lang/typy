@@ -220,8 +220,34 @@ point = (7, 3)
 print(max(*point), min(*(4, 9, 2)), *point, **{"sep": "-"})
 ```
 
-The same unpacking of a list or another iterable, or of a dict held in a
-variable, in such a call is planned for 0.11 (EXP-22).
+A call of a function value takes `*` of any iterable (EXP-22). The
+values before the first `*` bind to the first parameters, and the values
+from it on fill the rest, which must take one type. When the program
+runs, the call checks that they are as many as the `Callable` takes, and
+raises CPython's `TypeError` otherwise, naming the function the value
+holds, such as `total() takes 2 positional arguments but 3 were given`;
+for too few values the message does not name the missing parameters,
+which a `Callable` type does not carry:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable
+
+
+def total(first: int, second: int) -> int:
+    return first + second
+
+
+add: Callable[[int, int], int] = total
+values = [1, 2]
+print(add(*values), add(1, *values[1:]))
+```
+
+`**` in a call of a function value binds by the names of the function it
+holds, which a `Callable` type does not carry, and is planned for 1.0
+(EXP-21). The same unpacking of a list or another iterable, or of a dict
+held in a variable, in a call of a builtin, a protocol method or an
+exception class is planned for 0.11 (EXP-22).
 
 ## Nested functions
 
@@ -631,7 +657,9 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and such `**` in a call of `print`, planned for 0.11 | E0201 (EXP-22) |
+| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a protocol method or of an exception class, and such `**` in a call of `print`, planned for 0.11 | E0201 (EXP-22) |
+| `**` in a call of a function value, planned for 1.0 | E0201 (EXP-21) |
+| `*` in a call of a function value whose values may reach parameters of more than one type | E0404 (EXP-22) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
 | A property read through its class as a value, such as `Box.v`, which is a `property` object, planned for 1.0 | E0201 (FUN-17) |
 | A call of a value that is not a function, such as an `int` | E0401 |

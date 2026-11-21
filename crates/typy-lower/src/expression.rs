@@ -327,6 +327,11 @@ impl FunctionLowerer<'_> {
             TypedExprKind::CallValue { callee, arguments } => {
                 self.call_value(callee, arguments, ty, span)
             }
+            TypedExprKind::CallValueUnpacked {
+                callee,
+                fixed,
+                rest,
+            } => self.call_value_unpacked(callee, (fixed, rest), ty, span),
             // A type alias object is immortal, so it is borrowed (SMT-12).
             TypedExprKind::NewTypeAlias(index) => {
                 let description = self.constant(Constant::TypeAlias(*index), span);

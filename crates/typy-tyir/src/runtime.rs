@@ -187,6 +187,9 @@ pub enum RuntimeFunction {
     /// A new copy of the static description of an alias a function defines, which each run of
     /// its `type` statement makes (TYP-18).
     TypeAliasNew,
+    /// Checks that a call through a function value with `*` gives as many values as its
+    /// `Callable` takes, raising CPython's `TypeError` naming the function (EXP-22).
+    ValueArity,
     /// A new bound method of the descriptor and the instance, which it holds a reference to
     /// (FUN-05).
     MethodNew,
@@ -541,7 +544,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 391] = [
+    pub const ALL: [Self; 392] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -715,6 +718,7 @@ impl RuntimeFunction {
         Self::TypeAliasName,
         Self::TypeAliasModule,
         Self::TypeAliasNew,
+        Self::ValueArity,
         Self::MethodNew,
         Self::BuiltinMethodNew,
         Self::MethodOrFunction,
@@ -1169,6 +1173,7 @@ impl RuntimeFunction {
                 signature(&[TyirType::TYPE_ALIAS], STR, false)
             }
             Self::TypeAliasNew => signature(&[TyirType::TYPE_ALIAS], TyirType::TYPE_ALIAS, false),
+            Self::ValueArity => signature(&[Bits, Int, Int], Unit, true),
             Self::MethodNew | Self::BuiltinMethodNew => {
                 signature(&[Bits, Bits], TyirType::FUNCTION, false)
             }
@@ -1555,6 +1560,7 @@ impl RuntimeFunction {
             Self::TypeAliasName => "type_alias_name",
             Self::TypeAliasModule => "type_alias_module",
             Self::TypeAliasNew => "type_alias_new",
+            Self::ValueArity => "value_arity",
             Self::MethodNew => "method_new",
             Self::BuiltinMethodNew => "builtin_method_new",
             Self::MethodOrFunction => "method_or_function",

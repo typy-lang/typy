@@ -47,6 +47,10 @@ All notable changes to TyPy are recorded here. The format follows
   its `type` statement runs, as in CPython (TYP-18). They were E0201. An
   alias without type parameters given some is E0401, as CPython raises
   `TypeError`.
+- A call of a function value takes `*` of any iterable, such as
+  `add(*values)`, and checks when it runs that the values are as many as
+  the `Callable` takes, raising CPython's `TypeError` that names the
+  function (EXP-22). It was E0201. `**` there is planned for 1.0 (EXP-21).
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such

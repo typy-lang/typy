@@ -327,6 +327,18 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(argument, callees);
             }
         }
+        TypedExprKind::CallValueUnpacked {
+            callee,
+            fixed,
+            rest,
+        } => {
+            callees.insert(THROUGH_VALUE);
+            expression(callee, callees);
+            for argument in fixed {
+                expression(argument, callees);
+            }
+            expression(rest, callees);
+        }
         // The key of each item is called through its function value.
         TypedExprKind::Keyed { .. } => {
             callees.insert(THROUGH_VALUE);

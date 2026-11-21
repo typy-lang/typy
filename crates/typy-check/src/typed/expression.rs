@@ -209,6 +209,14 @@ pub enum TypedExprKind {
         protocol: super::class::ClassId,
         name: String,
     },
+    /// A call through a function value with `*` (EXP-22): `callee` is evaluated, then the
+    /// values before the first `*`, then the list `rest` of every value from it on, whose
+    /// length is checked against the `Callable`'s parameters left when the program runs.
+    CallValueUnpacked {
+        callee: Box<TypedExpr>,
+        fixed: Vec<TypedExpr>,
+        rest: Box<TypedExpr>,
+    },
     /// A call through a function value: `callee` is evaluated, then the arguments, one for
     /// each parameter of its `Callable` type, in order (FUN-05).
     CallValue {
@@ -825,6 +833,14 @@ impl TypedExpr {
             TypedExprKind::CallValue { callee, arguments } => {
                 std::iter::once(callee.as_ref()).chain(arguments).collect()
             }
+            TypedExprKind::CallValueUnpacked {
+                callee,
+                fixed,
+                rest,
+            } => std::iter::once(callee.as_ref())
+                .chain(fixed)
+                .chain(std::iter::once(rest.as_ref()))
+                .collect(),
             TypedExprKind::CaptureOf { closure, .. } => vec![closure],
             TypedExprKind::Lambda { captures, .. } => captures.iter().collect(),
             TypedExprKind::CallNested {

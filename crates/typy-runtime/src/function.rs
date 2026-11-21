@@ -149,6 +149,84 @@ pub unsafe extern "C" fn typy_rt_same_function(
     core::ptr::eq(left, right) || unsafe { core::ptr::eq(identity_of(left), identity_of(right)) }
 }
 
+/// Returns CPython's `TypeError` when a call through the function value `function` with `*`
+/// gives `given` positional values, an `int` word, and its `Callable` takes `expected`, an
+/// `int` word, naming the function by its qualified name; null when they are equal (EXP-22,
+/// ADR-0083). A bound method counts its instance, as CPython does, and a built-in writes the
+/// count as a built-in does.
+///
+/// # Safety
+///
+/// `function` points to a live function object, bound method or built-in function value.
+#[unsafe(no_mangle)]
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "a function object and a bound method keep their descriptor after the header"
+)]
+pub unsafe extern "C" fn typy_rt_value_arity(
+    function: *mut ObjectHeader,
+    expected: i64,
+    given: i64,
+) -> *mut crate::ExceptionObject {
+    let (expected, given) = (
+        crate::word::inline_value(expected),
+        crate::word::inline_value(given),
+    );
+    if expected == given {
+        return core::ptr::null_mut();
+    }
+    let mut message = crate::message::MessageBuffer::new();
+    // SAFETY: the caller's guarantee; a bound method, as a function object, keeps its
+    // descriptor right after its header, and the descriptor's names are immortal strings.
+    let kind = unsafe {
+        let descriptor = (*function.cast::<FunctionObject>()).descriptor;
+        message.push_text((*descriptor).qualified_name);
+        (*function).type_id
+    };
+    message.push_str("() ");
+    let builtin = matches!(
+        kind,
+        crate::header::BUILTIN_FUNCTION_TYPE_ID
+            | crate::header::BUILTIN_METHOD_TYPE_ID
+            | crate::header::METHOD_DESCRIPTOR_TYPE_ID
+            | crate::header::BUILTIN_TYPE_FUNCTION_TYPE_ID
+    );
+    let plural = |count: i64| if count == 1 { "" } else { "s" };
+    if builtin {
+        message.push_str("takes exactly ");
+        if expected == 1 {
+            message.push_str("one");
+        } else {
+            message.push_number(expected);
+        }
+        message.push_str(" argument");
+        message.push_str(plural(expected));
+        message.push_str(" (");
+        message.push_number(given);
+        message.push_str(" given)");
+    } else if given > expected {
+        let instance = i64::from(kind == crate::header::METHOD_TYPE_ID);
+        message.push_str("takes ");
+        message.push_number(expected + instance);
+        message.push_str(" positional argument");
+        message.push_str(plural(expected + instance));
+        message.push_str(" but ");
+        message.push_number(given + instance);
+        message.push_str(if given + instance == 1 {
+            " was"
+        } else {
+            " were"
+        });
+        message.push_str(" given");
+    } else {
+        message.push_str("missing ");
+        message.push_number(expected - given);
+        message.push_str(" required positional argument");
+        message.push_str(plural(expected - given));
+    }
+    message.raise(crate::exception::ExceptionKind::TypeError)
+}
+
 /// Returns true when `right` stands for the function `left` stands for.
 unsafe extern "C" fn function_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the slot is called with two live objects.
@@ -436,6 +514,78 @@ mod tests {
             for each in [name, qualified_name] {
                 crate::refcount::typy_rt_decrement(each.cast());
             }
+        }
+    }
+
+    #[test]
+    fn exp_22_a_value_called_with_the_wrong_count_names_the_function_as_cpython_does() {
+        use crate::word::inline;
+        let (name, qualified_name) = (from_str("total"), from_str("total"));
+        let descriptor = super::FunctionDescriptor {
+            name,
+            qualified_name,
+            code: core::ptr::null(),
+            captures: core::ptr::null(),
+            identity: core::ptr::null(),
+        };
+        let object = |type_id| super::FunctionObject {
+            header: crate::header::ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id,
+            },
+            descriptor: &raw const descriptor,
+        };
+        let (function, method, builtin) = (
+            object(crate::header::FUNCTION_TYPE_ID),
+            object(crate::header::METHOD_TYPE_ID),
+            object(crate::header::BUILTIN_FUNCTION_TYPE_ID),
+        );
+        let message = |value: &super::FunctionObject, expected: i64, given: i64| {
+            let value = core::ptr::from_ref(value).cast_mut().cast();
+            // SAFETY: the objects, their descriptor and the strings live for the whole test.
+            let error = unsafe {
+                super::typy_rt_value_arity(value, inline(expected).unwrap(), inline(given).unwrap())
+            };
+            if error.is_null() {
+                return String::new();
+            }
+            // SAFETY: the exception is live and owned here.
+            unsafe {
+                let shown = crate::exception::classes::BASE_EXCEPTION.str.unwrap()(error.cast());
+                let written = text(shown.value);
+                crate::refcount::typy_rt_decrement(shown.value.cast());
+                crate::refcount::typy_rt_decrement(error.cast());
+                written
+            }
+        };
+        assert_eq!(message(&function, 2, 2), "");
+        assert_eq!(
+            message(&function, 2, 3),
+            "total() takes 2 positional arguments but 3 were given"
+        );
+        assert_eq!(
+            message(&function, 0, 1),
+            "total() takes 0 positional arguments but 1 was given"
+        );
+        assert_eq!(
+            message(&function, 2, 1),
+            "total() missing 1 required positional argument"
+        );
+        assert_eq!(
+            message(&method, 1, 2),
+            "total() takes 2 positional arguments but 3 were given"
+        );
+        assert_eq!(
+            message(&builtin, 1, 2),
+            "total() takes exactly one argument (2 given)"
+        );
+        assert_eq!(
+            message(&builtin, 2, 3),
+            "total() takes exactly 2 arguments (3 given)"
+        );
+        for each in [name, qualified_name] {
+            // SAFETY: the strings are live.
+            unsafe { crate::refcount::typy_rt_decrement(each.cast()) };
         }
     }
 
