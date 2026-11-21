@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.29 |
+| Version | 1.30 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -276,6 +276,7 @@ that the specification does not define.
 | STD-05 | 0.3 | IT | `tests/conformance/std/STD-05_*.py` |
 | STD-06 | 0.1 | IT | `tests/conformance/std/STD-06_*.py` |
 | STD-07 | 0.1 | IT | `tests/conformance/std/STD-07_*.py` |
+| STD-08 | 0.11 | IT | The conformance suite run on each oracle version, and `typy-check` tests of the Python floors `python-floor` takes; checked against the release plan when a CPython version is released or reaches its end of life |
 | CLI-01 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-01 |
 | CLI-02 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-02 |
 | CLI-03 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-03 |
@@ -328,6 +329,11 @@ that the specification does not define.
 | TYP-20 | 0.9 | UT, IT | `typy-check` tests of the classes that fit `Iterator[T]` and `Iterable[T]`, and of those that do not; `tests/conformance/typ/TYP-20_*.py`, one function given each kind of iterator, also in the sanitizer run |
 | TYP-21 | 0.9 | UT, IT | `typy-check` tests of `Generator` in `isinstance` and a class pattern, and of an `Iterable[T]` read as an `Iterator[T]` after a test; `tests/conformance/typ/TYP-21_*.py` |
 | TYP-22 | 1.0 | UT, IT | `typy-check` tests of each refusal while it is planned; `tests/conformance/typ/TYP-22_*.py` |
+| TYP-23 | 0.11 | UT, IT | `typy-check` tests of each operation an `object` takes and refuses before narrowing, and of narrowing by `isinstance`, a class pattern and `type(x) is C`; runtime tests of boxing and unboxing each type held by value; `tests/conformance/typ/TYP-23_*.py` for `__eq__(self, other: object)`, `list[object]` and `dict[str, object]` |
+| TYP-24 | 0.11 | UT, IT | `typy-check` tests of the types a cast decides and refuses; `tests/conformance/typ/TYP-24_*.py` for a right cast and a wrong one that raises `TypeError` |
+| TYP-25 | 0.13 | UT, IT | `typy-check` tests of the refusal while it is planned; runtime tests of binding an attribute, an operator and a call by type, with the cache; `tests/conformance/typ/TYP-25_*.py` for each operation and each error CPython raises |
+| TYP-26 | 0.12 | UT, IT | `typy-check` tests of a result inferred from one `return`, from several, and from none, and of each case that keeps the annotation; `tests/conformance/typ/TYP-26_*.py` |
+| TYP-27 | 0.12 | UT, IT | `typy-check` tests of each statement that fills an empty list, dict or set, and of a read before it; `tests/conformance/typ/TYP-27_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -452,6 +458,8 @@ that the specification does not define.
 | CLS-41 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-41_*.py` |
 | CLS-42 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-42_*.py` |
 | CLS-43 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-43_*.py` |
+| CLS-44 | 0.12 | UT, IT | `typy-check` tests of the expansion of each enum kind and of `auto()`; `tests/conformance/cls/CLS-44_*.py` for members, iteration, lookup, comparison, hashing, `match` and the `Flag` operators, with CPython's errors |
+| CLS-45 | 0.12 | UT, IT | `typy-check` tests of an abstract class named in a call, and of a subclass that overrides every abstract method; `tests/conformance/cls/CLS-45_*.py` for the `TypeError` through a `type[C]` value |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |

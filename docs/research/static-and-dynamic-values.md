@@ -3,8 +3,8 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy research: values whose type is known late |
-| Version | 0.1 |
-| Status | Draft |
+| Version | 1.0 |
+| Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
 
@@ -341,16 +341,16 @@ excluded to planned.
 
 ## 10. Questions for the requirements
 
-The requirements specification holds these questions as open issues.
+The requirements specification resolved these questions on 2026-11-21.
 
-| ID | Question |
-| --- | --- |
-| OI-32 | Is `object` a type, holding a boxed value narrowed by `isinstance` and `match` (option J), and in which release? |
-| OI-33 | Does TyPy infer results, empty collections and unannotated parameters (option I), which changes TYP-01? |
-| OI-34 | Which definition code may the compiler run, and how is CPython's meaning proved (option A)? |
-| OI-35 | Does TyPy accept `Any` as a value bound when the program runs (option B)? |
-| OI-36 | Does `cast` compile to a check that raises `TypeError`? |
-| OI-37 | Which CPython versions join the oracle after 3.15, and when does the lowest Python floor rise? |
+| ID | Question | Answer |
+| --- | --- | --- |
+| OI-32 | Is `object` a type, holding a boxed value narrowed by `isinstance` and `match` (option J), and in which release? | Yes, in 0.11 (TYP-23, ADR-0090) |
+| OI-33 | Does TyPy infer results, empty collections and unannotated parameters (option I), which changes TYP-01? | Results and empty collections in 0.12; parameters keep their annotations (TYP-26, TYP-27, ADR-0092) |
+| OI-34 | Which definition code may the compiler run, and how is CPython's meaning proved (option A)? | None yet: the checker expands `enum` and `abc` classes in 0.12, and option A stays for after 1.0 (CLS-44, CLS-45, ADR-0093) |
+| OI-35 | Does TyPy accept `Any` as a value bound when the program runs (option B)? | Yes, in 0.13 (TYP-25, ADR-0094) |
+| OI-36 | Does `cast` compile to a check that raises `TypeError`? | Yes, in 0.11 (TYP-24, ADR-0091) |
+| OI-37 | Which CPython versions join the oracle after 3.15, and when does the lowest Python floor rise? | Each after its final release; the lowest floor rises after its end of life (STD-08, ADR-0095) |
 
 ## 11. References
 

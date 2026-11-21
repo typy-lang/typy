@@ -95,3 +95,9 @@ supersedes it.
 | [ADR-0087](0087-make-typing-values-constants-written-only-where-the-oracles-agree.md) | Make typing values constants, written only where the oracles agree | Accepted | 2026-11-20 |
 | [ADR-0088](0088-give-a-named-tuple-methods-over-the-tuple-of-its-fields.md) | Give a named tuple methods over the tuple of its fields | Accepted | 2026-11-21 |
 | [ADR-0089](0089-write-map-and-filter-as-generic-iterator-classes-of-the-module.md) | Write `map` and `filter` as generic iterator classes of the module | Accepted | 2026-11-21 |
+| [ADR-0090](0090-hold-a-value-of-type-object-as-an-object-narrowed-by-its-type-id.md) | Hold a value of type `object` as an object narrowed by its type ID | Accepted | 2026-11-21 |
+| [ADR-0091](0091-check-a-typing-cast-when-the-program-runs.md) | Check a `typing.cast` when the program runs | Accepted | 2026-11-21 |
+| [ADR-0092](0092-infer-a-functions-result-and-an-empty-collections-items.md) | Infer a function's result and an empty collection's items | Accepted | 2026-11-21 |
+| [ADR-0093](0093-expand-enum-and-abc-classes-in-the-checker.md) | Expand `enum` and `abc` classes in the checker | Accepted | 2026-11-21 |
+| [ADR-0094](0094-bind-the-operations-of-an-any-value-when-the-program-runs.md) | Bind the operations of an `Any` value when the program runs | Accepted | 2026-11-21 |
+| [ADR-0095](0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md) | Follow each CPython version from its final release to its end of life | Accepted | 2026-11-21 |

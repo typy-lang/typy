@@ -218,6 +218,12 @@ nav:
           - adr/0087-make-typing-values-constants-written-only-where-the-oracles-agree.md
           - adr/0088-give-a-named-tuple-methods-over-the-tuple-of-its-fields.md
           - adr/0089-write-map-and-filter-as-generic-iterator-classes-of-the-module.md
+          - adr/0090-hold-a-value-of-type-object-as-an-object-narrowed-by-its-type-id.md
+          - adr/0091-check-a-typing-cast-when-the-program-runs.md
+          - adr/0092-infer-a-functions-result-and-an-empty-collections-items.md
+          - adr/0093-expand-enum-and-abc-classes-in-the-checker.md
+          - adr/0094-bind-the-operations-of-an-any-value-when-the-program-runs.md
+          - adr/0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

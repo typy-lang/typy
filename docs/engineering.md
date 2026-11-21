@@ -9,12 +9,12 @@ TyPy and what each release accepts.
 | Order | Document | Status |
 | --- | --- | --- |
 | 1 | [Research](research/research.md) | Approved |
-| 1 | [Research: values whose type is known late](research/static-and-dynamic-values.md) | Draft |
+| 1 | [Research: values whose type is known late](research/static-and-dynamic-values.md) | Approved |
 | 2 | [Software requirements specification](requirements/srs.md) | Approved |
 | 3 | [Use case model](modeling/use-case-model.md) | Approved |
 | 4 | [Domain model](modeling/domain-model.md) | Approved |
 | 5 | [Software architecture](architecture/architecture.md) | Approved |
-| 6 | [Architecture decision records](adr/index.md) | 89 records: 80 Accepted, 1 Proposed, 8 Superseded |
+| 6 | [Architecture decision records](adr/index.md) | 95 records: 86 Accepted, 1 Proposed, 8 Superseded |
 | 7 | [Detailed design](design/detailed-design.md) | Approved |
 | 8 | [Test plan](testing/test-plan.md) | Draft |
 | 9 | [Development guide](development/development-guide.md) | Draft |
