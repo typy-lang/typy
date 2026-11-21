@@ -173,6 +173,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- A call that unpacks with `*` or `**` and names a function that is not
+  defined, or a builtin TyPy does not provide, such as `divmod(*pair)`, is
+  refused for that name with E0205 or E0202. The message said the
+  unpacking was planned for a later release (EXP-22).
+
 - A fixed tuple, such as `(1, 2)`, passed or assigned where a union with a
   `tuple[T, ...]` member is expected, such as `tuple[int, ...] | str`, is
   accepted as that member, as CPython runs it. It was refused with E0404

@@ -119,6 +119,22 @@ fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() 
 }
 
 #[test]
+fn exp_22_a_callee_refused_itself_is_reported_and_not_the_unpacking() {
+    for (call, code) in [
+        ("print(undefined_name(*[1, 2]))\n", "E0205"),
+        ("print(divmod(*[7, 2]))\n", "E0202"),
+        ("print(divmod(*(7, 2)))\n", "E0202"),
+    ] {
+        let found = messages(call);
+        assert!(
+            found.iter().any(|(found_code, ..)| found_code == code)
+                && !found.iter().any(|(.., rule)| rule == "EXP-22"),
+            "{call}: {found:?}"
+        );
+    }
+}
+
+#[test]
 fn exp_19_unpacking_written_out_in_full_binds_as_the_values_it_gives() {
     let source = format!(
         "{PAIR}from collections.abc import Callable\n\

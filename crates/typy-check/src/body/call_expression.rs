@@ -1,7 +1,8 @@
 //! Checks a call expression: it goes to the program's function, method or class it names,
 //! to a builtin, or through a function value. A call that unpacks with `*` or `**` binds only
-//! to the program's functions, methods and classes and to `print`; any other is planned for
-//! 0.10 (EXP-17, EXP-19, ADR-0073).
+//! to the program's functions, methods and classes and to `print`; any other takes only
+//! unpacking written out in full, and the rest is planned for 0.11 (EXP-17, EXP-19, EXP-22,
+//! ADR-0073).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
@@ -32,10 +33,19 @@ impl BodyChecker<'_> {
             return self.call_expression(function, &arguments, &keywords, span);
         }
         // A callee that takes the unpacked arguments binds them and notes the call; any other
-        // saw each `*value` as an error it does not report, so its diagnostics give way.
+        // saw each `*value` as an error it does not report, so its diagnostics give way, but
+        // for an error in the callee itself, such as a name that is not defined.
         let reported = self.diagnostics.len();
         let call = self.call_expression(function, arguments, keywords, span);
-        if self.unpacking_calls.contains(&span) {
+        let callee = function.span();
+        let callee_refused = self.diagnostics.iter().skip(reported).any(|diagnostic| {
+            diagnostic.span().is_some_and(|at| {
+                at.file() == callee.file()
+                    && at.start() >= callee.start()
+                    && at.end() <= callee.end()
+            })
+        });
+        if self.unpacking_calls.contains(&span) || callee_refused {
             return call;
         }
         self.diagnostics.truncate(reported);
