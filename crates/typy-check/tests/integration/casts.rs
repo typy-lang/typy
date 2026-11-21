@@ -54,3 +54,48 @@ fn typ_24_cast_is_a_function_not_a_type() {
     let found = messages("from typing import cast\nx: cast = 1\n");
     assert_eq!(found[0].0, "E0408", "{found:?}");
 }
+
+#[test]
+fn typ_24_a_cast_to_an_optional_an_exception_or_a_union_of_classes_is_checked() {
+    let source = concat!(
+        "from typing import cast\n",
+        "class Shape:\n",
+        "    pass\n",
+        "class Circle(Shape):\n",
+        "    pass\n",
+        "class Square(Shape):\n",
+        "    pass\n",
+        "value: object = None\n",
+        "maybe: str | None = cast(str | None, value)\n",
+        "error: Exception = ValueError('x')\n",
+        "wrong: ValueError = cast(ValueError, error)\n",
+        "shapes: list[Shape] = [Circle()]\n",
+        "first: Circle | Square = cast(Circle | Square, shapes[0])\n",
+        "mixed: int | str | None = 3\n",
+        "number: int = cast(int, mixed)\n",
+        "scale: float = cast(float, value) if value is not None else 1.5\n",
+        "print(maybe, wrong, first, number, scale)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn typ_24_a_cast_between_unrelated_classes_always_fails_and_is_refused() {
+    let found = messages(concat!(
+        "from typing import cast\n",
+        "class Shape:\n",
+        "    pass\n",
+        "class Text:\n",
+        "    pass\n",
+        "shape: Shape = Shape()\n",
+        "text = cast(Text, shape)\n",
+        "error: ValueError = ValueError()\n",
+        "other = cast(KeyError, error)\n",
+    ));
+    assert_eq!(found.len(), 2, "{found:?}");
+    assert!(
+        found
+            .iter()
+            .all(|(code, message, _)| code == "E0404" && message.contains("always raises"))
+    );
+}

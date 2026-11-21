@@ -108,3 +108,56 @@ fn typ_23_narrowing_an_object_to_a_collection_waits_for_any() {
         "{found:?}"
     );
 }
+
+#[test]
+fn typ_23_isinstance_narrows_an_object_to_each_kind_of_class() {
+    let source = concat!(
+        "class Box[T]:\n",
+        "    def __init__(self, item: T) -> None:\n",
+        "        self.item = item\n",
+        "def describe(value: object) -> str:\n",
+        "    if isinstance(value, float):\n",
+        "        return str(value + 0.5)\n",
+        "    if isinstance(value, bool):\n",
+        "        return str(not value)\n",
+        "    if isinstance(value, bytes):\n",
+        "        return str(len(value))\n",
+        "    if isinstance(value, type(None)):\n",
+        "        return 'none'\n",
+        "    if isinstance(value, type):\n",
+        "        return value.__name__\n",
+        "    if isinstance(value, range):\n",
+        "        return str(len(value))\n",
+        "    if isinstance(value, slice):\n",
+        "        return str(value.start)\n",
+        "    if isinstance(value, ValueError):\n",
+        "        return str(value)\n",
+        "    if isinstance(value, Box):\n",
+        "        return 'box'\n",
+        "    if isinstance(value, object):\n",
+        "        return 'object'\n",
+        "    return 'other'\n",
+        "print(describe(1.5), describe(True), describe(b'ab'), describe(None), describe(int))\n",
+        "print(describe(range(3)), describe(slice(1, 2)), describe(ValueError('x')), describe(Box(1)))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn typ_23_type_is_narrows_an_object_to_each_kind_of_class() {
+    let source = concat!(
+        "def describe(value: object) -> str:\n",
+        "    if type(value) is str:\n",
+        "        return value.upper()\n",
+        "    if type(value) is not float:\n",
+        "        return 'not a float'\n",
+        "    return str(value)\n",
+        "print(describe('a'), describe(1), describe(2.5))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let found = messages(
+        "def f(value: object) -> None:\n    if type(value) is dict:\n        print(value)\n",
+    );
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].2, "TYP-25");
+}

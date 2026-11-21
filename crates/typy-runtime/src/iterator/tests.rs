@@ -354,3 +354,108 @@ fn an_iterable_gives_the_iterator_its_header_calls_for() {
     release(text);
     release(numbers);
 }
+
+/// Returns the items a reversed iterator of `source` gives, as `int` values, and releases it.
+fn reversed_ints(source: *mut ObjectHeader, pair: *const TupleType) -> Vec<i64> {
+    // SAFETY: the tests pass a live source of a type `reversed` reads.
+    let items = unsafe { super::reversed::typy_rt_iterator_reversed(source, pair) };
+    let found = core::iter::from_fn(|| next(items))
+        .flat_map(|item| {
+            if pair.is_null() {
+                vec![inline_value(item.cast_signed())]
+            } else {
+                // SAFETY: the pair holds two `int` words.
+                unsafe {
+                    (0..2)
+                        .map(|index| {
+                            inline_value(crate::tuple::field(pair, item, index).cast_signed())
+                        })
+                        .collect()
+                }
+            }
+        })
+        .collect();
+    release(items);
+    found
+}
+
+#[test]
+fn lib_20_reversed_reads_a_list_a_tuple_a_range_and_bytes_from_the_last_item() {
+    let list = int_list(&[1, 2, 3]);
+    assert_eq!(reversed_ints(list.cast(), core::ptr::null()), [3, 2, 1]);
+    let tuple = int_list(&[4, 5]);
+    // SAFETY: the list is new and sealed once.
+    unsafe { crate::list::typy_rt_tuple_seal(tuple) };
+    assert_eq!(reversed_ints(tuple.cast(), core::ptr::null()), [5, 4]);
+    let source = range(word(0), word(7), word(3));
+    assert_eq!(reversed_ints(source, core::ptr::null()), [6, 3, 0]);
+    let empty = range(word(0), word(0), word(1));
+    assert_eq!(reversed_ints(empty, core::ptr::null()), Vec::<i64>::new());
+    let data = crate::bytes::new_bytes(2);
+    // SAFETY: the bytes are new and hold two bytes.
+    unsafe {
+        crate::string::set_code_point(data, 0, 7);
+        crate::string::set_code_point(data, 1, 9);
+    }
+    assert_eq!(reversed_ints(data.cast(), core::ptr::null()), [9, 7]);
+    for each in [list, tuple] {
+        release(each);
+    }
+    for each in [source, empty, data.cast()] {
+        release(each);
+    }
+}
+
+#[test]
+fn lib_20_reversed_reads_a_str_as_strings_of_one_code_point() {
+    let text = from_str("ab");
+    // SAFETY: the source is a live `str`.
+    let items =
+        unsafe { super::reversed::typy_rt_iterator_reversed(text.cast(), core::ptr::null()) };
+    let found: Vec<String> = core::iter::from_fn(|| next(items))
+        .map(|item| {
+            let item =
+                core::ptr::with_exposed_provenance::<StrObject>(usize::try_from(item).unwrap());
+            text_of(item)
+        })
+        .collect();
+    assert_eq!(found, ["b", "a"]);
+    release(items);
+    release(text);
+}
+
+#[test]
+fn lib_20_reversed_reads_a_dict_and_its_views_and_raises_when_it_changes_size() {
+    let int = word(ItemKind::Int as i64);
+    let dict = crate::dict::typy_rt_dict_new(int, 0, int, 0, word(0));
+    // SAFETY: the dict is live and the keys and values are inline words.
+    unsafe {
+        crate::dict::typy_rt_dict_set(dict, word(1).cast_unsigned(), word(10).cast_unsigned());
+        crate::dict::typy_rt_dict_set(dict, word(2).cast_unsigned(), word(20).cast_unsigned());
+    }
+    assert_eq!(reversed_ints(dict.cast(), core::ptr::null()), [2, 1]);
+    for (kind, pair, expected) in [
+        (0, core::ptr::null(), vec![2, 1]),
+        (1, core::ptr::null(), vec![20, 10]),
+        (2, &raw const PAIR, vec![2, 20, 1, 10]),
+    ] {
+        // SAFETY: the dict is live.
+        let view = unsafe { crate::dict::typy_rt_dict_view(dict, word(kind)) };
+        assert_eq!(reversed_ints(view.cast(), pair), expected, "view {kind}");
+        release(view);
+    }
+    // SAFETY: the dict is live.
+    let keys =
+        unsafe { super::reversed::typy_rt_iterator_reversed(dict.cast(), core::ptr::null()) };
+    assert!(next(keys).is_some());
+    // SAFETY: the dict is live.
+    unsafe {
+        crate::dict::typy_rt_dict_set(dict, word(3).cast_unsigned(), word(30).cast_unsigned());
+    };
+    assert_eq!(
+        failure(keys, 0),
+        "RuntimeError('dictionary changed size during iteration')"
+    );
+    release(keys);
+    release(dict);
+}
