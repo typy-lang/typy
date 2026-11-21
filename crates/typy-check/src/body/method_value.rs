@@ -121,7 +121,7 @@ impl BodyChecker<'_> {
     /// Returns the error for a method that is no value of one `Callable` type: a property,
     /// whose value through its class is a `property` object, planned for 1.0 (FUN-17); a method
     /// with type parameters of its own or a keyword-only parameter, E0202; and one with
-    /// `*args` or `**kwargs`, planned for 0.10 (FUN-13), as for a function.
+    /// `*args` or `**kwargs`, planned for 0.11 (FUN-19), as for a function.
     fn refused_method_value(
         &mut self,
         class: ClassId,

@@ -333,7 +333,7 @@ impl BodyChecker<'_> {
                             DiagnosticCode::error(201),
                             span,
                             "a type alias given its type arguments as a value is planned for \
-                             TyPy 0.10 (TYP-18)",
+                             TyPy 0.11 (TYP-18)",
                         )
                         .with_rule(RuleId::TYP_18),
                         span,

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.25 |
+| Version | 1.26 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -323,7 +323,7 @@ that the specification does not define.
 | TYP-15 | 0.3 | IT | `tests/conformance/typ/TYP-15_*.py` |
 | TYP-16 | 0.5 | IT | `tests/conformance/typ/TYP-16_*.py` |
 | TYP-17 | 0.5 | IT | `tests/conformance/typ/TYP-17_*.py` |
-| TYP-18 | 0.10 | UT, IT | `typy-check` tests of each kind of typing value, its equality and identity, and each written form refused below the floor that writes it alike; `tests/conformance/typ/TYP-18_*.py`, with `# typy-python: 3.14` and `3.15` for the forms only those oracles write alike |
+| TYP-18 | 0.11 | UT, IT | `typy-check` tests of each kind of typing value, its equality and identity, and each written form refused below the floor that writes it alike; `tests/conformance/typ/TYP-18_*.py`, with `# typy-python: 3.14` and `3.15` for the forms only those oracles write alike |
 | TYP-19 | 1.0 | IT | `tests/conformance/typ/TYP-19_*.py` |
 | TYP-20 | 0.9 | UT, IT | `typy-check` tests of the classes that fit `Iterator[T]` and `Iterable[T]`, and of those that do not; `tests/conformance/typ/TYP-20_*.py`, one function given each kind of iterator, also in the sanitizer run |
 | TYP-21 | 0.9 | UT, IT | `typy-check` tests of `Generator` in `isinstance` and a class pattern, and of an `Iterable[T]` read as an `Iterator[T]` after a test; `tests/conformance/typ/TYP-21_*.py` |
@@ -398,14 +398,16 @@ that the specification does not define.
 | FUN-07 | 0.9 | UT, IT | `typy-check` tests that a generator of each annotation yields and returns its types, and that `send`, `throw` and `close` are only for `Generator`; runtime tests of `send`, `throw` and `close` in each state and of the exception a step hands back to its caller; `tests/conformance/fun/FUN-07_*.py`, CPython's errors of a running, finished or just started generator and the context of an exception raised while one is suspended inside an `except` clause included, also in the sanitizer run |
 | FUN-08 | 0.10 | UT, IT | `typy-check` tests of each built-in against `Callable` types it fits and does not fit, and of a value with nothing expected; `typy-codegen` test of the identity key in a descriptor; `tests/conformance/fun/FUN-08_*.py` for keys, stored values, bound and unbound methods of built-in types, and their identity, equality, hash and `repr` |
 | FUN-09 | 0.10 | UT, IT | `typy-check` tests of each kind of method value; `tests/conformance/fun/FUN-09_*.py` for class methods through a class and an instance, static methods a subclass defines again, protocol methods and overrides held otherwise, with their identity, equality, hash and `repr` |
-| FUN-10 | 0.10 | UT, IT | `typy-check` tests of substitution through `Callable` and `Generator`, and that the passes with opaque types make no code; `tests/conformance/fun/FUN-10_*.py` for nested functions, `lambda` and generator expressions in generic functions and functions with protocol parameters, nested generic functions and their qualified names |
+| FUN-10 | 0.10 | UT, IT | `typy-check` tests of substitution through `Callable` and `Generator`, and that the passes with opaque types make no code; `tests/conformance/fun/FUN-10_*.py` for nested functions, `lambda` and generator expressions in generic functions and functions with protocol parameters, and their qualified names |
 | FUN-11 | 0.9 | UT, IT, E2E | Runtime tests of closing in each state, of the queue of freed generators and of one that yields again; `tests/conformance/fun/FUN-11_*.py`, with `break`, a temporary, a container, an instance, `with`, nested generators, a variable an exception keeps, a module variable at the end, `close()` and a generator that yields again, in CPython's order, also in the sanitizer run; `crates/typy-cli/tests/end_to_end/generators.rs` for what standard error shows of an exception while one closes |
 | FUN-12 | 1.0 | IT | `tests/conformance/fun/FUN-12_*.py` |
-| FUN-13 | 0.10 | UT, IT | `typy-check` tests of the fit of each kind of parameter list to a `Callable`; `tests/conformance/fun/FUN-13_*.py` for defaults, `*args`, `**kwargs`, `lambda *values`, closures and bound methods, with the identity of the original |
+| FUN-13 | 0.10 | UT, IT | `typy-check` tests of the fit of each kind of parameter list to a `Callable`; `tests/conformance/fun/FUN-13_*.py` for defaults, `*args` and `**kwargs` of functions of a module, with the identity of the original |
 | FUN-14 | 0.10 | UT, IT | `typy-check` tests of each built-in type against `Callable` types it fits and does not fit; `tests/conformance/fun/FUN-14_*.py` for `map`, `sorted` and `max` with types as keys, and their `repr` |
 | FUN-15 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-15_*.py` |
 | FUN-16 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-16_*.py` |
 | FUN-17 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned, including a property read through its class; `tests/conformance/fun/FUN-17_*.py` |
+| FUN-18 | 0.11 | UT, IT | `typy-check` tests of the refusal while it is planned; `tests/conformance/fun/FUN-18_*.py` for nested generic functions, their copies and their qualified names |
+| FUN-19 | 0.11 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/fun/FUN-19_*.py` for closures, bound methods and `lambda *values`, with the identity of the original |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |

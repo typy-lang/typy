@@ -310,7 +310,7 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        format!("using `{id}` as a value is planned for TyPy 0.10 (TYP-18)"),
+                        format!("using `{id}` as a value is planned for TyPy 0.11 (TYP-18)"),
                     )
                     .with_rule(RuleId::TYP_18)
                     .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),

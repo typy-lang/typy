@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.88 |
+| Version | 2.89 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -678,9 +678,9 @@ takes is converted to the item type, so a call may hold several arguments
 of one variadic parameter, in source order (EXP-17). The generic solver
 pairs each argument with the type `body/binding.rs` gives it, so `T` of
 `*items: T` is solved from the items. An override keeps the variadic
-parameters of the method it overrides, E0404 (CLS-04), and a function,
-nested function or method with one read as a value, or a `lambda` with
-one, is E0201, planned for 0.10 (FUN-13).
+parameters of the method it overrides, E0404 (CLS-04), and a nested
+function or method with one read as a value, or a `lambda` with one, is
+E0201, planned for 0.11 (FUN-19).
 
 An `isinstance` test of an abstract class of `collections.abc` or `typing`,
 `Iterable`, `Iterator` or `Generator`, is decided by its static type when
@@ -839,7 +839,7 @@ cell is read as `CapturedCell(position)` and passed on to a deeper `def` as
 cell variables, also an `except` clause's, whose symbol is the clause's
 own. A cell's type is the variable's once the body around the `def` is
 checked, since an assignment after the `def` may give it. A nested
-function with type parameters of its own is planned for 0.10 (FUN-10).
+function with type parameters of its own is planned for 0.11 (FUN-18).
 One in a generic function, as a `lambda` and a generator expression there,
 is checked in each pass and copy of the function (ADR-0081): while
 `generic_body::check` checks the generic body, `Program::generic_pass`
@@ -2061,7 +2061,7 @@ its name and hashes it by identity, and `typy_rt_type_alias_name` and
 (`TypedExprKind::TypeAliasPart`). Calling an alias and `isinstance` with
 one are E0401, as CPython raises `TypeError`; an alias a function or a
 class defines, an alias given its type arguments, and `__value__` and
-`__type_params__` read as values are E0201, planned for 0.10 (TYP-18)
+`__type_params__` read as values are E0201, planned for 0.11 (TYP-18)
 (SMT-12). `Final` follows TYP-08:
 `body::locals::declare` records each `Final` variable in
 `Program::final_variables` with the name its declaration assigns, and `assign`
@@ -2185,7 +2185,7 @@ gives `TracebackType` and `ModuleType`, as `AnnotationName`s that
 `resolve_import` binds for annotations only (TYP-15): a name imported from
 them, or a name bound to one of the modules, such as `typing.Iterable`,
 enters `AnnotationScope::names` or `standard`, and its use as a value is
-E0201, planned for 0.10 (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
+E0201, planned for 0.11 (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
 `TracebackType` is `Type::Traceback` and `ModuleType` is `Type::AnyModule`,
 a module whose attributes are unknown, E0412. `Iterable[T]` is
 `Type::Iterable(T)`: any built-in iterable or iterator whose items have

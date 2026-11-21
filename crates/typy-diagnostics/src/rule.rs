@@ -248,6 +248,10 @@ impl RuleId {
     pub const FUN_16: Self = Self("FUN-16");
     /// `property`, `staticmethod` and `classmethod`, and the objects they make, such as a property read through its class, shall be values as CPython's are.
     pub const FUN_17: Self = Self("FUN-17");
+    /// A nested function with type parameters of its own shall be accepted, with a copy for each set of types its calls give.
+    pub const FUN_18: Self = Self("FUN-18");
+    /// A nested function, a method or a `lambda` with `*args` or `**kwargs` parameters, or with parameters that have defaults, shall be a value where a `Callable` its parameters fit is expected.
+    pub const FUN_19: Self = Self("FUN-19");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -546,6 +550,8 @@ impl RuleId {
         Self::FUN_15,
         Self::FUN_16,
         Self::FUN_17,
+        Self::FUN_18,
+        Self::FUN_19,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,

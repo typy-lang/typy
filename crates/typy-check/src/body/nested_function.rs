@@ -95,7 +95,7 @@ impl BodyChecker<'_> {
     /// Checks a `def` in a function: its signature now, in the annotations of the function
     /// around it, and its body once that function's is checked. A nested function of a
     /// generic function is checked in each copy; one with type parameters of its own has a
-    /// copy for each set of types, which is planned for 0.10 (FUN-10).
+    /// copy for each set of types, which is planned for 0.11 (FUN-18).
     pub(super) fn nested_def(&mut self, statement: &Stmt) -> Option<TypedStmt> {
         let parts = FunctionParts::of(statement)?;
         let name = &parts.name.name;
@@ -107,10 +107,10 @@ impl BodyChecker<'_> {
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     parts.name.span,
-                    "a nested function with type parameters of its own is planned for TyPy 0.10 \
-                     (FUN-10)",
+                    "a nested function with type parameters of its own is planned for TyPy 0.11 \
+                     (FUN-18)",
                 )
-                .with_rule(RuleId::FUN_10),
+                .with_rule(RuleId::FUN_18),
             );
             return self.refused_def(symbol);
         }

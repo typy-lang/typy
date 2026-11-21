@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.110 |
+| Version | 1.111 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -199,7 +199,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-15 | The annotations `Iterator[T]` and `Iterable[T]`, imported from `collections.abc` or `typing`, shall be accepted for iterators and for the built-in iterables of items of type `T` (ADR-0014, ADR-0015). | S | 0.3 | |
 | TYP-16 | One value assigned to several targets, as in `a = b[0] = value`, shall be converted to each target's type, such as the union an item holds. | S | 0.5 | 7.2 |
 | TYP-17 | The names `Iterable` and `Iterator` of `typing` and `collections.abc`, and `List`, `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of `typing`, shall be accepted as the classes of `isinstance` and of a class pattern, with CPython's answers. | S | 0.5 | |
-| TYP-18 | The names of `typing` and `collections.abc`, alone or given type arguments, a built-in class given type arguments, and a union of types written with `\|`, shall be values of their own: stored, passed, compared and written as CPython writes them, where every oracle from the program's floor writes them alike; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__` (ADR-0087). | C | 0.10 | |
+| TYP-18 | The names of `typing` and `collections.abc`, alone or given type arguments, a built-in class given type arguments, and a union of types written with `\|`, shall be values of their own: stored, passed, compared and written as CPython writes them, where every oracle from the program's floor writes them alike; so shall a type alias that a function or a class defines, an alias given its type arguments, and an alias's `__value__` and `__type_params__` (ADR-0087). | C | 0.11 | |
 | TYP-19 | An operation on a union whose members the runtime cannot tell apart by class or kind, such as two iterators, two file kinds or an iterable, shall be accepted. | C | 1.0 | |
 | TYP-20 | A class whose `__next__` returns `T` and whose `__iter__` returns the instance shall be an `Iterator[T]`, and a class whose `__iter__` returns an `Iterator[T]` an `Iterable[T]`, as `typing` reads the protocols, so its instances are held and passed where those are expected (ADR-0065). | S | 0.9 | |
 | TYP-21 | `Generator` of `typing` and `collections.abc` shall be accepted as the class of `isinstance` and of a class pattern, and a value of type `Iterable[T]` shall be testable against `Iterator` and `Generator`, with CPython's answers (ADR-0065). | S | 0.9 | |
@@ -299,14 +299,16 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | FUN-07 | A generator function shall be annotated to return `Generator[Y, S, R]`, `Iterator[Y]` or `Iterable[Y]` of `typing` or `collections.abc`, and a call of it shall give a generator object of that type; only `Generator` shall offer `send`, `throw` and `close`, and a result of type `R`, as `typing` reads them; a generator suspended inside an `except` clause shall keep the exception it handles from its caller, as CPython does (ADR-0063, ADR-0068). | M | 0.9 | 8.7 |
 | FUN-08 | A built-in function, a function of a standard library module TyPy provides, or a method of a built-in type shall be a value where a `Callable` is expected, such as `sorted(words, key=len)`, with CPython's identity and text (ADR-0076, ADR-0077). | S | 0.10 | 3.2.8 |
 | FUN-09 | A class method read as a value, a static method read through an instance whose subclasses define it again, a method read through a protocol value, and a method read through an instance whose subclass overrides it with parameters or a result held otherwise, shall be values as CPython's are (ADR-0079). | S | 0.10 | 3.2.8 |
-| FUN-10 | A nested function, `lambda` or generator expression inside a generic function or a function with a protocol parameter, and a nested function with type parameters of its own, shall be accepted, with a copy for each set of types (ADR-0081). | C | 0.10 | 8.10 |
+| FUN-10 | A nested function, `lambda` or generator expression inside a generic function or a function with a protocol parameter shall be accepted, with a copy for each set of types (ADR-0081). | C | 0.10 | 8.10 |
 | FUN-11 | A generator closed, or freed while it is suspended, shall raise `GeneratorExit` at its `yield` and run its `except` and `finally` clauses when CPython does; one that yields again then shall raise `RuntimeError`, and one never started shall run nothing (ADR-0069, ADR-0070, ADR-0071). | M | 0.9 | 8.7 |
 | FUN-12 | A `yield` or `yield from` inside a larger expression, such as `print((yield value))`, shall be accepted. | C | 1.0 | 6.2.9 |
-| FUN-13 | A function, nested function, method or `lambda` with `*args` or `**kwargs` parameters, or with parameters that have defaults, shall be a value where a `Callable` its parameters fit is expected, taking the arguments the `Callable` passes (ADR-0080). | C | 0.10 | 3.2.8 |
+| FUN-13 | A function of a module with `*args` or `**kwargs` parameters, or with parameters that have defaults, shall be a value where a `Callable` its parameters fit is expected, taking the arguments the `Callable` passes (ADR-0080). | C | 0.10 | 3.2.8 |
 | FUN-14 | A built-in type whose call TyPy types, such as `int`, `str` or `list`, shall be a value where a `Callable` is expected, such as `map(int, words)` or `sorted(numbers, key=str)` (ADR-0077). | S | 0.10 | 3.2.8 |
 | FUN-15 | User-defined decorators shall be accepted on methods, alone and together with `@staticmethod`, `@classmethod` and `@property`. | C | 0.14 | 8.7 |
 | FUN-16 | A class of the program or an exception class shall be a value where a `Callable` is expected, such as `make: Callable[[int], Box] = Box`, its `__init__` taking the arguments the `Callable` passes. | C | 0.14 | 3.2.8 |
 | FUN-17 | `property`, `staticmethod` and `classmethod`, and the objects they make, such as a property read through its class, shall be values as CPython's are. | C | 1.0 | 3.2.8 |
+| FUN-18 | A nested function with type parameters of its own shall be accepted, with a copy for each set of types its calls give (ADR-0081). | C | 0.11 | 8.10 |
+| FUN-19 | A nested function, a method or a `lambda` with `*args` or `**kwargs` parameters, or with parameters that have defaults, shall be a value where a `Callable` its parameters fit is expected, taking the arguments the `Callable` passes (ADR-0080). | C | 0.11 | 3.2.8 |
 
 ### 3.10 Classes (CLS)
 
@@ -573,8 +575,8 @@ cache, unless a row says otherwise.
 | 0.7 | | macOS AArch64 as host and target; LLVM built and pinned by TyPy for every host |
 | 0.8 | Functions as values: nested functions and closures, `lambda`, `nonlocal`, keyword-only and positional-only parameters, the `key` argument of `sorted`, `list.sort`, `min` and `max` | Attributes, tuple items, captures and cells stored by decreasing alignment |
 | 0.9 | Generators: `yield` and `yield from`, generator functions of `Generator`, `Iterator` and `Iterable` types, generator expressions; classes with `__iter__` and `__next__` as iterators; `*args`, `**kwargs` and unpacking with `*` and `**` | Generator objects of one allocation |
-| 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass`; `typing` names and aliases as values | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
-| 0.11 | | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
+| 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions of a module with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass` | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
+| 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
 | 0.12 | | The benchmark suite within 5 times C |
 | 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `ctypes` callbacks, headers and the rest of `ctypes` | |
 | 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |

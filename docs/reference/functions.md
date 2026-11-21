@@ -40,10 +40,11 @@ A nested function inside a generic function, or inside a function with a
 protocol parameter, is checked and made in each copy of the function, and
 keeps Python's `__qualname__`, such as `pair_with.<locals>.make` (FUN-10).
 
-These are planned for 0.10 as values: a protocol method, and a nested
-function or method with `*args` or `**kwargs` (FUN-09, FUN-13). So is a
-nested function with type parameters of its own (FUN-10). A class of the
-program as a `Callable` is planned for 0.14 (FUN-16).
+A protocol method as a value is planned for 0.10 (FUN-09). A nested
+function or a method with `*args` or `**kwargs` as a value is planned for
+0.11 (FUN-19), and so is a nested function with type parameters of its
+own (FUN-18). A class of the program as a `Callable` is planned for 0.14
+(FUN-16).
 
 ## Decorators
 
@@ -119,7 +120,7 @@ is expected that its parameters take, such as `apply(total, 2, 3)` or
 with the `Callable`'s arguments by position, and stays the same function
 to `is` and `==` (FUN-13). Read where nothing is expected, it is E0203. A
 nested function or a method with them as a value, and `*args` or
-`**kwargs` in a `lambda`, are planned for 0.10 (FUN-13). A call may also
+`**kwargs` in a `lambda`, are planned for 0.11 (FUN-19). A call may also
 unpack its arguments; see [Unpacking in a call](#unpacking-in-a-call).
 
 ## Unpacking in a call
@@ -572,7 +573,7 @@ These forms are refused:
 | A generic function as a value, which has one copy for each set of types | E0202 |
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
-| A nested function or a method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.10 | E0201 (FUN-13) |
+| A nested function or a method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.11 | E0201 (FUN-19) |
 | A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
 | `*` or `**` in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and `**` in a call of `print`, planned for 0.10 | E0201 (EXP-19) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |

@@ -98,7 +98,7 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "f = lambda *a: 0\n",
-            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.10 (FUN-13)",
+            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.11 (FUN-19)",
         ),
         (
             "def f(a: int = g()) -> None:\n    pass\n",

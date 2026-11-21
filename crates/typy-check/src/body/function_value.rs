@@ -68,7 +68,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns E0201 when `function`, named `name`, has a `*args` or `**kwargs` parameter,
-    /// which a `Callable` does not yet reach, planned for 0.10 (FUN-13).
+    /// which a `Callable` does not yet reach, planned for 0.11 (FUN-19).
     pub(super) fn refused_variadic_value(
         &mut self,
         function: FunctionId,
@@ -86,11 +86,11 @@ impl BodyChecker<'_> {
         };
         let message = format!(
             "`{name}` takes `{stars}{}`, and a function with `*args` or `**kwargs` as a value is \
-             planned for TyPy 0.10 (FUN-13)",
+             planned for TyPy 0.11 (FUN-19)",
             parameter.name
         );
         let diagnostic = Diagnostic::new(DiagnosticCode::error(201), span, message)
-            .with_rule(RuleId::FUN_13)
+            .with_rule(RuleId::FUN_19)
             .with_help("pass a `lambda` that calls it with the arguments the `Callable` passes");
         Some(self.error(diagnostic, span))
     }

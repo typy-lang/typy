@@ -147,7 +147,7 @@ As in CPython, a bare `Optional` and a subscripted name such as
 `List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
 `False`. The names held in a variable, passed or printed are planned for
-0.10 (TYP-18). `NamedTuple` is a base for a named tuple's class, as
+0.11 (TYP-18). `NamedTuple` is a base for a named tuple's class, as
 [Classes](classes.md#named-tuples) describes (CLS-27). `typing.Any` and
 `typing.cast` are refused, since every value in TyPy has one type
 (TYP-10).
@@ -399,7 +399,7 @@ print(Score, Score.__name__, Score.__module__, type(Score), kinds[0] is Score)
 As in CPython, calling an alias, or giving it to `isinstance`, is E0401.
 An alias a function or a class defines read as a value, whose text
 CPython 3.15 changed, an alias given its type arguments as a value, and
-an alias's `__value__` and `__type_params__` are planned for 0.10
+an alias's `__value__` and `__type_params__` are planned for 0.11
 (TYP-18). Two aliases compare with `is`; `==` between them is E0407, as
 for module objects.
 

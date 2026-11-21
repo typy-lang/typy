@@ -48,8 +48,8 @@ impl Walker {
                 variadic.span,
                 planned(
                     "`*args` and `**kwargs` in a `lambda`",
-                    "0.10",
-                    RuleId::FUN_13,
+                    "0.11",
+                    RuleId::FUN_19,
                 ),
             );
         }
