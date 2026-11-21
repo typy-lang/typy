@@ -384,6 +384,12 @@ pub enum TypedExprKind {
     Downcast(Box<TypedExpr>),
     /// `isinstance(value, classes)` (CLS-09).
     IsInstance(Box<IsInstanceTest>),
+    /// `issubclass(class, classes)`: the class, then each of `bases`, type objects evaluated
+    /// in order, and true when the class is or derives from one of them (CLS-19, ADR-0084).
+    IsSubclass {
+        class: Box<TypedExpr>,
+        bases: Vec<TypedExpr>,
+    },
     /// An operation on a variable that holds a union, checked for each member (TYP-14).
     EachMember(Box<EachMember>),
     /// The `int` a class's `__len__` returned, checked to be a length, which raises
@@ -841,6 +847,9 @@ impl TypedExpr {
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
             TypedExprKind::IsInstance(test) => {
                 std::iter::once(&test.value).chain(&test.held).collect()
+            }
+            TypedExprKind::IsSubclass { class, bases } => {
+                std::iter::once(class.as_ref()).chain(bases).collect()
             }
             TypedExprKind::EachMember(each) => std::iter::once(&each.value)
                 .chain(each.arms.iter().map(|(_, body)| body))

@@ -21,6 +21,8 @@ pub enum Builtin {
     Int,
     Input,
     IsInstance,
+    /// `issubclass(class, classes)` (CLS-19).
+    IsSubclass,
     Iter,
     Len,
     List,
@@ -63,6 +65,7 @@ impl Builtin {
             "int" => Self::Int,
             "input" => Self::Input,
             "isinstance" => Self::IsInstance,
+            "issubclass" => Self::IsSubclass,
             "iter" => Self::Iter,
             "len" => Self::Len,
             "list" => Self::List,
@@ -101,6 +104,7 @@ impl Builtin {
                 | Self::Chr
                 | Self::Input
                 | Self::IsInstance
+                | Self::IsSubclass
                 | Self::Iter
                 | Self::Len
                 | Self::Max
@@ -151,6 +155,7 @@ impl Builtin {
             Self::Int => "int",
             Self::Input => "input",
             Self::IsInstance => "isinstance",
+            Self::IsSubclass => "issubclass",
             Self::Iter => "iter",
             Self::Len => "len",
             Self::List => "list",
@@ -195,6 +200,7 @@ mod tests {
             "float",
             "int",
             "isinstance",
+            "issubclass",
             "len",
             "list",
             "max",

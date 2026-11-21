@@ -340,6 +340,12 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(class, callees);
             }
         }
+        TypedExprKind::IsSubclass { class, bases } => {
+            expression(class, callees);
+            for base in bases {
+                expression(base, callees);
+            }
+        }
         TypedExprKind::EachMember(each) => {
             expression(&each.value, callees);
             for (_, body) in &each.arms {

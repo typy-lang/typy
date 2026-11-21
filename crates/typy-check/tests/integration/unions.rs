@@ -220,3 +220,31 @@ fn cls_18_isinstance_takes_a_class_held_in_a_value() {
     );
     assert_eq!(app(source), Vec::<String>::new());
 }
+
+#[test]
+fn cls_19_issubclass_takes_classes_named_or_held() {
+    let source = concat!(
+        "class Shape:\n",
+        "    pass\n",
+        "class Square(Shape):\n",
+        "    pass\n",
+        "kind = type(Square())\n",
+        "print(issubclass(Square, Shape), issubclass(kind, (int, Shape)), issubclass(bool, int))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let cases: [(&str, &[&str]); 4] = [
+        (
+            "class A:\n    pass\nprint(issubclass(A(), A))\n",
+            &["E0401"],
+        ),
+        ("class A:\n    pass\nprint(issubclass(A, 3))\n", &["E0401"]),
+        ("print(issubclass(int))\n", &["E0404"]),
+        (
+            "classes = (int, str)\nprint(issubclass(bool, classes))\n",
+            &["E0201"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(app(source), expected, "{source}");
+    }
+}

@@ -83,6 +83,77 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::IsInstance(Box::new(test)), Type::Bool, span)
     }
 
+    /// Checks `issubclass(class, classes)` (CLS-19, ADR-0084): the class, and each class of
+    /// the second argument, a class or a tuple of them, named or held in a value, are type
+    /// objects the runtime tests in order. A value that is no class is E0401, as CPython
+    /// raises `TypeError`.
+    pub(super) fn call_issubclass(
+        &mut self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let ([class, classes], []) = (arguments, keywords) else {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            let message = if keywords.is_empty() {
+                format!("issubclass expected 2 arguments, got {}", arguments.len())
+            } else {
+                "issubclass() takes no keyword arguments".to_owned()
+            };
+            return self.error(
+                Diagnostic::new(DiagnosticCode::error(404), span, message)
+                    .with_rule(RuleId::CLS_19),
+                span,
+            );
+        };
+        let class = self.expression(class);
+        let named = match classes {
+            Expr::Tuple { elements, .. } => elements.iter().collect(),
+            other => vec![other],
+        };
+        let bases: Vec<TypedExpr> = named.iter().map(|each| self.expression(each)).collect();
+        let not_class = |value: &TypedExpr| !matches!(value.ty, Type::TypeObject(_) | Type::Error);
+        if not_class(&class) {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    class.span,
+                    "issubclass() arg 1 must be a class: CPython raises `TypeError`",
+                )
+                .with_rule(RuleId::CLS_19),
+                span,
+            );
+        }
+        if let Some(base) = bases.iter().find(|base| not_class(base)) {
+            let held_tuple = matches!(base.ty, Type::Tuple(_) | Type::TupleOf(_));
+            let diagnostic = if held_tuple {
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    base.span,
+                    "a tuple of classes held in a variable is planned for TyPy 0.10 (CLS-19)",
+                )
+            } else {
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    base.span,
+                    "issubclass() arg 2 must be a class, a tuple of classes, or a union: CPython \
+                     raises `TypeError`",
+                )
+            };
+            return self.error(diagnostic.with_rule(RuleId::CLS_19), span);
+        }
+        Self::typed(
+            TypedExprKind::IsSubclass {
+                class: Box::new(class),
+                bases,
+            },
+            Type::Bool,
+            span,
+        )
+    }
+
     pub(super) fn call_isinstance(
         &mut self,
         arguments: &[Expr],

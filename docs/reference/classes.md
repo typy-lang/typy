@@ -272,9 +272,12 @@ of `and`. When the checker can tell the answer, as for
 counts as `int`, as in CPython. A class held in a value, such as
 `isinstance(shape, kind)` with `kind = type(other)` or a parameter of type
 `type[Square]`, is tested when the program runs, and narrows the value to
-the class its type names (CLS-18). A tuple of classes held in a variable,
-a class pattern with such a class, and `issubclass` are planned for 0.10
-(CLS-18, CLS-19).
+the class its type names (CLS-18). `issubclass(class, classes)` tests a
+class against a class or a tuple of them, named or held in a value, as
+CPython answers: `issubclass(bool, int)` is `True` (CLS-19). A value that
+is no class is E0401, as CPython raises `TypeError`. A tuple of classes
+held in a variable, and a class pattern with a class held in a variable,
+are planned for 0.10 (CLS-18, CLS-19).
 
 ## Class variables and defaults
 

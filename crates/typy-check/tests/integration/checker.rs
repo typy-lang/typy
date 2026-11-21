@@ -2298,7 +2298,7 @@ fn isinstance_narrows_variables_where_its_test_holds() {
     );
     let cases: &[(&str, &[&str])] = &[
         ("print(isinstance(1))\n", &["E0404"]),
-        ("print(issubclass(int, object))\n", &["E0201"]),
+        ("print(issubclass(int, 1))\n", &["E0401"]),
         (
             "class A:\n    pass\nclass B(A):\n    def f(self) -> None:\n        super().missing(1)\n",
             &["E0414"],

@@ -85,6 +85,25 @@ impl FunctionLowerer<'_> {
         Self::borrowed(value, TyirType::Bool)
     }
 
+    /// Returns `issubclass(class, bases)`: the class and each base evaluated in order, true
+    /// when the class is or derives from one of them (CLS-19).
+    pub(crate) fn issubclass(
+        &mut self,
+        class: &TypedExpr,
+        bases: &[TypedExpr],
+        span: Span,
+    ) -> Lowered {
+        let lowered = self.expression(class);
+        let held: Vec<Lowered> = bases.iter().map(|base| self.expression(base)).collect();
+        let found = self.held_test(lowered, &held, span);
+        let result = found.unwrap_or_else(|| self.constant(Constant::Bool(false), span));
+        for base in held.into_iter().rev() {
+            self.release(base, span);
+        }
+        self.release(lowered, span);
+        Self::borrowed(result, TyirType::Bool)
+    }
+
     /// Returns whether the type object `class` is or derives from one of `held`, or `None` when
     /// there are none (CLS-18).
     fn held_test(&mut self, class: Lowered, held: &[Lowered], span: Span) -> Option<ValueId> {

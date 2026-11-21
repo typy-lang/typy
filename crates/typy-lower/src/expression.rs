@@ -74,6 +74,7 @@ impl FunctionLowerer<'_> {
                 self.converted(inner, &expression.ty, ty, false, span)
             }
             TypedExprKind::IsInstance(test) => self.isinstance(test, span),
+            TypedExprKind::IsSubclass { class, bases } => self.issubclass(class, bases, span),
             TypedExprKind::EachMember(each) => self.each_member(each, ty, span),
             TypedExprKind::CheckedLength(call) => {
                 let length = self.expression(call);

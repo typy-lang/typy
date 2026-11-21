@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.81 |
+| Version | 2.82 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -987,7 +987,10 @@ the instance's class when the program runs and binding nothing. An
 value, and tests the value's runtime type with
 `typy_rt_type_derives_from`, `None` of an optional as `NoneType`; a held
 class whose type names one narrows the value to it. The runtime's `bool`
-derives from `int`, as in CPython. `callable(x)`
+derives from `int`, as in CPython. `issubclass(class, classes)`
+(CLS-19) is `TypedExprKind::IsSubclass` of the class and each class of the
+second argument, type objects named or held, which lowering evaluates in
+order and tests with `typy_rt_type_derives_from`. `callable(x)`
 (LIB-23) is an `IsInstanceTest` that holds for a `Callable` or a type
 object, by member for an optional or a union, and a name `names_builtin`
 takes is the constant `True`. Where nothing is expected, `chr` is
