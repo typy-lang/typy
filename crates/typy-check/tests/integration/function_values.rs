@@ -508,6 +508,27 @@ fn fun_08_a_name_the_program_binds_is_not_the_builtin() {
 }
 
 #[test]
+fn fun_08_enumerate_zip_and_reversed_are_values_only_where_a_call_of_them_is() {
+    for statement in [
+        "x = enumerate",
+        "f: Callable[[list[int]], Iterator[int]] = reversed",
+        "pairs = list(map(zip, [[1]], [[2]]))",
+    ] {
+        let source = format!("from collections.abc import Callable, Iterator\n{statement}\n");
+        let found = messages(&source);
+        assert_eq!(found.len(), 1, "{statement}: {found:?}");
+        assert_eq!(found[0].0, "E0201");
+        assert!(
+            found[0].1.ends_with(
+                "outside a `for` loop, a comprehension or an iterable argument is planned for \
+                 after TyPy 1.0"
+            ),
+            "{statement}: {found:?}"
+        );
+    }
+}
+
+#[test]
 fn fun_08_a_method_of_a_builtin_type_read_through_the_type_is_a_value() {
     let source = concat!(
         "from collections.abc import Callable\n",
@@ -794,4 +815,46 @@ fn fun_06_a_decorated_function_binds_what_its_decorators_return() {
         "print(increment(value=1))\n",
     );
     assert_eq!(app(keyword), ["E0404"]);
+}
+
+#[test]
+fn fun_06_a_decorated_function_inside_a_block_of_a_function_binds_what_its_decorators_return() {
+    let definitions = "from collections.abc import Callable\n\
+                       def keep(function: Callable[[int], int]) -> Callable[[int], int]:\n    \
+                       return function\n";
+    // Each `BODY` stands for the decorated function and a call of it, at its indentation.
+    let blocks = [
+        "    if flag:\nBODY",
+        "    for _ in range(2):\nBODY",
+        "    while flag:\nBODY        break\n",
+        "    with open('x') as _:\nBODY",
+        "    try:\nBODY    except ValueError:\n        pass\n",
+        "    try:\n        pass\n    except ValueError:\nBODY",
+        "    try:\n        pass\n    except ValueError:\n        pass\n    else:\nBODY",
+        "    try:\n        pass\n    finally:\nBODY",
+        "    match flag:\n        case True:\n    BODY",
+    ];
+    for block in blocks {
+        let body = "        @keep\n        def inner(value: int) -> int:\n            return value\n\
+                    \x20       print(inner(1))\n";
+        let body = if block.ends_with("    BODY") {
+            body.lines().fold(String::new(), |mut text, line| {
+                text.push_str("    ");
+                text.push_str(line);
+                text.push('\n');
+                text
+            })
+        } else {
+            body.to_owned()
+        };
+        let block = block.replace("    BODY", "BODY").replace("BODY", &body);
+        let source = format!("{definitions}def outer(flag: bool) -> None:\n{block}");
+        assert_eq!(app(&source), Vec::<String>::new(), "{source}");
+    }
+    // A function in a block of the module is refused for that, and its decorators are not.
+    let module = format!(
+        "{definitions}if True:\n    @keep\n    def inner(value: int) -> int:\n        \
+         return value\n"
+    );
+    assert_eq!(app(&module), ["E0202"]);
 }

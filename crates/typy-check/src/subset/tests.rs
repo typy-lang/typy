@@ -85,10 +85,6 @@ fn later_features_name_their_release_and_rule() {
             "`*Ts` and `**P` type parameters are planned for TyPy 0.13 (GEN-06)",
         ),
         (
-            "@d\ndef f() -> None:\n    pass\n",
-            "decorators are planned for TyPy 0.10 (FUN-06)",
-        ),
-        (
             "class C:\n    @d\n    def m(self) -> None:\n        pass\n",
             "decorators of methods are planned for TyPy 0.14 (FUN-15)",
         ),

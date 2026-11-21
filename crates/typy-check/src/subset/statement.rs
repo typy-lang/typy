@@ -93,14 +93,12 @@ impl Walker {
                     ),
                 }
                 // A method may carry one of the decorators of CLS-06; the checker reads which.
-                let method_decorator = place == Place::Class
-                    && matches!(decorators.as_slice(), [one] if is_method_decorator(one));
-                if !method_decorator && let Some(decorator) = decorators.first() {
-                    let feature = if place == Place::Class {
-                        planned("decorators of methods", "0.14", RuleId::FUN_15)
-                    } else {
-                        planned("decorators", "0.10", RuleId::FUN_06)
-                    };
+                // The decorators of any other function are rewritten before this walk (FUN-06).
+                if place == Place::Class
+                    && !matches!(decorators.as_slice(), [one] if is_method_decorator(one))
+                    && let Some(decorator) = decorators.first()
+                {
+                    let feature = planned("decorators of methods", "0.14", RuleId::FUN_15);
                     self.report(decorator.span(), feature);
                 }
                 self.type_parameters(type_parameters);

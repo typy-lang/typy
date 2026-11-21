@@ -206,19 +206,7 @@ impl BodyChecker<'_> {
                 );
             }
             Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        format!(
-                            "`{}` outside a `for` loop, a comprehension or an iterable argument \
-                             is planned for after TyPy 1.0",
-                            builtin.name()
-                        ),
-                    )
-                    .with_rule(RuleId::CST_09),
-                    span,
-                );
+                return self.loop_only(builtin, span);
             }
             Builtin::Range => {
                 if !self.arity(builtin, values.len(), 1..=3, span) {
@@ -527,5 +515,24 @@ impl BodyChecker<'_> {
             .with_rule(RuleId::LIB_01),
         );
         false
+    }
+
+    /// Returns E0201 for `enumerate`, `zip` or `reversed` called or read as a value outside
+    /// a `for` loop, a comprehension or an iterable argument, where TyPy makes no object of
+    /// it, which is planned for after 1.0.
+    pub(super) fn loop_only(&mut self, builtin: Builtin, span: Span) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                format!(
+                    "`{}` outside a `for` loop, a comprehension or an iterable argument is \
+                     planned for after TyPy 1.0",
+                    builtin.name()
+                ),
+            )
+            .with_rule(RuleId::CST_09),
+            span,
+        )
     }
 }

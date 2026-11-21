@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.93 |
+| Version | 2.94 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -924,7 +924,8 @@ such a comprehension variable, since a module variable is a global that
 every function reads as it is.
 
 `check::decorators::expand` rewrites each decorated function of a module,
-at its top level or nested in a function, before the module is checked
+at its top level or nested in a function, also in each block of a
+statement there (`blocks`), before the module is checked
 (FUN-06, ADR-0082): the function takes the hidden name `inc (undecorated)`,
 a space no Python name holds, and an assignment `inc = outer(inner(inc
 (undecorated)))` follows it. Python evaluates that call as it evaluates
@@ -934,7 +935,7 @@ order. The name is then a variable of the decorators' result, read as any
 variable, also inside the function's body. Lowering shows the hidden name
 as the own one in tracebacks and `__qualname__` (`python_name`). Methods
 and classes keep their decorators, which the subset walker refuses as
-planned (FUN-15, CLS-38).
+planned (FUN-15, CLS-38); it meets no other decorated function.
 
 `body/builtin_value.rs` reads a built-in function as a value (FUN-08,
 ADR-0077). Where a `Callable[[A1, ..., An], R]` is expected, which
@@ -2563,7 +2564,10 @@ a value, such as `ctypes.c_int`, `POINTER(T)` or `T * 3`, is
 unless `class_allowed` is set, which an assignment to names sets for its
 value; a call's callee, the operands of `*`, and the argument of
 `POINTER` and `sizeof` are checked with `expression_or_class`, which takes
-one.
+one. `POINTER`, `pointer`, `byref`, `sizeof`, `CDLL` and `cdll` themselves
+read as values are E0201 under FFI-10 (`BodyChecker::ctypes_value`), and
+so are `enumerate`, `zip` and `reversed` outside a loop, a comprehension
+or an iterable argument, as their calls are (`BodyChecker::loop_only`).
 
 An object has type `Type::CData`, which lowers to the runtime's `CDATA`
 objects; it has identity, no hash and a truth. `TypedExprKind::CData`

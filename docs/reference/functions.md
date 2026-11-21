@@ -54,8 +54,9 @@ own (FUN-18). A class of the program as a `Callable` is planned for 0.14
 
 ## Decorators
 
-A decorator on a function at the top of a module or nested in a function
-is any expression that takes the function, as CPython allows (FUN-06).
+A decorator on a function at the top of a module or nested in a function,
+also inside an `if`, a loop, a `with`, a `try` or a `match` there, is any
+expression that takes the function, as CPython allows (FUN-06).
 The decorators are evaluated from the top down and applied from the bottom
 up when the `def` runs, and the name holds what the outermost returns, so
 a read of the name, also inside the function, reads that value. A

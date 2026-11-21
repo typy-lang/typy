@@ -59,7 +59,8 @@ All notable changes to TyPy are recorded here. The format follows
   kind)` with `kind = type(other)` or a parameter of type `type[Square]`,
   alone or in a tuple with named classes, tested when the program runs; a
   class whose type names one narrows the value to it (CLS-18).
-- Decorators on functions at the top of a module or nested in a function:
+- Decorators on functions at the top of a module or nested in a function,
+  also inside an `if`, a loop, a `with`, a `try` or a `match` there:
   any expression that takes the function, evaluated from the top down and
   applied from the bottom up when the `def` runs, the name holding what the
   outermost returns, also inside the function; generic decorators too
@@ -120,6 +121,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `ctypes.POINTER`, `pointer`, `byref`, `sizeof`, `CDLL` and `cdll` read
+  as values, such as `size = ctypes.sizeof`, are refused as planned for
+  0.13 under FFI-10, with the other `ctypes` uses planned there. The
+  message named 0.10 (FUN-08).
+- `enumerate`, `zip` and `reversed` read as values, such as
+  `key=reversed`, are refused as their calls outside a `for` loop, a
+  comprehension or an iterable argument are, planned for after 1.0. The
+  message named 0.10 (FUN-08).
 - `typing` names and type aliases as values (TYP-18), nested functions with
   type parameters of their own (FUN-18), and nested functions, methods and
   `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19), and

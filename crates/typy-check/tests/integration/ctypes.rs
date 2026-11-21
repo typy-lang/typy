@@ -137,7 +137,15 @@ fn each_call_ctypes_would_refuse_is_an_error_where_it_is_compiled() {
         ),
         (
             "x = ctypes.POINTER\n",
-            "E0201 using `ctypes.POINTER` as a value is planned for TyPy 0.10 (FUN-08)",
+            "E0201 using `ctypes.POINTER` as a value is planned for TyPy 0.13 (FFI-10)",
+        ),
+        (
+            "keep = [ctypes.sizeof, ctypes.cdll]\n",
+            "E0201 using `ctypes.sizeof` as a value is planned for TyPy 0.13 (FFI-10)",
+        ),
+        (
+            "from ctypes import byref\nx = byref\n",
+            "E0201 using `byref` as a value is planned for TyPy 0.13 (FFI-10)",
         ),
         (
             "def load() -> None:\n    other = ctypes.CDLL(\"libm.so.6\")\n",

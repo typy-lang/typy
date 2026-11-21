@@ -307,15 +307,17 @@ says, and CPython runs the same program through `ctypes`.
 
 ## Planned
 
-Planned for 1.0 are methods and class attributes other than `_fields_`
+Planned for 0.13 are methods and class attributes other than `_fields_`
 in a structure, `_fields_` assigned after the class statement, bit
 fields, a subclass of a structure, and `ctypes.Union` (FFI-11); and
 `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and
 `addressof`, pointers to and arrays of pointers and arrays, arrays whose
 length is not an integer literal, array slices, `byref` other than as a C
-function's argument, assigning a pointer's `contents`, and `ctypes`
-classes as values, in annotations, `isinstance` and `type` (FFI-10), so a
-function takes and returns the values of an object rather than the object.
+function's argument, assigning a pointer's `contents`, `ctypes` classes
+as values, in annotations, `isinstance` and `type`, and `POINTER`,
+`pointer`, `byref`, `sizeof`, `CDLL` and `cdll` as values, such as
+`size = ctypes.sizeof` (FFI-10), so a function takes and returns the
+values of an object rather than the object.
 A library or a C function used as a value, stored, passed or printed, is
 planned for 0.13 too (FFI-09):
 

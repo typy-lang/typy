@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.112 |
+| Version | 1.113 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -298,7 +298,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | FUN-05 | A function, nested function, `lambda` or method the program defines shall be a value of type `Callable[[A, ...], R]`, stored, passed, returned, called and compared as CPython's are, and the `key` argument of `sorted`, `list.sort`, `min` and `max` shall take one; the methods of FUN-09 are excepted. | M | 0.8 | 3.2.8 |
 | FUN-06 | User-defined decorators whose types can be checked shall be accepted on module-level and nested functions, the name bound to what the decorators return (ADR-0082). | C | 0.10 | 8.7 |
 | FUN-07 | A generator function shall be annotated to return `Generator[Y, S, R]`, `Iterator[Y]` or `Iterable[Y]` of `typing` or `collections.abc`, and a call of it shall give a generator object of that type; only `Generator` shall offer `send`, `throw` and `close`, and a result of type `R`, as `typing` reads them; a generator suspended inside an `except` clause shall keep the exception it handles from its caller, as CPython does (ADR-0063, ADR-0068). | M | 0.9 | 8.7 |
-| FUN-08 | A built-in function, a function of a standard library module TyPy provides, or a method of a built-in type shall be a value where a `Callable` is expected, such as `sorted(words, key=len)`, with CPython's identity and text (ADR-0076, ADR-0077). | S | 0.10 | 3.2.8 |
+| FUN-08 | A built-in function, a function of a standard library module TyPy provides other than `ctypes` (FFI-10), or a method of a built-in type shall be a value where a `Callable` is expected, such as `sorted(words, key=len)`, with CPython's identity and text (ADR-0076, ADR-0077). | S | 0.10 | 3.2.8 |
 | FUN-09 | A class method read as a value, a static method read through an instance whose subclasses define it again, a method read through a protocol value, and a method read through an instance whose subclass overrides it with parameters or a result held otherwise, shall be values as CPython's are (ADR-0079). | S | 0.10 | 3.2.8 |
 | FUN-10 | A nested function, `lambda` or generator expression inside a generic function or a function with a protocol parameter shall be accepted, with a copy for each set of types (ADR-0081). | C | 0.10 | 8.10 |
 | FUN-11 | A generator closed, or freed while it is suspended, shall raise `GeneratorExit` at its `yield` and run its `except` and `finally` clauses when CPython does; one that yields again then shall raise `RuntimeError`, and one never started shall run nothing (ADR-0069, ADR-0070, ADR-0071). | M | 0.9 | 8.7 |
@@ -490,7 +490,7 @@ direct calls and links the library when the program is built.
 | FFI-07 | A C header shall be convertible into a module of ctypes declarations. | C | 0.13 |
 | FFI-08 | A library build shall write, beside the library and its C header, a `.pyi` stub of its exported functions and a `ctypes` module that loads the library and declares them, so CPython and TyPy programs call it with the same source (ADR-0032). | S | 0.5 |
 | FFI-09 | A library a `ctypes` declaration loads, and its functions, shall be values a program stores, passes and prints. | C | 0.13 |
-| FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, and ctypes classes as values, in annotations, `isinstance` and `type` shall be accepted. | C | 0.13 |
+| FFI-10 | The ctypes names `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and `addressof`, pointers to and arrays of pointers and arrays, arrays whose length is not an integer literal, array slices, `byref` other than as a C function's argument, assigning a pointer's `contents`, ctypes classes as values, in annotations, `isinstance` and `type`, and `POINTER`, `pointer`, `byref`, `sizeof`, `CDLL` and `cdll` as values shall be accepted. | C | 0.13 |
 | FFI-11 | Methods and class attributes other than one `_fields_` list in a `Structure` subclass, `_fields_` assigned after the class statement, bit fields, a subclass of a `Structure` subclass, and `ctypes.Union` shall be accepted. | C | 0.13 |
 | FFI-12 | A `ctypes` structure passed to or returned from a C function by value shall follow the C calling convention of the target: System V on x86_64 Linux and AAPCS64 on AArch64 Linux. | M | 0.6 |
 | FFI-13 | A `ctypes` call shall pass each integer and `c_bool` argument as `libffi` passes it on the target, a 64-bit word widened by its type in a register and, on Apple's arm64, its own size on the stack, so a C function reads the values it reads under CPython. | M | 0.7 |

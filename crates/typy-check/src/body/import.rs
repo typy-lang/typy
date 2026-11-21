@@ -852,7 +852,7 @@ impl BodyChecker<'_> {
 
     /// Reads `module.name` of a built-in module: a value as it is, a function of `math` or
     /// `sys` where a `Callable` is expected (FUN-08), and a `ctypes` function not as a value
-    /// yet; a refusal points at the name.
+    /// before 0.13 (FFI-10); a refusal points at the name.
     pub(super) fn builtin_attribute(
         &mut self,
         module: &str,
@@ -871,17 +871,26 @@ impl BodyChecker<'_> {
                 | super::builtin_module::ModuleFunction::GetRecursionLimit
                 | super::builtin_module::ModuleFunction::SetRecursionLimit,
             )) => self.module_function_without_context(&format!("{module}.{name}"), attribute.span),
-            Ok(BuiltinName::Function(_)) => self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    attribute.span,
-                    format!("using `{module}.{name}` as a value is planned for TyPy 0.10 (FUN-08)"),
-                )
-                .with_rule(RuleId::FUN_08),
-                span,
-            ),
+            Ok(BuiltinName::Function(_)) => {
+                self.ctypes_value(&format!("{module}.{name}"), attribute.span, span)
+            }
             Err(diagnostic) => self.error(*diagnostic, span),
         }
+    }
+
+    /// Returns E0201 for a function of `ctypes`, or `ctypes.CDLL` or `ctypes.cdll`, read as a
+    /// value, which TyPy reads only where it compiles a declaration or a C call, so a value
+    /// of one is planned for 0.13 (FFI-10).
+    pub(super) fn ctypes_value(&mut self, shown: &str, at: Span, span: Span) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                at,
+                format!("using `{shown}` as a value is planned for TyPy 0.13 (FFI-10)"),
+            )
+            .with_rule(RuleId::FFI_10),
+            span,
+        )
     }
 
     /// Returns the type object of a class as a value, an exception class's for one.
