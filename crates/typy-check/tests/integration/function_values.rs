@@ -640,3 +640,32 @@ fn fun_08_a_method_read_through_a_builtin_value_binds_it() {
         );
     }
 }
+
+#[test]
+fn fun_14_a_builtin_type_is_a_function_of_its_arguments() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "print(sorted(['10', '9'], key=int), sorted([10, 9], key=str))\n",
+        "parse: Callable[[str], int] = int\n",
+        "items: Callable[[str], list[str]] = list\n",
+        "print(parse('4'), items('ab'), parse == int)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let found =
+        messages("from collections.abc import Callable\nparse: Callable[[list[int]], int] = int\n");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, "E0404");
+}
+
+#[test]
+fn fun_16_a_class_as_a_callable_is_planned() {
+    let source = "from collections.abc import Callable\nclass Box:\n    def __init__(self, size: int) -> None:\n        self.size = size\nmake: Callable[[int], Box] = Box\n";
+    assert_eq!(
+        messages(source),
+        [(
+            "E0201".to_owned(),
+            "the class `Box` as a `Callable` value is planned for TyPy 0.14 (FUN-16)".to_owned(),
+            "FUN-16".to_owned(),
+        )]
+    );
+}

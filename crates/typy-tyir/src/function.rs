@@ -52,6 +52,9 @@ pub enum StandsFor {
     /// A method of a built-in type read through the type, such as `str.upper`, a
     /// `method_descriptor` object.
     BuiltinMethod,
+    /// A built-in type called as a function, such as `int` in `key=int`, written as the type
+    /// is (FUN-14).
+    BuiltinType,
 }
 
 /// What a generator's object holds between steps: the arguments its maker stores, then each

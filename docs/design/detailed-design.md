@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.73 |
+| Version | 2.74 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -937,12 +937,17 @@ is the same hidden function bound to the value: `lambda` passes the
 `bound_builtin_method` makes `TypedExprKind::BoundMethod` of the value and
 the hidden function, whose parameters are the value's type and the
 `Callable`'s; with nothing expected it is E0203. Lowering makes the object
-with `typy_rt_builtin_method_new`, of the type ID 30. The hidden functions
-of one built-in share the descriptor of the first as their identity
-(ADR-0076). Where nothing is expected, `chr`
-is `Callable[[int], str]` and `ord` `Callable[[str], int]`, and any other
-built-in function, and a method such as `str.upper`, is E0203. A built-in
-compared with a function value takes that value's type.
+with `typy_rt_builtin_method_new`, of the type ID 30. A built-in type
+whose call TyPy types, `int`, `float`, `str`, `bool`, `bytes`, `list`,
+`tuple`, `set` or `dict`, is the hidden function `return int(value0, ...)`
+where a `Callable` is expected (FUN-14); its `stands_for` is `BuiltinType`,
+and its object takes the type ID 31, written `<class 'int'>`, of the type
+`type`. A class of the program or an exception class there is E0201,
+planned for 0.14 (FUN-16). The hidden functions of one built-in share the
+descriptor of the first as their identity (ADR-0076). Where nothing is
+expected, `chr` is `Callable[[int], str]` and `ord` `Callable[[str], int]`,
+and any other built-in function, and a method such as `str.upper`, is
+E0203. A built-in compared with a function value takes that value's type.
 
 `body/generator_expression.rs` checks a generator expression (EXP-15) as
 a nested generator function, `<genexpr>`, of one parameter, `.0`, the
@@ -2888,6 +2893,7 @@ comparisons, calls and counting, terminators, and emission.
 | Built-in function | A built-in function used as a value: a function object of the hidden function that calls the built-in, emitted immortal with the type ID 28 in place of 24. Its type `builtin_function_or_method`, `typy_rt_type_builtin_function`, hashes by identity and writes `<built-in function NAME>` from the descriptor's name (FUN-08, ADR-0077) |
 | Method of a built-in type | A method of a built-in type read through the type: a function object of the hidden function that calls the method on its first argument, emitted immortal with the type ID 29. Its type `method_descriptor`, `typy_rt_type_method_descriptor`, writes `<method 'upper' of 'str' objects>` from the descriptor's name and the type's name before the dot of its qualified name, and compares and hashes as a function (FUN-08, ADR-0077) |
 | Built-in method | A method of a built-in type read through a value: a bound method of the hidden function and the value, made by `typy_rt_builtin_method_new(descriptor, value)` under the type ID 30, which holds a reference to the value. Its type is `builtin_function_or_method`, which writes it `<built-in method append of list object at 0x...>`; two are equal when they bind one value to functions of one identity, as bound methods of the program are, whose `equal` and `hash` also compare the identity their descriptors name (FUN-08, ADR-0076) |
+| Built-in type as a function | A built-in type where a `Callable` is expected: a function object of the hidden function that calls the type, emitted immortal with the type ID 31. Its type, `typy_rt_type_builtin_type_function`, is named `type`, writes `<class 'int'>` from the descriptor's name, and compares and hashes as a function (FUN-14, ADR-0077) |
 | Cell | Header with the type ID 26, `layout: ptr` to the tuple descriptor of its value and its flag, then that tuple. `typy_rt_cell_new(layout)` makes one with every byte zero, no value; freeing it releases the value through the descriptor. `typy_rt_free_variable_unbound(name)` returns `NameError: cannot access free variable 'NAME' where it is not associated with a value in enclosing scope`, as CPython 3.12 to 3.15 word it (FUN-04) |
 | Bound method | Header with the type ID 25, `descriptor: ptr`, then `instance: ptr`, the one capture, which it holds a reference to. `typy_rt_method_new(descriptor, instance)` makes one, and freeing it releases the instance. The method's descriptor, `typy.method.descriptor.N`, has the code `typy.method_thunk.` and the method's symbol, which reads the instance from the bound method and calls the method with it first. The type `method`, `typy_rt_type_method`, is equal for one descriptor and one instance, hashes the two addresses, and writes `<bound method QUALNAME of REPR>`, the instance through its type's `repr`, whose exception it passes on (FUN-05) |
 | Call through a value | Generated code loads the descriptor from the object, then the code, and calls it with the object first, then the arguments, in the raising form. The code of a function of the program is the thunk `typy.thunk.` and its symbol, which calls the function directly: one that may raise in a tail call, one that cannot with its result paired with a null exception |

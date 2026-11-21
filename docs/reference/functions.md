@@ -28,17 +28,21 @@ type read through the type, such as `sorted(words, key=str.lower)` or
 `<method 'lower' of 'str' objects>`, a method read through a built-in
 value, such as `add: Callable[[str], None] = words.append` or
 `key="-".join`, written `<built-in method append of list object at
-0x...>`, and a function of `math` or `sys`, such as `key=math.fabs`. With
+0x...>`, and a function of `math` or `sys`, such as `key=math.fabs`. A
+built-in type is a function of its arguments there too, such as
+`sorted(numbers, key=str)` or `parse: Callable[[str], int] = int`, written
+`<class 'int'>` (FUN-14). With
 no `Callable` expected, `chr` and `ord` have their one type, and any other
 built-in function or method is E0203, since its arguments may be of
 several types.
 
 Decorators of functions are planned for 0.10 (FUN-06), and so are these
-as values: a built-in type, a class method, a protocol method, and a
-function with defaults, `*args` or `**kwargs` (FUN-09, FUN-13, FUN-14). So
-are nested functions of generic functions (FUN-10), and `map`, `filter` and
-`callable` (LIB-23). Decorators of methods are planned for 0.14 (FUN-15),
-and class decorators other than `@dataclass` for 1.0 (CLS-38).
+as values: a class method, a protocol method, and a function with
+defaults, `*args` or `**kwargs` (FUN-09, FUN-13). So are nested functions
+of generic functions (FUN-10), and `map`, `filter` and `callable` (LIB-23).
+Decorators of methods are planned for 0.14 (FUN-15), and so is a class of
+the program as a `Callable` (FUN-16); class decorators other than
+`@dataclass` are planned for 1.0 (CLS-38).
 
 ## Variable numbers of arguments
 

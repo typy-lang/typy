@@ -22,6 +22,8 @@ use crate::types::{Type, TypeObjectOf};
 enum Called<'name> {
     /// A built-in function, such as `len`, called with every argument.
     Function(&'name str),
+    /// A built-in type, such as `int`, called with every argument (FUN-14).
+    Type(&'name str),
     /// A method of the built-in type `class`, such as `str.upper`, called on the first
     /// argument with the others.
     Method {
@@ -41,7 +43,7 @@ impl<'name> Called<'name> {
     /// `math.sqrt`.
     fn key(self) -> String {
         match self {
-            Self::Function(name) => name.to_owned(),
+            Self::Function(name) | Self::Type(name) => name.to_owned(),
             Self::Method { class, method } => format!("{class}.{method}"),
             Self::Module { module, name, .. } => format!("{module}.{name}"),
         }
@@ -58,7 +60,7 @@ impl<'name> Called<'name> {
     /// Returns the `__name__` CPython gives the built-in: `len`, `upper` or `sqrt`.
     const fn short_name(self) -> &'name str {
         match self {
-            Self::Function(name) | Self::Module { name, .. } => name,
+            Self::Function(name) | Self::Type(name) | Self::Module { name, .. } => name,
             Self::Method { method, .. } => method,
         }
     }
@@ -67,6 +69,7 @@ impl<'name> Called<'name> {
     const fn kind(self) -> BuiltinValue {
         match self {
             Self::Method { .. } => BuiltinValue::Method,
+            Self::Type(_) => BuiltinValue::Type,
             Self::Function(_) | Self::Module { .. } => BuiltinValue::Function,
         }
     }
@@ -92,8 +95,31 @@ impl BodyChecker<'_> {
         }
         match expression {
             Expr::Name { id, span } => {
-                let builtin = self.unbound_builtin_function(id, *span)?;
-                let called = Called::Function(builtin.name());
+                if let Some(builtin) = self.unbound_builtin_function(id, *span) {
+                    let called = Called::Function(builtin.name());
+                    return Some(self.builtin_value(called, *span, parameters, returns));
+                }
+                // A class of the program, or an exception class, as a function is planned
+                // (FUN-16).
+                if self.program.class_ids.contains_key(id)
+                    || crate::exception::BuiltinException::named(id).is_some()
+                {
+                    let message = format!(
+                        "the class `{id}` as a `Callable` value is planned for TyPy 0.14 (FUN-16)"
+                    );
+                    return Some(
+                        self.error(
+                            Diagnostic::new(DiagnosticCode::error(201), *span, message)
+                                .with_rule(RuleId::FUN_16)
+                                .with_help("pass a function that makes the instance"),
+                            *span,
+                        ),
+                    );
+                }
+                // A built-in type is a function of its arguments too (FUN-14).
+                let builtin = Builtin::named(id)
+                    .filter(|builtin| builtin.is_callable_type() && !self.binds(id, *span))?;
+                let called = Called::Type(builtin.name());
                 Some(self.builtin_value(called, *span, parameters, returns))
             }
             Expr::Attribute {
@@ -203,7 +229,11 @@ impl BodyChecker<'_> {
             return true;
         }
         match expression {
-            Expr::Name { id, span } => self.unbound_builtin_function(id, *span).is_some(),
+            Expr::Name { id, span } => {
+                self.unbound_builtin_function(id, *span).is_some()
+                    || Builtin::named(id)
+                        .is_some_and(|builtin| builtin.is_callable_type() && !self.binds(id, *span))
+            }
             Expr::Attribute {
                 value, attribute, ..
             } => match value.as_ref() {
@@ -465,7 +495,7 @@ fn hidden_body(called: Called<'_>, names: &[String], span: Span) -> Vec<Stmt> {
         span,
     };
     let (target, arguments): (Expr, Vec<Expr>) = match called {
-        Called::Function(name) => (
+        Called::Function(name) | Called::Type(name) => (
             Expr::Name {
                 id: name.to_owned(),
                 span,
@@ -499,7 +529,7 @@ fn hidden_body(called: Called<'_>, names: &[String], span: Span) -> Vec<Stmt> {
             is_lazy: false,
             span,
         }),
-        Called::Function(_) | Called::Method { .. } => None,
+        Called::Function(_) | Called::Type(_) | Called::Method { .. } => None,
     };
     import
         .into_iter()

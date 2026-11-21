@@ -29,6 +29,11 @@ All notable changes to TyPy are recorded here. The format follows
   `key="ab".index`, bound to that value and written `<built-in method
   append of list object at 0x...>`; with no `Callable` expected it is
   E0203, where it was E0412 (FUN-08).
+- A built-in type whose call TyPy types, such as `int`, `str` or `list`, is a
+  function where a `Callable` is expected, such as `sorted(numbers,
+  key=str)` or `parse: Callable[[str], int] = int`, written `<class 'int'>`
+  (FUN-14). A class of the program there is refused as planned for 0.14
+  (FUN-16), where it was E0402 or E0404.
 - Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
   of its files, with their SHA-256, and of the crates and libraries the
   compiler holds, with their licences; a copy is published beside the

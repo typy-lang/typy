@@ -579,6 +579,7 @@ fn function_builder(
     builder.set_stands_for(match program.builtin_values.get(&function.id) {
         Some(typy_check::BuiltinValue::Function) => typy_tyir::StandsFor::BuiltinFunction,
         Some(typy_check::BuiltinValue::Method) => typy_tyir::StandsFor::BuiltinMethod,
+        Some(typy_check::BuiltinValue::Type) => typy_tyir::StandsFor::BuiltinType,
         None => typy_tyir::StandsFor::Itself,
     });
     (builder, generator, closure)

@@ -112,6 +112,24 @@ impl Builtin {
         )
     }
 
+    /// Returns true for a built-in type whose call TyPy types from its arguments, which is a
+    /// value where a `Callable` is expected, as `key=int` (FUN-14).
+    #[must_use]
+    pub const fn is_callable_type(self) -> bool {
+        matches!(
+            self,
+            Self::Int
+                | Self::Float
+                | Self::Str
+                | Self::Bool
+                | Self::Bytes
+                | Self::List
+                | Self::Tuple
+                | Self::Set
+                | Self::Dict
+        )
+    }
+
     /// Returns the builtin's Python name.
     #[must_use]
     pub const fn name(self) -> &'static str {

@@ -83,6 +83,8 @@ pub enum BuiltinValue {
     Function,
     /// A method of a built-in type read through the type, such as `str.upper`.
     Method,
+    /// A built-in type called as a function, such as `int` in `key=int` (FUN-14).
+    Type,
 }
 
 /// One capture of a nested function: a copy of a variable's value, or the cell it lives in.

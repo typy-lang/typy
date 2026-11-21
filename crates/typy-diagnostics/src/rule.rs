@@ -238,6 +238,8 @@ impl RuleId {
     pub const FUN_13: Self = Self("FUN-13");
     /// User-defined decorators shall be accepted on methods, alone and together with `@staticmethod`, `@classmethod` and `@property`.
     pub const FUN_15: Self = Self("FUN-15");
+    /// A class of the program or an exception class shall be a value where a `Callable` is expected, its `__init__` taking the arguments the `Callable` passes.
+    pub const FUN_16: Self = Self("FUN-16");
     /// `property`, `staticmethod` and `classmethod`, and the objects they make, such as a property read through its class, shall be values as CPython's are.
     pub const FUN_17: Self = Self("FUN-17");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
@@ -531,6 +533,7 @@ impl RuleId {
         Self::FUN_12,
         Self::FUN_13,
         Self::FUN_15,
+        Self::FUN_16,
         Self::FUN_17,
         Self::GEN_01,
         Self::GEN_02,

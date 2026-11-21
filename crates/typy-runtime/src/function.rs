@@ -108,6 +108,7 @@ unsafe fn identity_of(object: *mut ObjectHeader) -> Option<*const FunctionDescri
             crate::header::FUNCTION_TYPE_ID
                 | crate::header::BUILTIN_FUNCTION_TYPE_ID
                 | crate::header::METHOD_DESCRIPTOR_TYPE_ID
+                | crate::header::BUILTIN_TYPE_FUNCTION_TYPE_ID
         ) {
             return None;
         }
@@ -269,6 +270,31 @@ unsafe extern "C" fn method_descriptor_repr(object: *mut ObjectHeader) -> Raisin
     Raising::ok(text.finish())
 }
 
+/// The type of a built-in type called as a function, such as `int` in `key=int`, written as
+/// the type is and of the type `type`, as CPython's value is the type itself (FUN-14).
+#[unsafe(export_name = "typy_rt_type_builtin_type_function")]
+pub(crate) static BUILTIN_TYPE_FUNCTION: TypeObject = TypeObject {
+    hash: Some(function_hash),
+    equal: Some(function_equal),
+    repr: Some(builtin_type_repr),
+    ..TypeObject::new("type", &raw const OBJECT)
+};
+
+/// Returns `repr` of a built-in type called as a function: `<class 'int'>`.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "a function object is a static the compiler aligns for its pointers"
+)]
+unsafe extern "C" fn builtin_type_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    let mut text = StrBuilder::with_capacity(24);
+    push_ascii(&mut text, "<class '");
+    // SAFETY: the type of the object says it is a function object, whose descriptor and
+    // names are immortal statics.
+    unsafe { text.push_str((*(*object.cast::<FunctionObject>()).descriptor).name) };
+    push_ascii(&mut text, "'>");
+    Raising::ok(text.finish())
+}
+
 /// Returns `repr` of a function object: `<function QUALNAME at 0x...>`, with the object's
 /// address, as CPython writes it.
 #[allow(
@@ -408,6 +434,36 @@ mod tests {
             let class = crate::type_object::typy_rt_type_text(crate::type_object::type_of(object));
             assert_eq!(text(class), "<class 'method_descriptor'>");
             for each in [repr, class, name, qualified_name] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
+        }
+    }
+
+    #[test]
+    fn fun_14_a_builtin_type_as_a_function_writes_itself_as_the_type() {
+        let name = from_str("int");
+        let descriptor = super::FunctionDescriptor {
+            name,
+            qualified_name: name,
+            code: core::ptr::null(),
+            captures: core::ptr::null(),
+            identity: core::ptr::null(),
+        };
+        let function = super::FunctionObject {
+            header: crate::header::ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: crate::header::BUILTIN_TYPE_FUNCTION_TYPE_ID,
+            },
+            descriptor: &raw const descriptor,
+        };
+        // SAFETY: the object, its descriptor and the string are live for the whole test.
+        unsafe {
+            let object = core::ptr::from_ref(&function).cast_mut().cast();
+            let repr = super::builtin_type_repr(object).value;
+            assert_eq!(text(repr), "<class 'int'>");
+            let class = crate::type_object::typy_rt_type_text(crate::type_object::type_of(object));
+            assert_eq!(text(class), "<class 'type'>");
+            for each in [repr, class, name] {
                 crate::refcount::typy_rt_decrement(each.cast());
             }
         }

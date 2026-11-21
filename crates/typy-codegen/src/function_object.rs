@@ -15,7 +15,8 @@ use crate::abi::{function_type, value_type};
 use crate::error::CodegenError;
 use crate::function::{FunctionEmitter, Shared};
 use crate::layout::{
-    BUILTIN_FUNCTION_TYPE_ID, FUNCTION_TYPE_ID, IMMORTAL, METHOD_DESCRIPTOR_TYPE_ID,
+    BUILTIN_FUNCTION_TYPE_ID, BUILTIN_TYPE_FUNCTION_TYPE_ID, FUNCTION_TYPE_ID, IMMORTAL,
+    METHOD_DESCRIPTOR_TYPE_ID,
 };
 use typy_tyir::StandsFor;
 
@@ -99,6 +100,7 @@ pub(crate) fn function_object<'ctx>(
         StandsFor::Itself => FUNCTION_TYPE_ID,
         StandsFor::BuiltinFunction => BUILTIN_FUNCTION_TYPE_ID,
         StandsFor::BuiltinMethod => METHOD_DESCRIPTOR_TYPE_ID,
+        StandsFor::BuiltinType => BUILTIN_TYPE_FUNCTION_TYPE_ID,
     };
     let object = object_type(context).const_named_struct(&[
         context
