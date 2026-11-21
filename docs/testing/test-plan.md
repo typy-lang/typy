@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.33 |
+| Version | 1.34 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -422,7 +422,7 @@ that the specification does not define.
 | FUN-15 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-15_*.py` |
 | FUN-16 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-16_*.py` |
 | FUN-17 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned, including a property read through its class; `tests/conformance/fun/FUN-17_*.py` |
-| FUN-18 | 0.11 | UT, IT | `typy-check` tests of the refusal while it is planned; `tests/conformance/fun/FUN-18_*.py` for nested generic functions, their copies and their qualified names |
+| FUN-18 | 0.11 | UT, IT | `typy-check` tests of a generic function of a group and of reads as a value, also inside another nested function; `tests/conformance/fun/FUN-18_*.py` for nested generic functions with bounds, constraints, generators, recursion and groups, inside ordinary and generic functions, their copies and the qualified names of what they nest |
 | FUN-19 | 0.11 | UT, IT | `typy-check` tests of each kind of function that fits a `Callable` through an adapter and of each refusal (`callable_adapters.rs`); runtime test that adapters of one nested function are one function to `is`, `==` and `hash`; `tests/conformance/fun/FUN-19_*.py` for closures, bound methods through an instance, a class and a protocol value, class and static methods, overrides and `lambda`s with defaults and `*values`, with the identity and `repr` of the original |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |

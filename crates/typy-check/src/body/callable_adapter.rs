@@ -56,7 +56,9 @@ impl BodyChecker<'_> {
         span: Span,
         (parameters, returns): (&[Type], Option<&Type>),
     ) -> Option<TypedExpr> {
-        let function = self.function_held(id)?;
+        let function = self
+            .function_held(id)
+            .filter(|function| self.program.generic(*function).is_none())?;
         if !needs_adapter(&self.program.signatures[function.0 as usize], 0, parameters) {
             return None;
         }

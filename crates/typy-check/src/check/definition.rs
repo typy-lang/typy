@@ -202,7 +202,7 @@ fn type_parameters(
 
 /// Returns the type parameters a list declares for the definition at `owner`, each with its
 /// bound or its constraints (GEN-01, GEN-02).
-pub(super) fn resolve_type_parameters(
+pub(crate) fn resolve_type_parameters(
     parameters: &[typy_source::syntax::TypeParameter],
     owner: Span,
     scope: &AnnotationScope<'_>,

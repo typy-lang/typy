@@ -28,8 +28,14 @@ impl BodyChecker<'_> {
             return Self::cdata_class(class, span);
         }
         // A nested function reads its own name and its captures from its function object
-        // (FUN-04).
+        // (FUN-04); one that holds a nested function is refused as a value as the variable
+        // that holds it is.
         if let Some(read) = self.closure_read(id, span) {
+            if let Some(function) = self.function_held(id)
+                && let Some(refused) = self.refused_function_value(function, id, span)
+            {
+                return refused;
+            }
             return read;
         }
         if self.in_function()

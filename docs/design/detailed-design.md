@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.99 |
+| Version | 2.100 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -846,12 +846,25 @@ cell is read as `CapturedCell(position)` and passed on to a deeper `def` as
 cell variables, also an `except` clause's, whose symbol is the clause's
 own. A cell's type is the variable's once the body around the `def` is
 checked, since an assignment after the `def` may give it. A nested
-function with type parameters of its own is planned for 0.11 (FUN-18).
-One in a generic function, as a `lambda` and a generator expression there,
-is checked in each pass and copy of the function (ADR-0081): while
-`generic_body::check` checks the generic body, `Program::generic_pass`
-makes `check_body_of` keep each nested function as a generic with no body,
-so only the copies, checked by `generic_copies`, make code. Lowering
+function with type parameters of its own (FUN-18, ADR-0081) reads them in
+its annotations beside those of a generic function around it
+(`definition_of`), and is a `Generic` whose `nested` flag keeps it out of
+the module's copies. Its `def` makes one function object, as any nested
+function's. `check_nested` checks it after the others of its body, in
+`body/nested_generic.rs`: once for each combination of opaque types and
+constraints with `Program::generic_pass` set, then each copy the body's
+calls asked for, taken from `Generics::pending` until none is left, with
+the same closure, so every copy reads the captures by one layout. A call
+by name goes through `call_target` to the copy for its types and passes
+the function object, and lowering gives the generic itself a stub that
+takes the object, so the object's descriptor has code. Read as a value,
+also inside another nested function, it is E0202
+(`refused_function_value`). One in a generic function, as a `lambda`
+and a generator expression there, is checked in each pass and copy of
+the function (ADR-0081): while `generic_body::check` checks the generic
+body, `Program::generic_pass` makes `check_body_of` keep each nested
+function as a generic with no body, so only the copies, checked by
+`generic_copies`, make code. Lowering
 writes a copy's `__qualname__` without its type arguments, so
 `pair_with[int].<locals>.make` shows as `pair_with.<locals>.make`. A call
 of a local variable before an assignment gives it a type is read first, so

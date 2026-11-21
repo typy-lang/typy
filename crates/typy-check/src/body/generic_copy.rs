@@ -14,11 +14,13 @@ use crate::types::Type;
 /// never end (ADR-0023).
 pub(crate) const MOST_NESTED_COPIES: usize = 64;
 
-/// A generic function of the program, with the module that defines it.
+/// A generic function of the program, with the module that defines it, and whether it is
+/// nested in a function, whose body checks its copies (FUN-18).
 #[derive(Clone, Debug)]
 pub(crate) struct Generic {
     pub(crate) parameters: Vec<TypeParameter>,
     pub(crate) module: String,
+    pub(crate) nested: bool,
 }
 
 /// A copy of a generic function for its type arguments.
@@ -67,6 +69,7 @@ impl Program {
                     Generic {
                         parameters: definition.type_parameters.clone(),
                         module: self.module.clone(),
+                        nested: false,
                     },
                 );
             }

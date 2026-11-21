@@ -50,9 +50,9 @@ value has the type of the method read, and calls the object's own method.
 A nested function, a method or a `lambda` with defaults, `*args` or
 `**kwargs` is a value where a `Callable` is expected that its parameters
 take; see [Variable numbers of arguments](#variable-numbers-of-arguments)
-(FUN-19). A nested function with type parameters of its own is planned for
-0.11 (FUN-18), and a class of the program as a `Callable` for 0.14
-(FUN-16).
+(FUN-19). A nested function may have type parameters of its own; see
+[Nested generic functions](generics.md#nested-generic-functions) (FUN-18).
+A class of the program as a `Callable` is planned for 0.14 (FUN-16).
 
 ## Decorators
 

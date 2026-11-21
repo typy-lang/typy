@@ -34,6 +34,10 @@ All notable changes to TyPy are recorded here. The format follows
   and `lambda value, by=3: value * by` or `lambda *values: sum(values)`
   (FUN-19). The value is the function itself to `is`, `==`, `hash` and
   `repr`. These were E0201.
+- A function nested in another may have type parameters of its own, such
+  as `def tagged[T](value: T) -> tuple[str, T]` inside a function; each
+  call runs the copy for its types, with the variables it captures
+  (FUN-18). It was E0201.
 
 ### Changed
 
@@ -51,7 +55,10 @@ All notable changes to TyPy are recorded here. The format follows
   LIB-26).
 - A nested function or a method with `*args` or `**kwargs` read where no
   `Callable` is expected is E0203, with the help to annotate the variable,
-  as a function of a module is; it was E0201.
+  as a function of a module is; it was E0201. Such a function read as a
+  value inside another nested function, which captures it, is refused as
+  well; it was accepted with a `Callable` type that listed `*args` as one
+  tuple parameter.
 - The help of E0204, a missing return annotation, and of E0410, an empty
   `[]`, `{}` or `set()` without an annotation, names 0.12, which infers
   them (TYP-26, TYP-27).

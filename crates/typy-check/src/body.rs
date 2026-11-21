@@ -69,6 +69,7 @@ mod name;
 mod named;
 mod named_tuple;
 mod nested_function;
+mod nested_generic;
 mod open_call;
 mod open_options;
 mod operator;

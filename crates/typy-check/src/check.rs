@@ -52,7 +52,10 @@ pub(crate) struct ImportedNames {
 }
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
 pub(crate) use class::{ClassInfo, Frozen, class_value_variable, class_values};
-pub(crate) use definition::{Definition, FunctionParts, factory_call, function_definition};
+pub(crate) use definition::{
+    Definition, FunctionParts, factory_call, function_definition, resolve_type_parameters,
+};
+pub(crate) use generic_body::combinations;
 
 use crate::body::{BodyChecker, Program};
 use crate::exception_arguments::Creations;

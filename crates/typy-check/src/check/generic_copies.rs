@@ -19,8 +19,10 @@ pub(super) fn check(
     // The overrides of a generic method get copies for each copy of it, whose bodies may need
     // more copies in turn (GEN-09).
     while let Some(copy) = next_copy(program) {
+        // A nested generic function's body checks its copies (FUN-18).
         let Some(home) = program
             .generic(copy.generic)
+            .filter(|generic| !generic.nested)
             .map(|generic| generic.module.clone())
         else {
             continue;
