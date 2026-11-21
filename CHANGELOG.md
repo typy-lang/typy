@@ -6,6 +6,36 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The refusals of forms a later release gives now name that release:
+  `object` as a type and `typing.cast` 0.11 (TYP-23, TYP-24);
+  `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
+  to TYP-31); `typing.Any` and `TypedDict` with `Required`,
+  `NotRequired` and `ReadOnly` 0.13 (TYP-25, TYP-32); the modules `enum`,
+  `abc`, `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`,
+  `random`, `copy` and `string` 0.12 (CLS-44, CLS-45, LIB-27), and `os`
+  1.0 (LIB-07). They were E0202, E0206, E0403 or E0425, and are E0201.
+- From the Python floor 3.14, template strings are refused as planned for
+  0.13 (LEX-12); they were refused as a form TyPy cannot compile. From
+  the floor 3.15, `[*row for row in rows]`, `frozendict` and
+  `math.integer` are refused as planned for 0.12 (EXP-23, DAT-18,
+  LIB-26).
+- The help of E0204, a missing return annotation, and of E0410, an empty
+  `[]`, `{}` or `set()` without an annotation, names 0.12, which infers
+  them (TYP-26, TYP-27).
+
+### Removed
+
+- E0403 is retired: the `object`, `typing.Any` and `typing.cast` it
+  refused are E0201, planned. `typy explain E0403` says so.
+
+### Fixed
+
+- `Literal["r", "w"]` in an annotation is refused for `Literal`, which a
+  later release gives, and no longer as an annotation written as a
+  string.
+
 ## [0.10.0] - 2026-11-21
 
 ### Added

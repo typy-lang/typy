@@ -147,7 +147,15 @@ pub const CODES: &[CodeInfo] = &[
         "assignment changes the type of a variable",
         RuleId::TYP_03,
     ),
-    active(403, "`Any`, `cast` or an untyped value", RuleId::TYP_10),
+    // `object`, `Any` and `cast` are planned (TYP-23 to TYP-25), so their refusal is E0201.
+    CodeInfo {
+        code: DiagnosticCode::error(403),
+        summary: "`Any`, `cast` or an `object` annotation",
+        rule: Some(RuleId::TYP_10),
+        status: CodeStatus::Retired {
+            replaced_by: Some(DiagnosticCode::error(201)),
+        },
+    },
     active(404, "argument of the wrong type", RuleId::TYP_01),
     active(405, "returned value of the wrong type", RuleId::TYP_01),
     active(406, "arithmetic on `bool`", RuleId::DAT_03),

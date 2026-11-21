@@ -558,27 +558,6 @@ label = "none"
 print(count, label)
 ```
 
-## E0403: `Any`, `cast` or an untyped value
-
-`typing.Any`, `typing.cast` and `object` annotations would leave a value
-without one type (TYP-10). Annotate the type the value holds.
-
-This program gives E0403:
-
-<!-- typy-expect: rejected E0403 at 1:8 -->
-```python
-value: object = 1
-print(value)
-```
-
-This one is correct:
-
-<!-- typy-expect: accepted -->
-```python
-value: int = 1
-print(value)
-```
-
 ## E0404: argument of the wrong type
 
 An argument does not match its parameter, an argument is missing or extra,

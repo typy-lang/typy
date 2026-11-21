@@ -31,7 +31,9 @@ assigns the variable of the function or module around it. A test of
 `(name := value) is not None` narrows `name`, as a test of the variable
 does. CPython's syntax errors are E0103: rebinding a name the
 comprehension binds, `:=` in a comprehension's source, and `__debug__`
-as the name.
+as the name. A comprehension element that unpacks, such as
+`[*row for row in rows]`, which needs the Python floor 3.15, is E0201,
+planned for 0.12 (EXP-23).
 
 <!-- typy-expect: accepted -->
 ```python

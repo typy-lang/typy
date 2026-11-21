@@ -16,7 +16,8 @@ TyPy reads source as the Python Language Reference defines it.
 | A source file over 16 MiB is refused before it is read | LEX-09 |
 
 Imaginary literals such as `2j` are refused, because TyPy has no `complex`
-type (LEX-08).
+type (LEX-08). Template strings such as `t"hi {name}"`, which need the
+Python floor 3.14, are E0201, planned for 0.13 (LEX-12).
 
 ## Example
 

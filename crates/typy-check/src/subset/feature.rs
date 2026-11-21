@@ -41,9 +41,8 @@ pub(super) fn feature(kind: NodeKind) -> Feature {
         NodeKind::TryStar => Feature::AfterOne {
             what: "`except*` clauses",
         },
-        NodeKind::TemplateStr => Feature::Excluded {
-            what: "template strings",
-        },
+        // A template is an immutable object fixed when the expression runs (OI-38).
+        NodeKind::TemplateStr => planned("template strings", "0.13", RuleId::LEX_12),
         NodeKind::IpyEscapeCommand => Feature::Excluded {
             what: "IPython escape commands",
         },

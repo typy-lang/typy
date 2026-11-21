@@ -855,17 +855,7 @@ fn named_type(
         "bytes" => Type::Bytes,
         "range" => Type::Range,
         "slice" => Type::Slice,
-        "Any" | "object" => {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(403),
-                    span,
-                    format!("`{id}` does not give the value one type"),
-                )
-                .with_rule(RuleId::TYP_10),
-            );
-            Type::Error
-        }
+        "Any" | "object" => planned_open_type(id, span, diagnostics),
         "tuple" => {
             diagnostics.push(
                 Diagnostic::new(
@@ -1029,4 +1019,29 @@ fn tuple_annotation(
             .map(|item| annotation_type(item, scope, diagnostics))
             .collect(),
     )
+}
+
+/// Returns the error type after reporting `object` or `Any` as a type, which a later release
+/// gives: `object` boxed and narrowed (ADR-0090), and `Any` bound when the program runs
+/// (ADR-0094).
+fn planned_open_type(
+    id: &str,
+    span: typy_diagnostics::Span,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let (release, rule) = if id == "object" {
+        ("0.11", RuleId::TYP_23)
+    } else {
+        ("0.13", RuleId::TYP_25)
+    };
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            span,
+            format!("`{id}` as a type is planned for TyPy {release} ({rule})"),
+        )
+        .with_rule(rule)
+        .with_help("annotate the value with its type, or a union of its types"),
+    );
+    Type::Error
 }

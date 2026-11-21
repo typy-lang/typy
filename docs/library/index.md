@@ -23,5 +23,8 @@ TyPy 0.10 provides these modules of the standard library:
 | `typing`, `collections.abc` and `types` | Names for annotations, such as `Iterator`, `Final` and `Protocol` | [Modules](../reference/modules.md) |
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
-A module planned for a later release, such as `os`, `time` or `random`, is
-refused with E0201.
+A module planned for a later release is refused with E0201, naming the
+release: `enum` and `abc` (CLS-44, CLS-45), and `textwrap`, `base64`,
+`heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string`
+(LIB-27) in 0.12; `math.integer` (LIB-26) in 0.12 from the Python floor
+3.15; `os` (LIB-07) in 1.0. Each other module is E0206.

@@ -128,6 +128,26 @@ fn later_features_name_their_release_and_rule() {
 }
 
 #[test]
+fn newer_python_forms_name_their_release_at_their_floor() {
+    for (source, expected) in [
+        (
+            "name = 'x'\nt = t'hi {name}'\n",
+            "template strings are planned for TyPy 0.13 (LEX-12)",
+        ),
+        (
+            "rows = [[1]]\nflat = [*row for row in rows]\n",
+            "`*` and `**` in comprehension elements are planned for TyPy 0.12 (EXP-23)",
+        ),
+    ] {
+        let found = diagnostics_with_floor(source, PythonFloor::V3_15);
+        assert!(
+            found.iter().any(|(_, message)| message == expected),
+            "{source:?} gave {found:?}"
+        );
+    }
+}
+
+#[test]
 fn lazy_imports_at_module_level_pass_with_floor_3_15() {
     let source =
         "lazy import json\nif True:\n    lazy from os import path\nwith x:\n    lazy import a\n";

@@ -89,6 +89,10 @@ print(dict(defaults, size="l"), list(reversed(defaults)))
 print(dict.fromkeys(["ada", "alan"], 0), dict.fromkeys("ab"))
 ```
 
+`frozendict`, a builtin from Python 3.15, is E0201 at the Python floor
+3.15, planned for 0.12 (DAT-18); below that floor it is not defined, as
+in CPython.
+
 ## Example
 
 <!-- typy-expect: accepted -->

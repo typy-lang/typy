@@ -45,6 +45,19 @@ impl Walker {
             }
         }
         for expression in made {
+            // An element that unpacks, from Python 3.15 (PEP 798), which the parser accepts
+            // only at that floor.
+            if let Expr::Starred { span, .. } = expression {
+                self.report(
+                    *span,
+                    planned(
+                        "`*` and `**` in comprehension elements",
+                        "0.12",
+                        RuleId::EXP_23,
+                    ),
+                );
+                continue;
+            }
             self.expression(expression);
         }
         self.comprehension_names.pop();
@@ -228,6 +241,9 @@ impl Walker {
             Expr::Subscript { value, index, .. } if names_callable(value) => {
                 self.callable_annotation(index);
             }
+            // `Literal[...]` holds values, not annotations; the checker reports the name, which
+            // a later release gives (TYP-28).
+            Expr::Subscript { value, .. } if names_literal(value) => {}
             // A generic class or type alias of the module, given its type arguments (GEN-01),
             // or a name of another module, which the checker reads (SMT-12).
             Expr::Subscript { value, index, .. }
@@ -484,6 +500,15 @@ fn collect_names(target: &Expr, names: &mut Vec<String>) {
 
 /// Returns true when `value` names `Callable`, by name or through `typing` or
 /// `collections.abc`, which the checker resolves (FUN-05).
+fn names_literal(value: &Expr) -> bool {
+    matches!(
+        value,
+        Expr::Name { id, .. }
+            | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
+            if id == "Literal"
+    )
+}
+
 fn names_callable(value: &Expr) -> bool {
     matches!(
         value,

@@ -374,7 +374,7 @@ fn rejected_programs_give_their_codes() {
         ("def f() -> float:\n    return \"a\"\n", &["E0405"]),
         ("def f(x) -> None:\n    pass\n", &["E0203"]),
         ("def f(x: int):\n    pass\n", &["E0204"]),
-        ("def f(x: Any) -> None:\n    pass\n", &["E0403"]),
+        ("def f(x: Any) -> None:\n    pass\n", &["E0201"]),
         ("def f(x: Thing) -> None:\n    pass\n", &["E0205"]),
         ("print(undefined)\n", &["E0205"]),
         ("print(eval(\"1\"))\n", &["E0202"]),

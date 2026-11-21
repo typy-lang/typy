@@ -95,6 +95,10 @@ impl RuleId {
     pub const CLS_41: Self = Self("CLS-41");
     /// A named tuple shall have `_make` and `_field_defaults`, and its `_replace` shall be a value, be called through its class and take `**` arguments, as CPython's are and do.
     pub const CLS_43: Self = Self("CLS-43");
+    /// A class derived from `enum.Enum`, `IntEnum`, `StrEnum`, `Flag` or `IntFlag` shall be accepted, with its members, `name`, `value`, `auto()`, iteration, `len`, lookup by value and by name, comparison, hashing and the `Flag` operators as CPython gives them (ADR-0093).
+    pub const CLS_44: Self = Self("CLS-44");
+    /// A class derived from `abc.ABC` shall accept `@abstractmethod`, and making an instance of a class that leaves an abstract method without an override shall be rejected where the class is named and raise CPython's `TypeError` otherwise (ADR-0093).
+    pub const CLS_45: Self = Self("CLS-45");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -139,6 +143,8 @@ impl RuleId {
     pub const DAT_16: Self = Self("DAT-16");
     /// `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python.
     pub const DAT_17: Self = Self("DAT-17");
+    /// `frozendict` (PEP 814) shall be an immutable, hashable mapping with CPython's methods, `|` and text, under a Python floor of 3.15 or later.
+    pub const DAT_18: Self = Self("DAT-18");
     /// Where CPython 3.12 to 3.15 give a `SyntaxWarning` while compiling a program TyPy accepts, TyPy shall give a warning: for an invalid escape sequence and for an assertion that is always true.
     pub const DIA_08: Self = Self("DIA-08");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
@@ -201,6 +207,8 @@ impl RuleId {
     pub const EXP_20: Self = Self("EXP-20");
     /// `*` of any iterable and `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print`, of a method through a protocol value and of an exception class, `*` in a call of a function value, and `**` in a call of `print`.
     pub const EXP_22: Self = Self("EXP-22");
+    /// A list, set or generator comprehension whose element is `*iterable`, and a dict comprehension whose element is `**mapping` (PEP 798), shall unpack each into the result, under a Python floor of 3.15 or later.
+    pub const EXP_23: Self = Self("EXP-23");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
     /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
@@ -302,6 +310,8 @@ impl RuleId {
     pub const LEX_10: Self = Self("LEX-10");
     /// Brackets nested more than 200 deep and blocks nested more than 99 deep shall be rejected with CPython's messages, and expressions and statements nested more than 25000 deep shall be rejected, so that no program nests past what the compiler's stack holds.
     pub const LEX_11: Self = Self("LEX-11");
+    /// A template string (PEP 750) shall evaluate to a `string.templatelib.Template` whose `strings`, `interpolations` and `values`, iteration and `+` are CPython's, under a Python floor of 3.14 or later.
+    pub const LEX_12: Self = Self("LEX-12");
     /// `print` with `sep` and `end`, `len`, `range`, `abs`, `min`, `max`, `int`, `float`, `str`, `bool`, `repr`, `ord` and `chr` shall be available.
     pub const LIB_01: Self = Self("LIB-01");
     /// `list`, `dict`, `set`, `tuple`, `sorted`, `reversed`, `enumerate`, `zip`, `sum`, `any`, `all` and `round` shall be available.
@@ -348,6 +358,10 @@ impl RuleId {
     pub const LIB_24: Self = Self("LIB-24");
     /// `map` and `filter` themselves shall be values, held in a variable, passed, written and given to `isinstance`, and `map` shall take `*` arguments, as CPython's classes are and do.
     pub const LIB_25: Self = Self("LIB-25");
+    /// `math.integer` (PEP 791) shall be available with `comb`, `factorial`, `gcd`, `isqrt`, `lcm` and `perm`, under a Python floor of 3.15 or later.
+    pub const LIB_26: Self = Self("LIB-26");
+    /// `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097).
+    pub const LIB_27: Self = Self("LIB-27");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -430,6 +444,26 @@ impl RuleId {
     pub const TYP_18: Self = Self("TYP-18");
     /// An operation on a union whose members the runtime cannot tell apart by class or kind, such as two iterators, two file kinds or an iterable, shall be accepted.
     pub const TYP_19: Self = Self("TYP-19");
+    /// A parameter, variable, attribute, collection item or result annotated `object` shall hold a value of any type, support `==`, `!=`, `is`, `hash`, `str`, `repr`, truth, `type()` and `isinstance`, and narrow by `isinstance`, a class pattern and `type(x) is C`, as Java narrows `Object` (ADR-0090).
+    pub const TYP_23: Self = Self("TYP-23");
+    /// `typing.cast(T, value)` shall give `value` as a `T` when it is one, and raise `TypeError` when it is not (ADR-0091).
+    pub const TYP_24: Self = Self("TYP-24");
+    /// A value of type `typing.Any` shall support every operation, bound when the program runs, and raise the `TypeError` or `AttributeError` CPython raises for an operation it does not support (ADR-0094).
+    pub const TYP_25: Self = Self("TYP-25");
+    /// A function without a result annotation, other than a generator function, one that calls itself, a method that overrides or is overridden, and a function a library exports, shall return the type its `return` statements give (ADR-0092).
+    pub const TYP_26: Self = Self("TYP-26");
+    /// An unannotated local variable assigned an empty list, dict or set display shall take its item types from the first statement of the same function that adds to it (ADR-0092).
+    pub const TYP_27: Self = Self("TYP-27");
+    /// `typing.Literal` of `int`, `str`, `bytes`, `bool` and `None` constants shall be accepted, a constant passing for its literal type and `==`, `in` and `match` narrowing to it.
+    pub const TYP_28: Self = Self("TYP-28");
+    /// `typing.overload` shall be accepted on functions and methods, each call checked against the signature it matches and the body against every signature.
+    pub const TYP_29: Self = Self("TYP-29");
+    /// `typing.Self` shall be accepted in a method's parameters and result as the class the method is called through.
+    pub const TYP_30: Self = Self("TYP-30");
+    /// A function annotated to return `typing.TypeGuard[T]` or `typing.TypeIs[T]` shall narrow its argument where a call of it is tested, as CPython's type system reads them.
+    pub const TYP_31: Self = Self("TYP-31");
+    /// A class derived from `typing.TypedDict` shall be accepted, its instances being dicts whose keys it names and whose values it types, with `total`, `Required`, `NotRequired` and `ReadOnly`.
+    pub const TYP_32: Self = Self("TYP-32");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -477,6 +511,8 @@ impl RuleId {
         Self::CLS_40,
         Self::CLS_41,
         Self::CLS_43,
+        Self::CLS_44,
+        Self::CLS_45,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
@@ -499,6 +535,7 @@ impl RuleId {
         Self::DAT_15,
         Self::DAT_16,
         Self::DAT_17,
+        Self::DAT_18,
         Self::DIA_08,
         Self::EXC_01,
         Self::EXC_05,
@@ -530,6 +567,7 @@ impl RuleId {
         Self::EXP_19,
         Self::EXP_20,
         Self::EXP_22,
+        Self::EXP_23,
         Self::FFI_01,
         Self::FFI_02,
         Self::FFI_03,
@@ -579,6 +617,7 @@ impl RuleId {
         Self::LEX_09,
         Self::LEX_10,
         Self::LEX_11,
+        Self::LEX_12,
         Self::LIB_01,
         Self::LIB_02,
         Self::LIB_03,
@@ -602,6 +641,8 @@ impl RuleId {
         Self::LIB_23,
         Self::LIB_24,
         Self::LIB_25,
+        Self::LIB_26,
+        Self::LIB_27,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,
@@ -643,6 +684,16 @@ impl RuleId {
         Self::TYP_17,
         Self::TYP_18,
         Self::TYP_19,
+        Self::TYP_23,
+        Self::TYP_24,
+        Self::TYP_25,
+        Self::TYP_26,
+        Self::TYP_27,
+        Self::TYP_28,
+        Self::TYP_29,
+        Self::TYP_30,
+        Self::TYP_31,
+        Self::TYP_32,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

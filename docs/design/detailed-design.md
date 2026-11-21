@@ -294,7 +294,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0310 | Attribute whose type is not known yet, because the `__init__` that assigns it is checked later | CLS-01 |
 | E0401 | Operator not defined for these operand types | EXP-02 |
 | E0402 | Assignment changes the type of a variable | TYP-03 |
-| E0403 | `Any`, `cast` or an untyped value | TYP-10 |
+| E0403 | Retired in 0.11: `Any`, `cast` and `object` annotations, which are now E0201, planned (TYP-23 to TYP-25) | TYP-10 |
 | E0404 | Argument of the wrong type | TYP-01 |
 | E0405 | Returned value of the wrong type | TYP-01 |
 | E0406 | Arithmetic on `bool` | DAT-03 |

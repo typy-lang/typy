@@ -15,7 +15,7 @@ value.
 | An empty `[]`, `{}`, `set()` or `dict()` needs an annotation or a typed context | TYP-05 |
 | `list[T]`, `dict[K, V]`, `set[T]`, `tuple[A, B]`, `tuple[T, ...]` and `T \| None` | TYP-06 |
 | An `int` is refused where a `float` is declared, since CPython keeps it an `int` | TYP-09 |
-| `typing.Any`, `typing.cast` and `object` annotations are refused | TYP-10 |
+| A value whose type neither an annotation nor inference gives is refused | TYP-10 |
 | A variable read before it is assigned on every path is refused | TYP-12 |
 | `T \| None` narrows to `T` after `is not None`, a failed `is None` test or a truth test | TYP-13 |
 | A variable narrows to a derived class after `isinstance` | TYP-07 |
@@ -148,9 +148,21 @@ As in CPython, a bare `Optional` and a subscripted name such as
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
 `False`. The names held in a variable, passed or printed are planned for
 0.11 (TYP-18). `NamedTuple` is a base for a named tuple's class, as
-[Classes](classes.md#named-tuples) describes (CLS-27). `typing.Any` and
-`typing.cast` are refused, since every value in TyPy has one type
-(TYP-10).
+[Classes](classes.md#named-tuples) describes (CLS-27).
+
+These forms are planned, and each is E0201 until its release:
+
+| Form | Release | Requirement |
+| --- | --- | --- |
+| `object` as a type, narrowed by `isinstance` and `match` | 0.11 | TYP-23 |
+| `typing.cast`, checked when the program runs | 0.11 | TYP-24 |
+| A result inferred from `return` statements, and an empty collection's item type from its first use | 0.12 | TYP-26, TYP-27 |
+| `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-28 to TYP-31 |
+| `typing.Any`, bound when the program runs | 0.13 | TYP-25 |
+| `TypedDict`, `Required`, `NotRequired` and `ReadOnly` | 0.13 | TYP-32 |
+
+A missing return annotation stays E0204 and an empty `[]` E0410 until
+0.12, and their help names the release.
 
 ## Abstract collections
 
