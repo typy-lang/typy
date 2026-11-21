@@ -90,6 +90,7 @@ pub(crate) fn function_object<'ctx>(
     let context = shared.context;
     let code = thunk(shared, id, Receives::Nothing)?;
     let descriptor = descriptor(shared, id, code, ("function", None))?;
+    shared.statics.add_function_descriptor(id.0, descriptor);
     // A built-in function used as a value is written as CPython writes one (FUN-08).
     let stands_for = shared
         .tyir
@@ -97,7 +98,7 @@ pub(crate) fn function_object<'ctx>(
         .get(id.0 as usize)
         .map_or(StandsFor::Itself, |function| function.stands_for);
     let type_id = match stands_for {
-        StandsFor::Itself => FUNCTION_TYPE_ID,
+        StandsFor::Itself | StandsFor::Adapter(_) => FUNCTION_TYPE_ID,
         StandsFor::BuiltinFunction => BUILTIN_FUNCTION_TYPE_ID,
         StandsFor::BuiltinMethod => METHOD_DESCRIPTOR_TYPE_ID,
         StandsFor::BuiltinType => BUILTIN_TYPE_FUNCTION_TYPE_ID,
@@ -187,10 +188,19 @@ fn descriptor<'ctx>(
     let own = global.as_pointer_value();
     // The hidden functions of one built-in stand for it, so they share one identity; any
     // other function stands for itself (ADR-0076).
-    let identity = if stands_for == StandsFor::Itself {
-        own
-    } else {
-        shared.statics.builtin_identity(&own_name, own)
+    let identity = match stands_for {
+        StandsFor::Itself => own,
+        // An adapter stands for the function it calls, whose descriptor is its identity.
+        StandsFor::Adapter(original) => {
+            function_object(shared, original)?;
+            shared
+                .statics
+                .function_descriptor(original.0)
+                .unwrap_or(own)
+        }
+        StandsFor::BuiltinFunction | StandsFor::BuiltinMethod | StandsFor::BuiltinType => {
+            shared.statics.builtin_identity(&own_name, own)
+        }
     };
     let descriptor = descriptor_type(context).const_named_struct(&[
         name.into(),

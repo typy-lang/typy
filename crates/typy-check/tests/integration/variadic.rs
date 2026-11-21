@@ -64,8 +64,8 @@ fn exp_17_an_argument_left_over_is_refused_where_cpython_or_typing_refuses_it() 
         ),
         (
             "def f(*items: int) -> None:\n    pass\n\n\ng = f\n",
-            "`f` takes `*items`, and a function with `*args` or `**kwargs` as a value is planned \
-             for TyPy 0.10 (FUN-13)",
+            "`f` takes `*args` or `**kwargs`, so as a value it needs the `Callable` type its \
+             context expects",
         ),
         (
             "def outer() -> None:\n    def inner(**options: int) -> None:\n        pass\n    \

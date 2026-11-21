@@ -580,6 +580,9 @@ fn function_builder(
         Some(typy_check::BuiltinValue::Function) => typy_tyir::StandsFor::BuiltinFunction,
         Some(typy_check::BuiltinValue::Method) => typy_tyir::StandsFor::BuiltinMethod,
         Some(typy_check::BuiltinValue::Type) => typy_tyir::StandsFor::BuiltinType,
+        Some(typy_check::BuiltinValue::Adapter(original)) => {
+            typy_tyir::StandsFor::Adapter(FunctionId(original.0))
+        }
         None => typy_tyir::StandsFor::Itself,
     });
     (builder, generator, closure)

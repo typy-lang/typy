@@ -28,6 +28,7 @@ pub(crate) struct Statics<'ctx> {
     closure_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     generator_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     builtin_identities: BTreeMap<String, PointerValue<'ctx>>,
+    function_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
 }
 
 impl<'ctx> Statics<'ctx> {
@@ -48,6 +49,7 @@ impl<'ctx> Statics<'ctx> {
             closure_descriptors: BTreeMap::new(),
             generator_descriptors: BTreeMap::new(),
             builtin_identities: BTreeMap::new(),
+            function_descriptors: BTreeMap::new(),
         }
     }
 
@@ -82,6 +84,16 @@ impl<'ctx> Statics<'ctx> {
             .builtin_identities
             .entry(name.to_owned())
             .or_insert(own)
+    }
+
+    /// Returns the descriptor of the function object of function `id`, if it was emitted.
+    pub(crate) fn function_descriptor(&self, id: u32) -> Option<PointerValue<'ctx>> {
+        self.function_descriptors.get(&id).copied()
+    }
+
+    /// Records the descriptor of the function object of function `id`.
+    pub(crate) fn add_function_descriptor(&mut self, id: u32, pointer: PointerValue<'ctx>) {
+        self.function_descriptors.insert(id, pointer);
     }
 
     /// Returns the bound method descriptor of method `id`, if it was emitted already.

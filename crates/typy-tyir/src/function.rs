@@ -55,6 +55,9 @@ pub enum StandsFor {
     /// A built-in type called as a function, such as `int` in `key=int`, written as the type
     /// is (FUN-14).
     BuiltinType,
+    /// An adapter that fits a function of the program to a `Callable`, which stands for that
+    /// function: its value is that function's to `is`, `==` and `hash` (FUN-13, ADR-0080).
+    Adapter(FunctionId),
 }
 
 /// What a generator's object holds between steps: the arguments its maker stores, then each

@@ -85,6 +85,9 @@ pub enum BuiltinValue {
     Method,
     /// A built-in type called as a function, such as `int` in `key=int` (FUN-14).
     Type,
+    /// An adapter that fits a function of the program with defaults, `*args` or `**kwargs`
+    /// to a `Callable`, and stands for that function (FUN-13, ADR-0080).
+    Adapter(FunctionId),
 }
 
 /// One capture of a nested function: a copy of a variable's value, or the cell it lives in.

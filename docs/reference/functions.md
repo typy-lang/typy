@@ -75,11 +75,15 @@ names `*args` or `**kwargs` itself.
 Methods, `__init__`, nested functions and generic functions take them
 too; a type parameter is solved from the arguments `*args` takes, as in
 `def first[T](*items: T) -> T`. An override keeps the `*args` and
-`**kwargs` of the method it overrides, E0404 (CLS-04). Reading such a
-function as a value, and `*args` or `**kwargs` in a `lambda`, are planned
-for 0.10 (FUN-13); call it from a `lambda` that takes the arguments the
-`Callable` passes. A call may also unpack its arguments; see
-[Unpacking in a call](#unpacking-in-a-call).
+`**kwargs` of the method it overrides, E0404 (CLS-04). A function of the
+module with defaults, `*args` or `**kwargs` is a value where a `Callable`
+is expected that its parameters take, such as `apply(total, 2, 3)` or
+`twice: Callable[[int], int] = scale` with `by: int = 2`; it is called
+with the `Callable`'s arguments by position, and stays the same function
+to `is` and `==` (FUN-13). Read where nothing is expected, it is E0203. A
+nested function or a method with them as a value, and `*args` or
+`**kwargs` in a `lambda`, are planned for 0.10 (FUN-13). A call may also
+unpack its arguments; see [Unpacking in a call](#unpacking-in-a-call).
 
 ## Unpacking in a call
 
@@ -531,7 +535,8 @@ These forms are refused:
 | A generic function as a value, which has one copy for each set of types | E0202 |
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
-| A function, nested function or method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.10 | E0201 (FUN-13) |
+| A nested function or a method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.10 | E0201 (FUN-13) |
+| A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
 | `*` or `**` in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and `**` in a call of `print`, planned for 0.10 | E0201 (EXP-19) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
 | A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |

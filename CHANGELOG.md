@@ -34,6 +34,12 @@ All notable changes to TyPy are recorded here. The format follows
   key=str)` or `parse: Callable[[str], int] = int`, written `<class 'int'>`
   (FUN-14). A class of the program there is refused as planned for 0.14
   (FUN-16), where it was E0402 or E0404.
+- A function of the module with defaults, `*args` or `**kwargs` is a value
+  where a `Callable` its parameters take is expected, such as
+  `apply(total, 2, 3)` with `def total(*values: int)`, or `twice:
+  Callable[[int], int] = scale` with a default for its second parameter;
+  it is the same function to `is` and `==`. Read where no `Callable` is
+  expected it is E0203 (FUN-13).
 - `callable(x)` is true for a function value, a built-in function, method
   or type, and a class, and false for any other value, as CPython answers
   (LIB-23).

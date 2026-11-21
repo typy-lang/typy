@@ -150,6 +150,9 @@ impl BodyChecker<'_> {
         {
             return Some(Self::cdata_class(crate::ctypes::CData::Scalar(*ty), span));
         }
+        if self.variadic_function(id, span).is_some() {
+            return Some(self.variadic_without_context(id, span));
+        }
         if let Some(function) = self.program.function_ids.get(id).copied() {
             let value = self.function_value(function, id, span);
             return Some(self.through_lazy(id, value));

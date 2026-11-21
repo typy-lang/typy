@@ -699,3 +699,38 @@ fn lib_23_callable_takes_one_value_by_position() {
         Vec::<String>::new()
     );
 }
+
+#[test]
+fn fun_13_a_function_with_defaults_or_variadic_parameters_fits_through_an_adapter() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def total(*values: int) -> int:\n",
+        "    return sum(values)\n",
+        "def scale(value: int, by: int = 2) -> int:\n",
+        "    return value * by\n",
+        "def pick(first: int, *rest: int, **named: int) -> int:\n",
+        "    return first\n",
+        "def apply(function: Callable[[int, int], int]) -> int:\n",
+        "    return function(1, 2)\n",
+        "twice: Callable[[int], int] = scale\n",
+        "summed: Callable[[int, int, int], int] = total\n",
+        "print(apply(total), apply(pick), sorted([3, 1], key=scale), twice is scale, summed is total)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let cases = [
+        (
+            "from collections.abc import Callable\ndef scale(value: int, by: int = 2) -> int:\n    \
+             return value\nf: Callable[[str], int] = scale\n",
+            "E0404",
+        ),
+        (
+            "def total(*values: int) -> int:\n    return 0\nf = total\n",
+            "E0203",
+        ),
+    ];
+    for (source, code) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(found[0].0, code, "{source}");
+    }
+}

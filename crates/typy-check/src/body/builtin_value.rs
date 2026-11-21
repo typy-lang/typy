@@ -24,6 +24,13 @@ enum Called<'name> {
     Function(&'name str),
     /// A built-in type, such as `int`, called with every argument (FUN-14).
     Type(&'name str),
+    /// A function of the module, `name`, called with every argument by position, so its
+    /// defaults, `*args` and `**kwargs` take what the `Callable` does not pass (FUN-13).
+    Adapter {
+        name: &'name str,
+        qualified: &'name str,
+        function: FunctionId,
+    },
     /// A method of the built-in type `class`, such as `str.upper`, called on the first
     /// argument with the others.
     Method {
@@ -44,6 +51,7 @@ impl<'name> Called<'name> {
     fn key(self) -> String {
         match self {
             Self::Function(name) | Self::Type(name) => name.to_owned(),
+            Self::Adapter { function, .. } => format!("<adapter {}>", function.0),
             Self::Method { class, method } => format!("{class}.{method}"),
             Self::Module { module, name, .. } => format!("{module}.{name}"),
         }
@@ -53,6 +61,7 @@ impl<'name> Called<'name> {
     fn qualified_name(self) -> String {
         match self {
             Self::Module { name, .. } => name.to_owned(),
+            Self::Adapter { qualified, .. } => qualified.to_owned(),
             other => other.key(),
         }
     }
@@ -60,7 +69,10 @@ impl<'name> Called<'name> {
     /// Returns the `__name__` CPython gives the built-in: `len`, `upper` or `sqrt`.
     const fn short_name(self) -> &'name str {
         match self {
-            Self::Function(name) | Self::Type(name) | Self::Module { name, .. } => name,
+            Self::Function(name)
+            | Self::Type(name)
+            | Self::Module { name, .. }
+            | Self::Adapter { name, .. } => name,
             Self::Method { method, .. } => method,
         }
     }
@@ -70,6 +82,7 @@ impl<'name> Called<'name> {
         match self {
             Self::Method { .. } => BuiltinValue::Method,
             Self::Type(_) => BuiltinValue::Type,
+            Self::Adapter { function, .. } => BuiltinValue::Adapter(function),
             Self::Function(_) | Self::Module { .. } => BuiltinValue::Function,
         }
     }
@@ -86,6 +99,9 @@ impl BodyChecker<'_> {
         parameters: &[Type],
         returns: Option<&Type>,
     ) -> Option<TypedExpr> {
+        if let Some(adapted) = self.adapted_function(expression, parameters) {
+            return Some(adapted(self, parameters, returns));
+        }
         if let Some((module, name)) = self.module_function_named(expression) {
             let called = Called::Module {
                 module: &module,
@@ -139,6 +155,100 @@ impl BodyChecker<'_> {
             }
             _ => None,
         }
+    }
+
+    /// Returns, for a name of a module's function whose parameters do not take a `Callable`
+    /// of `parameters` exactly, a maker of the adapter that calls it with every argument by
+    /// position (FUN-13, ADR-0080); `None` for a function that fits as it is, which stays its
+    /// own value, and for any other expression.
+    #[allow(
+        clippy::type_complexity,
+        reason = "the maker borrows the name it was found by"
+    )]
+    fn adapted_function<'name>(
+        &self,
+        expression: &'name Expr,
+        parameters: &[Type],
+    ) -> Option<impl FnOnce(&mut Self, &[Type], Option<&Type>) -> TypedExpr + 'name> {
+        let Expr::Name { id, span } = expression else {
+            return None;
+        };
+        if self.locals.contains_key(id) || self.closure_read(id, *span).is_some() {
+            return None;
+        }
+        let function = *self.program.function_ids.get(id)?;
+        if self.program.generic(function).is_some() {
+            return None;
+        }
+        // Only a function with a default, `*args`, `**kwargs` or a keyword-only parameter
+        // takes another number of arguments than it names; any other keeps its own type.
+        let signature = &self.program.signatures[function.0 as usize];
+        let flexible = signature.parameters.iter().any(|parameter| {
+            parameter.default.is_some()
+                || !matches!(
+                    parameter.kind,
+                    ParameterKind::PositionalOnly | ParameterKind::Normal
+                )
+        });
+        let exact = signature.parameters.len() == parameters.len()
+            && signature.parameters.iter().all(|parameter| {
+                matches!(
+                    parameter.kind,
+                    ParameterKind::PositionalOnly | ParameterKind::Normal
+                )
+            });
+        if !flexible || exact {
+            return None;
+        }
+        let qualified = self.program.functions[function.0 as usize]
+            .as_ref()
+            .map_or_else(|| id.clone(), |typed| typed.qualified_name.clone());
+        let span = *span;
+        Some(
+            move |this: &mut Self, parameters: &[Type], returns: Option<&Type>| {
+                let called = Called::Adapter {
+                    name: id,
+                    qualified: &qualified,
+                    function,
+                };
+                this.builtin_value(called, span, parameters, returns)
+            },
+        )
+    }
+
+    /// Returns the module's function `id` names when it takes `*args` or `**kwargs`, which
+    /// has no `Callable` type of its own, so it takes the one its context expects (FUN-13).
+    pub(super) fn variadic_function(&self, id: &str, span: Span) -> Option<FunctionId> {
+        if self.locals.contains_key(id) || self.closure_read(id, span).is_some() {
+            return None;
+        }
+        let function = *self.program.function_ids.get(id)?;
+        self.program.signatures[function.0 as usize]
+            .parameters
+            .iter()
+            .any(|parameter| parameter.kind.is_variadic())
+            .then_some(function)
+    }
+
+    /// Returns E0203 for the module's function `id`, which takes `*args` or `**kwargs`, read
+    /// where no `Callable` is expected (FUN-13, ADR-0080).
+    pub(super) fn variadic_without_context(&mut self, id: &str, span: Span) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(203),
+                span,
+                format!(
+                    "`{id}` takes `*args` or `**kwargs`, so as a value it needs the `Callable` \
+                     type its context expects"
+                ),
+            )
+            .with_rule(RuleId::FUN_13)
+            .with_help(format!(
+                "annotate the variable with the types you call it with, such as \
+                 `combine: Callable[[int, int], int] = {id}`"
+            )),
+            span,
+        )
     }
 
     /// Returns the method `attribute` of the built-in type `class` as a value of the
@@ -233,6 +343,7 @@ impl BodyChecker<'_> {
                 self.unbound_builtin_function(id, *span).is_some()
                     || Builtin::named(id)
                         .is_some_and(|builtin| builtin.is_callable_type() && !self.binds(id, *span))
+                    || self.variadic_function(id, *span).is_some()
             }
             Expr::Attribute {
                 value, attribute, ..
@@ -495,7 +606,7 @@ fn hidden_body(called: Called<'_>, names: &[String], span: Span) -> Vec<Stmt> {
         span,
     };
     let (target, arguments): (Expr, Vec<Expr>) = match called {
-        Called::Function(name) | Called::Type(name) => (
+        Called::Function(name) | Called::Type(name) | Called::Adapter { name, .. } => (
             Expr::Name {
                 id: name.to_owned(),
                 span,
@@ -529,7 +640,9 @@ fn hidden_body(called: Called<'_>, names: &[String], span: Span) -> Vec<Stmt> {
             is_lazy: false,
             span,
         }),
-        Called::Function(_) | Called::Type(_) | Called::Method { .. } => None,
+        Called::Function(_) | Called::Type(_) | Called::Adapter { .. } | Called::Method { .. } => {
+            None
+        }
     };
     import
         .into_iter()
