@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.28 |
+| Version | 1.29 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -403,7 +403,7 @@ that the specification does not define.
 | FUN-11 | 0.9 | UT, IT, E2E | Runtime tests of closing in each state, of the queue of freed generators and of one that yields again; `tests/conformance/fun/FUN-11_*.py`, with `break`, a temporary, a container, an instance, `with`, nested generators, a variable an exception keeps, a module variable at the end, `close()` and a generator that yields again, in CPython's order, also in the sanitizer run; `crates/typy-cli/tests/end_to_end/generators.rs` for what standard error shows of an exception while one closes |
 | FUN-12 | 1.0 | IT | `tests/conformance/fun/FUN-12_*.py` |
 | FUN-13 | 0.10 | UT, IT | `typy-check` tests of the fit of each kind of parameter list to a `Callable`; `tests/conformance/fun/FUN-13_*.py` for defaults, `*args` and `**kwargs` of functions of a module, with the identity of the original |
-| FUN-14 | 0.10 | UT, IT | `typy-check` tests of each built-in type against `Callable` types it fits and does not fit; `tests/conformance/fun/FUN-14_*.py` for `map`, `sorted` and `max` with types as keys, and their `repr` |
+| FUN-14 | 0.10 | UT, IT | `typy-check` tests of each built-in type against `Callable` types it fits and does not fit; `tests/conformance/fun/FUN-14_*.py` for `map`, `sorted` and `max` with types as keys, and their `repr`, and a type whose call gives another result than the `Callable` |
 | FUN-15 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-15_*.py` |
 | FUN-16 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-16_*.py` |
 | FUN-17 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned, including a property read through its class; `tests/conformance/fun/FUN-17_*.py` |
