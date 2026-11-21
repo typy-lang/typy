@@ -31,6 +31,11 @@ pub struct InstanceClass {
 /// ADR-0088).
 pub(crate) const NAMED_TUPLE_FIELDS: &str = " (fields)";
 
+/// The hidden method the compiler writes for a named tuple and each class derived from it,
+/// which `_replace` calls: it takes each field as `tuple[F] | None`, `None` where the call
+/// leaves the field as it is, and returns an instance of its own class (CLS-27, ADR-0088).
+pub(crate) const NAMED_TUPLE_REPLACE: &str = " (replace)";
+
 /// The comparison and hash methods a class defines or inherits, which decide whether its
 /// instances can be ordered and hashed (CLS-07, ADR-0026), and whether it is a named tuple,
 /// whose instances are tuples (CLS-27).

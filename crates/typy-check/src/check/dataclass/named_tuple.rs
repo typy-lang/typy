@@ -3,21 +3,22 @@
 //! had written it: `__init__` from the fields and their defaults, `__repr__`, `__eq__`,
 //! `__hash__` and, for fields of types that order, the order methods, each over the tuple of
 //! the fields; the hidden method that returns that tuple, which the checker calls where a
-//! tuple operation applies; `__match_args__` and `_fields`. What CPython raises when the class
-//! statement runs is reported with its text, and a class derived from a named tuple is checked
-//! for what it may add.
+//! tuple operation applies; `_asdict`, `__match_args__` and `_fields`; and the hidden method
+//! `_replace` calls, which a class derived from a named tuple gets too, so it makes an instance
+//! of the receiver's own class. What CPython raises when the class statement runs is reported
+//! with its text, and a class derived from a named tuple is checked for what it may add.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
-use typy_source::syntax::{Constant, Expr, Stmt};
+use typy_source::syntax::{BinaryOperator, Constant, Expr, Stmt};
 
 use super::{
     DataclassInfo, Dataclasses, Field, Names, defined, match_args_statement, parsed, tuple,
     write_init, write_repr,
 };
-use crate::class_type::NAMED_TUPLE_FIELDS;
+use crate::class_type::{NAMED_TUPLE_FIELDS, NAMED_TUPLE_REPLACE};
 
 /// The names CPython's `NamedTuple` keeps for itself, which a class body may not define.
 const PROHIBITED: [&str; 10] = [
@@ -63,13 +64,16 @@ impl Dataclasses {
             return None;
         };
         let class = name.name.clone();
-        if let Some(base) = bases.first()
-            && names
-                .class_key(base, module)
-                .is_some_and(|key| self.named_tuples.contains(&key))
+        if let Some(fields) = bases
+            .first()
+            .and_then(|base| names.class_key(base, module))
+            .and_then(|key| self.named_tuples.get(&key))
+            .cloned()
         {
             derived_body(body, diagnostics)?;
-            self.named_tuples.insert((module.to_owned(), class.clone()));
+            body.extend(replace_method(&class, &fields, name.span));
+            self.named_tuples
+                .insert((module.to_owned(), class.clone()), fields);
             let info = DataclassInfo {
                 named_tuple: true,
                 ..DataclassInfo::default()
@@ -121,7 +125,9 @@ impl Dataclasses {
             body.extend(match_args_statement(&fields, at));
         }
         body.extend(fields_statement(&fields, at));
-        self.named_tuples.insert((module.to_owned(), class.clone()));
+        body.extend(replace_method(&class, &fields, at));
+        self.named_tuples
+            .insert((module.to_owned(), class.clone()), fields.clone());
         let info = DataclassInfo {
             frozen: true,
             generated_init: true,
@@ -306,37 +312,116 @@ fn methods(
             );
         }
     }
-    let _ = write!(source, "def fields(self) -> int:\n    return {mine}\n");
+    let _ = write!(source, "def _asdict(self) -> int:\n    return {{");
+    for field in fields {
+        let _ = write!(source, "'{0}': self.{0}, ", field.name);
+    }
+    let _ = write!(source, "}}\ndef fields(self) -> int:\n    return {mine}\n");
     let mut methods = parsed(&source, fields, at);
-    if let Some(Stmt::FunctionDef { name, returns, .. }) = methods.last_mut() {
+    if let [
+        ..,
+        Stmt::FunctionDef {
+            returns: as_dict, ..
+        },
+        Stmt::FunctionDef { name, returns, .. },
+    ] = methods.as_mut_slice()
+    {
+        *as_dict = Some(subscript(
+            "dict",
+            vec![name_expression("str", at), union(fields, at)],
+            at,
+        ));
         NAMED_TUPLE_FIELDS.clone_into(&mut name.name);
         *returns = Some(fields_annotation(fields, at));
     }
     methods
 }
 
-/// Returns `tuple[A, B]`, the type of the tuple of the fields.
-fn fields_annotation(fields: &[Field], at: Span) -> Expr {
-    let mut items: Vec<Expr> = fields
-        .iter()
-        .map(|field| field.annotation.clone())
-        .collect();
-    let index = if items.len() == 1 {
-        items.remove(0)
+/// Returns the hidden method `_replace` calls for `class`: each field is taken as
+/// `tuple[F] | None`, so a field whose value may be `None` is told apart from one the call
+/// leaves out, and the new instance is of `class`.
+fn replace_method(class: &str, fields: &[Field], at: Span) -> Vec<Stmt> {
+    let mut source = String::from("def replace(self");
+    for field in fields {
+        let _ = write!(source, ", {}: int", field.name);
+    }
+    let _ = write!(source, ") -> \"{class}\":\n    return {class}(");
+    for field in fields {
+        let _ = write!(source, "self.{0} if {0} is None else {0}[0], ", field.name);
+    }
+    source.push_str(")\n");
+    let mut methods = parsed(&source, &[], at);
+    if let Some(Stmt::FunctionDef {
+        name, parameters, ..
+    }) = methods.first_mut()
+    {
+        NAMED_TUPLE_REPLACE.clone_into(&mut name.name);
+        for (parameter, field) in parameters.iter_mut().skip(1).zip(fields) {
+            let item = subscript("tuple", vec![field.annotation.clone()], at);
+            parameter.annotation = Some(Expr::BinOp {
+                left: Box::new(item),
+                operator: BinaryOperator::BitOr,
+                right: Box::new(Expr::Constant {
+                    value: Constant::None,
+                    span: at,
+                }),
+                span: at,
+            });
+        }
+    }
+    methods
+}
+
+/// Returns the union of the fields' types, the type of a value of `_asdict`; `None` for a
+/// named tuple without fields, whose dict is empty.
+fn union(fields: &[Field], at: Span) -> Expr {
+    let mut types = fields.iter().map(|field| field.annotation.clone());
+    let Some(first) = types.next() else {
+        return Expr::Constant {
+            value: Constant::None,
+            span: at,
+        };
+    };
+    types.fold(first, |left, right| Expr::BinOp {
+        left: Box::new(left),
+        operator: BinaryOperator::BitOr,
+        right: Box::new(right),
+        span: at,
+    })
+}
+
+/// Returns `name`, read as a name.
+fn name_expression(name: &str, at: Span) -> Expr {
+    Expr::Name {
+        id: name.to_owned(),
+        span: at,
+    }
+}
+
+/// Returns `name[A, B]`, a built-in type given its arguments.
+fn subscript(name: &str, mut arguments: Vec<Expr>, at: Span) -> Expr {
+    let index = if arguments.len() == 1 {
+        arguments.remove(0)
     } else {
         Expr::Tuple {
-            elements: items,
+            elements: arguments,
             span: at,
         }
     };
     Expr::Subscript {
-        value: Box::new(Expr::Name {
-            id: "tuple".to_owned(),
-            span: at,
-        }),
+        value: Box::new(name_expression(name, at)),
         index: Box::new(index),
         span: at,
     }
+}
+
+/// Returns `tuple[A, B]`, the type of the tuple of the fields.
+fn fields_annotation(fields: &[Field], at: Span) -> Expr {
+    let items = fields
+        .iter()
+        .map(|field| field.annotation.clone())
+        .collect();
+    subscript("tuple", items, at)
 }
 
 /// Returns `_fields = ('a', 'b', )`, the names of the fields.

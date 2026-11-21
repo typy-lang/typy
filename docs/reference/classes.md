@@ -753,9 +753,39 @@ point = Point(1)
 point.x = 5
 ```
 
-`_replace`, `_asdict`, `_make` and `_field_defaults` are planned for 0.10
-(CLS-27). A named tuple made by a call, such as `NamedTuple("P", [("x",
-int)])`, a class derived from a named tuple with `__new__`, `__init__` or
+`_fields` holds the names of the fields, and `_asdict()` gives a dict of
+them with their values. `_replace` makes a new instance with the fields
+it is given by name and the others of the instance it is called on, of
+that instance's own class, also where the variable's type is a base;
+a name that is no field is refused with CPython's text:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import NamedTuple
+
+
+class Point(NamedTuple):
+    x: int
+    y: int = 0
+
+
+class Labelled(Point):
+    def label(self) -> str:
+        return f"P{self.x}"
+
+
+def moved(point: Point) -> Point:
+    return point._replace(x=point.x + 1)
+
+
+print(moved(Point(1, 2)), moved(Labelled(5)), Point._fields)
+print(Point(3)._asdict())
+```
+
+`_make`, `_field_defaults`, and `_replace` read as a value, called
+through the class or given `**` arguments are planned for 0.14 (CLS-43).
+A named tuple made by a call, such as `NamedTuple("P", [("x", int)])`, a
+class derived from a named tuple with `__new__`, `__init__` or
 attributes of its own, and one that defines `__len__`, `__getitem__`,
 `__iter__` or `__contains__` are planned for 1.0 (CLS-41), and a named
 tuple where a plain tuple is expected also for 1.0 (CLS-42).

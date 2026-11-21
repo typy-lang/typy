@@ -91,6 +91,8 @@ impl RuleId {
     pub const CLS_39: Self = Self("CLS-39");
     /// A named tuple made by a call, a subclass of a named tuple with `__new__`, `__init__` or attributes of its own, and a named tuple whose class defines `__len__`, `__getitem__`, `__iter__` or `__contains__` shall be accepted.
     pub const CLS_41: Self = Self("CLS-41");
+    /// A named tuple shall have `_make` and `_field_defaults`, and its `_replace` shall be a value, be called through its class and take `**` arguments, as CPython's are and do.
+    pub const CLS_43: Self = Self("CLS-43");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -463,6 +465,7 @@ impl RuleId {
         Self::CLS_38,
         Self::CLS_39,
         Self::CLS_41,
+        Self::CLS_43,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

@@ -131,6 +131,22 @@ impl BodyChecker<'_> {
         None
     }
 
+    /// Returns `value.attribute` when `value` names a module: a name of a built-in module, or
+    /// a variable of a module of the program.
+    fn attribute_of_module(
+        &mut self,
+        value: &Expr,
+        attribute: &Identifier,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let module = self.module_of(value)?;
+        if is_builtin_module(&module) {
+            return Some(self.builtin_attribute(&module, attribute, span));
+        }
+        let read = self.module_attribute(&module, &attribute.name, span);
+        Some(self.through_lazy_module(value, read))
+    }
+
     /// Checks `value.attribute`, read as a value.
     pub(super) fn attribute(
         &mut self,
@@ -138,14 +154,13 @@ impl BodyChecker<'_> {
         attribute: &Identifier,
         span: Span,
     ) -> TypedExpr {
-        if let Some(module) = self.module_of(value) {
-            if is_builtin_module(&module) {
-                return self.builtin_attribute(&module, attribute, span);
-            }
-            let read = self.module_attribute(&module, &attribute.name, span);
-            return self.through_lazy_module(value, read);
+        if let Some(read) = self.attribute_of_module(value, attribute, span) {
+            return read;
         }
         let object = self.instance_object(value);
+        if let Some(refused) = self.planned_member(&object.ty, attribute, false) {
+            return refused;
+        }
         if let Type::CData(class) = object.ty.clone() {
             return self.cdata_attribute((object, class), attribute, span);
         }

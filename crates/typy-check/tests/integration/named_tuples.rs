@@ -182,3 +182,74 @@ fn cls_41_what_a_derived_class_adds_is_planned() {
         )
     );
 }
+
+#[test]
+fn cls_27_replace_takes_fields_by_name_and_asdict_gives_them() {
+    let source = format!(
+        "{POINT}class Labelled(Point):\n    def label(self) -> str:\n        return str(self.x)\n\n\n\
+         def moved(point: Point) -> Point:\n    return point._replace(x=point.x + 1)\n\n\n\
+         print(moved(Labelled(1)), Point(1)._replace(), Point(1)._asdict())\n"
+    );
+    assert_eq!(app(&source), Vec::<String>::new());
+}
+
+#[test]
+fn cls_27_replace_is_refused_as_cpython_refuses_it() {
+    let cases = [
+        (
+            "Point(1)._replace(1)\n",
+            "E0404",
+            "Point._replace() takes 1 positional argument but 2 were given, as CPython raises \
+             `TypeError`",
+        ),
+        (
+            "Point(1)._replace(z=1, w=2)\n",
+            "E0404",
+            "Got unexpected field names: ['z', 'w'], as CPython raises `ValueError` up to 3.12 \
+             and `TypeError` from 3.13",
+        ),
+        (
+            "Point(1)._replace(x='a')\n",
+            "E0404",
+            "the field `x` must be an int, and this is a str",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let (found, text, _) = only_error(source);
+        assert_eq!((found.as_str(), text.as_str()), (code, message), "{source}");
+    }
+}
+
+#[test]
+fn cls_43_the_members_of_a_later_release_are_planned() {
+    let cases = [
+        ("print(Point._make([1]))\n", "`Point._make`"),
+        (
+            "print(Point(1)._field_defaults)\n",
+            "`Point._field_defaults`",
+        ),
+        (
+            "replace = Point(1)._replace\n",
+            "`Point._replace` other than called on an instance",
+        ),
+        (
+            "print(Point._replace(Point(1), x=2))\n",
+            "`Point._replace` other than called on an instance",
+        ),
+        (
+            "print(Point(1)._replace(**{'x': 2}))\n",
+            "`**` in a call of `_replace`",
+        ),
+    ];
+    for (source, what) in cases {
+        assert_eq!(
+            only_error(source),
+            (
+                "E0201".to_owned(),
+                format!("{what} is planned for TyPy 0.14 (CLS-43)"),
+                "CLS-43".to_owned()
+            ),
+            "{source}"
+        );
+    }
+}

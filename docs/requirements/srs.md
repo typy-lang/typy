@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.108 |
+| Version | 1.109 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -353,6 +353,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-40 | A class pattern with a class held in a variable shall accept positional sub-patterns, read by the `__match_args__` of the class it holds. | C | 0.14 | |
 | CLS-41 | A named tuple made by a call, such as `NamedTuple("P", [("x", int)])`, a subclass of a named tuple with `__new__`, `__init__` or attributes of its own, and a named tuple whose class defines `__len__`, `__getitem__`, `__iter__` or `__contains__` shall be accepted. | C | 1.0 | |
 | CLS-42 | A named tuple shall be accepted where a plain tuple type or an abstract collection is expected, keeping its class. | C | 1.0 | |
+| CLS-43 | A named tuple shall have `_make` and `_field_defaults`, and its `_replace` shall be a value, be called through its class and take `**` arguments, as CPython's are and do. | C | 0.14 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
@@ -575,7 +576,7 @@ cache, unless a row says otherwise.
 | 0.11 | | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
 | 0.12 | | The benchmark suite within 5 times C |
 | 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `ctypes` callbacks, headers and the rest of `ctypes` | |
-| 0.14 | The rest of the class rules (CLS-28 to CLS-37); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |
+| 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |
 | 0.15 | | The benchmark suite within 3 times C |
 | 1.0 | The remaining requirements of section 3 marked 1.0 | Cycle collection, `weakref`; Windows; performance budgets |
 

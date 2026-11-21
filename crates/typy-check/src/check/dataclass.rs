@@ -56,8 +56,9 @@ pub(crate) struct Dataclasses {
     /// The functions of the `default_factory` fields of the module being expanded, each put
     /// before its class (CLS-15).
     factories: Vec<(String, Stmt)>,
-    /// The named tuples and the classes derived from them, by module and class (CLS-27).
-    named_tuples: BTreeSet<(String, String)>,
+    /// The fields of each named tuple and each class derived from one, by module and class
+    /// (CLS-27).
+    named_tuples: BTreeMap<(String, String), Vec<Field>>,
 }
 
 /// The names a module binds to the `dataclasses` module and its `dataclass` and `field`.

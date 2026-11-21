@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.23 |
+| Version | 1.24 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-20 |
+| Last updated | 2026-11-21 |
 
 ## 1. Purpose
 
@@ -448,6 +448,7 @@ that the specification does not define.
 | CLS-40 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-40_*.py` |
 | CLS-41 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-41_*.py` |
 | CLS-42 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-42_*.py` |
+| CLS-43 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-43_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |

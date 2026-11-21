@@ -60,10 +60,14 @@ Option 2. Each other part of ADR-0085's decision stands, restated here.
   their defaults, `__repr__`, `__eq__`, `__hash__`, `__match_args__`,
   `_fields`, and the order methods when every field is a number, a
   string, `bytes`, or a list or tuple of them; each compares or hashes
-  the tuple of the fields. It writes `_replace`, `_asdict`, `_make` and
-  `_field_defaults` too, `_asdict` and `_field_defaults` giving a
-  `dict[str, U]` of the union `U` of the field types. Defaults are
-  constants, as for any function (EXP-20).
+  the tuple of the fields. It writes `_asdict`, which gives a
+  `dict[str, U]` of the union `U` of the field types, and for the class
+  and each class derived from it a hidden method `_replace` calls. That
+  method takes each field as `tuple[F] | None`, `None` for a field the
+  call leaves as it is, so a field that holds `None` is told apart from
+  one left out, and it makes an instance of its own class, so `_replace`
+  on an instance of a derived class gives one of that class. Defaults
+  are constants, as for any function (EXP-20).
 - **Tuple operations.** An index, a slice, `len`, `in`, a loop,
   unpacking, `*` in a call, a sequence pattern, `+` and a comparison
   with a tuple or another named tuple read the named tuple as the tuple
@@ -90,7 +94,11 @@ Option 2. Each other part of ADR-0085's decision stands, restated here.
   from a named tuple that add methods. The form made by a call, a class
   derived from a named tuple with `__new__`, `__init__` or attributes of
   its own, and a body that defines `__len__`, `__getitem__`, `__iter__`
-  or `__contains__` are planned for 1.0 (CLS-41).
+  or `__contains__` are planned for 1.0 (CLS-41). `_make`,
+  `_field_defaults`, and `_replace` read as a value, called through the
+  class or given `**`, are planned for 0.14 (CLS-43): `_make` takes any
+  iterable, whose items a named tuple of fields of several types could
+  not take without a cast.
 
 ## Consequences
 
@@ -106,5 +114,5 @@ Option 2. Each other part of ADR-0085's decision stands, restated here.
 
 ## Related requirements
 
-CLS-27, CLS-41, CLS-42, CLS-05, CLS-04, EXP-20, ADR-0009, ADR-0026,
+CLS-27, CLS-41, CLS-42, CLS-43, CLS-05, CLS-04, EXP-20, ADR-0009, ADR-0026,
 ADR-0038, ADR-0042, ADR-0062, ADR-0085.

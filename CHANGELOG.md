@@ -14,9 +14,11 @@ All notable changes to TyPy are recorded here. The format follows
   ordered and hashed as that tuple, also with a plain tuple, and an
   instance of `tuple` (CLS-27). The body may hold methods, properties,
   class and static methods and class variables, a class derived from one
-  may add methods, and a generic one is copied as any generic class. What
-  CPython raises when the class statement runs, and assigning a field, are
-  refused with CPython's text.
+  may add methods, and a generic one is copied as any generic class.
+  `_fields`, `_asdict()` and `_replace(field=value)` are given, `_replace`
+  making an instance of the receiver's own class. What CPython raises when
+  the class statement runs, assigning a field, and `_replace` with a name
+  that is no field are refused with CPython's text.
 - `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set`,
   `MutableSet`, `Collection`, `Container` and `Reversible` of
   `collections.abc` and `typing`, and `typing.AbstractSet`, as types that
