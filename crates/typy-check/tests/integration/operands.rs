@@ -75,9 +75,10 @@ fn an_operand_an_operator_or_a_display_cannot_take_is_refused() {
             "a str has no method `nope` in TyPy",
         ),
         (
-            "classes = (int, str)\nprint(isinstance(1, classes))\n",
-            "E0201",
-            "a class held in a tuple, or in a class pattern, is planned for TyPy 0.10 (CLS-18)",
+            "classes = (int, 3)\nprint(isinstance(1, classes))\n",
+            "E0401",
+            "isinstance() arg 2 must be a type, a tuple of types, or a union: CPython raises \
+             `TypeError`",
         ),
     ];
     for (source, code, message) in refused {

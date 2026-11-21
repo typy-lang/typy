@@ -7,6 +7,14 @@ use typy_tyir::{BoolOperator, Constant, Operation, RuntimeFunction, TyirType, Va
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
 
+/// A class held in a value that `isinstance` or `issubclass` tests against: one class, or a
+/// `tuple[type, ...]` whose items the runtime goes over.
+#[derive(Clone, Copy)]
+enum Held {
+    Class(Lowered),
+    Classes(Lowered),
+}
+
 impl FunctionLowerer<'_> {
     /// Returns `isinstance(value, classes)`: `None` gives what the checker found for it, and
     /// any other value is an instance when every value of its static type is one, or when
@@ -15,11 +23,7 @@ impl FunctionLowerer<'_> {
         let lowered = self.expression(&test.value);
         // The classes held in values are evaluated after the value, as CPython evaluates the
         // arguments of `isinstance` (CLS-18).
-        let held: Vec<Lowered> = test
-            .held
-            .iter()
-            .map(|class| self.expression(class))
-            .collect();
+        let (owners, held) = self.held_classes(&test.held, span);
         let result = if let Type::Optional(inner) = &test.value.ty {
             let none_matches = test.none_matches;
             let held_classes = &held;
@@ -40,11 +44,36 @@ impl FunctionLowerer<'_> {
             let value = Self::borrowed(lowered.value, lowered.ty);
             self.instance_test(value, &test.value.ty, test, &held, span)
         };
-        for class in held.into_iter().rev() {
-            self.release(class, span);
+        for owner in owners.into_iter().rev() {
+            self.release(owner, span);
         }
         self.release(lowered, span);
         result
+    }
+
+    /// Returns the values of `classes`, evaluated in order, and the classes they hold: a class,
+    /// or each item of a fixed tuple of classes, borrowed from the value, or a
+    /// `tuple[type, ...]` the runtime goes over (CLS-18, CLS-19).
+    fn held_classes(&mut self, classes: &[TypedExpr], span: Span) -> (Vec<Lowered>, Vec<Held>) {
+        let mut owners = Vec::new();
+        let mut held = Vec::new();
+        for class in classes {
+            let lowered = self.expression(class);
+            match &class.ty {
+                Type::Tuple(items) => {
+                    for (index, item) in items.iter().enumerate() {
+                        let ty = self.lowered_type(item);
+                        held.push(Held::Class(self.borrowed_item(lowered, index, ty, span)));
+                    }
+                }
+                Type::TupleOf(_) => {
+                    held.push(Held::Classes(Self::borrowed(lowered.value, lowered.ty)));
+                }
+                _ => held.push(Held::Class(Self::borrowed(lowered.value, lowered.ty))),
+            }
+            owners.push(lowered);
+        }
+        (owners, held)
     }
 
     /// Returns whether `value`, of the checked type `ty` and not `None`, is an instance of one
@@ -54,7 +83,7 @@ impl FunctionLowerer<'_> {
         value: Lowered,
         ty: &Type,
         test: &IsInstanceTest,
-        held: &[Lowered],
+        held: &[Held],
         span: Span,
     ) -> Lowered {
         // A tagged union is tested as the member it holds (TYP-14).
@@ -94,11 +123,11 @@ impl FunctionLowerer<'_> {
         span: Span,
     ) -> Lowered {
         let lowered = self.expression(class);
-        let held: Vec<Lowered> = bases.iter().map(|base| self.expression(base)).collect();
+        let (owners, held) = self.held_classes(bases, span);
         let found = self.held_test(lowered, &held, span);
         let result = found.unwrap_or_else(|| self.constant(Constant::Bool(false), span));
-        for base in held.into_iter().rev() {
-            self.release(base, span);
+        for owner in owners.into_iter().rev() {
+            self.release(owner, span);
         }
         self.release(lowered, span);
         Self::borrowed(result, TyirType::Bool)
@@ -106,17 +135,17 @@ impl FunctionLowerer<'_> {
 
     /// Returns whether the type object `class` is or derives from one of `held`, or `None` when
     /// there are none (CLS-18).
-    fn held_test(&mut self, class: Lowered, held: &[Lowered], span: Span) -> Option<ValueId> {
+    fn held_test(&mut self, class: Lowered, held: &[Held], span: Span) -> Option<ValueId> {
         let mut result = None;
         for each in held {
+            let (each, function) = match each {
+                Held::Class(each) => (each, RuntimeFunction::TypeDerivesFrom),
+                Held::Classes(each) => (each, RuntimeFunction::TypeDerivesFromAny),
+            };
             let class_bits = self.bits(Self::borrowed(class.value, class.ty), span);
             let base = self.bits(Self::borrowed(each.value, each.ty), span);
             let found = self
-                .call_runtime(
-                    RuntimeFunction::TypeDerivesFrom,
-                    vec![class_bits, base],
-                    span,
-                )
+                .call_runtime(function, vec![class_bits, base], span)
                 .value;
             result = Some(self.or(found, result, span));
         }

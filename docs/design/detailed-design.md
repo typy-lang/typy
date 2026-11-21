@@ -990,7 +990,10 @@ class whose type names one narrows the value to it. The runtime's `bool`
 derives from `int`, as in CPython. `issubclass(class, classes)`
 (CLS-19) is `TypedExprKind::IsSubclass` of the class and each class of the
 second argument, type objects named or held, which lowering evaluates in
-order and tests with `typy_rt_type_derives_from`. An abstract collection
+order and tests with `typy_rt_type_derives_from`. Either takes a tuple of
+classes held in a value: lowering evaluates it once and tests each item of
+a fixed tuple, or calls `typy_rt_type_derives_from_any` with a
+`tuple[type, ...]`, which goes over its items. An abstract collection
 of `typing` or `collections.abc` names `AnnotationName::Abstract`, whose
 `AbstractCollection::of` gives the union of the built-in collections of
 its item types, or `dict[K, V]` for a mapping (LIB-20, ADR-0086).

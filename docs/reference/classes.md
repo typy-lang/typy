@@ -275,10 +275,12 @@ counts as `int`, as in CPython. A class held in a value, such as
 `type[Square]`, is tested when the program runs, and narrows the value to
 the class its type names (CLS-18). `issubclass(class, classes)` tests a
 class against a class or a tuple of them, named or held in a value, as
-CPython answers: `issubclass(bool, int)` is `True` (CLS-19). A value that
-is no class is E0401, as CPython raises `TypeError`. A tuple of classes
-held in a variable, and a class pattern with a class held in a variable,
-are planned for 0.10 (CLS-18, CLS-19).
+CPython answers: `issubclass(bool, int)` is `True` (CLS-19). Either test
+takes a tuple of classes held in a value, such as `kinds = (int, float)`
+or a `tuple[type[Shape], ...]`, and tests each class in order. A value
+that is no class, or a tuple with one, is E0401, as CPython raises
+`TypeError`. A class pattern with a class held in a variable is planned
+for 0.10 (CLS-18).
 
 ## Class variables and defaults
 

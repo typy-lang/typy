@@ -333,6 +333,31 @@ pub unsafe extern "C" fn typy_rt_type_derives_from(
     unsafe { crate::exception::classes::derives_from(&*class, &*base) }
 }
 
+/// Returns whether the type object `class` is or derives from one of the type objects the
+/// `tuple[type, ...]` `classes` holds, as `isinstance` and `issubclass` test a tuple of
+/// classes whose length the program does not know when it compiles (CLS-18, CLS-19).
+///
+/// # Safety
+///
+/// `class` points to a live type object, and `classes` to a live tuple whose items are
+/// addresses of live type objects.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_type_derives_from_any(
+    class: *const TypeObject,
+    classes: *const crate::list::ListObject,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    let classes = unsafe { &*classes };
+    (0..classes.length).any(|index| {
+        // SAFETY: `index` is below the length, and each item is a type object's address.
+        let word = unsafe { classes.item(index) };
+        let base =
+            core::ptr::with_exposed_provenance::<TypeObject>(usize::try_from(word).unwrap_or(0));
+        // SAFETY: the caller's guarantee.
+        unsafe { crate::exception::classes::derives_from(&*class, &*base) }
+    })
+}
+
 /// Returns whether the heap object at `object` is an instance of `class`: its type is
 /// `class` or derives from it, as `isinstance` tests (CLS-09).
 ///

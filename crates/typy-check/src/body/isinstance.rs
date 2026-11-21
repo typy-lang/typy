@@ -114,7 +114,9 @@ impl BodyChecker<'_> {
             other => vec![other],
         };
         let bases: Vec<TypedExpr> = named.iter().map(|each| self.expression(each)).collect();
-        let not_class = |value: &TypedExpr| !matches!(value.ty, Type::TypeObject(_) | Type::Error);
+        let not_class = |value: &TypedExpr| {
+            !matches!(value.ty, Type::TypeObject(_) | Type::Error) && !holds_classes(&value.ty)
+        };
         if not_class(&class) {
             return self.error(
                 Diagnostic::new(
@@ -127,22 +129,16 @@ impl BodyChecker<'_> {
             );
         }
         if let Some(base) = bases.iter().find(|base| not_class(base)) {
-            let held_tuple = matches!(base.ty, Type::Tuple(_) | Type::TupleOf(_));
-            let diagnostic = if held_tuple {
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    base.span,
-                    "a tuple of classes held in a variable is planned for TyPy 0.10 (CLS-19)",
-                )
-            } else {
+            return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(401),
                     base.span,
                     "issubclass() arg 2 must be a class, a tuple of classes, or a union: CPython \
                      raises `TypeError`",
                 )
-            };
-            return self.error(diagnostic.with_rule(RuleId::CLS_19), span);
+                .with_rule(RuleId::CLS_19),
+                span,
+            );
         }
         Self::typed(
             TypedExprKind::IsSubclass {
@@ -201,10 +197,16 @@ impl BodyChecker<'_> {
         let TypedExprKind::IsInstance(mut test_parts) = test.kind else {
             return test;
         };
-        // A class read when the program runs narrows only to the class its type bounds it by.
+        // A class read when the program runs narrows only to the class its type bounds it by,
+        // and a tuple of them to the classes its items' types bound them by.
         let bounds: Option<Vec<TypeObjectOf>> = held
             .iter()
-            .map(|class| match &class.ty {
+            .flat_map(|class| match &class.ty {
+                Type::Tuple(items) => items.iter().collect(),
+                Type::TupleOf(item) => vec![item.as_ref()],
+                other => vec![other],
+            })
+            .map(|ty| match ty {
                 Type::TypeObject(Some(of)) => Some(of.as_ref().clone()),
                 _ => None,
             })
@@ -385,9 +387,8 @@ impl BodyChecker<'_> {
             TypedExprKind::TypeObject(of) => Ok(Named::Class(*of)),
             _ if typed.ty == Type::Error => Err(None),
             // A class held in a value is tested when the program runs (CLS-18).
-            _ if matches!(typed.ty, Type::TypeObject(_)) => Ok(Named::Held(typed)),
-            _ if matches!(typed.ty, Type::Tuple(_) | Type::TupleOf(_)) => {
-                Err(Some(Box::new(held_class_planned(each.span()))))
+            _ if matches!(typed.ty, Type::TypeObject(_)) || holds_classes(&typed.ty) => {
+                Ok(Named::Held(typed))
             }
             // Any other value is no class: CPython raises `TypeError` for it.
             _ => Err(Some(Box::new(
@@ -715,14 +716,24 @@ enum Named {
     Held(TypedExpr),
 }
 
+/// Returns true for a tuple of classes held in a value, such as `kinds = (int, str)` or a
+/// `tuple[type[Shape], ...]`, each item of which is tested as a held class (CLS-18, CLS-19).
+fn holds_classes(ty: &Type) -> bool {
+    match ty {
+        Type::Tuple(items) => items.iter().all(|item| matches!(item, Type::TypeObject(_))),
+        Type::TupleOf(item) => matches!(item.as_ref(), Type::TypeObject(_)),
+        _ => false,
+    }
+}
+
 /// Returns E0201 for a class held in a value where TyPy tests only named classes yet: a class
-/// pattern, and a value that is no type object, such as a tuple of classes in a variable.
+/// pattern.
 fn held_class_planned(span: Span) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        "a class held in a tuple, or in a class pattern, is planned for TyPy 0.10 (CLS-18)",
+        "a class held in a value in a class pattern is planned for TyPy 0.10 (CLS-18)",
     )
     .with_rule(RuleId::CLS_18)
-    .with_help("name the class, or a tuple of classes, in the call")
+    .with_help("name the class in the pattern")
 }
