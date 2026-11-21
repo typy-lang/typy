@@ -89,6 +89,8 @@ impl RuleId {
     pub const CLS_38: Self = Self("CLS-38");
     /// A value of type `type[C]` that may hold a class derived from `C` shall be callable, and its class methods and class variables reachable through it, as CPython reaches those of the class it holds.
     pub const CLS_39: Self = Self("CLS-39");
+    /// A class pattern with a class held in a variable shall accept positional sub-patterns, read by the `__match_args__` of the class it holds.
+    pub const CLS_40: Self = Self("CLS-40");
     /// A named tuple made by a call, a subclass of a named tuple with `__new__`, `__init__` or attributes of its own, and a named tuple whose class defines `__len__`, `__getitem__`, `__iter__` or `__contains__` shall be accepted.
     pub const CLS_41: Self = Self("CLS-41");
     /// A named tuple shall have `_make` and `_field_defaults`, and its `_replace` shall be a value, be called through its class and take `**` arguments, as CPython's are and do.
@@ -466,6 +468,7 @@ impl RuleId {
         Self::CLS_36,
         Self::CLS_38,
         Self::CLS_39,
+        Self::CLS_40,
         Self::CLS_41,
         Self::CLS_43,
         Self::CST_03,

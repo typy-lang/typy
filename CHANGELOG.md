@@ -34,6 +34,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `issubclass(class, classes)` with a class or a tuple of classes, named or
   held in a value, answering as CPython does; a value that is no class is
   refused with CPython's `TypeError` message (CLS-19).
+- A class pattern may name a class held in a variable or a parameter, such
+  as `case kind(size=1):`, tested when the program runs, with keyword
+  sub-patterns; positional ones are planned for 0.14 (CLS-18, CLS-40).
+  `Union[...]` and `Optional[...]` in `isinstance` take such a class too.
 - `isinstance` and `issubclass` take a tuple of classes held in a value,
   such as `kinds = (int, float)` or a `tuple[type[Shape], ...]`, evaluated
   once and tested class by class (CLS-18, CLS-19).

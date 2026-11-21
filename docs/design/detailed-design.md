@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.87 |
+| Version | 2.88 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -997,7 +997,13 @@ and copies are made, and which `TypedProgram::fits` carries to lowering.
 `may_hold_derived` tells such a value from an exact one, the class's name
 or `cls` of a class method (`BodyChecker::class_parameter`), and a call,
 a class variable or a class method through a value that may hold a
-derived class is E0201 (CLS-39). Either takes a tuple of
+derived class is E0201 (CLS-39). A class pattern whose class is held in a
+value is checked by `body/pattern_held_class.rs`: the subject's test is an
+`IsInstanceTest` with the class in `held`, and keyword sub-patterns read
+the attributes of the class its type names; positional ones are E0201,
+planned for 0.14 (CLS-40), and a tuple of classes is E0401. `Union[...]`
+and `Optional[...]` in `isinstance` take held classes too. Either takes a
+tuple of
 classes held in a value: lowering evaluates it once and tests each item of
 a fixed tuple, or calls `typy_rt_type_derives_from_any` with a
 `tuple[type, ...]`, which goes over its items. An abstract collection

@@ -283,8 +283,8 @@ CPython answers: `issubclass(bool, int)` is `True` (CLS-19). Either test
 takes a tuple of classes held in a value, such as `kinds = (int, float)`
 or a `tuple[type[Shape], ...]`, and tests each class in order. A value
 that is no class, or a tuple with one, is E0401, as CPython raises
-`TypeError`. A class pattern with a class held in a variable is planned
-for 0.10 (CLS-18).
+`TypeError`. A class pattern may name a class held in a variable too, as
+[Compound statements](compound-statements.md#class-patterns) shows.
 
 ## Class variables and defaults
 

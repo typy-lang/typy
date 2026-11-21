@@ -172,7 +172,7 @@ impl BodyChecker<'_> {
         };
         let value = self.expression(value);
         let mut held = Vec::new();
-        let classes = match self.isinstance_classes_holding(classes, Some(&mut held)) {
+        let classes = match self.isinstance_classes_holding(classes, &mut held) {
             Ok(classes) => classes,
             Err(Some(diagnostic)) => return self.error(*diagnostic, span),
             // The class is reported where it is named.
@@ -190,7 +190,7 @@ impl BodyChecker<'_> {
 
     /// Returns the test `test` that also asks about `held`, classes held in values, whose
     /// bound, the class their type names, narrows the value as a named class does (CLS-18).
-    fn with_held_classes(&mut self, test: TypedExpr, held: Vec<TypedExpr>) -> TypedExpr {
+    pub(super) fn with_held_classes(&mut self, test: TypedExpr, held: Vec<TypedExpr>) -> TypedExpr {
         if held.is_empty() {
             return test;
         }
@@ -312,21 +312,12 @@ impl BodyChecker<'_> {
         tests
     }
 
-    /// Returns the classes the second argument names: a class or a tuple of them, each named
-    /// as a value.
-    pub(super) fn isinstance_classes(
+    /// Returns the classes the second argument names, a class or a tuple of them, and puts
+    /// each class held in a value into `held`, which is tested when the program runs (CLS-18).
+    pub(super) fn isinstance_classes_holding(
         &mut self,
         classes: &Expr,
-    ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {
-        self.isinstance_classes_holding(classes, None)
-    }
-
-    /// Returns the classes the second argument names, and puts each class held in a value
-    /// into `held` when it is given (CLS-18); without it, such a class is planned.
-    fn isinstance_classes_holding(
-        &mut self,
-        classes: &Expr,
-        mut held: Option<&mut Vec<TypedExpr>>,
+        held: &mut Vec<TypedExpr>,
     ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {
         let named = match classes {
             Expr::Tuple { elements, .. } => elements.iter().collect(),
@@ -334,16 +325,13 @@ impl BodyChecker<'_> {
         };
         let mut found = Vec::new();
         for each in named {
-            if let Some(classes) = self.typing_classes(each)? {
+            if let Some(classes) = self.typing_classes(each, held)? {
                 found.extend(classes);
                 continue;
             }
             match self.named_class(each)? {
                 Named::Class(class) => found.push(class),
-                Named::Held(value) => match held.as_deref_mut() {
-                    Some(held) => held.push(value),
-                    None => return Err(Some(Box::new(held_class_planned(each.span())))),
-                },
+                Named::Held(value) => held.push(value),
             }
         }
         Ok(found)
@@ -724,16 +712,4 @@ fn holds_classes(ty: &Type) -> bool {
         Type::TupleOf(item) => matches!(item.as_ref(), Type::TypeObject(_)),
         _ => false,
     }
-}
-
-/// Returns E0201 for a class held in a value where TyPy tests only named classes yet: a class
-/// pattern.
-fn held_class_planned(span: Span) -> Diagnostic {
-    Diagnostic::new(
-        DiagnosticCode::error(201),
-        span,
-        "a class held in a value in a class pattern is planned for TyPy 0.10 (CLS-18)",
-    )
-    .with_rule(RuleId::CLS_18)
-    .with_help("name the class in the pattern")
 }

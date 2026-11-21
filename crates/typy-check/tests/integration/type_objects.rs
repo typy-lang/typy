@@ -118,3 +118,27 @@ fn a_subclass_of_a_copy_of_a_generic_class_counts() {
                   box: Box[int] = IntBox(1)\nkind = type(box)\nmade = kind(2)\n";
     assert_eq!(app(source), ["E0201"]);
 }
+
+#[test]
+fn cls_18_a_class_pattern_takes_a_class_held_in_a_value() {
+    let source = format!(
+        "{SHAPES}def which(kind: type[Shape], value: Shape) -> str:\n    match value:\n        \
+         case kind(kind='circle'):\n            return 'circle'\n        case kind():\n            \
+         return 'kind'\n        case _:\n            return 'other'\nprint(which(Circle, shape))\n"
+    );
+    assert_eq!(app(&source), Vec::<String>::new());
+    let cases = [
+        (
+            "kind = type(shape)\nmatch shape:\n    case kind(1):\n        pass\n",
+            "E0201",
+        ),
+        (
+            "kinds = (Shape,)\nmatch shape:\n    case kinds():\n        pass\n",
+            "E0401",
+        ),
+    ];
+    for (statement, code) in cases {
+        let source = format!("{SHAPES}{statement}");
+        assert_eq!(codes(&[("app.py", &source)]), [code], "{statement}");
+    }
+}

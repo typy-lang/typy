@@ -9,7 +9,7 @@ use typy_source::syntax::{Constant, Expr};
 
 use super::BodyChecker;
 use crate::check::{AnnotationName, annotation_name};
-use crate::typed::ClassId;
+use crate::typed::{ClassId, TypedExpr};
 use crate::types::{AbstractClass, TypeObjectOf};
 
 impl BodyChecker<'_> {
@@ -19,13 +19,14 @@ impl BodyChecker<'_> {
     pub(super) fn typing_classes(
         &mut self,
         expression: &Expr,
+        held: &mut Vec<TypedExpr>,
     ) -> Result<Option<Vec<TypeObjectOf>>, Option<Box<Diagnostic>>> {
         if let Expr::Subscript { value, index, .. } = expression
             && let Some(name) = self.standard_name(value)
         {
             return match name {
                 AnnotationName::Optional | AnnotationName::Union => {
-                    self.union_classes(name, index).map(Some)
+                    self.union_classes(name, index, held).map(Some)
                 }
                 _ => Err(Some(type_error(
                     expression,
@@ -115,6 +116,7 @@ impl BodyChecker<'_> {
         &mut self,
         name: AnnotationName,
         index: &Expr,
+        held: &mut Vec<TypedExpr>,
     ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {
         let members: Vec<&Expr> = match index {
             Expr::Tuple { elements, .. } => elements.iter().collect(),
@@ -140,7 +142,7 @@ impl BodyChecker<'_> {
                 classes.push(TypeObjectOf::NoneType);
                 continue;
             }
-            classes.extend(self.isinstance_classes(member)?);
+            classes.extend(self.isinstance_classes_holding(member, held)?);
         }
         if name == AnnotationName::Optional {
             classes.push(TypeObjectOf::NoneType);
