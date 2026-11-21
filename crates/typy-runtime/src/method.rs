@@ -41,6 +41,33 @@ pub unsafe extern "C" fn typy_rt_method_new(descriptor: u64, instance: u64) -> *
     unsafe { new_method(descriptor, instance, METHOD_TYPE_ID) }
 }
 
+/// Returns the value a method read through `instance` gives when the instance's class chose
+/// `chosen`: with `binds`, a new bound method of the method whose descriptor `chosen` is
+/// address of; without, the function object at `chosen`, a static method's, with a reference
+/// of its own (FUN-09).
+///
+/// # Safety
+///
+/// `chosen` is the address of a descriptor the compiler emitted when `binds` holds, and of a
+/// live function object when it does not; `instance` is the address of a live object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_method_or_function(
+    chosen: u64,
+    instance: u64,
+    binds: bool,
+) -> *mut ObjectHeader {
+    if binds {
+        // SAFETY: the caller's guarantee.
+        return unsafe { new_method(chosen, instance, METHOD_TYPE_ID) }.cast();
+    }
+    let function = core::ptr::with_exposed_provenance_mut::<ObjectHeader>(
+        usize::try_from(chosen).unwrap_or(0),
+    );
+    // SAFETY: the caller's guarantee.
+    unsafe { crate::refcount::typy_rt_increment(function) };
+    function
+}
+
 /// Returns a new method of a built-in type read through the value `instance`, such as
 /// `words.append`, whose hidden function's descriptor is at `descriptor`, with a reference of
 /// its own to the value (FUN-08, ADR-0077).
@@ -326,6 +353,43 @@ mod tests {
             }
             assert_eq!((*value).header.reference_count, 1);
             for each in [value, names[0], names[1]] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
+        }
+    }
+
+    #[test]
+    fn fun_09_a_chosen_method_binds_the_instance_and_a_chosen_function_is_itself() {
+        let names = [from_str("sides"), from_str("Shape.sides")];
+        let method = FunctionDescriptor {
+            name: names[0],
+            qualified_name: names[1],
+            code: core::ptr::without_provenance(1),
+            captures: core::ptr::null(),
+            identity: core::ptr::null(),
+        };
+        // A `str` stands for the static method's function object, which is returned held.
+        let (instance, function) = (from_str("shape"), from_str("function"));
+        // SAFETY: the descriptor and the strings live for the whole test; the bound method
+        // holds its instance until it is released.
+        unsafe {
+            let bound =
+                super::typy_rt_method_or_function(word(&raw const method), word(instance), true);
+            assert_eq!(
+                (*bound).type_id,
+                crate::header::METHOD_TYPE_ID,
+                "a method binds the instance"
+            );
+            assert_eq!((*instance).header.reference_count, 2);
+            let chosen = super::typy_rt_method_or_function(word(function), word(instance), false);
+            assert_eq!(chosen, function.cast());
+            assert_eq!((*function).header.reference_count, 2);
+            assert_eq!((*instance).header.reference_count, 2);
+            for each in [bound, chosen] {
+                crate::refcount::typy_rt_decrement(each);
+            }
+            for each in [instance, function, names[0], names[1]] {
+                assert_eq!((*each).header.reference_count, 1);
                 crate::refcount::typy_rt_decrement(each.cast());
             }
         }

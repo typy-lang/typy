@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.92 |
+| Version | 2.93 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -771,10 +771,11 @@ instance's static class has, then, for each class derived from it that
 defines the method itself, that class and its method, sorted by the depth
 of the class, so a class comes after each class it derives from. A static
 method no subclass defines again is its function after the object is
-evaluated. A class method, a static method a subclass defines again, a
-method read through a protocol value, and an override a subclass holds
-otherwise than its base, which only an adapter reaches, are planned for
-0.10 under FUN-09; a method with type parameters of its own or a
+evaluated. An override a subclass holds otherwise than its base enters
+`methods` as its adapter to the signature of the method read: the class's
+own adapter when it adapts to that signature, or else one
+`Program::value_adapter` writes for the pair of the override and the
+method read (FUN-09). A method with type parameters of its own or a
 keyword-only parameter is E0202, as a function is. An assignment to a
 method of an instance is E0414.
 
@@ -983,9 +984,20 @@ the copy of each class from the static class down, the last whose test
 holds chosen, binding the instance's runtime type, as CPython binds `cls`.
 One of a generic class read through an instance is E0201, planned for
 0.14 (CLS-30). A static method read through an instance whose subclasses
-define it again as static methods of its types is
-`TypedExprKind::ChosenFunction` of the function of each class, chosen by
-the instance's class when the program runs and binding nothing. An
+define it again, or a method a subclass defines again as a static method,
+is `TypedExprKind::ChosenFunction` of the function of each class, chosen by
+the instance's class when the program runs. `binds` lists the classes that
+define it as a method: for one of them, lowering passes the method's
+descriptor and `typy_rt_method_or_function` binds the instance to it, and
+for any other class it returns the function object. An override of the
+other kind fits only with values held as the base's (CLS-35), so each
+function gives a value of the read's `Callable` type. A method read
+through a protocol value is `TypedExprKind::ProtocolMethod`; once every
+module is checked, `Program::write_protocol_method_values` gives each
+class that satisfies the protocol its method, or its adapter to the
+protocol's signature when it takes or gives a value held otherwise, in
+`TypedProgram::protocol_methods`, and lowering binds it as a
+`BoundMethod`. An
 `isinstance` argument that is a type object held in a value, such as
 `type(c)` or a variable of type `type[Square]`, joins
 `IsInstanceTest::held` (CLS-18, ADR-0084): lowering evaluates it after the
@@ -1787,9 +1799,15 @@ override changes takes the default of the object's class: lowering tests the
 instance against each override's class, the nearest first
 (`MethodTables::overrides`, `dispatched_default`). An override whose parameter
 or result is held otherwise than the base's, such as `int | None` for `int`
-(`overriding::Fit::Adapted`), gets `<adapter name>`, which
+(`overriding::Fit::Adapted`), gets an adapter, which
 `Program::add_override_adapters` writes with the base's signature: it widens
 each argument, calls the override through the table, and widens the result.
+The adapter takes the override's name and qualified name, and
+`TypedProgram::builtin_values` marks it `Adapter` of the override, so a
+method read through the base as a value binds it for the subclass and is
+written, compared and hashed as the override (FUN-09): codegen gives the
+bound-method descriptor of an adapter the override's bound-method
+descriptor as identity, and its function descriptor the override's.
 `MethodTables` puts the adapter in the base method's place and gives the
 override a place of its own, under which calls typed at its class find it; such
 a parameter with a default of its own is E0201, planned for 0.14 (CLS-34). A

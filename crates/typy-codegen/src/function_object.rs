@@ -190,7 +190,9 @@ fn descriptor<'ctx>(
     // other function stands for itself (ADR-0076).
     let identity = match stands_for {
         StandsFor::Itself => own,
-        // An adapter stands for the function it calls, whose descriptor is its identity.
+        // An adapter stands for the function it calls, whose descriptor of the same kind is
+        // its identity: a bound method of it is equal to one of the method itself (FUN-09).
+        StandsFor::Adapter(original) if kind == "method" => method_descriptor(shared, original)?,
         StandsFor::Adapter(original) => {
             function_object(shared, original)?;
             shared

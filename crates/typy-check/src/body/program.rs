@@ -879,6 +879,8 @@ impl Program {
             .find(|module| module.name == main)
             .map_or(FunctionId(0), |module| module.body);
         let classes = self.typed_classes();
+        let adapters = self.override_adapters();
+        let protocol_methods = self.protocol_values.bound_methods.clone();
         TypedProgram {
             symbols: self.symbols,
             functions: self.functions.into_iter().flatten().collect(),
@@ -909,7 +911,9 @@ impl Program {
                 .builtin_values
                 .iter()
                 .map(|(_, _, _, function, kind)| (*function, *kind))
+                .chain(adapters)
                 .collect(),
+            protocol_methods,
             cells: self.cells,
             nonlocals: self.nonlocals,
             fits: crate::typed::ClassTables {
@@ -918,6 +922,28 @@ impl Program {
                 bases: crate::class_bases::table(),
             },
         }
+    }
+}
+
+impl Program {
+    /// Returns each adapter of an override with the override it stands for, whose identity
+    /// its bound methods take (FUN-09, ADR-0079).
+    fn override_adapters(&self) -> Vec<(FunctionId, crate::typed::BuiltinValue)> {
+        let protocol = self
+            .protocol_values
+            .adapters
+            .iter()
+            .map(|((own, _), adapter)| (*adapter, crate::typed::BuiltinValue::Adapter(*own)));
+        self.classes
+            .iter()
+            .flat_map(|class| {
+                class.adapters.iter().filter_map(|(name, adapter)| {
+                    let (_, _, own) = class.adapted.iter().find(|(each, ..)| each == name)?;
+                    Some((*adapter, crate::typed::BuiltinValue::Adapter(*own)))
+                })
+            })
+            .chain(protocol)
+            .collect()
     }
 }
 

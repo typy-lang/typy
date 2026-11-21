@@ -287,9 +287,29 @@ impl FunctionLowerer<'_> {
                 methods,
                 binds_class,
             } => self.bound_method(object, methods, *binds_class, span),
-            TypedExprKind::ChosenFunction { object, functions } => {
-                self.chosen_function(object, functions, span)
+            TypedExprKind::ProtocolMethod {
+                object,
+                protocol,
+                name,
+            } => {
+                let methods = self
+                    .program
+                    .protocol_methods
+                    .get(&(*protocol, name.clone()))
+                    .cloned()
+                    .unwrap_or_default();
+                self.bound_method(object, &methods, false, span)
             }
+            TypedExprKind::ChosenFunction {
+                object,
+                functions,
+                binds,
+            } if binds.is_empty() => self.chosen_function(object, functions, span),
+            TypedExprKind::ChosenFunction {
+                object,
+                functions,
+                binds,
+            } => self.chosen_value(object, functions, binds, span),
             TypedExprKind::Keyed {
                 operation,
                 list,

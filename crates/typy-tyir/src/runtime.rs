@@ -188,6 +188,9 @@ pub enum RuntimeFunction {
     /// A new method of a built-in type read through a value, such as `words.append`, of a
     /// hidden function's descriptor and the value (FUN-08, ADR-0077).
     BuiltinMethodNew,
+    /// A bound method of a descriptor and an instance, or a static method's function object,
+    /// as the `bool` says (FUN-09).
+    MethodOrFunction,
     /// Raises `NameError` for a captured variable, named by the `str`, that has no value yet
     /// (FUN-04).
     FreeVariableUnbound,
@@ -516,7 +519,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 380] = [
+    pub const ALL: [Self; 381] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -690,6 +693,7 @@ impl RuntimeFunction {
         Self::TypeAliasModule,
         Self::MethodNew,
         Self::BuiltinMethodNew,
+        Self::MethodOrFunction,
         Self::FreeVariableUnbound,
         Self::ExceptionNew,
         Self::ExceptionPartText,
@@ -1133,6 +1137,7 @@ impl RuntimeFunction {
             Self::MethodNew | Self::BuiltinMethodNew => {
                 signature(&[Bits, Bits], TyirType::FUNCTION, false)
             }
+            Self::MethodOrFunction => signature(&[Bits, Bits, Bool], TyirType::FUNCTION, false),
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1507,6 +1512,7 @@ impl RuntimeFunction {
             Self::TypeAliasModule => "type_alias_module",
             Self::MethodNew => "method_new",
             Self::BuiltinMethodNew => "builtin_method_new",
+            Self::MethodOrFunction => "method_or_function",
             Self::FreeVariableUnbound => "free_variable_unbound",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",

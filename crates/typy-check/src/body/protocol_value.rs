@@ -24,6 +24,14 @@ pub(crate) struct ProtocolValues {
     pub(crate) iterations: std::collections::BTreeMap<ClassId, crate::iterator_fits::Iteration>,
     /// The dispatcher of each member read through a protocol value, by protocol and name.
     pub(crate) dispatchers: BTreeMap<(ClassId, String), FunctionId>,
+    /// Each method read through a protocol value as a value, by protocol and name (FUN-09).
+    pub(crate) method_values: BTreeSet<(ClassId, String)>,
+    /// The method of each class such a read binds, by protocol and name, the least derived
+    /// class first, once every module is checked.
+    pub(crate) bound_methods: BTreeMap<(ClassId, String), Vec<(ClassId, FunctionId)>>,
+    /// The adapter of each class's method to the signature of a method a value reads, a
+    /// protocol's or a base's, by the method and that signature's method (FUN-09).
+    pub(crate) adapters: BTreeMap<(FunctionId, FunctionId), FunctionId>,
 }
 
 impl Program {
@@ -230,7 +238,7 @@ impl Program {
     }
 
     /// Returns the classes that satisfy `protocol`, each class derived from another before it.
-    fn satisfying_classes(&self, protocol: ClassId) -> Vec<ClassId> {
+    pub(super) fn satisfying_classes(&self, protocol: ClassId) -> Vec<ClassId> {
         let mut classes: Vec<ClassId> = self
             .protocol_values
             .fits
@@ -328,17 +336,8 @@ impl BodyChecker<'_> {
             .dispatcher(protocol, &attribute.name)
             .filter(|_| info.attribute(&attribute.name).is_some());
         let Some(getter) = getter else {
-            if info.method(&attribute.name).is_some() {
-                let message = format!(
-                    "`{}` is a method of the protocol `{}`, and using a protocol value's method \
-                     as a value is planned for TyPy 0.10 (FUN-09)",
-                    attribute.name, info.name
-                );
-                return self.error(
-                    Diagnostic::new(DiagnosticCode::error(201), attribute.span, message)
-                        .with_rule(RuleId::FUN_09),
-                    span,
-                );
+            if let Some(method) = info.method(&attribute.name) {
+                return self.protocol_method_value(object, (protocol, method), attribute, span);
             }
             let message = format!("`{}` has no attribute `{}`", info.name, attribute.name);
             return self.error(

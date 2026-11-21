@@ -62,6 +62,10 @@ pub struct TypedProgram {
     /// The hidden functions that stand for a built-in function, or a method of a built-in
     /// type, used as a value, each with which it stands for (FUN-08, ADR-0077).
     pub builtin_values: std::collections::BTreeMap<FunctionId, BuiltinValue>,
+    /// The method of each class a method read through a protocol value binds, by protocol and
+    /// name, the least derived class first (FUN-09).
+    pub protocol_methods:
+        std::collections::BTreeMap<(super::ClassId, String), Vec<(super::ClassId, FunctionId)>>,
     /// The variables of each function that live in a cell, which its nested functions share.
     pub cells: std::collections::BTreeMap<FunctionId, std::collections::BTreeSet<SymbolId>>,
     /// The variables nested functions declare `nonlocal`, each a cell variable whose cell is

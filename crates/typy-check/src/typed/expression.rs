@@ -189,10 +189,20 @@ pub enum TypedExprKind {
     },
     /// A static method read through an instance whose subclasses define it again: `object` is
     /// evaluated, and the value is the function of its class among `functions`, chosen as
-    /// `BoundMethod` chooses, binding nothing (FUN-09, ADR-0079).
+    /// `BoundMethod` chooses, binding nothing, or for a class in `binds`, which defines it
+    /// again as a method, a bound method of that method and the object (FUN-09, ADR-0079).
     ChosenFunction {
         object: Box<TypedExpr>,
         functions: Vec<(super::class::ClassId, FunctionId)>,
+        binds: Box<[super::class::ClassId]>,
+    },
+    /// A method read through a protocol value as a value: `object` is evaluated, and the value
+    /// is a bound method of it and the method its class has among those
+    /// `TypedProgram::protocol_methods` gives for the protocol and the name (FUN-09).
+    ProtocolMethod {
+        object: Box<TypedExpr>,
+        protocol: super::class::ClassId,
+        name: String,
     },
     /// A call through a function value: `callee` is evaluated, then the arguments, one for
     /// each parameter of its `Callable` type, in order (FUN-05).
@@ -877,6 +887,7 @@ impl TypedExpr {
             | TypedExprKind::AsIterator(inner)
             | TypedExprKind::Lazy { value: inner, .. }
             | TypedExprKind::BoundMethod { object: inner, .. }
+            | TypedExprKind::ProtocolMethod { object: inner, .. }
             | TypedExprKind::ChosenFunction { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],

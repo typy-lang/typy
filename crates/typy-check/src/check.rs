@@ -290,6 +290,7 @@ impl Checked<'_> {
         }
         // Every class that satisfies a protocol is known now (ADR-0041).
         program.write_protocol_dispatchers();
+        program.write_protocol_method_values();
         program
     }
 }

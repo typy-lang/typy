@@ -31,6 +31,7 @@ mod generic_call;
 mod generic_copy;
 mod override_adapter;
 mod override_copy;
+mod protocol_method_value;
 mod protocol_value;
 mod static_bridge;
 mod truth_bridge;

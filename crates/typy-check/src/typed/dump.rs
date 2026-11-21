@@ -544,6 +544,7 @@ impl Dump<'_> {
                     .collect();
                 format!("BoundMethod {}", names.join(" "))
             }
+            TypedExprKind::ProtocolMethod { name, .. } => format!("ProtocolMethod {name}"),
             TypedExprKind::VersionRead { .. } => "VersionRead".to_owned(),
             TypedExprKind::TypeAliasPart { module, .. } => if *module {
                 "TypeAliasModule"

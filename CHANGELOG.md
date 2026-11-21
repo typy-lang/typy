@@ -8,6 +8,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- A method read as a value through a protocol value, such as
+  `area = shape.area`, and through an instance whose subclass defines the
+  method again as a static method, or overrides it with a parameter or
+  result held otherwise, such as `int | None` for `int`. The value is a
+  bound method of the object's own method, or that static method, and is
+  written, compared and hashed as it, as CPython's is (FUN-09).
 - A call of a builtin, a function value, a protocol method or an exception
   class takes `*` of a tuple display or a variable holding a fixed tuple,
   and `**` of a dict display with `str` literal keys, such as

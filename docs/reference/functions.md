@@ -40,9 +40,15 @@ A nested function inside a generic function, or inside a function with a
 protocol parameter, is checked and made in each copy of the function, and
 keeps Python's `__qualname__`, such as `pair_with.<locals>.make` (FUN-10).
 
-A protocol method as a value is planned for 0.10 (FUN-09). A nested
-function or a method with `*args` or `**kwargs` as a value is planned for
-0.11 (FUN-19), and so is a nested function with type parameters of its
+A method read through a protocol value, such as `area = shape.area`, is
+a bound method of the method of the object's class, written, compared and
+hashed as that method (FUN-09). So is a method read through an instance
+whose subclass defines it again as a static method, or overrides it with a
+parameter or a result held otherwise, such as `int | None` for `int`: the
+value has the type of the method read, and calls the object's own method.
+
+A nested function or a method with `*args` or `**kwargs` as a value is
+planned for 0.11 (FUN-19), and so is a nested function with type parameters of its
 own (FUN-18). A class of the program as a `Callable` is planned for 0.14
 (FUN-16).
 
@@ -588,7 +594,6 @@ These forms are refused:
 | A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
 | `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and such `**` in a call of `print`, planned for 0.11 | E0201 (EXP-22) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
-| A static method read through an instance whose subclasses define it again as a method; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
 | A property read through its class as a value, such as `Box.v`, which is a `property` object, planned for 1.0 | E0201 (FUN-17) |
 | A call of a value that is not a function, such as an `int` | E0401 |
 

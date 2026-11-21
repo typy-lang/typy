@@ -298,40 +298,32 @@ fn fun_05_a_bound_method_takes_the_parameters_after_self() {
 }
 
 #[test]
-fn fun_09_the_methods_without_one_bound_value_yet_are_planned() {
+fn fun_09_a_method_a_subclass_defines_again_otherwise_is_a_value_of_the_base_s_type() {
     let cases = [
-        (
-            "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
-             class D(B):\n    def s(self) -> int:\n        return 2\nf = B().s\n",
-            "`s` is a static method a subclass defines again otherwise, and using one as a value \
-             is planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
-            "class B:\n    def v(self) -> int | None:\n        return None\n\
-             class D(B):\n    def v(self) -> int:\n        return 1\nf = B().v\n",
-            "`v` is a method a subclass overrides with other parameters or a result held \
-             otherwise, and using one as a value is planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
-            "class B:\n    def v(self) -> int:\n        return 0\n\
-             class D(B):\n    @staticmethod\n    def v() -> int:\n        return 1\nf = B().v\n",
-            "`v` is a method a subclass overrides with other parameters or a result held \
-             otherwise, and using one as a value is planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
-            "from typing import Protocol\nclass P(Protocol):\n    def n(self) -> int: ...\n\
-             def f(p: P) -> None:\n    g = p.n\n",
-            "`n` is a method of the protocol `P`, and using a protocol value's method as a \
-             value is planned for TyPy 0.10 (FUN-09)",
-        ),
+        // A static method that a subclass defines again as a method.
+        "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
+         class D(B):\n    def s(self) -> int:\n        return 2\n\
+         f: Callable[[], int] = B().s\n",
+        // A method whose override returns a type held otherwise.
+        "class B:\n    def v(self) -> int | None:\n        return None\n\
+         class D(B):\n    def v(self) -> int:\n        return 1\n\
+         f: Callable[[], int | None] = B().v\n",
+        // A method that a subclass defines again as a static method.
+        "class B:\n    def v(self) -> int:\n        return 0\n\
+         class D(B):\n    @staticmethod\n    def v() -> int:\n        return 1\n\
+         f: Callable[[], int] = B().v\n",
+        // An override adapted to the method between, read through the first base.
+        "class A:\n    def m(self, x: int) -> int | None:\n        return None\n\
+         class P(A):\n    def m(self, x: int) -> int:\n        return x\n\
+         class Q(P):\n    def m(self, x: int | None) -> int:\n        return 7\n\
+         f: Callable[[int], int | None] = A().m\n",
+        // A method of a protocol, read through a protocol value.
+        "from typing import Protocol\nclass P(Protocol):\n    def n(self) -> int: ...\n\
+         def f(p: P) -> None:\n    g: Callable[[], int] = p.n\n",
     ];
-    for (source, message) in cases {
-        let found = messages(source);
-        assert_eq!(
-            found,
-            [("E0201".to_owned(), message.to_owned(), "FUN-09".to_owned())],
-            "{source}"
-        );
+    for case in cases {
+        let source = format!("from collections.abc import Callable\n{case}");
+        assert_eq!(app(&source), Vec::<String>::new(), "{case}");
     }
 }
 
