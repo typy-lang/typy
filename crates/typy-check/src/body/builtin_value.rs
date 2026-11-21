@@ -426,6 +426,7 @@ impl BodyChecker<'_> {
             TypedExprKind::BoundMethod {
                 object: Box::new(object),
                 methods: vec![(crate::typed::ClassId(0), function)],
+                binds_class: false,
             },
             ty,
             span,

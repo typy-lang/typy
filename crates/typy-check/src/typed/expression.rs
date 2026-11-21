@@ -179,10 +179,13 @@ pub enum TypedExprKind {
     /// A method read through an instance: a new bound method of `object` and the method of
     /// its class (FUN-05, ADR-0060). `methods` holds the method of the instance's static class
     /// first, then each override among its subclasses, after the classes it derives from; the
-    /// last whose class the object is an instance of is bound.
+    /// last whose class the object is an instance of is bound. With `binds_class`, the
+    /// methods are copies of a class method, and the object's class is bound in place of the
+    /// object, as CPython binds `cls` (FUN-09, ADR-0079).
     BoundMethod {
         object: Box<TypedExpr>,
         methods: Vec<(super::class::ClassId, FunctionId)>,
+        binds_class: bool,
     },
     /// A call through a function value: `callee` is evaluated, then the arguments, one for
     /// each parameter of its `Callable` type, in order (FUN-05).

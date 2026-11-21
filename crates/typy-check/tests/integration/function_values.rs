@@ -316,10 +316,6 @@ fn fun_05_a_bound_method_takes_the_parameters_after_self() {
 fn fun_09_the_methods_without_one_bound_value_yet_are_planned() {
     let cases = [
         (
-            "class C:\n    @classmethod\n    def make(cls) -> int:\n        return 1\nf = C.make\n",
-            "`make` is a class method, and using one as a value is planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
             "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
              class D(B):\n    @staticmethod\n    def s() -> int:\n        return 2\nf = B().s\n",
             "`s` is a static method a subclass defines again, and using one as a value is \
@@ -733,4 +729,36 @@ fn fun_13_a_function_with_defaults_or_variadic_parameters_fits_through_an_adapte
         assert_eq!(found.len(), 1, "{source}: {found:?}");
         assert_eq!(found[0].0, code, "{source}");
     }
+}
+
+#[test]
+fn fun_09_a_class_method_read_as_a_value_binds_its_class() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "class Box:\n",
+        "    @classmethod\n",
+        "    def make(cls, size: int) -> int:\n",
+        "        return size\n",
+        "class BigBox(Box):\n",
+        "    pass\n",
+        "box: Box = BigBox()\n",
+        "made: Callable[[int], int] = Box.make\n",
+        "through: Callable[[int], int] = box.make\n",
+        "print(made(1), through(2), made == Box.make, BigBox.make)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let generic = concat!(
+        "class Box[T]:\n",
+        "    @classmethod\n",
+        "    def make(cls) -> int:\n",
+        "        return 1\n",
+        "box = Box[int]()\n",
+        "made = box.make\n",
+    );
+    let found = messages(generic);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        (found[0].0.as_str(), found[0].2.as_str()),
+        ("E0201", "CLS-30")
+    );
 }

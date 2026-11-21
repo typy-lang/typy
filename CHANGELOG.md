@@ -40,6 +40,10 @@ All notable changes to TyPy are recorded here. The format follows
   Callable[[int], int] = scale` with a default for its second parameter;
   it is the same function to `is` and `==`. Read where no `Callable` is
   expected it is E0203 (FUN-13).
+- A class method read as a value, such as `make = Box.make` or `box.make`,
+  is a bound method of the class it is read through, or of the instance's
+  own class, as CPython binds `cls`: `box.make` of a `BigBox` makes a
+  `BigBox` (FUN-09).
 - `callable(x)` is true for a function value, a built-in function, method
   or type, and a class, and false for any other value, as CPython answers
   (LIB-23).

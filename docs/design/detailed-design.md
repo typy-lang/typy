@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.76 |
+| Version | 2.77 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -951,7 +951,13 @@ the hidden adapter `return name(value0, ...)`, which binds the call as any
 call (FUN-13, ADR-0080); its `stands_for` is `Adapter` of the function, so
 codegen gives its descriptor that function's descriptor as identity and
 its qualified name. Read where nothing is expected, one with `*args` or
-`**kwargs` is E0203. `callable(x)`
+`**kwargs` is E0203. A class method read as a value (FUN-09, ADR-0079) is
+`TypedExprKind::BoundMethod` with `binds_class`: read through a class, of
+that class's copy, binding the type object; read through an instance, of
+the copy of each class from the static class down, the last whose test
+holds chosen, binding the instance's runtime type, as CPython binds `cls`.
+One of a generic class read through an instance is E0201, planned for
+0.14 (CLS-30). `callable(x)`
 (LIB-23) is an `IsInstanceTest` that holds for a `Callable` or a type
 object, by member for an optional or a union, and a name `names_builtin`
 takes is the constant `True`. Where nothing is expected, `chr` is

@@ -280,9 +280,11 @@ impl FunctionLowerer<'_> {
                 self.release(closure_value, span);
                 result
             }
-            TypedExprKind::BoundMethod { object, methods } => {
-                self.bound_method(object, methods, span)
-            }
+            TypedExprKind::BoundMethod {
+                object,
+                methods,
+                binds_class,
+            } => self.bound_method(object, methods, *binds_class, span),
             TypedExprKind::Keyed {
                 operation,
                 list,

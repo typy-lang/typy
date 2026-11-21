@@ -138,6 +138,7 @@ impl FunctionLowerer<'_> {
         &mut self,
         object: &TypedExpr,
         methods: &[(ClassId, FunctionId)],
+        binds_class: bool,
         span: Span,
     ) -> Lowered {
         let instance = self.expression(object);
@@ -155,7 +156,13 @@ impl FunctionLowerer<'_> {
             let own = descriptor(self, *method);
             chosen = self.select(found, own, chosen, TyirType::Bits);
         }
-        let bits = self.bits(Self::borrowed(instance.value, instance.ty), span);
+        // A class method binds the object's class, which it holds as CPython's `cls` (FUN-09).
+        let bound = if binds_class {
+            self.runtime_type(instance, &object.ty, span)
+        } else {
+            Self::borrowed(instance.value, instance.ty)
+        };
+        let bits = self.bits(Self::borrowed(bound.value, bound.ty), span);
         // A method of a built-in type read through a value is written as CPython writes a
         // built-in method (FUN-08).
         let new = if self.program.builtin_values.contains_key(&methods[0].1) {
