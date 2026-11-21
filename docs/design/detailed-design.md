@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.79 |
+| Version | 2.80 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -916,6 +916,19 @@ comprehension's variable that a `lambda` in it reads is a cell variable
 of the function. At module level, `ClosureScope::of_module` captures only
 such a comprehension variable, since a module variable is a global that
 every function reads as it is.
+
+`check::decorators::expand` rewrites each decorated function of a module,
+at its top level or nested in a function, before the module is checked
+(FUN-06, ADR-0082): the function takes the hidden name `inc (undecorated)`,
+a space no Python name holds, and an assignment `inc = outer(inner(inc
+(undecorated)))` follows it. Python evaluates that call as it evaluates
+decorators: the decorator expressions top to bottom, then each applied
+bottom up; a function's defaults, constants in TyPy, have no effect to
+order. The name is then a variable of the decorators' result, read as any
+variable, also inside the function's body. Lowering shows the hidden name
+as the own one in tracebacks and `__qualname__` (`python_name`). Methods
+and classes keep their decorators, which the subset walker refuses as
+planned (FUN-15, CLS-38).
 
 `body/builtin_value.rs` reads a built-in function as a value (FUN-08,
 ADR-0077). Where a `Callable[[A1, ..., An], R]` is expected, which

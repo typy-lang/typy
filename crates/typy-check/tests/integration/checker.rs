@@ -1799,7 +1799,7 @@ else:
 #[test]
 fn statements_and_expressions_outside_the_subset_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
-        ("@d\ndef f() -> None:\n    pass\n", &["E0201"]),
+        ("@d\ndef f() -> None:\n    pass\n", &["E0205"]),
         ("def f[*Ts](a: int) -> None:\n    pass\n", &["E0201"]),
         ("return 1\n", &["E0103"]),
         ("break\n", &["E0103"]),

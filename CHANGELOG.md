@@ -8,6 +8,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- Decorators on functions at the top of a module or nested in a function:
+  any expression that takes the function, evaluated from the top down and
+  applied from the bottom up when the `def` runs, the name holding what the
+  outermost returns, also inside the function; generic decorators too
+  (FUN-06). A call through a decorated name passes its arguments by
+  position.
 - A nested function, a `lambda` or a generator expression inside a generic
   function, or inside a function with a protocol parameter, is accepted and
   made in each copy of the function, with Python's `__qualname__`, such as

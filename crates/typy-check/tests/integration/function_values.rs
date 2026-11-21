@@ -781,3 +781,40 @@ fn fun_09_a_static_method_read_through_an_instance_is_its_classs_own() {
     );
     assert_eq!(app(source), Vec::<String>::new());
 }
+
+#[test]
+fn fun_06_a_decorated_function_binds_what_its_decorators_return() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def trace(function: Callable[[int], int]) -> Callable[[int], int]:\n",
+        "    def wrapper(value: int) -> int:\n",
+        "        return function(value)\n",
+        "    return wrapper\n",
+        "def twice[T](function: Callable[[T], T]) -> Callable[[T], T]:\n",
+        "    return lambda value: function(function(value))\n",
+        "@trace\n",
+        "def increment(value: int) -> int:\n",
+        "    return value + 1\n",
+        "@twice\n",
+        "def shout(text: str) -> str:\n",
+        "    return text + '!'\n",
+        "def outer() -> int:\n",
+        "    @trace\n",
+        "    def inner(value: int) -> int:\n",
+        "        return value\n",
+        "    return inner(3)\n",
+        "print(increment(1), shout('a'), outer())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    // A `Callable` names no parameters, so a decorated function takes none by keyword.
+    let keyword = concat!(
+        "from collections.abc import Callable\n",
+        "def trace(function: Callable[[int], int]) -> Callable[[int], int]:\n",
+        "    return function\n",
+        "@trace\n",
+        "def increment(value: int) -> int:\n",
+        "    return value + 1\n",
+        "print(increment(value=1))\n",
+    );
+    assert_eq!(app(keyword), ["E0404"]);
+}

@@ -5,6 +5,7 @@ mod callable_annotation;
 mod class;
 pub(crate) mod ctypes_declarations;
 mod dataclass;
+pub(crate) mod decorators;
 
 pub(crate) use annotation::{unhashable, unhashable_key};
 pub(crate) mod class_index;
@@ -99,6 +100,8 @@ impl TypeChecker {
             .modules_in_order()
             .map(|module| {
                 let mut module = dataclasses.expand(module, &mut diagnostics);
+                // A decorated function binds what its decorators return (FUN-06, ADR-0082).
+                decorators::expand(&mut module.syntax.body);
                 let aliases = type_alias::expand(&mut module.syntax.body, &mut diagnostics);
                 let (name, package) = (module.name.as_str().to_owned(), module.package());
                 let reading = ctypes_declarations::ReadModule {

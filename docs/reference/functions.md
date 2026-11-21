@@ -40,13 +40,47 @@ A nested function inside a generic function, or inside a function with a
 protocol parameter, is checked and made in each copy of the function, and
 keeps Python's `__qualname__`, such as `pair_with.<locals>.make` (FUN-10).
 
-Decorators of functions are planned for 0.10 (FUN-06), and so are these
-as values: a protocol method, and a nested function or method with
-`*args` or `**kwargs` (FUN-09, FUN-13). So are a nested function with type
-parameters of its own (FUN-10), and `map` and `filter` (LIB-23).
-Decorators of methods are planned for 0.14 (FUN-15), and so is a class of
-the program as a `Callable` (FUN-16); class decorators other than
-`@dataclass` are planned for 1.0 (CLS-38).
+These are planned for 0.10 as values: a protocol method, and a nested
+function or method with `*args` or `**kwargs` (FUN-09, FUN-13). So are a
+nested function with type parameters of its own (FUN-10), and `map` and
+`filter` (LIB-23). A class of the program as a `Callable` is planned for
+0.14 (FUN-16).
+
+## Decorators
+
+A decorator on a function at the top of a module or nested in a function
+is any expression that takes the function, as CPython allows (FUN-06).
+The decorators are evaluated from the top down and applied from the bottom
+up when the `def` runs, and the name holds what the outermost returns, so
+a read of the name, also inside the function, reads that value. A
+decorator may be generic, such as one that takes a `Callable[[T], T]`.
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable
+
+
+def trace(function: Callable[[int], int]) -> Callable[[int], int]:
+    def wrapper(value: int) -> int:
+        print("calling with", value)
+        return function(value)
+
+    return wrapper
+
+
+@trace
+def increment(value: int) -> int:
+    return value + 1
+
+
+print(increment(2))
+```
+
+The name holds a `Callable` value, which names no parameters, so a call
+through it passes its arguments by position: `increment(value=2)` is
+E0404. A generic function cannot be decorated, since it is no one value
+(E0202). Decorators of methods are planned for 0.14 (FUN-15), and class
+decorators other than `@dataclass` for 1.0 (CLS-38).
 
 ## Variable numbers of arguments
 

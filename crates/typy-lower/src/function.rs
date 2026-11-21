@@ -566,10 +566,11 @@ fn function_builder(
         crate::generator::resume_builder(program, function, resume, tuple_types)
     } else {
         let return_type = tyir_type(&function.signature.returns, tuple_types);
+        // A decorated function's traceback shows its own name (FUN-06).
         let mut builder = FunctionBuilder::new(
             FunctionId(function.id.0),
             function_symbol(program, function),
-            function.name.clone(),
+            typy_check::python_name(&function.name),
             return_type,
         );
         let closure = closure_parameter(program, function, &mut builder, tuple_types);
@@ -577,7 +578,9 @@ fn function_builder(
     };
     // A copy of a generic function, and what it nests, shows Python's `__qualname__`, without
     // the type arguments its symbol keeps (ADR-0081).
-    builder.set_qualified_name(without_type_arguments(&function.qualified_name));
+    builder.set_qualified_name(typy_check::python_name(&without_type_arguments(
+        &function.qualified_name,
+    )));
     builder.set_stands_for(match program.builtin_values.get(&function.id) {
         Some(typy_check::BuiltinValue::Function) => typy_tyir::StandsFor::BuiltinFunction,
         Some(typy_check::BuiltinValue::Method) => typy_tyir::StandsFor::BuiltinMethod,
