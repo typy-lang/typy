@@ -383,3 +383,12 @@ fn a_structure_reads_its_fields_copies_structures_and_writes_pointers() {
         drop_object(second);
     }
 }
+
+#[test]
+fn an_address_is_written_in_hexadecimal_without_leading_zeros() {
+    for (address, expected) in [(0, "0"), (0x1f, "1f"), (0x7fff_0000_1000, "7fff00001000")] {
+        let mut written = crate::message::MessageBuffer::new();
+        super::push_address(&mut written, address);
+        assert_eq!(text(written.text()), expected, "{address:#x}");
+    }
+}

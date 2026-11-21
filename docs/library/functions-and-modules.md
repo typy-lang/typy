@@ -12,6 +12,8 @@
 | The `math` module: its constants and its functions of numbers | LIB-05 |
 | `sys.argv`, `sys.exit`, `sys.stdout` and `sys.stderr`, `print` with `file` and `flush`, and `input` | LIB-04 |
 | `open` for text files in UTF-8, with `read`, `readline`, `readlines`, `write`, `writelines`, `flush`, `close`, iteration and `with` | LIB-04 |
+| `callable(x)`: true for a function value, a built-in function, method or type, and a class | LIB-23 |
+| `map` and `filter`, lazy iterators that go on after the function raises | LIB-23 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -25,6 +27,9 @@ has the same with `decode` and `hex`. Lists have `append`, `pop`,
 `iter` and `next` are
 described in
 [Compound statements](../reference/compound-statements.md#iterators).
+`callable(x)` is decided when the program is compiled for every type but
+an optional or a union, which it tests as `isinstance` does, and it still
+evaluates `x`.
 
 ## Example
 
@@ -71,8 +76,41 @@ soon as it is computed, and give the first item of the smallest or the
 largest key. `key=None` is no key. `list.sort` orders a copy of the items
 and writes them back, so a key that raises leaves the list as it was, as
 in CPython; CPython leaves undefined what a key sees of the list while it
-is sorted, and in TyPy it sees the items unsorted. A built-in function as
-a key, such as `key=len`, is planned for 0.10 (FUN-08).
+is sorted, and in TyPy it sees the items unsorted. A built-in function is
+a key too, such as `key=len` or `key=abs`, called with each item.
+
+## Mapping and filtering
+
+`map(function, iterable, ...)` gives an iterator of the function's
+results for the items of the iterables, taken together and stopping at
+the shortest; `filter(function, iterable)` gives the items for which the
+function's result is true, and `filter(None, iterable)` the true items.
+The function is a function or method of the program, a `lambda`, or a
+built-in such as `int` or `str.upper`, and takes the items as they are.
+Each step calls the function once, and when it raises, the next step goes
+on with the next items, as in CPython (LIB-23, ADR-0089):
+
+<!-- typy-expect: accepted -->
+```python
+words = ["3", "x", "12"]
+numbers = map(int, words)
+print(next(numbers))
+try:
+    next(numbers)
+except ValueError as error:
+    print("skipped:", error)
+print(list(numbers), list(filter(str.isdigit, words)))
+print(list(map(lambda a, b: a * b, [1, 2, 3], [4, 5])))
+```
+
+A `map` or `filter` object is an iterator: a `for` loop, `list`, `next`
+and a parameter of type `Iterator[T]` take it, and it is written as
+`<map object at 0x...>`. With a Python floor of 3.14 or later, `map`
+takes `strict=True`, which raises CPython's `ValueError` when the
+iterables differ in length; below 3.14 it is refused, as CPython 3.12
+and 3.13 raise `TypeError` for it. `map` and `filter` themselves as
+values, such as `f = map`, and `*` in a call of `map` are planned for 1.0
+(LIB-25).
 
 ## Formatting with `%`
 
@@ -139,8 +177,10 @@ print(math.frexp(8.0), math.degrees(math.pi), math.log10(10**400))
 A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
-A function of `math` is not a value yet: `f = math.sqrt` is planned for
-0.10 (FUN-08).
+A function of `math` or `sys` is a value where a `Callable` is expected,
+such as `sorted(values, key=math.fabs)` or `root: Callable[[float], float]
+= math.sqrt`, written `<built-in function sqrt>`; with no `Callable`
+expected it is E0203 (FUN-08).
 
 `fsum`, `dist`, `prod` and `sumprod` take iterables of `int`, `bool` or
 `float` items, and `gamma` and `lgamma` a real number, each with
@@ -180,7 +220,7 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` on every target; `"linux"` in a program built for Linux and `"darwin"` in one built for macOS |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
-| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.9.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.10.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,

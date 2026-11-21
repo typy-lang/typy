@@ -38,6 +38,7 @@ fn class(name: &str, fields: crate::types::TupleTypeId) -> TyirClass {
         base: None,
         exception_base: None,
         os_error: false,
+        tuple_base: false,
         public: None,
     }
 }

@@ -278,8 +278,10 @@ fn the_edit_distance_is_cpython_s() {
     assert_eq!(levenshtein(b"abc", b"abc", 10), 0);
     assert_eq!(levenshtein(b"", b"abc", 1), 6);
     assert_eq!(levenshtein(b"a", b"abcdef", 3), 10);
+    // A name longer than 40 bytes is never close to another, whichever side it is on.
     let long = [b'x'; 41];
     assert_eq!(levenshtein(&long, b"y", 3), 4);
+    assert_eq!(levenshtein(b"y", &long, 3), 4);
 }
 
 #[test]

@@ -42,6 +42,50 @@ fn calls_solve_type_parameters_from_every_kind_of_argument() {
 }
 
 #[test]
+fn type_parameters_are_solved_and_replaced_through_callable_and_generator_types() {
+    let source = concat!(
+        "from collections.abc import Callable, Generator, Iterator\n",
+        "def apply[T](value: T, change: Callable[[T], T]) -> T:\n",
+        "    return change(value)\n",
+        "def first_of[T](changes: list[Callable[[T], T]], value: T) -> T:\n",
+        "    return changes[0](value)\n",
+        "def call_with_one[R](make: Callable[[int], R]) -> R:\n",
+        "    return make(1)\n",
+        "def repeat[T](value: T, times: int) -> Generator[T, None, int]:\n",
+        "    for _ in range(times):\n",
+        "        yield value\n",
+        "    return times\n",
+        "def drain[T](items: Generator[T, None, int]) -> list[T]:\n",
+        "    return list(items)\n",
+        "def head[T](items: Iterator[T]) -> T:\n",
+        "    return next(items)\n",
+        "def increment(number: int) -> int:\n",
+        "    return number + 1\n",
+        "def describe(number: int) -> str:\n",
+        "    return str(number)\n",
+        "a: int = apply(1, increment)\n",
+        "b: int = first_of([increment], 2)\n",
+        "c: str = call_with_one(describe)\n",
+        "d: list[str] = drain(repeat('x', 2))\n",
+        "e: float = head(repeat(1.5, 1))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn a_callable_that_does_not_fit_the_solved_types_is_refused() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def apply[T](value: T, change: Callable[[T], T]) -> T:\n",
+        "    return change(value)\n",
+        "def increment(number: int) -> int:\n",
+        "    return number + 1\n",
+        "print(apply('a', increment))\n",
+    );
+    assert_eq!(app(source), ["E0404"]);
+}
+
+#[test]
 fn calls_that_give_no_fitting_type_are_refused() {
     let cases: &[(&str, &str)] = &[
         (
@@ -418,4 +462,30 @@ fn generic_classes_check_their_type_arguments() {
             "{body}\n{found:?}"
         );
     }
+}
+
+#[test]
+fn fun_10_nested_code_of_a_generic_function_is_checked_in_each_copy() {
+    let source = concat!(
+        "from collections.abc import Callable, Iterator\n",
+        "def pair_with[T](first: T) -> Callable[[T], tuple[T, T]]:\n",
+        "    def make(second: T) -> tuple[T, T]:\n",
+        "        return (first, second)\n",
+        "    return make\n",
+        "def doubled[T](values: list[T]) -> Iterator[tuple[T, T]]:\n",
+        "    return ((value, value) for value in values)\n",
+        "def same[T](value: T) -> Callable[[], T]:\n",
+        "    return lambda: value\n",
+        "print(pair_with(1)(2), pair_with('a')('b'), list(doubled([1])), same(2.5)())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    // An error in the nested code is reported once, from the check with opaque types.
+    let wrong = concat!(
+        "def pair_with[T](first: T) -> int:\n",
+        "    def make(second: T) -> T:\n",
+        "        return first + second\n",
+        "    return 1\n",
+        "print(pair_with(1), pair_with('a'))\n",
+    );
+    assert_eq!(app(wrong), ["E0401"]);
 }

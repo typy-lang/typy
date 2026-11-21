@@ -1,10 +1,12 @@
 //! Checks a project and builds its typed program (detailed design section 7.2).
 
 mod annotation;
+pub(crate) mod builtin_iterators;
 mod callable_annotation;
 mod class;
 pub(crate) mod ctypes_declarations;
 mod dataclass;
+pub(crate) mod decorators;
 
 pub(crate) use annotation::{unhashable, unhashable_key};
 pub(crate) mod class_index;
@@ -49,7 +51,7 @@ pub(crate) struct ImportedNames {
     pub(crate) standard: BTreeMap<String, String>,
 }
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
-pub(crate) use class::{ClassInfo, class_value_variable, class_values};
+pub(crate) use class::{ClassInfo, Frozen, class_value_variable, class_values};
 pub(crate) use definition::{Definition, FunctionParts, factory_call, function_definition};
 
 use crate::body::{BodyChecker, Program};
@@ -99,6 +101,10 @@ impl TypeChecker {
             .modules_in_order()
             .map(|module| {
                 let mut module = dataclasses.expand(module, &mut diagnostics);
+                // A decorated function binds what its decorators return (FUN-06, ADR-0082).
+                decorators::expand(&mut module.syntax.body);
+                // A module that calls `map` or `filter` gets their classes (LIB-23, ADR-0089).
+                builtin_iterators::expand(&mut module.syntax.body);
                 let aliases = type_alias::expand(&mut module.syntax.body, &mut diagnostics);
                 let (name, package) = (module.name.as_str().to_owned(), module.package());
                 let reading = ctypes_declarations::ReadModule {
@@ -254,6 +260,7 @@ impl Checked<'_> {
         );
         // Each module is checked after the modules its module-level imports need.
         program.set_subclass_variables(subclass_variables::subclass_variables(self.modules));
+        program.set_derived_classes(class_index::ClassIndex::of(self.modules).derived_from());
         program.giving_way = not_implemented::not_implemented_methods(self.modules);
         let mut deferred = Vec::new();
         let mut definitions = ModuleDefinitions::new();
@@ -283,6 +290,7 @@ impl Checked<'_> {
         }
         // Every class that satisfies a protocol is known now (ADR-0041).
         program.write_protocol_dispatchers();
+        program.write_protocol_method_values();
         program
     }
 }
@@ -732,7 +740,11 @@ fn mark_dataclasses(
 ) {
     for info in infos {
         if let Some(dataclass) = dataclasses.get(&info.name) {
-            info.frozen = dataclass.frozen;
+            info.frozen = if dataclass.named_tuple {
+                Some(class::Frozen::NamedTuple)
+            } else {
+                dataclass.frozen.then_some(class::Frozen::Dataclass)
+            };
             info.generated_init = dataclass.generated_init;
             if info.match_args.is_none() {
                 info.match_args = dataclass.match_args.clone().map(Ok);

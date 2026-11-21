@@ -530,6 +530,13 @@ impl Dump<'_> {
                     self.program.function(*function).qualified_name
                 )
             }
+            TypedExprKind::ChosenFunction { functions, .. } => {
+                let names: Vec<&str> = functions
+                    .iter()
+                    .map(|(_, function)| self.program.function(*function).qualified_name.as_str())
+                    .collect();
+                format!("ChosenFunction {}", names.join(" "))
+            }
             TypedExprKind::BoundMethod { methods, .. } => {
                 let names: Vec<&str> = methods
                     .iter()
@@ -537,6 +544,7 @@ impl Dump<'_> {
                     .collect();
                 format!("BoundMethod {}", names.join(" "))
             }
+            TypedExprKind::ProtocolMethod { name, .. } => format!("ProtocolMethod {name}"),
             TypedExprKind::VersionRead { .. } => "VersionRead".to_owned(),
             TypedExprKind::TypeAliasPart { module, .. } => if *module {
                 "TypeAliasModule"
@@ -600,6 +608,7 @@ impl Dump<'_> {
             TypedExprKind::NewException { class, .. } => format!("NewException {class}"),
             TypedExprKind::SetArguments { .. } => "SetArguments".to_owned(),
             TypedExprKind::Iter(_) => "Iter".to_owned(),
+            TypedExprKind::Reversed(_) => "Reversed".to_owned(),
             TypedExprKind::Next { method, .. } => if method.is_some() {
                 "Next __next__"
             } else {
@@ -644,6 +653,7 @@ impl Dump<'_> {
             TypedExprKind::Upcast(_) => "Upcast".to_owned(),
             TypedExprKind::Downcast(_) => "Downcast".to_owned(),
             TypedExprKind::IsInstance(_) => "IsInstance".to_owned(),
+            TypedExprKind::IsSubclass { .. } => "IsSubclass".to_owned(),
             TypedExprKind::EachMember(_) => "EachMember".to_owned(),
             TypedExprKind::CheckedLength(_) => "CheckedLength".to_owned(),
             TypedExprKind::OperatorCall(_) => "OperatorCall".to_owned(),

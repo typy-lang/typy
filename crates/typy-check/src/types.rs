@@ -113,6 +113,9 @@ pub enum Type {
     /// A type object, of the type it stands for, or of any type when that is known only
     /// when the program runs, as for `type(x)` of an optional `x` (CLS-12).
     TypeObject(Option<Box<TypeObjectOf>>),
+    /// A declared abstract collection, such as `Sequence[int]`, held as the built-in types it
+    /// stands for, which an expression's type is in its place (LIB-20, ADR-0086).
+    Abstract(Box<crate::abstract_type::AbstractType>),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -177,9 +180,29 @@ pub enum AbstractClass {
     /// `Generator`: a class with `__iter__`, `__next__`, `send`, `throw` and `close`, as
     /// CPython's `__subclasshook__` reads it (TYP-21).
     Generator,
+    /// `Container`: a class with `__contains__` (LIB-20).
+    Container,
+    /// `Collection`: a class with `__len__`, `__iter__` and `__contains__` (LIB-20).
+    Collection,
+    /// `Reversible`: a class with `__reversed__` and `__iter__` (LIB-20).
+    Reversible,
 }
 
 impl TypeObjectOf {
+    /// Returns true when this class is `base` or derives from it: a class of the program from
+    /// a base, an exception class from a base, and `bool` from `int` (CLS-18).
+    #[must_use]
+    pub fn derives_from(&self, base: &Self) -> bool {
+        match (self, base) {
+            (Self::Instance(own, _), Self::Instance(base, _)) => {
+                crate::class_bases::derives(*own, *base)
+            }
+            (Self::Exception(own), Self::Exception(base)) => own.derives_from(base),
+            (Self::Bool, Self::Int) | (_, Self::Object) => true,
+            _ => self == base,
+        }
+    }
+
     /// Returns the type of type objects of `of`, any type object when it is `None`.
     #[must_use]
     pub fn type_of(of: Option<Self>) -> Type {
@@ -191,6 +214,7 @@ impl TypeObjectOf {
     #[must_use]
     pub fn of(ty: &Type) -> Option<Self> {
         Some(match ty {
+            Type::Abstract(collection) => return Self::of(&collection.members),
             Type::Int => Self::Int,
             Type::Float => Self::Float,
             Type::Bool => Self::Bool,
@@ -296,6 +320,18 @@ impl TypeObjectOf {
                 kind: AbstractClass::Generator,
                 ..
             } => "Generator",
+            Self::Abstract {
+                kind: AbstractClass::Container,
+                ..
+            } => "Container",
+            Self::Abstract {
+                kind: AbstractClass::Collection,
+                ..
+            } => "Collection",
+            Self::Abstract {
+                kind: AbstractClass::Reversible,
+                ..
+            } => "Reversible",
         }
     }
 }
@@ -397,6 +433,17 @@ impl Type {
             | (Self::NoneType, Self::Optional(_))
             | (Self::Module(_), Self::AnyModule)
             | (Self::TypeObject(_), Self::TypeObject(None)) => true,
+            // A declared abstract collection takes each built-in collection it holds, and
+            // one that only reads its items a collection of a derived class's instances
+            // (LIB-20, ADR-0086).
+            (Self::Abstract(own), Self::Abstract(other)) => {
+                own == other || other.takes(&own.members)
+            }
+            (_, Self::Abstract(collection)) => collection.takes(self),
+            (Self::Abstract(own), _) => own.members.is_assignable_to(target),
+            // A class is held where a base's class is: a `type[C]` holds `C` or a class
+            // derived from it (CLS-18, ADR-0084).
+            (Self::TypeObject(Some(own)), Self::TypeObject(Some(base))) => own.derives_from(base),
             // An exception of a class is one of each of its bases (EXC-01), and so is an
             // instance (CLS-04).
             (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
@@ -462,6 +509,8 @@ impl Type {
     pub fn matches(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
+            (Self::Abstract(own), _) => own.members.matches(other),
+            (_, Self::Abstract(collection)) => self.matches(&collection.members),
             (Self::List(item), Self::List(other))
             | (Self::Iterator(item), Self::Iterator(other))
             | (Self::Iterable(item), Self::Iterable(other))
@@ -704,7 +753,14 @@ impl Type {
     /// converts to where that type is expected (DAT-14).
     #[must_use]
     pub fn fits_tuple_of(&self, item: &Self) -> bool {
-        matches!(self, Self::Tuple(items) if items.iter().all(|each| each.matches(item)))
+        // A class is held as one of its bases, as the same object (CLS-18), and so is an
+        // instance of a derived class, since a tuple's items are only read.
+        let fits = |each: &Self| match (each, item) {
+            (Self::TypeObject(Some(own)), Self::TypeObject(Some(base))) => own.derives_from(base),
+            (Self::Instance(_), Self::Instance(_)) => each.is_upcast_to(item),
+            _ => each.matches(item),
+        };
+        matches!(self, Self::Tuple(items) if items.iter().all(fits))
     }
 
     /// Returns true when a value of this type has a hash, so it may be an item of a set or a key
@@ -788,7 +844,9 @@ impl Type {
             Self::Set(_) => "set".to_owned(),
             Self::Dict(..) => "dict".to_owned(),
             Self::Optional(_) | Self::NoneType => "NoneType".to_owned(),
-            Self::Instance(class) => class.name.clone(),
+            Self::Instance(class) => crate::check::builtin_iterators::built_in_class(&class.name)
+                .unwrap_or(&class.name)
+                .to_owned(),
             other => other.to_string(),
         }
     }
@@ -869,6 +927,7 @@ impl Type {
 impl fmt::Display for Type {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Abstract(collection) => write!(formatter, "{collection}"),
             Self::Int => formatter.write_str("int"),
             Self::Float => formatter.write_str("float"),
             Self::Bool => formatter.write_str("bool"),

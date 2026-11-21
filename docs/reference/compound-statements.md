@@ -175,6 +175,37 @@ for one attribute. A keyword naming an attribute the class does not have
 is refused as reading that attribute is. A `__match_args__` other than a
 tuple of `str` literals is planned for 1.0.
 
+A class pattern may name a class held in a variable or a parameter, such
+as `case kind(size=1):` with `kind: type[Shape]`. The subject is tested
+when the program runs, as `isinstance` tests it, and keyword
+sub-patterns match the attributes of the class the variable's type
+names (CLS-18). Positional sub-patterns, which read the `__match_args__`
+of the class the variable holds, are planned for 0.14 (CLS-40):
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    def __init__(self, size: int) -> None:
+        self.size = size
+
+
+class Square(Shape):
+    pass
+
+
+def describe(kind: type[Shape], shape: Shape) -> str:
+    match shape:
+        case kind(size=1):
+            return "a unit of the kind"
+        case kind():
+            return "of the kind"
+        case _:
+            return "another shape"
+
+
+print(describe(Square, Square(1)), describe(Square, Shape(2)))
+```
+
 ### Missing cases
 
 When the subject's type is a union, an optional or a `bool`, TyPy checks

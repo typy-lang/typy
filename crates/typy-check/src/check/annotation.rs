@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 use typy_source::syntax::{Constant, Expr};
 
+use crate::abstract_type::AbstractCollection;
 use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::ClassId;
 use crate::types::Type;
@@ -76,6 +77,9 @@ pub(crate) enum AnnotationName {
     Dataclasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
+    /// `typing.NamedTuple`, the base of a named tuple, which the dataclass expansion reads
+    /// (CLS-27).
+    NamedTuple,
     /// A name that imports bind to more than one class, whose type depends on the import
     /// that ran last (MOD-14).
     Rebound,
@@ -88,6 +92,9 @@ pub(crate) enum AnnotationName {
     Builtin(&'static str),
     /// `Callable` of `typing` or `collections.abc`, the type of a function value (FUN-05).
     Callable,
+    /// An abstract collection of `typing` or `collections.abc`, such as `Sequence`, held as
+    /// the union of the built-in types CPython registers with it (LIB-20, ADR-0086).
+    Abstract(AbstractCollection),
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -120,6 +127,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
+        ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
         ("typing", "List") => Some(AnnotationName::Builtin("list")),
@@ -128,6 +136,9 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Tuple") => Some(AnnotationName::Builtin("tuple")),
         ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
+        ("typing" | "collections.abc", _) => {
+            AbstractCollection::named(module, name).map(AnnotationName::Abstract)
+        }
         _ => None,
     }
 }
@@ -208,6 +219,27 @@ fn standard_annotation(
         {
             generator_annotation(index, scope, diagnostics)
         }
+        // `Sequence[int]` is the union of the built-in sequences of `int` (LIB-20).
+        Expr::Subscript { value, index, span }
+            if let Some(AnnotationName::Abstract(collection)) = standard_name(value, scope) =>
+        {
+            let written: Vec<&Expr> = match index.as_ref() {
+                Expr::Tuple { elements, .. } => elements.iter().collect(),
+                other => vec![other],
+            };
+            let arguments: Vec<Type> = written
+                .iter()
+                .map(|each| annotation_type(each, scope, diagnostics))
+                .collect();
+            if arguments.iter().any(Type::has_error) {
+                return Some(Type::Error);
+            }
+            let Some(ty) = collection.of(&arguments) else {
+                diagnostics.push(abstract_form(collection, *span));
+                return Some(Type::Error);
+            };
+            ty
+        }
         // `List[int]` is `list[int]`, read as the built-in type is (LIB-17).
         Expr::Subscript { value, index, span }
             if let Some(AnnotationName::Builtin(builtin)) = standard_name(value, scope) =>
@@ -278,6 +310,18 @@ fn bare_standard(
             );
             Type::Error
         }
+        AnnotationName::NamedTuple => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "`NamedTuple` is not a type in TyPy; a named tuple's class derives from it",
+                )
+                .with_rule(RuleId::CLS_27)
+                .with_help("annotate the value with the named tuple's class"),
+            );
+            Type::Error
+        }
         AnnotationName::Rebound => {
             let Expr::Name { id, .. } = annotation else {
                 return Type::Error;
@@ -312,6 +356,10 @@ fn bare_standard(
             diagnostics.push(super::callable_annotation::callable_form(annotation.span()));
             Type::Error
         }
+        AnnotationName::Abstract(collection) => {
+            diagnostics.push(abstract_form(collection, annotation.span()));
+            Type::Error
+        }
         AnnotationName::TracebackType => Type::Traceback,
         AnnotationName::ModuleType => Type::AnyModule,
         AnnotationName::Iterator(_) | AnnotationName::Iterable(_) => {
@@ -330,6 +378,26 @@ fn bare_standard(
             Type::Error
         }
     }
+}
+
+/// Returns E0408 for an abstract collection without the types of its items, or with another
+/// number of them than it takes.
+fn abstract_form(collection: AbstractCollection, span: typy_diagnostics::Span) -> Diagnostic {
+    let example = match collection {
+        AbstractCollection::Mapping | AbstractCollection::MutableMapping => {
+            format!("{}[str, int]", collection.name())
+        }
+        other => format!("{}[int]", other.name()),
+    };
+    Diagnostic::new(
+        DiagnosticCode::error(408),
+        span,
+        format!(
+            "a `{}` annotation names the types of its items, such as `{example}`",
+            collection.name()
+        ),
+    )
+    .with_rule(RuleId::LIB_20)
 }
 
 /// Returns the type `Generator[Y, S, R]` names: what it yields, what it is sent and what it
@@ -844,7 +912,8 @@ fn named_type(
                     DiagnosticCode::error(205),
                     span,
                     format!(
-                        "`{id}` is not a type TyPy 0.1 knows; use int, float, bool, str or None"
+                        "`{id}` names no type: it is not a built-in type, nor a class or a \
+                         type alias the program defines or imports"
                     ),
                 )
                 .with_rule(RuleId::STD_04),

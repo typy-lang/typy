@@ -40,6 +40,7 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
+            dist/*.cdx.json
             dist/notes.md
           if-no-files-found: error
 
@@ -63,6 +64,7 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
+            dist/*.cdx.json
           if-no-files-found: error
 
   # The archive for macOS, built natively with the LLVM llvm.lock pins; it
@@ -94,6 +96,7 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.tar.gz.sha256
+            dist/*.cdx.json
           if-no-files-found: error
 
   publish:
@@ -101,8 +104,12 @@ jobs:
     needs: [build, build-aarch64, build-macos]
     runs-on: ubuntu-24.04
     environment: release
+    # The OIDC token signs each archive's provenance through Sigstore, so a user verifies
+    # it without a key the project keeps (NFR-26).
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -113,6 +120,14 @@ jobs:
           pattern: release*
           merge-multiple: true
           path: dist
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Verify each archive's provenance
+        run: |
+          for archive in dist/*.tar.gz; do
+            gh attestation verify "${archive}" --repo "${GITHUB_REPOSITORY}"
+          done
       # A version with a suffix, such as 1.0.0-rc.1, is a release candidate.
       - name: Create the release
         run: |
@@ -120,12 +135,13 @@ jobs:
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then prerelease="--prerelease"; fi
           gh release create "${GITHUB_REF_NAME}" --verify-tag ${prerelease} \
             --title "TyPy ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
-            dist/*.tar.gz dist/*.tar.gz.sha256
+            dist/*.tar.gz dist/*.tar.gz.sha256 dist/*.cdx.json
       - name: Install the release back and run a program
         run: |
           mkdir check && cd check
           gh release download "${GITHUB_REF_NAME}" --pattern "*.tar.gz*"
           sha256sum --check ./*.sha256
+          gh attestation verify ./*-x86_64-unknown-linux-gnu.tar.gz --repo "${GITHUB_REPOSITORY}"
           tar -xzf ./*-x86_64-unknown-linux-gnu.tar.gz
           printf 'print("hello", 1 + 2)\n' > hello.py
           test "$(TYPY_HOME="$PWD/home" ./typy-*/bin/typy run hello.py)" = "hello 3"

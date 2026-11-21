@@ -166,7 +166,7 @@ impl Program {
         Err(error(
             201,
             span,
-            format!("{what} is planned for TyPy 1.0 ({})", rule.as_str()),
+            format!("{what} is planned for TyPy 0.13 ({})", rule.as_str()),
             rule,
         ))
     }

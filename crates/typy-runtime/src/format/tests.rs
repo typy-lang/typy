@@ -49,21 +49,42 @@ pub(super) fn outcome(result: Raising<*mut StrObject>) -> (String, String) {
     }
 }
 
+/// Returns `format(int(digits), spec)`.
+fn format_int(digits: &str, spec: &str) -> (String, String) {
+    let text = from_str(digits);
+    // SAFETY: the text is live; the parsed word is released after it is formatted.
+    let word = unsafe {
+        let parsed = crate::int::typy_rt_int_from_str(text, 21);
+        assert!(parsed.exception.is_null());
+        crate::refcount::typy_rt_decrement(text.cast());
+        parsed.value
+    };
+    format_word(word, spec)
+}
+
+/// Returns `format(value, spec)` of an `int` word, and releases the word.
+fn format_word(word: i64, spec: &str) -> (String, String) {
+    let spec = from_str(spec);
+    // SAFETY: the word and the specification are live until they are released here.
+    let result = unsafe {
+        let result = typy_rt_format_int(word, spec);
+        crate::refcount::typy_rt_int_decrement(word);
+        crate::refcount::typy_rt_decrement(spec.cast());
+        result
+    };
+    outcome(result)
+}
+
 /// Returns `format(value, spec)`.
 fn format(value: Value, spec: &str) -> (String, String) {
+    if let Value::Int(digits) = value {
+        return format_int(digits, spec);
+    }
     let spec = from_str(spec);
     // SAFETY: each string and word is live until it is released at the end.
     let result = unsafe {
         match value {
-            Value::Int(digits) => {
-                let text = from_str(digits);
-                let parsed = crate::int::typy_rt_int_from_str(text, 21);
-                assert!(parsed.exception.is_null());
-                crate::refcount::typy_rt_decrement(text.cast());
-                let result = typy_rt_format_int(parsed.value, spec);
-                crate::refcount::typy_rt_int_decrement(parsed.value);
-                result
-            }
+            Value::Int(_) => unreachable!("an `int` is formatted above"),
             Value::Bool(value) => typy_rt_format_bool(if value { 3 } else { 1 }, spec),
             Value::Float(bits) => typy_rt_format_float(f64::from_bits(bits), spec),
             Value::Str(value) => {
@@ -164,4 +185,57 @@ fn a_zero_fill_after_an_alignment_and_a_negative_zero_follow_cpython() {
             "{value:?} {spec:?}"
         );
     }
+}
+
+#[test]
+fn the_character_of_an_int_takes_any_value_of_a_c_long() {
+    let too_large = "Python int too large to convert to C long";
+    let out_of_range = "%c arg not in range(0x110000)";
+    for (digits, message) in [
+        ("9223372036854775808", too_large),
+        ("-9223372036854775809", too_large),
+        ("9223372036854775807", out_of_range),
+        ("-9223372036854775808", out_of_range),
+        ("-1", out_of_range),
+    ] {
+        assert_eq!(
+            format_int(digits, "c"),
+            ("OverflowError".to_owned(), message.to_owned()),
+            "{digits}"
+        );
+    }
+}
+
+#[test]
+fn an_int_too_large_for_a_float_type_raises_overflow_error() {
+    let huge = format!("1{}", "0".repeat(400));
+    for spec in ["f", "e", "g", "%"] {
+        assert_eq!(
+            format_int(&huge, spec),
+            (
+                "OverflowError".to_owned(),
+                "int too large to convert to float".to_owned()
+            ),
+            "{spec}"
+        );
+    }
+}
+
+#[test]
+#[cfg_attr(
+    miri,
+    ignore = "building a 4300-digit integer takes hours under Miri; the same code runs in the other tests"
+)]
+fn an_int_of_more_than_4300_digits_is_not_formatted_in_decimal() {
+    let mut big = crate::int::value::Integer::from_i128(1);
+    let ten = crate::int::value::Integer::from_i128(10);
+    for _ in 0..4300 {
+        big = big.multiply(&ten);
+    }
+    let (kind, message) = format_word(big.into_word(), ",");
+    assert_eq!(kind, "ValueError");
+    assert!(
+        message.starts_with("Exceeds the limit (4300 digits) for integer string conversion"),
+        "{message}"
+    );
 }

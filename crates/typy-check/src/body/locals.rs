@@ -181,7 +181,7 @@ impl BodyChecker<'_> {
             self.global_names.insert(name.name.clone());
             self.locals.insert(name.name.clone(), symbol);
             self.declared.insert(symbol, ty.clone());
-            self.types.insert(symbol, ty);
+            self.types.insert(symbol, ty.without_abstract());
         }
     }
 
@@ -214,7 +214,7 @@ impl BodyChecker<'_> {
             self.locals.insert(name.name.clone(), symbol);
             self.local_order.push(symbol);
             self.declared.insert(symbol, ty.clone());
-            self.types.insert(symbol, ty);
+            self.types.insert(symbol, ty.without_abstract());
             self.assigned
                 .get_or_insert_with(std::collections::BTreeSet::new)
                 .insert(super::flow::Fact::Assigned(symbol));
@@ -278,7 +278,7 @@ impl BodyChecker<'_> {
             Some(_) => {}
             None => {
                 self.declared.insert(symbol, ty.clone());
-                self.types.insert(symbol, ty);
+                self.types.insert(symbol, ty.without_abstract());
             }
         }
     }
@@ -691,11 +691,18 @@ impl BodyChecker<'_> {
         {
             return None;
         }
+        // A variable declared as an abstract collection takes what its declaration takes.
+        let declared = self
+            .declared
+            .get(&symbol)
+            .filter(|declared| declared.has_abstract())
+            .cloned();
         match self.types.get(&symbol).cloned() {
             None => {
                 self.types.insert(symbol, ty);
             }
-            Some(existing) if !ty.is_assignable_to(&existing) => {
+            Some(existing) if !ty.is_assignable_to(declared.as_ref().unwrap_or(&existing)) => {
+                let existing = declared.unwrap_or(existing);
                 let mut diagnostic = Diagnostic::new(
                     DiagnosticCode::error(402),
                     value.span,

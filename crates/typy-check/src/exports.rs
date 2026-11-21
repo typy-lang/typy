@@ -24,8 +24,10 @@ pub struct Export {
 /// which atomic instructions the processor has; on macOS the runtime reads `errno` through
 /// `__error`, an error's text from `strerror`, and the calling thread's stack from the
 /// `pthread` functions (ADR-0057), and Rust's `core` there calls `bzero`, `memcmp` and
-/// `sysctlbyname`.
-pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
+/// `sysctlbyname`. On Linux a library reads the stack of a thread other than the main one,
+/// told apart by `getpid` and the `gettid` of `syscall`, with `pthread_getattr_np`, and keeps
+/// it under a `pthread` key (ADR-0075).
+pub const RUNTIME_C_FUNCTIONS: [&str; 72] = [
     "__error",
     "abort",
     "acos",
@@ -56,6 +58,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
     "fstat",
     "ftruncate",
     "getauxval",
+    "getpid",
     "getrlimit",
     "isatty",
     "ldexp",
@@ -74,9 +77,15 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
     "nextafter",
     "open",
     "pow",
+    "pthread_attr_destroy",
+    "pthread_attr_getstack",
     "pthread_get_stackaddr_np",
     "pthread_get_stacksize_np",
+    "pthread_getattr_np",
+    "pthread_getspecific",
+    "pthread_key_create",
     "pthread_self",
+    "pthread_setspecific",
     "read",
     "realloc",
     "round",
@@ -85,6 +94,7 @@ pub const RUNTIME_C_FUNCTIONS: [&str; 64] = [
     "sqrt",
     "strerror",
     "strlen",
+    "syscall",
     "sysctlbyname",
     "tan",
     "tanh",
@@ -115,7 +125,9 @@ pub(crate) fn exports(
         Ok(names) => names,
         Err(diagnostic) => return Err(Diagnostics::from(*diagnostic)),
     };
-    let allocator: Vec<&str> = project
+    // The allocator's functions and the C functions the module calls through `ctypes` are
+    // symbols of the process, which an export of the same name would take the place of.
+    let called: Vec<&str> = project
         .settings()
         .allocator
         .iter()
@@ -126,6 +138,12 @@ pub(crate) fn exports(
                 allocator.free.as_str(),
             ]
         })
+        .chain(
+            program
+                .foreign_functions
+                .iter()
+                .map(|function| function.name.as_str()),
+        )
         .collect();
     let mut exports: Vec<Export> = Vec::new();
     for (name, span) in names {
@@ -137,7 +155,7 @@ pub(crate) fn exports(
             ));
             continue;
         }
-        if let Err(diagnostic) = symbol_name(&name, span, &allocator) {
+        if let Err(diagnostic) = symbol_name(&name, span, &called) {
             diagnostics.push(*diagnostic);
             continue;
         }
@@ -225,8 +243,8 @@ pub(crate) fn module_bindings<'module>(
 }
 
 /// Checks that an export's name can be a C symbol of its own: ASCII, and none of the names
-/// the runtime, TyPy or the project's allocator uses.
-fn symbol_name(name: &str, span: Span, allocator: &[&str]) -> Result<(), Box<Diagnostic>> {
+/// the runtime, TyPy, the project's allocator or the module's C functions use.
+fn symbol_name(name: &str, span: Span, called: &[&str]) -> Result<(), Box<Diagnostic>> {
     if !name.is_ascii() {
         return Err(refused(
             span,
@@ -251,7 +269,7 @@ fn symbol_name(name: &str, span: Span, allocator: &[&str]) -> Result<(), Box<Dia
             "export the function under a name that starts with a letter, and not with `typy_`",
         ));
     }
-    if RUNTIME_C_FUNCTIONS.contains(&name) || allocator.contains(&name) {
+    if RUNTIME_C_FUNCTIONS.contains(&name) || called.contains(&name) {
         return Err(refused(
             span,
             format!(

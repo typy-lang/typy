@@ -1269,8 +1269,9 @@ lists, each as a C function (FFI-05). This error names what cannot be one:
   `bool`, or `None` for the result;
 - the name is not ASCII, starts with `__`, `_` and a capital letter, or
   `typy_`, is listed twice, or is a C function the library itself calls,
-  such as `read`, `free`, `sqrt` or `main`, or one of the project's
-  allocator functions;
+  such as `read`, `free`, `sqrt` or `main`, one of the project's
+  allocator functions, or a C function the module calls through `ctypes`,
+  such as `labs` for `libc.labs`;
 - the file's name is not an ASCII identifier, which the library and its
   header are named after (CLI-09);
 - `__version__` is not one string literal that starts with a number, or

@@ -159,6 +159,23 @@ fn each_name_that_cannot_be_exported_is_e0429() {
 }
 
 #[test]
+fn an_export_named_as_a_c_function_the_module_calls_is_e0429() {
+    // The export would take the place of the C function in the process, and call itself.
+    let found = refusals(
+        "import ctypes\n\n__all__ = ['labs']\n\nlibc = ctypes.CDLL(None)\n\
+         libc.labs.argtypes = [ctypes.c_long]\nlibc.labs.restype = ctypes.c_long\n\n\n\
+         def labs(value: int) -> int:\n    return libc.labs(value)\n",
+    );
+    assert!(
+        found
+            .iter()
+            .any(|each| each
+                .starts_with("E0429 FFI-05 `labs` is a C function the library itself calls")),
+        "{found:?}"
+    );
+}
+
+#[test]
 fn a_parameter_without_a_c_type_is_named() {
     let found = refusals(
         "def join(items: list[int], separator: str) -> int:\n    return 0\n\n\n__all__ = ['join']\n",

@@ -594,7 +594,8 @@ fn slot_parameter(
 
 /// Returns the base a class's type object names and its public type: for a copy of a generic
 /// class, the generic class both times, so `isinstance` holds and `type()` gives it
-/// (ADR-0028); otherwise the class's base, or the runtime's `object`, and null.
+/// (ADR-0028); otherwise the class's base, the runtime's `tuple` for a named tuple (CLS-27) or
+/// its `object`, and null.
 fn bases<'ctx>(
     shared: &mut Shared<'_, 'ctx>,
     class: &typy_tyir::TyirClass,
@@ -614,6 +615,7 @@ fn bases<'ctx>(
                 .ok_or_else(|| CodegenError("a runtime class has a symbol".to_owned()))?;
             runtime_global(shared, &symbol)
         }
+        (None, None) if class.tuple_base => runtime_global(shared, "typy_rt_type_tuple"),
         (None, None) => runtime_global(shared, "typy_rt_object"),
     };
     Ok((base, public))

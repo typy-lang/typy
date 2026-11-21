@@ -31,6 +31,7 @@ pub struct FunctionBuilder {
     slots: Vec<Slot>,
     current: BlockId,
     generator: Option<crate::function::GeneratorFrame>,
+    stands_for: crate::function::StandsFor,
 }
 
 impl FunctionBuilder {
@@ -59,6 +60,7 @@ impl FunctionBuilder {
             slots: Vec::new(),
             current: BlockId(0),
             generator: None,
+            stands_for: crate::function::StandsFor::Itself,
         }
     }
 
@@ -202,6 +204,11 @@ impl FunctionBuilder {
         self.generator = Some(frame);
     }
 
+    /// Sets what the function stands for as a value (FUN-08).
+    pub fn set_stands_for(&mut self, stands_for: crate::function::StandsFor) {
+        self.stands_for = stands_for;
+    }
+
     /// Returns the types of the slots made so far, in order.
     #[must_use]
     pub fn slot_types(&self) -> Vec<TyirType> {
@@ -234,6 +241,7 @@ impl FunctionBuilder {
             values: self.values,
             slots: self.slots,
             generator: self.generator,
+            stands_for: self.stands_for,
         }
     }
 }

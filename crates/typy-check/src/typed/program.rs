@@ -59,18 +59,47 @@ pub struct TypedProgram {
     /// The captures of each nested function, in order, whose code takes its function object
     /// first (FUN-04, ADR-0061).
     pub closures: std::collections::BTreeMap<FunctionId, Vec<CapturedVariable>>,
+    /// The hidden functions that stand for a built-in function, or a method of a built-in
+    /// type, used as a value, each with which it stands for (FUN-08, ADR-0077).
+    pub builtin_values: std::collections::BTreeMap<FunctionId, BuiltinValue>,
+    /// The method of each class a method read through a protocol value binds, by protocol and
+    /// name, the least derived class first (FUN-09).
+    pub protocol_methods:
+        std::collections::BTreeMap<(super::ClassId, String), Vec<(super::ClassId, FunctionId)>>,
     /// The variables of each function that live in a cell, which its nested functions share.
     pub cells: std::collections::BTreeMap<FunctionId, std::collections::BTreeSet<SymbolId>>,
     /// The variables nested functions declare `nonlocal`, each a cell variable whose cell is
     /// the capture at this position of its function object, not a new one (SMT-09).
     pub nonlocals: std::collections::BTreeMap<SymbolId, u32>,
-    /// Each class and protocol it satisfies, and what the instances of each iterator or
-    /// iterable class are, which assignability reads; `ProgramScope` puts them back after
-    /// the check (ADR-0041, TYP-20).
-    pub(crate) fits: (
-        std::collections::BTreeSet<(super::ClassId, super::ClassId)>,
+    /// The tables of the program's classes that assignability reads, which `ProgramScope`
+    /// puts back after the check.
+    pub(crate) fits: ClassTables,
+}
+
+/// The tables of a checked program's classes that assignability reads.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ClassTables {
+    /// Each class and a protocol it satisfies (ADR-0041).
+    pub(crate) protocols: std::collections::BTreeSet<(super::ClassId, super::ClassId)>,
+    /// What the instances of each iterator or iterable class are (TYP-20).
+    pub(crate) iterations:
         std::collections::BTreeMap<super::ClassId, crate::iterator_fits::Iteration>,
-    ),
+    /// The bases of each class, nearest first (CLS-18).
+    pub(crate) bases: std::collections::BTreeMap<super::ClassId, Vec<super::ClassId>>,
+}
+
+/// What a hidden function of a built-in stands for (FUN-08, ADR-0077).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinValue {
+    /// A built-in function, such as `len`.
+    Function,
+    /// A method of a built-in type read through the type, such as `str.upper`.
+    Method,
+    /// A built-in type called as a function, such as `int` in `key=int` (FUN-14).
+    Type,
+    /// An adapter that fits a function of the program with defaults, `*args` or `**kwargs`
+    /// to a `Callable`, and stands for that function (FUN-13, ADR-0080).
+    Adapter(FunctionId),
 }
 
 /// One capture of a nested function: a copy of a variable's value, or the cell it lives in.

@@ -4,6 +4,8 @@
 //! had written it, at the decorator. A field's `default_factory` becomes a module-level
 //! function that `__init__` calls for the field each time it is left out.
 
+mod named_tuple;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
@@ -32,6 +34,8 @@ pub(crate) struct DataclassInfo {
     /// The fields class patterns take positionally, unless `match_args=False` is given or the
     /// class writes its own `__match_args__` (CST-06).
     pub(crate) match_args: Option<Vec<String>>,
+    /// Whether the class is a named tuple or derives from one (CLS-27).
+    pub(crate) named_tuple: bool,
 }
 
 /// The dataclasses of the modules expanded so far: each one's fields, by module and class.
@@ -52,6 +56,9 @@ pub(crate) struct Dataclasses {
     /// The functions of the `default_factory` fields of the module being expanded, each put
     /// before its class (CLS-15).
     factories: Vec<(String, Stmt)>,
+    /// The fields of each named tuple and each class derived from one, by module and class
+    /// (CLS-27).
+    named_tuples: BTreeMap<(String, String), Vec<Field>>,
 }
 
 /// The names a module binds to the `dataclasses` module and its `dataclass` and `field`.
@@ -92,7 +99,11 @@ impl Dataclasses {
     /// Returns the module with each dataclass given its methods, and the problems found.
     pub(crate) fn expand(&mut self, module: &Module, diagnostics: &mut Diagnostics) -> Module {
         let names = Names::of(&module.syntax.body);
-        if names.dataclass.is_empty() && names.modules.is_empty() {
+        if names.dataclass.is_empty()
+            && names.modules.is_empty()
+            && self.named_tuples.is_empty()
+            && !names.names_typing()
+        {
             return module.clone();
         }
         let mut expanded = module.clone();
@@ -101,6 +112,10 @@ impl Dataclasses {
         let mut body = Vec::with_capacity(expanded.syntax.body.len());
         for mut statement in std::mem::take(&mut expanded.syntax.body) {
             if let Some((class, class_info)) =
+                self.expand_named_tuple(&mut statement, &module_name, &names, diagnostics)
+            {
+                info.insert(class, class_info);
+            } else if let Some((class, class_info)) =
                 self.expand_class(&mut statement, &module_name, &names, diagnostics)
             {
                 info.insert(class, class_info);
@@ -181,17 +196,7 @@ impl Dataclasses {
         if !fields_are_ordered(&fields, at, diagnostics) {
             return None;
         }
-        let defined: BTreeSet<String> = body
-            .iter()
-            .filter_map(|statement| match statement {
-                Stmt::FunctionDef { name, .. } => Some(name.name.clone()),
-                Stmt::Assign { targets, .. } => match targets.as_slice() {
-                    [Expr::Name { id, .. }] => Some(id.clone()),
-                    _ => None,
-                },
-                _ => None,
-            })
-            .collect();
+        let defined = defined(body);
         let hashable = fields
             .iter()
             .all(|field| !self.unhashable_annotation(&field.annotation, module_name, names));
@@ -216,6 +221,7 @@ impl Dataclasses {
             frozen: options.frozen,
             generated_init,
             match_args,
+            named_tuple: false,
         };
         self.fields
             .insert((module_name.to_owned(), name.name.clone()), fields);
@@ -501,6 +507,15 @@ impl Names {
         names
     }
 
+    /// Returns true when the module's imports bind `typing` or a name of it, which may name
+    /// `NamedTuple` (CLS-27).
+    fn names_typing(&self) -> bool {
+        self.program_modules
+            .values()
+            .any(|module| module == "typing")
+            || self.imported.values().any(|(module, _)| module == "typing")
+    }
+
     /// Returns true when an expression names `name` of `dataclasses`: bound by `from` or read
     /// through the module.
     fn names(&self, expression: &Expr, bound: &BTreeSet<String>, name: &str) -> bool {
@@ -623,6 +638,20 @@ fn options(decorator: &Expr, diagnostics: &mut Diagnostics) -> Option<Options> {
 struct OwnField {
     field: Field,
     factory: Option<Stmt>,
+}
+
+/// Returns the names a class body binds: its methods and the names it assigns.
+fn defined(body: &[Stmt]) -> BTreeSet<String> {
+    body.iter()
+        .filter_map(|statement| match statement {
+            Stmt::FunctionDef { name, .. } => Some(name.name.clone()),
+            Stmt::Assign { targets, .. } => match targets.as_slice() {
+                [Expr::Name { id, .. }] => Some(id.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
 }
 
 /// Returns the fields the class body declares, and gives each `name: T = field(default=v)` the
@@ -1034,7 +1063,7 @@ fn planned(span: Span, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        format!("{what} is planned for TyPy 1.0 (CLS-28)"),
+        format!("{what} is planned for TyPy 0.14 (CLS-28)"),
     )
     .with_rule(RuleId::CLS_28)
 }
@@ -1048,7 +1077,7 @@ fn generic_comparisons(class: &str, compared: &str, at: Span) -> Diagnostic {
         at,
         format!(
             "the comparison methods of `{class}`, a generic dataclass derived from the dataclass \
-             `{compared}`, are planned for TyPy 1.0 (GEN-14)"
+             `{compared}`, are planned for TyPy 0.13 (GEN-14)"
         ),
     )
     .with_rule(RuleId::GEN_14)
@@ -1063,7 +1092,7 @@ fn fields_through_copy(class: &str, at: Span) -> Diagnostic {
         at,
         format!(
             "`{class}` is a dataclass derived from a copy of a generic dataclass, whose fields \
-             it takes from TyPy 1.0 (GEN-15)"
+             it takes from TyPy 0.13 (GEN-15)"
         ),
     )
     .with_rule(RuleId::GEN_15)

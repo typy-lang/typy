@@ -23,13 +23,12 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         Unprovided::Planned { release, rule }
     }
     match name {
-        "issubclass" => Some(planned("0.10", RuleId::CLS_19)),
         // As decorators and as `super().name` they are taken before a name is read; as values
-        // they need functions as values.
-        "super" => Some(planned("1.0", RuleId::CLS_36)),
-        "property" | "staticmethod" | "classmethod" | "callable" | "map" | "filter" => {
-            Some(planned("0.10", RuleId::FUN_08))
-        }
+        // they are objects of their own.
+        "super" => Some(planned("0.14", RuleId::CLS_36)),
+        "property" | "staticmethod" | "classmethod" => Some(planned("1.0", RuleId::FUN_17)),
+        // A call of either is an object of the class the module is given for it (ADR-0089).
+        "map" | "filter" => Some(planned("1.0", RuleId::LIB_25)),
         _ if CPYTHON_3_12_BUILTINS.contains(&name) => Some(Unprovided::Excluded),
         _ => None,
     }
@@ -195,10 +194,9 @@ mod tests {
     #[test]
     fn later_builtins_name_their_release_and_rule() {
         let cases = [
-            ("issubclass", "0.10", RuleId::CLS_19),
-            ("super", "1.0", RuleId::CLS_36),
-            ("property", "0.10", RuleId::FUN_08),
-            ("map", "0.10", RuleId::FUN_08),
+            ("super", "0.14", RuleId::CLS_36),
+            ("property", "1.0", RuleId::FUN_17),
+            ("map", "1.0", RuleId::LIB_25),
         ];
         for (name, release, rule) in cases {
             assert_eq!(

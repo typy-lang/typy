@@ -147,10 +147,67 @@ As in CPython, a bare `Optional` and a subscripted name such as
 `List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
 `False`. The names held in a variable, passed or printed are planned for
-0.10 (TYP-18), and so are `Sequence`, `Mapping` and the other abstract
-collections (LIB-20) and `NamedTuple` (CLS-27). `typing.Any` and
+0.11 (TYP-18). `NamedTuple` is a base for a named tuple's class, as
+[Classes](classes.md#named-tuples) describes (CLS-27). `typing.Any` and
 `typing.cast` are refused, since every value in TyPy has one type
 (TYP-10).
+
+## Abstract collections
+
+`Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set` (and
+`typing.AbstractSet`), `MutableSet`, `Collection`, `Container`,
+`Reversible`, `KeysView`, `ValuesView` and `ItemsView` of
+`collections.abc` and `typing` are types that hold each built-in
+collection CPython registers with them, with the items they name
+(LIB-20, ADR-0086):
+
+| Annotation | Holds |
+| --- | --- |
+| `Sequence[T]` | `list[T]`, `tuple[T, ...]`; `str` for `T` of `str`; `bytes` and `range` for `T` of `int` |
+| `MutableSequence[T]` | `list[T]` |
+| `Mapping[K, V]`, `MutableMapping[K, V]` | `dict[K, V]` |
+| `Set[T]` | `set[T]`, the keys of a dict of keys `T`, and the items of a dict when `T` is a pair |
+| `MutableSet[T]` | `set[T]` |
+| `Collection[T]`, `Container[T]` | what `Sequence[T]` and `Set[T]` hold, and the values of a dict of values `T` |
+| `Reversible[T]` | what `Sequence[T]` holds, a dict of keys `T`, and the views of a dict |
+| `KeysView[K]`, `ValuesView[V]`, `ItemsView[K, V]` | the keys, values or items of a dict |
+
+A value of one is held as the collection it is, and an operation on it,
+such as `len`, an index, a slice, `in`, a loop or `reversed`, runs on that
+collection, as for a union. Messages name the type as it is written,
+such as `Sequence[int]`. A collection that only reads its items, every
+one but `MutableSequence`, `MutableMapping` and `MutableSet`, takes a
+collection of instances of a class derived from its item class, as
+`typing` reads it: a `list[Square]` is a `Sequence[Shape]`. A
+`list[bool]` is no `Sequence[int]`, since a `bool` item is held otherwise.
+`isinstance` with one answers as CPython does: a list is a `Sequence`,
+and a class of the program is a `Collection`, a `Container` or a
+`Reversible` when it defines their methods. Without its item types, an
+abstract collection is E0408. `Sized`, `Hashable` and `MappingView`, and
+classes of the program held as `Sequence` or the other collections that
+read no methods, are planned for 0.14 (LIB-24).
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Sequence
+
+
+class Shape:
+    def __init__(self, size: int) -> None:
+        self.size = size
+
+
+class Square(Shape):
+    pass
+
+
+def total(shapes: Sequence[Shape]) -> int:
+    return sum([shape.size for shape in reversed(shapes)])
+
+
+squares = [Square(1), Square(2)]
+print(total(squares), total((Square(3), Shape(4))), isinstance(squares, Sequence))
+```
 
 ## Unions
 
@@ -359,8 +416,8 @@ print(Score, Score.__name__, Score.__module__, type(Score), kinds[0] is Score)
 
 As in CPython, calling an alias, or giving it to `isinstance`, is E0401.
 An alias a function or a class defines read as a value, whose text
-CPython 3.14 changed, an alias given its type arguments as a value, and
-an alias's `__value__` and `__type_params__` are planned for 1.0
+CPython 3.15 changed, an alias given its type arguments as a value, and
+an alias's `__value__` and `__type_params__` are planned for 0.11
 (TYP-18). Two aliases compare with `is`; `==` between them is E0407, as
 for module objects.
 

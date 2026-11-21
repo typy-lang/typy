@@ -257,6 +257,7 @@ impl Program {
         let module = self.class_modules[copy.root.0 as usize].clone();
         self.classes.push(info);
         self.class_modules.push(module);
+        super::program::note_bases(copy.id, &copy.instance);
         self.instances.insert(copy.id, copy.instance.clone());
     }
 

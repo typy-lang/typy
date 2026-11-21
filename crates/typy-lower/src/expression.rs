@@ -43,6 +43,7 @@ impl FunctionLowerer<'_> {
                 arguments,
             } => self.set_arguments(exception, arguments, span),
             TypedExprKind::Iter(source) => self.iter_of(source, span),
+            TypedExprKind::Reversed(source) => self.reversed_of(source, span),
             TypedExprKind::Next {
                 iterator,
                 method,
@@ -74,6 +75,7 @@ impl FunctionLowerer<'_> {
                 self.converted(inner, &expression.ty, ty, false, span)
             }
             TypedExprKind::IsInstance(test) => self.isinstance(test, span),
+            TypedExprKind::IsSubclass { class, bases } => self.issubclass(class, bases, span),
             TypedExprKind::EachMember(each) => self.each_member(each, ty, span),
             TypedExprKind::CheckedLength(call) => {
                 let length = self.expression(call);
@@ -280,9 +282,34 @@ impl FunctionLowerer<'_> {
                 self.release(closure_value, span);
                 result
             }
-            TypedExprKind::BoundMethod { object, methods } => {
-                self.bound_method(object, methods, span)
+            TypedExprKind::BoundMethod {
+                object,
+                methods,
+                binds_class,
+            } => self.bound_method(object, methods, *binds_class, span),
+            TypedExprKind::ProtocolMethod {
+                object,
+                protocol,
+                name,
+            } => {
+                let methods = self
+                    .program
+                    .protocol_methods
+                    .get(&(*protocol, name.clone()))
+                    .cloned()
+                    .unwrap_or_default();
+                self.bound_method(object, &methods, false, span)
             }
+            TypedExprKind::ChosenFunction {
+                object,
+                functions,
+                binds,
+            } if binds.is_empty() => self.chosen_function(object, functions, span),
+            TypedExprKind::ChosenFunction {
+                object,
+                functions,
+                binds,
+            } => self.chosen_value(object, functions, binds, span),
             TypedExprKind::Keyed {
                 operation,
                 list,

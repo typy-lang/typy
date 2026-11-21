@@ -5,7 +5,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Stmt};
 
 use super::BodyChecker;
-use crate::typed::{TypedExprKind, TypedStmt};
+use crate::typed::{TypedExpr, TypedExprKind, TypedStmt};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -18,7 +18,19 @@ impl BodyChecker<'_> {
         result: Option<&mut Type>,
         span: Span,
     ) -> TypedStmt {
-        let value = Self::version_tuple(self.expression(source));
+        let (source, item) = self.delegation(source, result);
+        TypedStmt::YieldFrom {
+            item,
+            source,
+            received: None,
+            span,
+        }
+    }
+
+    /// Returns the source of a `yield from`, checked, and each item it yields, as the
+    /// generator yields it; with `result`, sets the type the source returns.
+    fn delegation(&mut self, source: &Expr, result: Option<&mut Type>) -> (TypedExpr, TypedExpr) {
+        let value = self.tuple_expression(source);
         let delegated = match &value.ty {
             Type::Generator { sends, returns, .. } => {
                 Some((sends.as_ref().clone(), returns.as_ref().clone()))
@@ -71,12 +83,7 @@ impl BodyChecker<'_> {
             *result = delegated.map_or(Type::NoneType, |(_, returns)| returns);
         }
         let delegated_item = Self::typed(TypedExprKind::DelegatedItem, item, source.span);
-        TypedStmt::YieldFrom {
-            item: Self::converted(delegated_item, Some(&yields)),
-            source,
-            received: None,
-            span,
-        }
+        (source, Self::converted(delegated_item, Some(&yields)))
     }
 
     /// Checks `target = yield from source`, also with an annotation: the `yield from`, then
@@ -85,23 +92,12 @@ impl BodyChecker<'_> {
     pub(super) fn yield_from_assignment(
         &mut self,
         statement: &Stmt,
-        yielded: &Expr,
+        (source, yielded): (&Expr, Span),
         span: Span,
     ) -> TypedStmt {
-        let Expr::YieldFrom { value, .. } = yielded else {
-            unreachable!("the statement assigns a `yield from`")
-        };
         let mut result = Type::NoneType;
-        let TypedStmt::YieldFrom { source, item, .. } =
-            self.yield_from_statement(value, Some(&mut result), span)
-        else {
-            unreachable!("a `yield from` checks as one")
-        };
-        self.received = Some(Self::typed(
-            TypedExprKind::DelegatedResult,
-            result,
-            yielded.span(),
-        ));
+        let (source, item) = self.delegation(source, Some(&mut result));
+        self.received = Some(Self::typed(TypedExprKind::DelegatedResult, result, yielded));
         let received = self.statement(statement).map(Box::new);
         self.received = None;
         TypedStmt::YieldFrom {

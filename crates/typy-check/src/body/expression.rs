@@ -99,7 +99,9 @@ impl BodyChecker<'_> {
                 // An instance's class may define the operator's method (CLS-07).
                 let (left, right) = match self.operator_binary(*operator, left, right, span) {
                     super::operator_method::Comparison::Called(call) => return call,
-                    super::operator_method::Comparison::Builtin(left, right) => (left, right),
+                    super::operator_method::Comparison::Builtin(left, right) => {
+                        self.arithmetic_tuples(*operator, left, right)
+                    }
                 };
                 let (left, right) = Self::tuple_operands(*operator, left, right);
                 if let Some(formatted) = self.percent_dynamic(*operator, &left, &right, span) {
@@ -205,6 +207,7 @@ impl BodyChecker<'_> {
                     match self.operator_comparison(*operator, left, right, span) {
                         super::operator_method::Comparison::Called(call) => return call,
                         super::operator_method::Comparison::Builtin(back, other) => {
+                            let (back, other) = self.compared_tuples(*operator, back, other);
                             left = back;
                             comparators = vec![other];
                         }
@@ -258,7 +261,7 @@ impl BodyChecker<'_> {
                 Self::typed(TypedExprKind::Tuple(elements), ty, span)
             }
             Expr::Subscript { value, index, .. } => {
-                let value = Self::version_tuple(self.expression(value));
+                let value = self.tuple_expression(value);
                 if let Type::CData(class) = value.ty.clone() {
                     return self.cdata_item((value, &class), index, span);
                 }
@@ -330,7 +333,7 @@ impl BodyChecker<'_> {
                             DiagnosticCode::error(201),
                             span,
                             "a type alias given its type arguments as a value is planned for \
-                             TyPy 0.10 (TYP-18)",
+                             TyPy 0.11 (TYP-18)",
                         )
                         .with_rule(RuleId::TYP_18),
                         span,

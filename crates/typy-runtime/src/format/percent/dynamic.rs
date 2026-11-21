@@ -733,6 +733,31 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        miri,
+        ignore = "building a 4300-digit integer takes hours under Miri; the same code runs in the other tests"
+    )]
+    fn an_int_of_more_than_4300_digits_is_not_written() {
+        let mut big = crate::int::value::Integer::from_i128(1);
+        let ten = crate::int::value::Integer::from_i128(10);
+        for _ in 0..4300 {
+            big = big.multiply(&ten);
+        }
+        let word = big.into_word();
+        for format in ["%s", "%r", "%a"] {
+            let found = format_items(format, &[(ItemKind::Int, word.cast_unsigned())], 1);
+            let message = found.unwrap_err();
+            assert!(
+                message
+                    .starts_with("Exceeds the limit (4300 digits) for integer string conversion"),
+                "{format}: {message}"
+            );
+        }
+        // SAFETY: the test owns the word.
+        unsafe { crate::refcount::typy_rt_int_decrement(word) };
+    }
+
+    #[test]
     fn a_format_is_read_with_its_flags_widths_and_stars() {
         let cases: &[(&str, &[i64], bool, &str)] = &[
             (

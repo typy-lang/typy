@@ -179,10 +179,30 @@ pub enum TypedExprKind {
     /// A method read through an instance: a new bound method of `object` and the method of
     /// its class (FUN-05, ADR-0060). `methods` holds the method of the instance's static class
     /// first, then each override among its subclasses, after the classes it derives from; the
-    /// last whose class the object is an instance of is bound.
+    /// last whose class the object is an instance of is bound. With `binds_class`, the
+    /// methods are copies of a class method, and the object's class is bound in place of the
+    /// object, as CPython binds `cls` (FUN-09, ADR-0079).
     BoundMethod {
         object: Box<TypedExpr>,
         methods: Vec<(super::class::ClassId, FunctionId)>,
+        binds_class: bool,
+    },
+    /// A static method read through an instance whose subclasses define it again: `object` is
+    /// evaluated, and the value is the function of its class among `functions`, chosen as
+    /// `BoundMethod` chooses, binding nothing, or for a class in `binds`, which defines it
+    /// again as a method, a bound method of that method and the object (FUN-09, ADR-0079).
+    ChosenFunction {
+        object: Box<TypedExpr>,
+        functions: Vec<(super::class::ClassId, FunctionId)>,
+        binds: Box<[super::class::ClassId]>,
+    },
+    /// A method read through a protocol value as a value: `object` is evaluated, and the value
+    /// is a bound method of it and the method its class has among those
+    /// `TypedProgram::protocol_methods` gives for the protocol and the name (FUN-09).
+    ProtocolMethod {
+        object: Box<TypedExpr>,
+        protocol: super::class::ClassId,
+        name: String,
     },
     /// A call through a function value: `callee` is evaluated, then the arguments, one for
     /// each parameter of its `Callable` type, in order (FUN-05).
@@ -214,6 +234,10 @@ pub enum TypedExprKind {
     },
     /// `iter(source)` of a built-in iterable: a new iterator over it (CST-09).
     Iter(Box<TypedExpr>),
+    /// `reversed(source)` of a value held as an `Iterable[T]` that is one of several built-in
+    /// sequences, or a dict or a view of one: a new iterator that reads it from its last item
+    /// (LIB-20).
+    Reversed(Box<TypedExpr>),
     /// `next(iterator)` or `next(iterator, default)`: the next item of an iterator, or of an
     /// instance whose class's `__next__` is `method`; at the end, the default, or
     /// `StopIteration` without one (CST-08, CST-09).
@@ -374,6 +398,12 @@ pub enum TypedExprKind {
     Downcast(Box<TypedExpr>),
     /// `isinstance(value, classes)` (CLS-09).
     IsInstance(Box<IsInstanceTest>),
+    /// `issubclass(class, classes)`: the class, then each of `bases`, type objects evaluated
+    /// in order, and true when the class is or derives from one of them (CLS-19, ADR-0084).
+    IsSubclass {
+        class: Box<TypedExpr>,
+        bases: Vec<TypedExpr>,
+    },
     /// An operation on a variable that holds a union, checked for each member (TYP-14).
     EachMember(Box<EachMember>),
     /// The `int` a class's `__len__` returned, checked to be a length, which raises
@@ -658,6 +688,9 @@ pub struct IsInstanceTest {
     /// For a union, each member in order: whether every value of it is an instance of one of
     /// the classes, and the tests its value's class decides (TYP-14).
     pub members: Vec<(bool, Vec<MemberTest>)>,
+    /// The classes held in values, each a type object evaluated after `value`, which the
+    /// value's class is tested against when the program runs (CLS-18, ADR-0084).
+    pub held: Vec<TypedExpr>,
 }
 
 /// What a call with a `key` does with the items of its list (FUN-05).
@@ -826,7 +859,12 @@ impl TypedExpr {
                 .flat_map(|(key, value)| [key, value])
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
-            TypedExprKind::IsInstance(test) => vec![&test.value],
+            TypedExprKind::IsInstance(test) => {
+                std::iter::once(&test.value).chain(&test.held).collect()
+            }
+            TypedExprKind::IsSubclass { class, bases } => {
+                std::iter::once(class.as_ref()).chain(bases).collect()
+            }
             TypedExprKind::EachMember(each) => std::iter::once(&each.value)
                 .chain(each.arms.iter().map(|(_, body)| body))
                 .collect(),
@@ -849,6 +887,8 @@ impl TypedExpr {
             | TypedExprKind::AsIterator(inner)
             | TypedExprKind::Lazy { value: inner, .. }
             | TypedExprKind::BoundMethod { object: inner, .. }
+            | TypedExprKind::ProtocolMethod { object: inner, .. }
+            | TypedExprKind::ChosenFunction { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],
             TypedExprKind::PercentFormat { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
@@ -940,7 +980,7 @@ impl TypedExpr {
                         .flat_map(|init| init.arguments.iter().map(|argument| &argument.value)),
                 )
                 .collect(),
-            TypedExprKind::Iter(source) => vec![source],
+            TypedExprKind::Iter(source) | TypedExprKind::Reversed(source) => vec![source],
             TypedExprKind::Next {
                 iterator, default, ..
             } => std::iter::once(iterator.as_ref())

@@ -297,3 +297,20 @@ fn type_of_a_copy_of_a_generic_class_is_the_generic_class() {
         crate::refcount::typy_rt_decrement(plain.cast());
     }
 }
+
+#[test]
+fn cls_18_a_type_derives_from_itself_and_its_bases_and_bool_from_int() {
+    use crate::type_object::builtin::{BOOL, FLOAT, INT};
+    use crate::type_object::{OBJECT, typy_rt_type_derives_from};
+    // SAFETY: the type objects are immortal statics.
+    unsafe {
+        assert!(typy_rt_type_derives_from(&raw const BOOL, &raw const INT));
+        assert!(typy_rt_type_derives_from(
+            &raw const BOOL,
+            &raw const OBJECT
+        ));
+        assert!(typy_rt_type_derives_from(&raw const INT, &raw const INT));
+        assert!(!typy_rt_type_derives_from(&raw const INT, &raw const BOOL));
+        assert!(!typy_rt_type_derives_from(&raw const INT, &raw const FLOAT));
+    }
+}

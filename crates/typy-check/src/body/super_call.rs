@@ -106,7 +106,7 @@ impl BodyChecker<'_> {
                     DiagnosticCode::error(201),
                     receiver.span(),
                     "`super()` with an instance other than the method's own is planned for \
-                     TyPy 1.0 (CLS-29)",
+                     TyPy 0.14 (CLS-29)",
                 )
                 .with_rule(RuleId::CLS_29)
                 .with_help("write `super()`, or `super(Class, self)`"),

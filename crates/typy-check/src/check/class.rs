@@ -65,9 +65,9 @@ pub(crate) struct ClassInfo {
     /// the instance first, which the method table holds in the static method's place (CLS-06).
     pub(crate) static_bridges: Vec<(String, FunctionId)>,
     pub(crate) defaults: Vec<usize>,
-    /// Whether the class is a frozen dataclass, whose fields only the `__init__` `@dataclass`
-    /// writes assigns (CLS-05).
-    pub(crate) frozen: bool,
+    /// Why the fields of the class's instances are assigned only by the `__init__` written
+    /// for it, when they are: a frozen dataclass (CLS-05) or a named tuple (CLS-27).
+    pub(crate) frozen: Option<Frozen>,
     /// Whether `@dataclass` wrote the class's `__init__`.
     pub(crate) generated_init: bool,
     /// What the class body assigns to `__match_args__`, which a class pattern's positional
@@ -83,12 +83,27 @@ pub(crate) struct ClassInfo {
     pub(crate) span: Span,
 }
 
+/// What makes the fields of a class's instances frozen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Frozen {
+    /// `@dataclass(frozen=True)` (CLS-05).
+    Dataclass,
+    /// A named tuple or a class derived from one (CLS-27).
+    NamedTuple,
+}
+
 impl ClassInfo {
     /// Returns the position of an attribute.
     pub(crate) fn attribute(&self, name: &str) -> Option<usize> {
         self.attributes
             .iter()
             .position(|attribute| attribute.name == name)
+    }
+
+    /// Returns the name messages show: a class written for `map` or `filter` is the built-in
+    /// of that name (ADR-0089).
+    pub(crate) fn shown_name(&self) -> &str {
+        super::builtin_iterators::built_in_class(&self.name).unwrap_or(&self.name)
     }
 
     /// Returns a method by its name.
@@ -206,7 +221,7 @@ fn refuse_generic_kind(class: &ClassStatement<'_>, ty: &Type, diagnostics: &mut 
         Diagnostic::new(
             DiagnosticCode::error(201),
             class.name.span,
-            format!("`{name}` is {what}, which is planned for TyPy 1.0 ({rule})"),
+            format!("`{name}` is {what}, which is planned for TyPy 0.13 ({rule})"),
         )
         .with_rule(rule),
     );
@@ -299,7 +314,7 @@ fn derived_type(
                     DiagnosticCode::error(201),
                     span,
                     format!(
-                        "a class derived from the protocol `{written}` is planned for TyPy 1.0 \
+                        "a class derived from the protocol `{written}` is planned for TyPy 0.13 \
                          (GEN-17)"
                     ),
                 )
@@ -656,7 +671,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         adapted: Vec::new(),
         adapters: Vec::new(),
         static_bridges: Vec::new(),
-        frozen: false,
+        frozen: None,
         generated_init: false,
         match_args: None,
         init_uses_instance: false,
@@ -882,7 +897,7 @@ impl ClassMethodCopies<'_> {
                     info.span,
                     format!(
                         "`{}` derives from a copy of a generic class with class methods, which it \
-                         inherits from TyPy 1.0 (GEN-15)",
+                         inherits from TyPy 0.13 (GEN-15)",
                         info.name
                     ),
                 )
@@ -936,7 +951,7 @@ fn give_way(
                 name.span,
                 format!(
                     "`{}` returns `None` and `NotImplemented`, and an operator method that may \
-                     return both is planned for TyPy 1.0 (CLS-33)",
+                     return both is planned for TyPy 0.14 (CLS-33)",
                     name.name
                 ),
             )
@@ -1270,7 +1285,7 @@ fn check_override(
                 name.span,
                 format!(
                     "a static method that overrides `{base_class}.{}`, or is overridden, with a \
-                     parameter or result held otherwise is planned for TyPy 1.0 (CLS-35)",
+                     parameter or result held otherwise is planned for TyPy 0.14 (CLS-35)",
                     name.name
                 ),
             )
@@ -1319,7 +1334,7 @@ fn later_generic_method(name: &Identifier, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         name.span,
-        format!("{what} planned for TyPy 1.0 (GEN-16)"),
+        format!("{what} planned for TyPy 0.13 (GEN-16)"),
     )
     .with_rule(RuleId::GEN_16)
 }
@@ -1452,7 +1467,7 @@ fn refuse_shared_parameter(
             annotation.span(),
             format!(
                 "a value of the generic class `{}` whose type names its type parameter \
-                 `{parameter}` is planned for TyPy 1.0 (GEN-11)",
+                 `{parameter}` is planned for TyPy 0.13 (GEN-11)",
                 info.name
             ),
         )

@@ -2,7 +2,7 @@
 # the Markdown under docs/ (DOC-05, ADR-0050). Every setting here is one that
 # Material for MkDocs 9.8 also reads, so either tool builds the site from
 # this file. scripts/build-docs.sh builds it in strict mode into site/.
-site_name: TyPy 0.9 documentation
+site_name: TyPy 0.10 documentation
 site_url: https://typy-lang.org/
 site_description: >-
   TyPy compiles a strict, typed subset of standard Python ahead of time to
@@ -85,6 +85,7 @@ nav:
   - Home: index.md
   - What's new:
       - whatsnew/index.md
+      - What's new in TyPy 0.10: whatsnew/0.10.md
       - What's new in TyPy 0.9: whatsnew/0.9.md
       - What's new in TyPy 0.8: whatsnew/0.8.md
       - What's new in TyPy 0.7: whatsnew/0.7.md
@@ -200,6 +201,22 @@ nav:
           - adr/0071-release-the-module-variables-when-a-program-with-generators-ends.md
           - adr/0072-delegate-yield-from-one-step-at-a-time-through-the-runtime.md
           - adr/0073-bind-the-arguments-of-a-call-with-unpacking-when-the-program-runs.md
+          - adr/0074-define-a-stable-abi-for-typy-modules-at-1-0.md
+          - adr/0075-read-the-stack-of-each-thread-a-library-runs-on-from-the-thread.md
+          - adr/0076-give-a-function-value-the-identity-of-the-function-it-stands-for.md
+          - adr/0077-type-a-built-in-used-as-a-value-by-the-callable-it-fills.md
+          - adr/0078-make-map-and-filter-iterator-objects-of-the-runtime.md
+          - adr/0079-bind-a-method-value-to-the-method-the-receivers-own-class-runs.md
+          - adr/0080-call-a-function-with-defaults-or-args-through-an-adapter.md
+          - adr/0081-check-a-nested-function-of-a-generic-function-in-each-copy.md
+          - adr/0082-bind-a-decorated-functions-name-to-what-its-decorators-return.md
+          - adr/0083-describe-each-built-in-so-calls-with-unpacking-bind-when-they-run.md
+          - adr/0084-let-type-c-hold-c-or-a-class-derived-from-it.md
+          - adr/0085-hold-a-named-tuple-as-an-instance-of-a-class-derived-from-tuple.md
+          - adr/0086-hold-an-abstract-collection-as-its-built-in-types-range-included.md
+          - adr/0087-make-typing-values-constants-written-only-where-the-oracles-agree.md
+          - adr/0088-give-a-named-tuple-methods-over-the-tuple-of-its-fields.md
+          - adr/0089-write-map-and-filter-as-generic-iterator-classes-of-the-module.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

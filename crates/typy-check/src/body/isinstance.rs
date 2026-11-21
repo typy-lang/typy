@@ -22,6 +22,134 @@ enum Outcome {
 impl BodyChecker<'_> {
     /// Checks `isinstance(value, class)` with a class, or a tuple of classes, named as values:
     /// a class of the program or a built-in type or exception class.
+    /// Checks `callable(x)` (LIB-23): true for a function value and a class, false for any
+    /// other value, as TyPy has no `__call__`; tested when the program runs only for an
+    /// optional or a union, as `isinstance` tests one, and `x` is evaluated either way.
+    pub(super) fn call_callable(
+        &mut self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let ([value], []) = (arguments, keywords) else {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            let message = if keywords.is_empty() {
+                format!(
+                    "callable() takes exactly one argument ({} given)",
+                    arguments.len()
+                )
+            } else {
+                "callable() takes no keyword arguments".to_owned()
+            };
+            return self.error(
+                Diagnostic::new(DiagnosticCode::error(404), span, message)
+                    .with_rule(RuleId::LIB_23),
+                span,
+            );
+        };
+        // A built-in function, method or type is callable, and reading it has no effect.
+        if self.names_builtin(value) {
+            return Self::typed(
+                TypedExprKind::Constant(crate::typed::TypedConstant::Bool(true)),
+                Type::Bool,
+                span,
+            );
+        }
+        let value = self.expression(value);
+        let calls = |ty: &Type| matches!(ty, Type::Callable { .. } | Type::TypeObject(_));
+        let (always, members) = match &value.ty {
+            Type::Optional(inner) => (calls(inner), Vec::new()),
+            Type::Union(members) => (
+                false,
+                members
+                    .iter()
+                    .map(|member| (calls(member), Vec::new()))
+                    .collect(),
+            ),
+            other => (calls(other), Vec::new()),
+        };
+        let test = crate::typed::IsInstanceTest {
+            value,
+            none_matches: false,
+            always,
+            checks: Vec::new(),
+            narrowed: None,
+            otherwise: None,
+            members,
+            held: Vec::new(),
+        };
+        Self::typed(TypedExprKind::IsInstance(Box::new(test)), Type::Bool, span)
+    }
+
+    /// Checks `issubclass(class, classes)` (CLS-19, ADR-0084): the class, and each class of
+    /// the second argument, a class or a tuple of them, named or held in a value, are type
+    /// objects the runtime tests in order. A value that is no class is E0401, as CPython
+    /// raises `TypeError`.
+    pub(super) fn call_issubclass(
+        &mut self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let ([class, classes], []) = (arguments, keywords) else {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            let message = if keywords.is_empty() {
+                format!("issubclass expected 2 arguments, got {}", arguments.len())
+            } else {
+                "issubclass() takes no keyword arguments".to_owned()
+            };
+            return self.error(
+                Diagnostic::new(DiagnosticCode::error(404), span, message)
+                    .with_rule(RuleId::CLS_19),
+                span,
+            );
+        };
+        let class = self.expression(class);
+        let named = match classes {
+            Expr::Tuple { elements, .. } => elements.iter().collect(),
+            other => vec![other],
+        };
+        let bases: Vec<TypedExpr> = named.iter().map(|each| self.expression(each)).collect();
+        let not_class = |value: &TypedExpr| {
+            !matches!(value.ty, Type::TypeObject(_) | Type::Error) && !holds_classes(&value.ty)
+        };
+        if not_class(&class) {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    class.span,
+                    "issubclass() arg 1 must be a class: CPython raises `TypeError`",
+                )
+                .with_rule(RuleId::CLS_19),
+                span,
+            );
+        }
+        if let Some(base) = bases.iter().find(|base| not_class(base)) {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    base.span,
+                    "issubclass() arg 2 must be a class, a tuple of classes, or a union: CPython \
+                     raises `TypeError`",
+                )
+                .with_rule(RuleId::CLS_19),
+                span,
+            );
+        }
+        Self::typed(
+            TypedExprKind::IsSubclass {
+                class: Box::new(class),
+                bases,
+            },
+            Type::Bool,
+            span,
+        )
+    }
+
     pub(super) fn call_isinstance(
         &mut self,
         arguments: &[Expr],
@@ -43,7 +171,8 @@ impl BodyChecker<'_> {
             );
         };
         let value = self.expression(value);
-        let classes = match self.isinstance_classes(classes) {
+        let mut held = Vec::new();
+        let classes = match self.isinstance_classes_holding(classes, &mut held) {
             Ok(classes) => classes,
             Err(Some(diagnostic)) => return self.error(*diagnostic, span),
             // The class is reported where it is named.
@@ -55,7 +184,49 @@ impl BodyChecker<'_> {
                 );
             }
         };
-        self.isinstance_test(value, &classes, span)
+        let test = self.isinstance_test(value, &classes, span);
+        self.with_held_classes(test, held)
+    }
+
+    /// Returns the test `test` that also asks about `held`, classes held in values, whose
+    /// bound, the class their type names, narrows the value as a named class does (CLS-18).
+    pub(super) fn with_held_classes(&mut self, test: TypedExpr, held: Vec<TypedExpr>) -> TypedExpr {
+        if held.is_empty() {
+            return test;
+        }
+        let TypedExprKind::IsInstance(mut test_parts) = test.kind else {
+            return test;
+        };
+        // A class read when the program runs narrows only to the class its type bounds it by,
+        // and a tuple of them to the classes its items' types bound them by.
+        let bounds: Option<Vec<TypeObjectOf>> = held
+            .iter()
+            .flat_map(|class| match &class.ty {
+                Type::Tuple(items) => items.iter().collect(),
+                Type::TupleOf(item) => vec![item.as_ref()],
+                other => vec![other],
+            })
+            .map(|ty| match ty {
+                Type::TypeObject(Some(of)) => Some(of.as_ref().clone()),
+                _ => None,
+            })
+            .collect();
+        if test_parts.checks.is_empty()
+            && !test_parts.always
+            && let Some(bounds) = bounds
+        {
+            let inner = match &test_parts.value.ty {
+                Type::Optional(inner) => inner.as_ref().clone(),
+                other => other.clone(),
+            };
+            let value = test_parts.value.clone();
+            test_parts.narrowed = self.narrowing(&value, &inner, &bounds, false, false);
+        } else {
+            test_parts.narrowed = None;
+            test_parts.otherwise = None;
+        }
+        test_parts.held = held;
+        Self::typed(TypedExprKind::IsInstance(test_parts), Type::Bool, test.span)
     }
 
     /// Returns the test `isinstance(value, classes)` with the classes known, and what it
@@ -107,6 +278,7 @@ impl BodyChecker<'_> {
                 narrowed,
                 otherwise,
                 members,
+                held: Vec::new(),
             })),
             Type::Bool,
             span,
@@ -136,15 +308,35 @@ impl BodyChecker<'_> {
             ]),
             AbstractClass::Generator => tests.push(MemberTest::Kind(RuntimeKind::Generator)),
             AbstractClass::Iterable => {}
+            // The built-in collections are told apart by their classes (LIB-20).
+            AbstractClass::Container | AbstractClass::Collection | AbstractClass::Reversible => {
+                use crate::types::View;
+                let mut builtin = vec![
+                    TypeObjectOf::List,
+                    TypeObjectOf::Tuple,
+                    TypeObjectOf::Str,
+                    TypeObjectOf::Bytes,
+                    TypeObjectOf::Range,
+                    TypeObjectOf::Dict,
+                    TypeObjectOf::View(View::Keys),
+                    TypeObjectOf::View(View::Values),
+                    TypeObjectOf::View(View::Items),
+                ];
+                if *kind != AbstractClass::Reversible {
+                    builtin.push(TypeObjectOf::Set);
+                }
+                tests.extend(builtin.into_iter().map(MemberTest::Class));
+            }
         }
         tests
     }
 
-    /// Returns the classes the second argument names: a class or a tuple of them, each named
-    /// as a value.
-    pub(super) fn isinstance_classes(
+    /// Returns the classes the second argument names, a class or a tuple of them, and puts
+    /// each class held in a value into `held`, which is tested when the program runs (CLS-18).
+    pub(super) fn isinstance_classes_holding(
         &mut self,
         classes: &Expr,
+        held: &mut Vec<TypedExpr>,
     ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {
         let named = match classes {
             Expr::Tuple { elements, .. } => elements.iter().collect(),
@@ -152,18 +344,21 @@ impl BodyChecker<'_> {
         };
         let mut found = Vec::new();
         for each in named {
-            if let Some(classes) = self.typing_classes(each)? {
+            if let Some(classes) = self.typing_classes(each, held)? {
                 found.extend(classes);
                 continue;
             }
-            found.push(self.named_class(each)?);
+            match self.named_class(each)? {
+                Named::Class(class) => found.push(class),
+                Named::Held(value) => held.push(value),
+            }
         }
         Ok(found)
     }
 
     /// Returns the class an expression names as a value: a class of the program, or a
     /// built-in type or exception class.
-    fn named_class(&mut self, each: &Expr) -> Result<TypeObjectOf, Option<Box<Diagnostic>>> {
+    fn named_class(&mut self, each: &Expr) -> Result<Named, Option<Box<Diagnostic>>> {
         let typed = self.expression(each);
         if typed.ty == Type::TypeAlias {
             return Err(Some(Box::new(
@@ -196,17 +391,21 @@ impl BodyChecker<'_> {
             )));
         }
         match typed.kind {
-            TypedExprKind::TypeObject(of) => Ok(*of),
+            TypedExprKind::TypeObject(of) => Ok(Named::Class(*of)),
             _ if typed.ty == Type::Error => Err(None),
+            // A class held in a value is tested when the program runs (CLS-18).
+            _ if matches!(typed.ty, Type::TypeObject(_)) || holds_classes(&typed.ty) => {
+                Ok(Named::Held(typed))
+            }
+            // Any other value is no class: CPython raises `TypeError` for it.
             _ => Err(Some(Box::new(
                 Diagnostic::new(
-                    DiagnosticCode::error(201),
+                    DiagnosticCode::error(401),
                     each.span(),
-                    "`isinstance` with a class held in a variable or computed is \
-                     planned for TyPy 0.10 (CLS-18)",
+                    "isinstance() arg 2 must be a type, a tuple of types, or a union: CPython \
+                     raises `TypeError`",
                 )
-                .with_rule(RuleId::CLS_18)
-                .with_help("name the class, or a tuple of classes, in the call"),
+                .with_rule(RuleId::CLS_09),
             ))),
         }
     }
@@ -416,16 +615,35 @@ fn abstract_outcome(
 ) -> Outcome {
     use crate::types::AbstractClass;
     let always = |yes: bool| if yes { Outcome::Always } else { Outcome::Never };
+    // `Container`, `Collection` and `Reversible` take the built-in collections CPython
+    // registers with them, and no iterator or file (LIB-20).
+    let collection = matches!(
+        kind,
+        AbstractClass::Container | AbstractClass::Collection | AbstractClass::Reversible
+    );
     match ty {
+        Type::Set(_) => always(
+            kind != AbstractClass::Reversible
+                && kind != AbstractClass::Iterator
+                && kind != AbstractClass::Generator,
+        ),
         Type::List(_)
         | Type::Tuple(_)
         | Type::TupleOf(_)
         | Type::Str
         | Type::Bytes
-        | Type::Set(_)
         | Type::Dict(..)
         | Type::DictView(..)
-        | Type::Range => always(kind == AbstractClass::Iterable),
+        | Type::Range => always(kind == AbstractClass::Iterable || collection),
+        Type::Generator { .. }
+        | Type::Iterator(_)
+        | Type::TextFile
+        | Type::BinaryFile(_)
+        | Type::DescriptorFile(_)
+            if collection =>
+        {
+            Outcome::Never
+        }
         // A generator is all three; what an iterator holds, or an iterable, its object knows
         // (TYP-21).
         Type::Generator { .. } => Outcome::Always,
@@ -502,13 +720,34 @@ fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
                 Outcome::Never
             }
         }
-        // Every value is an `object`, and a `bool` is an `int` in CPython.
+        // Every value is an `object`, a `bool` is an `int` in CPython, and a named tuple is a
+        // `tuple` (CLS-27).
         (_, TypeObjectOf::Object) | (Type::Bool, TypeObjectOf::Int) => Outcome::Always,
+        (Type::Instance(own), TypeObjectOf::Tuple) if own.operators.named_tuple() => {
+            Outcome::Always
+        }
         // These hold an object whose type only the object knows.
         (Type::Iterator(_) | Type::Iterable(_) | Type::AnyModule, _) => Outcome::Checked,
         _ => match TypeObjectOf::of(ty) {
             Some(own) if own == *class => Outcome::Always,
             _ => Outcome::Never,
         },
+    }
+}
+
+/// A class the second argument of `isinstance` names: one the program names, or one held in
+/// a value, which is tested when the program runs (CLS-18).
+enum Named {
+    Class(TypeObjectOf),
+    Held(TypedExpr),
+}
+
+/// Returns true for a tuple of classes held in a value, such as `kinds = (int, str)` or a
+/// `tuple[type[Shape], ...]`, each item of which is tested as a held class (CLS-18, CLS-19).
+fn holds_classes(ty: &Type) -> bool {
+    match ty {
+        Type::Tuple(items) => items.iter().all(|item| matches!(item, Type::TypeObject(_))),
+        Type::TupleOf(item) => matches!(item.as_ref(), Type::TypeObject(_)),
+        _ => false,
     }
 }

@@ -85,6 +85,16 @@ impl RuleId {
     pub const CLS_35: Self = Self("CLS-35");
     /// `super()` shall be usable as a value: held in a variable, passed and returned.
     pub const CLS_36: Self = Self("CLS-36");
+    /// A class decorator other than `@dataclass` shall be accepted when its type shows that it returns the class it is given.
+    pub const CLS_38: Self = Self("CLS-38");
+    /// A value of type `type[C]` that may hold a class derived from `C` shall be callable, and its class methods and class variables reachable through it, as CPython reaches those of the class it holds.
+    pub const CLS_39: Self = Self("CLS-39");
+    /// A class pattern with a class held in a variable shall accept positional sub-patterns, read by the `__match_args__` of the class it holds.
+    pub const CLS_40: Self = Self("CLS-40");
+    /// A named tuple made by a call, a subclass of a named tuple with `__new__`, `__init__` or attributes of its own, and a named tuple whose class defines `__len__`, `__getitem__`, `__iter__` or `__contains__` shall be accepted.
+    pub const CLS_41: Self = Self("CLS-41");
+    /// A named tuple shall have `_make` and `_field_defaults`, and its `_replace` shall be a value, be called through its class and take `**` arguments, as CPython's are and do.
+    pub const CLS_43: Self = Self("CLS-43");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -153,6 +163,8 @@ impl RuleId {
     pub const EXC_17: Self = Self("EXC-17");
     /// `characters_written` of a `BlockingIOError`, and a number as the third argument of `OSError` or `BlockingIOError`, shall behave as CPython's do.
     pub const EXC_18: Self = Self("EXC-18");
+    /// The special methods an exception class of the program defines, such as `__eq__`, `__lt__`, `__hash__` and `__len__`, shall be called by the operators and the built-in functions as they are for other classes.
+    pub const EXC_20: Self = Self("EXC-20");
     /// `+`, `-`, `*`, `/`, `//`, `%` and `**` shall give Python's results for `int` and `float`, including `/` on two `int` values returning `float` and `%` taking the sign of the divisor.
     pub const EXP_02: Self = Self("EXP-02");
     /// `int ** int` shall be accepted only when the exponent is a non-negative integer literal, because CPython returns `float` for a negative exponent.
@@ -185,6 +197,10 @@ impl RuleId {
     pub const EXP_18: Self = Self("EXP-18");
     /// `*` and `**` shall be accepted in a call of a built-in function or method other than `print`, of a function value and of an exception class, and `**` in a call of `print`, binding as CPython binds them (ADR-0073).
     pub const EXP_19: Self = Self("EXP-19");
+    /// A default value other than a constant, such as `-1`, a tuple or a call, shall be accepted and evaluated once, when the function is defined.
+    pub const EXP_20: Self = Self("EXP-20");
+    /// `*` of any iterable and `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print`, of a method through a protocol value and of an exception class, `*` in a call of a function value, and `**` in a call of `print`.
+    pub const EXP_22: Self = Self("EXP-22");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
     /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
@@ -228,6 +244,16 @@ impl RuleId {
     pub const FUN_12: Self = Self("FUN-12");
     /// A function, nested function, method or `lambda` with `*args` or `**kwargs` parameters shall be a value where a `Callable` is expected, taking the arguments the `Callable` passes.
     pub const FUN_13: Self = Self("FUN-13");
+    /// User-defined decorators shall be accepted on methods, alone and together with `@staticmethod`, `@classmethod` and `@property`.
+    pub const FUN_15: Self = Self("FUN-15");
+    /// A class of the program or an exception class shall be a value where a `Callable` is expected, its `__init__` taking the arguments the `Callable` passes.
+    pub const FUN_16: Self = Self("FUN-16");
+    /// `property`, `staticmethod` and `classmethod`, and the objects they make, such as a property read through its class, shall be values as CPython's are.
+    pub const FUN_17: Self = Self("FUN-17");
+    /// A nested function with type parameters of its own shall be accepted, with a copy for each set of types its calls give.
+    pub const FUN_18: Self = Self("FUN-18");
+    /// A nested function, a method or a `lambda` with `*args` or `**kwargs` parameters, or with parameters that have defaults, shall be a value where a `Callable` its parameters fit is expected.
+    pub const FUN_19: Self = Self("FUN-19");
     /// Generic functions and classes shall be written with PEP 695 type parameter lists; `TypeVar` and `Generic` shall be rejected.
     pub const GEN_01: Self = Self("GEN-01");
     /// Type parameters with a bound or with constraints shall be accepted and checked.
@@ -316,6 +342,12 @@ impl RuleId {
     pub const LIB_20: Self = Self("LIB-20");
     /// `math.prod` shall take items and a start other than numbers, multiplying them in turn as CPython does.
     pub const LIB_21: Self = Self("LIB-21");
+    /// `map`, `filter` and `callable` shall be available, `map` and `filter` giving iterators that go on after the function raises, as CPython's do.
+    pub const LIB_23: Self = Self("LIB-23");
+    /// `Sized`, `Hashable` and `MappingView` shall be accepted as types, and a class of the program with the methods of `Collection`, `Container` or `Reversible` shall be accepted where that collection is expected.
+    pub const LIB_24: Self = Self("LIB-24");
+    /// `map` and `filter` themselves shall be values, held in a variable, passed, written and given to `isinstance`, and `map` shall take `*` arguments, as CPython's classes are and do.
+    pub const LIB_25: Self = Self("LIB-25");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -440,6 +472,11 @@ impl RuleId {
         Self::CLS_34,
         Self::CLS_35,
         Self::CLS_36,
+        Self::CLS_38,
+        Self::CLS_39,
+        Self::CLS_40,
+        Self::CLS_41,
+        Self::CLS_43,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
@@ -474,6 +511,7 @@ impl RuleId {
         Self::EXC_16,
         Self::EXC_17,
         Self::EXC_18,
+        Self::EXC_20,
         Self::EXP_02,
         Self::EXP_04,
         Self::EXP_06,
@@ -490,6 +528,8 @@ impl RuleId {
         Self::EXP_17,
         Self::EXP_18,
         Self::EXP_19,
+        Self::EXP_20,
+        Self::EXP_22,
         Self::FFI_01,
         Self::FFI_02,
         Self::FFI_03,
@@ -510,6 +550,11 @@ impl RuleId {
         Self::FUN_10,
         Self::FUN_12,
         Self::FUN_13,
+        Self::FUN_15,
+        Self::FUN_16,
+        Self::FUN_17,
+        Self::FUN_18,
+        Self::FUN_19,
         Self::GEN_01,
         Self::GEN_02,
         Self::GEN_03,
@@ -554,6 +599,9 @@ impl RuleId {
         Self::LIB_19,
         Self::LIB_20,
         Self::LIB_21,
+        Self::LIB_23,
+        Self::LIB_24,
+        Self::LIB_25,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,

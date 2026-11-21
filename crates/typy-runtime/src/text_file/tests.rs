@@ -296,6 +296,29 @@ fn a_write_waits_in_the_buffer_until_it_fills_or_is_flushed() {
 }
 
 #[test]
+fn a_surrogate_standard_output_cannot_escape_raises_before_anything_is_written() {
+    // `surrogateescape` writes U+DC80 to U+DCFF as bytes; U+D800 has no byte to stand for.
+    let text = crate::string::new_string(2, crate::string::StrKind::Ucs2);
+    for (index, point) in [0x61, 0xd800].into_iter().enumerate() {
+        // SAFETY: the string is new with two code points.
+        unsafe { crate::string::set_code_point(text, index, point) };
+    }
+    // SAFETY: the text is live and owned here; standard output is the null file.
+    let written = unsafe { typy_rt_text_write(core::ptr::null_mut(), text) };
+    assert_eq!(
+        error_text(written.exception),
+        (
+            "UnicodeEncodeError".to_owned(),
+            "'utf-8' codec can't encode character '\u{5c}ud800' in position 1: surrogates not \
+             allowed"
+                .to_owned()
+        )
+    );
+    // SAFETY: the string is owned here.
+    unsafe { typy_rt_decrement(text.cast()) };
+}
+
+#[test]
 fn a_surrogate_is_refused_before_anything_is_written() {
     let mut writer = Box::new(Writer::with(Encoding::DEFAULT));
     let mut sink = |_: &[u8]| Ok(());

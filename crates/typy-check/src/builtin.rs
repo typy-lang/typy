@@ -12,6 +12,8 @@ pub enum Builtin {
     Any,
     Bool,
     Bytes,
+    /// `callable(x)`, whether `x` is a function value or a class (LIB-23).
+    Callable,
     Chr,
     Dict,
     Enumerate,
@@ -19,6 +21,8 @@ pub enum Builtin {
     Int,
     Input,
     IsInstance,
+    /// `issubclass(class, classes)` (CLS-19).
+    IsSubclass,
     Iter,
     Len,
     List,
@@ -53,6 +57,7 @@ impl Builtin {
             "any" => Self::Any,
             "bool" => Self::Bool,
             "bytes" => Self::Bytes,
+            "callable" => Self::Callable,
             "chr" => Self::Chr,
             "dict" => Self::Dict,
             "enumerate" => Self::Enumerate,
@@ -60,6 +65,7 @@ impl Builtin {
             "int" => Self::Int,
             "input" => Self::Input,
             "isinstance" => Self::IsInstance,
+            "issubclass" => Self::IsSubclass,
             "iter" => Self::Iter,
             "len" => Self::Len,
             "list" => Self::List,
@@ -85,6 +91,53 @@ impl Builtin {
         })
     }
 
+    /// Returns true for a built-in function, which CPython writes as `<built-in function
+    /// NAME>`, and false for a built-in type, such as `int` or `zip`, which is a class.
+    #[must_use]
+    pub const fn is_function(self) -> bool {
+        matches!(
+            self,
+            Self::Abs
+                | Self::All
+                | Self::Any
+                | Self::Callable
+                | Self::Chr
+                | Self::Input
+                | Self::IsInstance
+                | Self::IsSubclass
+                | Self::Iter
+                | Self::Len
+                | Self::Max
+                | Self::Min
+                | Self::Next
+                | Self::Open
+                | Self::Ord
+                | Self::Print
+                | Self::Repr
+                | Self::Round
+                | Self::Sorted
+                | Self::Sum
+        )
+    }
+
+    /// Returns true for a built-in type whose call TyPy types from its arguments, which is a
+    /// value where a `Callable` is expected, as `key=int` (FUN-14).
+    #[must_use]
+    pub const fn is_callable_type(self) -> bool {
+        matches!(
+            self,
+            Self::Int
+                | Self::Float
+                | Self::Str
+                | Self::Bool
+                | Self::Bytes
+                | Self::List
+                | Self::Tuple
+                | Self::Set
+                | Self::Dict
+        )
+    }
+
     /// Returns the builtin's Python name.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -94,6 +147,7 @@ impl Builtin {
             Self::Any => "any",
             Self::Bool => "bool",
             Self::Bytes => "bytes",
+            Self::Callable => "callable",
             Self::Chr => "chr",
             Self::Dict => "dict",
             Self::Enumerate => "enumerate",
@@ -101,6 +155,7 @@ impl Builtin {
             Self::Int => "int",
             Self::Input => "input",
             Self::IsInstance => "isinstance",
+            Self::IsSubclass => "issubclass",
             Self::Iter => "iter",
             Self::Len => "len",
             Self::List => "list",
@@ -138,12 +193,14 @@ mod tests {
             "any",
             "bool",
             "bytes",
+            "callable",
             "chr",
             "dict",
             "enumerate",
             "float",
             "int",
             "isinstance",
+            "issubclass",
             "len",
             "list",
             "max",

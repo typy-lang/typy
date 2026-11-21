@@ -566,17 +566,47 @@ fn function_builder(
         crate::generator::resume_builder(program, function, resume, tuple_types)
     } else {
         let return_type = tyir_type(&function.signature.returns, tuple_types);
+        // A decorated function's traceback shows its own name (FUN-06).
         let mut builder = FunctionBuilder::new(
             FunctionId(function.id.0),
             function_symbol(program, function),
-            function.name.clone(),
+            typy_check::python_name(&function.name),
             return_type,
         );
         let closure = closure_parameter(program, function, &mut builder, tuple_types);
         (builder, None, closure)
     };
-    builder.set_qualified_name(function.qualified_name.clone());
+    // A copy of a generic function, and what it nests, shows Python's `__qualname__`, without
+    // the type arguments its symbol keeps (ADR-0081).
+    builder.set_qualified_name(typy_check::python_name(&without_type_arguments(
+        &function.qualified_name,
+    )));
+    builder.set_stands_for(match program.builtin_values.get(&function.id) {
+        Some(typy_check::BuiltinValue::Function) => typy_tyir::StandsFor::BuiltinFunction,
+        Some(typy_check::BuiltinValue::Method) => typy_tyir::StandsFor::BuiltinMethod,
+        Some(typy_check::BuiltinValue::Type) => typy_tyir::StandsFor::BuiltinType,
+        Some(typy_check::BuiltinValue::Adapter(original)) => {
+            typy_tyir::StandsFor::Adapter(FunctionId(original.0))
+        }
+        None => typy_tyir::StandsFor::Itself,
+    });
     (builder, generator, closure)
+}
+
+/// Returns `name` without the type arguments a copy of a generic function or class adds to
+/// it, such as `pair_with[int].<locals>.make`, which Python writes `pair_with.<locals>.make`.
+fn without_type_arguments(name: &str) -> String {
+    let mut shown = String::with_capacity(name.len());
+    let mut depth = 0_usize;
+    for character in name.chars() {
+        match character {
+            '[' => depth += 1,
+            ']' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => shown.push(character),
+            _ => {}
+        }
+    }
+    shown
 }
 
 /// Returns the symbol `function` is emitted under.
@@ -585,9 +615,9 @@ pub(crate) fn function_symbol(program: &TypedProgram, function: &TypedFunction) 
         ENTRY_SYMBOL.to_owned()
     } else if function.name == FINISH_NAME {
         FINISH_SYMBOL.to_owned()
-    } else if function.name == "<lambda>" {
-        // The lambdas of one function share a `__qualname__`, so each symbol adds the
-        // lambda's number.
+    } else if function.name == "<lambda>" || program.builtin_values.contains_key(&function.id) {
+        // The lambdas of one function share a `__qualname__`, and so do the hidden functions
+        // of one built-in, so each symbol adds the function's number.
         symbol(
             &function.module,
             &format!("{}.{}", function.qualified_name, function.id.0),

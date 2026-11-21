@@ -55,6 +55,9 @@ impl BodyChecker<'_> {
             );
         }
         let value = self.expression(argument);
+        // An instance of a class some class derives from may be of that class, so its type
+        // object is a `type[C]` read when the program runs, whose calls and class members are
+        // planned (CLS-39, ADR-0084).
         let ty = TypeObjectOf::type_of(TypeObjectOf::of(&value.ty));
         Self::typed(TypedExprKind::TypeOf(Box::new(value)), ty, span)
     }
@@ -87,15 +90,42 @@ impl BodyChecker<'_> {
         if attribute.name == "__name__" {
             return Self::typed(TypedExprKind::TypeName(Box::new(object)), Type::Str, span);
         }
+        // A method of a built-in type is a value where a `Callable` is expected (FUN-08).
+        if let Type::TypeObject(Some(class)) = &object.ty
+            && let Some(receiver) = super::builtin_value::receiver_of(class)
+            && crate::method::Method::of(&receiver, &attribute.name).is_some()
+        {
+            let qualified = format!("{}.{}", class.name(), attribute.name);
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(203),
+                    attribute.span,
+                    format!(
+                        "`{qualified}` as a value needs the `Callable` type its context expects"
+                    ),
+                )
+                .with_rule(RuleId::FUN_08)
+                .with_help(format!(
+                    "annotate the variable with the types you call it with, such as \
+                     `change: Callable[[{0}], {0}] = {qualified}`",
+                    class.name()
+                )),
+                span,
+            );
+        }
         let message = format!(
             "{} has no attribute `{}` in TyPy; it has `__name__`",
             object.ty.with_article(),
             attribute.name
         );
-        self.error(
-            Diagnostic::new(DiagnosticCode::error(412), attribute.span, message)
-                .with_rule(RuleId::CLS_12),
-            span,
-        )
+        let mut diagnostic = Diagnostic::new(DiagnosticCode::error(412), attribute.span, message)
+            .with_rule(RuleId::CLS_12);
+        if object.ty == Type::TypeObject(None) {
+            diagnostic = diagnostic.with_help(
+                "reading a class variable or a class method through a class known only when \
+                 the program runs is planned for TyPy 0.14 (CLS-39)",
+            );
+        }
+        self.error(diagnostic, span)
     }
 }

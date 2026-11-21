@@ -298,7 +298,7 @@ impl Types<'_> {
                         DiagnosticCode::error(201),
                         span,
                         "an array whose length is not an integer literal is planned for TyPy \
-                         1.0 (FFI-10)",
+                         0.13 (FFI-10)",
                     )
                     .with_rule(RuleId::FFI_10),
                 ));
@@ -310,7 +310,7 @@ impl Types<'_> {
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     span,
-                    "an array of pointers or arrays is planned for TyPy 1.0 (FFI-10)",
+                    "an array of pointers or arrays is planned for TyPy 0.13 (FFI-10)",
                 )
                 .with_rule(RuleId::FFI_10),
             ));
@@ -324,7 +324,7 @@ pub(crate) fn pointer_of_pointer(span: Span) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        "a pointer to a pointer or to an array is planned for TyPy 1.0 (FFI-10)",
+        "a pointer to a pointer or to an array is planned for TyPy 0.13 (FFI-10)",
     )
     .with_rule(RuleId::FFI_10)
 }

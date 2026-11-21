@@ -34,6 +34,19 @@ impl BodyChecker<'_> {
             span,
         } = expression
         else {
+            // A built-in function takes the `Callable` the context expects (FUN-08).
+            if let Some(types) = expected.parameters
+                && let Some(value) = self.builtin_as_callable(expression, types, expected.returns)
+            {
+                return value;
+            }
+            // So does a method read through a built-in value, such as `words.append`.
+            if let (Some(types), Expr::Attribute { span, .. }) = (expected.parameters, expression) {
+                self.expected_method = Some((*span, types.to_vec(), expected.returns.cloned()));
+                let value = self.expression(expression);
+                self.expected_method = None;
+                return value;
+            }
             return self.expression(expression);
         };
         if let Some(refused) = self.refused_lambda(*span) {
@@ -117,19 +130,9 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::Lambda { function, captures }, ty, *span)
     }
 
-    /// Returns E0201 for a `lambda` in a generic function, which has a copy for each set of
-    /// types (FUN-10), and E0306 for one that captures a variable assigned no type yet: its
-    /// body is checked where it stands.
+    /// Returns E0306 for a `lambda` that captures a variable assigned no type yet: its body is
+    /// checked where it stands.
     fn refused_lambda(&mut self, span: Span) -> Option<TypedExpr> {
-        if !self.program.type_arguments.is_empty() {
-            let diagnostic = Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "a `lambda` inside a generic function is planned for TyPy 0.10 (FUN-10)",
-            )
-            .with_rule(RuleId::FUN_10);
-            return Some(self.error(diagnostic, span));
-        }
         let untyped = self.captured_names(span).into_iter().find(|name| {
             self.cell_symbol(name)
                 .is_some_and(|symbol| !self.types.contains_key(&symbol))
@@ -201,13 +204,14 @@ impl BodyChecker<'_> {
         Some(given[..parameters.len()].to_vec())
     }
 
-    /// Returns the type of the body of the `lambda` `function`, which no context gave, and
-    /// gives its signature that result.
-    fn settle_lambda_result(&mut self, function: crate::typed::FunctionId) -> Type {
+    /// Returns the type of the value the last statement of `function` returns, the body of a
+    /// `lambda` or of a hidden function of a built-in, which no context gave, and gives its
+    /// signature that result.
+    pub(super) fn settle_lambda_result(&mut self, function: crate::typed::FunctionId) -> Type {
         let index = function.0 as usize;
         let returns = self.program.functions[index]
             .as_ref()
-            .and_then(|typed| match typed.body.first() {
+            .and_then(|typed| match typed.body.last() {
                 Some(TypedStmt::Return {
                     value: Some(value), ..
                 }) => Some(value.ty.clone()),

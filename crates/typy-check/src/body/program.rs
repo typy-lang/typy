@@ -73,6 +73,10 @@ pub(crate) struct Program {
     /// The type each type parameter stands for while a generic body or a copy of it is
     /// checked (GEN-01).
     pub(crate) type_arguments: BTreeMap<String, Type>,
+    /// The generic function whose body is being checked with opaque or constrained types,
+    /// whose nested functions, `lambda`s and generator expressions make no code: each copy
+    /// makes its own (ADR-0081).
+    pub(crate) generic_pass: Option<FunctionId>,
     /// The generic functions of the program and the copies made of them (GEN-03).
     pub(crate) generics: super::generic_copy::Generics,
     /// The classes that satisfy each protocol, and the dispatchers of protocol values
@@ -131,9 +135,26 @@ pub(crate) struct Program {
     /// The class variables the program assigns through a subclass that inherits them
     /// (ADR-0037).
     pub(super) subclass_variables: crate::check::subclass_variables::SubclassVariables,
+    /// The classes of every module that some class derives from, by module and name, read
+    /// before any module is checked, so a subclass in a module checked later counts
+    /// (ADR-0084).
+    pub(super) derived_classes: BTreeSet<crate::check::class_index::ClassKey>,
+    /// The hidden function of each built-in function used as a value, by its module, its
+    /// name and the parameter types of its `Callable` (FUN-08, ADR-0077).
+    builtin_values: Vec<BuiltinValueEntry>,
     /// The operator and comparison methods that return `T | NotImplementedType` (CLS-21).
     pub(crate) giving_way: crate::check::not_implemented::GivingWay,
 }
+
+/// A hidden function of a built-in used as a value: the module that made it, the built-in's
+/// name, the parameter types of its `Callable`, the function and what it stands for (FUN-08).
+type BuiltinValueEntry = (
+    String,
+    String,
+    Vec<Type>,
+    FunctionId,
+    crate::typed::BuiltinValue,
+);
 
 /// What a first look at a module body may change, which `keep_module_types` undoes.
 pub(crate) struct Snapshot {
@@ -197,6 +218,7 @@ impl Program {
             type_alias_objects: Vec::new(),
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
+            generic_pass: None,
             generics: super::generic_copy::Generics::default(),
             protocol_values: super::protocol_value::ProtocolValues::default(),
             class_copies: std::cell::RefCell::default(),
@@ -220,6 +242,8 @@ impl Program {
             contexts: BTreeMap::new(),
             foreign: super::foreign_call::Foreign::default(),
             subclass_variables: crate::check::subclass_variables::SubclassVariables::default(),
+            derived_classes: BTreeSet::new(),
+            builtin_values: Vec::new(),
             giving_way: crate::check::not_implemented::GivingWay::new(),
         }
     }
@@ -313,6 +337,9 @@ impl Program {
         let first_class = self.classes.len();
         self.classes.extend(classes);
         self.class_ids = class_ids;
+        for (class, instance) in &instances {
+            note_bases(*class, instance);
+        }
         self.instances.extend(instances);
         // A generic class's copies are made from its definitions, which have no bridges
         // (CLS-30); a protocol has no instances, and a value of it reaches the methods of the
@@ -373,6 +400,35 @@ impl Program {
     }
 
     /// Returns the ID the next function added while checking a module body takes.
+    /// Returns the hidden function of the module being checked that calls the built-in
+    /// `name` with arguments of `parameters`, when one was made.
+    pub(super) fn builtin_value(&self, name: &str, parameters: &[Type]) -> Option<FunctionId> {
+        self.builtin_values
+            .iter()
+            .find(|(module, each, types, ..)| {
+                *module == self.module && each == name && types.as_slice() == parameters
+            })
+            .map(|(_, _, _, function, _)| *function)
+    }
+
+    /// Keeps `function`, the hidden function that calls the built-in `name` with arguments of
+    /// `parameters`, for the module being checked.
+    pub(super) fn add_builtin_value(
+        &mut self,
+        name: &str,
+        parameters: Vec<Type>,
+        function: FunctionId,
+        kind: crate::typed::BuiltinValue,
+    ) {
+        self.builtin_values.push((
+            self.module.clone(),
+            name.to_owned(),
+            parameters,
+            function,
+            kind,
+        ));
+    }
+
     pub(super) fn next_function(&self) -> FunctionId {
         FunctionId(id(self.functions.len()))
     }
@@ -700,6 +756,9 @@ impl Program {
         let first_new = FunctionId(id(snapshot.functions));
         self.lazy_imports
             .retain(|function, _| *function < first_new);
+        // The hidden functions of built-ins the look made are made again (FUN-08).
+        self.builtin_values
+            .retain(|(_, _, _, function, _)| *function < first_new);
         self.functions.truncate(snapshot.functions);
         self.signatures.truncate(snapshot.signatures);
         self.classes.truncate(snapshot.first_class);
@@ -806,6 +865,7 @@ impl Program {
                             Some(crate::iterator_fits::Iteration::Iterator(_))
                         ),
                     iterates: !opaque && self.protocol_values.iterations.contains_key(&class.id),
+                    named_tuple: class.frozen == Some(crate::check::Frozen::NamedTuple),
                 }
             })
             .collect()
@@ -819,6 +879,8 @@ impl Program {
             .find(|module| module.name == main)
             .map_or(FunctionId(0), |module| module.body);
         let classes = self.typed_classes();
+        let adapters = self.override_adapters();
+        let protocol_methods = self.protocol_values.bound_methods.clone();
         TypedProgram {
             symbols: self.symbols,
             functions: self.functions.into_iter().flatten().collect(),
@@ -844,13 +906,52 @@ impl Program {
             library_version: None,
             warnings: typy_diagnostics::Diagnostics::new(),
             closures: self.closures,
+            // A hidden function of a method is named `type.method` (ADR-0077).
+            builtin_values: self
+                .builtin_values
+                .iter()
+                .map(|(_, _, _, function, kind)| (*function, *kind))
+                .chain(adapters)
+                .collect(),
+            protocol_methods,
             cells: self.cells,
             nonlocals: self.nonlocals,
-            fits: (
-                self.protocol_values.fits.clone(),
-                self.protocol_values.iterations.clone(),
-            ),
+            fits: crate::typed::ClassTables {
+                protocols: self.protocol_values.fits.clone(),
+                iterations: self.protocol_values.iterations.clone(),
+                bases: crate::class_bases::table(),
+            },
         }
+    }
+}
+
+impl Program {
+    /// Returns each adapter of an override with the override it stands for, whose identity
+    /// its bound methods take (FUN-09, ADR-0079).
+    fn override_adapters(&self) -> Vec<(FunctionId, crate::typed::BuiltinValue)> {
+        let protocol = self
+            .protocol_values
+            .adapters
+            .iter()
+            .map(|((own, _), adapter)| (*adapter, crate::typed::BuiltinValue::Adapter(*own)));
+        self.classes
+            .iter()
+            .flat_map(|class| {
+                class.adapters.iter().filter_map(|(name, adapter)| {
+                    let (_, _, own) = class.adapted.iter().find(|(each, ..)| each == name)?;
+                    Some((*adapter, crate::typed::BuiltinValue::Adapter(*own)))
+                })
+            })
+            .chain(protocol)
+            .collect()
+    }
+}
+
+/// Notes the bases of `class`, whose instances have the type `instance`, which assignability
+/// reads for `type[C]` (CLS-18).
+pub(super) fn note_bases(class: ClassId, instance: &Type) {
+    if let Type::Instance(own) = instance {
+        crate::class_bases::note(class, own.ancestors.iter().map(|(base, _)| *base).collect());
     }
 }
 

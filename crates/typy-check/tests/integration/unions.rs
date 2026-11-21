@@ -173,3 +173,95 @@ fn an_operation_on_a_union_variable_is_checked_for_each_member() {
         assert_eq!(with_shapes(body), vec![code.to_string()], "{body}");
     }
 }
+
+#[test]
+fn a_fixed_tuple_takes_the_member_of_a_union_that_holds_any_number_of_its_items() {
+    let source = concat!(
+        "def show(values: tuple[int, ...] | str) -> None:\n",
+        "    print(values)\n",
+        "def first(values: tuple[int, ...] | tuple[str, str]) -> None:\n",
+        "    print(values)\n",
+        "pair = (3, 4)\n",
+        "show((1, 2))\n",
+        "show(())\n",
+        "show(pair)\n",
+        "show('a')\n",
+        "first((1, 2, 3))\n",
+        "first(('a', 'b'))\n",
+        "kept: tuple[int, ...] | str = (5,)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn a_fixed_tuple_of_other_items_is_no_member_of_such_a_union() {
+    let source = concat!(
+        "def show(values: tuple[int, ...] | str) -> None:\n",
+        "    print(values)\n",
+        "show((1, 'a'))\n",
+    );
+    assert_eq!(app(source), ["E0404"]);
+}
+
+#[test]
+fn cls_18_isinstance_takes_a_class_held_in_a_value() {
+    let source = concat!(
+        "class Shape:\n",
+        "    pass\n",
+        "class Square(Shape):\n",
+        "    def side(self) -> int:\n",
+        "        return 4\n",
+        "shape: Shape = Square()\n",
+        "kind = type(shape)\n",
+        "square_class: type[Square] = Square\n",
+        "if isinstance(shape, square_class):\n",
+        "    print(shape.side())\n",
+        "print(isinstance(shape, kind), isinstance(shape, (Shape, kind)), isinstance(True, type(1)))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn cls_19_issubclass_takes_classes_named_or_held() {
+    let source = concat!(
+        "class Shape:\n",
+        "    pass\n",
+        "class Square(Shape):\n",
+        "    pass\n",
+        "kind = type(Square())\n",
+        "print(issubclass(Square, Shape), issubclass(kind, (int, Shape)), issubclass(bool, int))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let cases: [(&str, &[&str]); 4] = [
+        (
+            "class A:\n    pass\nprint(issubclass(A(), A))\n",
+            &["E0401"],
+        ),
+        ("class A:\n    pass\nprint(issubclass(A, 3))\n", &["E0401"]),
+        ("print(issubclass(int))\n", &["E0404"]),
+        (
+            "classes = (int, 3)\nprint(issubclass(bool, classes))\n",
+            &["E0401"],
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(app(source), expected, "{source}");
+    }
+}
+
+#[test]
+fn cls_18_a_tuple_of_classes_held_in_a_value_is_tested_class_by_class() {
+    let source = concat!(
+        "class Shape:\n",
+        "    pass\n",
+        "class Square(Shape):\n",
+        "    pass\n",
+        "numbers = (int, float)\n",
+        "squares: tuple[type[Square], ...] = (Square,)\n",
+        "def kind(value: int | str) -> bool:\n",
+        "    return isinstance(value, numbers)\n",
+        "print(kind(1), isinstance(Shape(), squares), issubclass(Square, squares))\n",
+        "print(issubclass(bool, numbers), isinstance(Square(), ()))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}

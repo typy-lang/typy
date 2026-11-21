@@ -144,8 +144,9 @@ fn fun_05_a_function_without_one_callable_type_is_not_a_value() {
         ),
         (
             "print(len)",
-            "E0201",
-            "using `len` as a value is planned for TyPy 0.10 (FUN-08)",
+            "E0203",
+            "`len` takes arguments of more than one type, so as a value it needs the \
+             `Callable` type its context expects",
         ),
     ];
     for (statement, code, message) in cases {
@@ -248,21 +249,6 @@ fn fun_05_a_function_value_compares_and_hashes_by_identity_and_never_orders() {
     assert_eq!(ordered[0].0, "E0407");
 }
 
-#[test]
-fn lib_17_the_typing_names_a_later_release_gives_are_planned_for_it() {
-    for (name, rule) in [("NamedTuple", "CLS-27"), ("Sequence", "LIB-20")] {
-        let found = messages(&format!("from typing import {name}\n"));
-        assert_eq!(
-            found,
-            [(
-                "E0201".to_owned(),
-                format!("`typing.{name}` is planned for TyPy 0.10 ({rule})"),
-                rule.to_owned()
-            )]
-        );
-    }
-}
-
 /// A class whose method a subclass overrides, and a static method, for the method cases.
 const METHODS: &str = "\
 class Shape:
@@ -312,45 +298,50 @@ fn fun_05_a_bound_method_takes_the_parameters_after_self() {
 }
 
 #[test]
-fn fun_09_the_methods_without_one_bound_value_yet_are_planned() {
+fn fun_09_a_method_a_subclass_defines_again_otherwise_is_a_value_of_the_base_s_type() {
     let cases = [
-        (
-            "class C:\n    @classmethod\n    def make(cls) -> int:\n        return 1\nf = C.make\n",
-            "`make` is a class method, and using one as a value is planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
-            "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
-             class D(B):\n    @staticmethod\n    def s() -> int:\n        return 2\nf = B().s\n",
-            "`s` is a static method a subclass defines again, and using one as a value is \
-             planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
-            "class B:\n    def v(self) -> int | None:\n        return None\n\
-             class D(B):\n    def v(self) -> int:\n        return 1\nf = B().v\n",
-            "`v` is a method a subclass overrides with other parameters or a result held \
-             otherwise, and using one as a value is planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
-            "class B:\n    def v(self) -> int:\n        return 0\n\
-             class D(B):\n    @staticmethod\n    def v() -> int:\n        return 1\nf = B().v\n",
-            "`v` is a method a subclass overrides with other parameters or a result held \
-             otherwise, and using one as a value is planned for TyPy 0.10 (FUN-09)",
-        ),
-        (
-            "from typing import Protocol\nclass P(Protocol):\n    def n(self) -> int: ...\n\
-             def f(p: P) -> None:\n    g = p.n\n",
-            "`n` is a method of the protocol `P`, and using a protocol value's method as a \
-             value is planned for TyPy 0.10 (FUN-09)",
-        ),
+        // A static method that a subclass defines again as a method.
+        "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
+         class D(B):\n    def s(self) -> int:\n        return 2\n\
+         f: Callable[[], int] = B().s\n",
+        // A method whose override returns a type held otherwise.
+        "class B:\n    def v(self) -> int | None:\n        return None\n\
+         class D(B):\n    def v(self) -> int:\n        return 1\n\
+         f: Callable[[], int | None] = B().v\n",
+        // A method that a subclass defines again as a static method.
+        "class B:\n    def v(self) -> int:\n        return 0\n\
+         class D(B):\n    @staticmethod\n    def v() -> int:\n        return 1\n\
+         f: Callable[[], int] = B().v\n",
+        // An override adapted to the method between, read through the first base.
+        "class A:\n    def m(self, x: int) -> int | None:\n        return None\n\
+         class P(A):\n    def m(self, x: int) -> int:\n        return x\n\
+         class Q(P):\n    def m(self, x: int | None) -> int:\n        return 7\n\
+         f: Callable[[int], int | None] = A().m\n",
+        // A method of a protocol, read through a protocol value.
+        "from typing import Protocol\nclass P(Protocol):\n    def n(self) -> int: ...\n\
+         def f(p: P) -> None:\n    g: Callable[[], int] = p.n\n",
     ];
-    for (source, message) in cases {
-        let found = messages(source);
-        assert_eq!(
-            found,
-            [("E0201".to_owned(), message.to_owned(), "FUN-09".to_owned())],
-            "{source}"
-        );
+    for case in cases {
+        let source = format!("from collections.abc import Callable\n{case}");
+        assert_eq!(app(&source), Vec::<String>::new(), "{case}");
     }
+}
+
+#[test]
+fn fun_17_a_property_read_through_its_class_is_planned() {
+    let source = "class Box:\n    @property\n    def v(self) -> int:\n        return 1\n\
+                  class Big(Box):\n    pass\nf = Box.v\ng = Big.v\n";
+    let message = |class: &str| {
+        (
+            "E0201".to_owned(),
+            format!(
+                "`{class}.v` is a property, and a property read through its class as a value is \
+                 planned for TyPy 1.0 (FUN-17)"
+            ),
+            "FUN-17".to_owned(),
+        )
+    };
+    assert_eq!(messages(source), [message("Box"), message("Big")]);
 }
 
 #[test]
@@ -455,4 +446,415 @@ fn fun_05_a_key_is_a_function_value_of_one_item_whose_results_order() {
             "{statement}"
         );
     }
+}
+
+#[test]
+fn fun_08_a_builtin_function_takes_the_callable_its_context_expects() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def apply(function: Callable[[int], str], value: int) -> str:\n",
+        "    return function(value)\n",
+        "words = ['pear', 'fig']\n",
+        "print(sorted(words, key=len), max(words, key=len), min([3, -5], key=abs))\n",
+        "measure: Callable[[str], int] = len\n",
+        "letter = chr\n",
+        "code = ord\n",
+        "print(apply(chr, 97), apply(repr, 5), measure is len, len == measure, letter(66), code('a'))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn fun_08_a_builtin_function_that_does_not_fit_its_context_is_refused() {
+    let cases = [
+        (
+            "from collections.abc import Callable\nmeasure: Callable[[str], float] = len\n",
+            "E0404",
+            "`len` called with a str gives an int, and this `Callable` returns float",
+        ),
+        (
+            "print(sorted([1, 2], key=len))\n",
+            "E0404",
+            "the argument of `len` must be a str, and this is an int",
+        ),
+        (
+            "measure = abs\n",
+            "E0203",
+            "`abs` takes arguments of more than one type, so as a value it needs the `Callable` \
+             type its context expects",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            (code, message),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn fun_08_a_name_the_program_binds_is_not_the_builtin() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def len(text: str) -> int:\n",
+        "    return 0\n",
+        "measure: Callable[[str], int] = len\n",
+        "print(sorted(['a'], key=len))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn fun_08_enumerate_zip_and_reversed_are_values_only_where_a_call_of_them_is() {
+    for statement in [
+        "x = enumerate",
+        "f: Callable[[list[int]], Iterator[int]] = reversed",
+        "pairs = list(map(zip, [[1]], [[2]]))",
+    ] {
+        let source = format!("from collections.abc import Callable, Iterator\n{statement}\n");
+        let found = messages(&source);
+        assert_eq!(found.len(), 1, "{statement}: {found:?}");
+        assert_eq!(found[0].0, "E0201");
+        assert!(
+            found[0].1.ends_with(
+                "outside a `for` loop, a comprehension or an iterable argument is planned for \
+                 after TyPy 1.0"
+            ),
+            "{statement}: {found:?}"
+        );
+    }
+}
+
+#[test]
+fn fun_08_a_method_of_a_builtin_type_read_through_the_type_is_a_value() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "words = ['pear', 'Fig']\n",
+        "print(sorted(words, key=str.lower), max(words, key=str.upper))\n",
+        "shout: Callable[[str], str] = str.upper\n",
+        "add: Callable[[list[int], int], None] = list.append\n",
+        "keys: Callable[[dict[str, int]], list[str]] = dict.copy\n",
+        "print(shout is str.upper, shout == str.upper)\n",
+    );
+    let found = messages(source);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        found[0].1,
+        "`dict.copy` called with a dict[str, int] gives a dict[str, int], and this `Callable` \
+         returns list[str]"
+    );
+}
+
+#[test]
+fn fun_08_a_method_of_a_builtin_type_takes_that_type_first() {
+    let cases = [
+        (
+            "from collections.abc import Callable\nshout: Callable[[int], str] = str.upper\n",
+            "E0404",
+            "`str.upper` takes a str as its first argument, and this `Callable` passes an int",
+        ),
+        (
+            "shout = str.upper\n",
+            "E0203",
+            "`str.upper` as a value needs the `Callable` type its context expects",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            (code, message),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn fun_08_a_function_of_math_or_sys_takes_the_callable_its_context_expects() {
+    let source = concat!(
+        "import math\n",
+        "import sys\n",
+        "from collections.abc import Callable\n",
+        "from math import sqrt as root\n",
+        "floor_of: Callable[[float], int] = math.floor\n",
+        "square_root: Callable[[float], float] = root\n",
+        "limit: Callable[[], int] = sys.getrecursionlimit\n",
+        "print(sorted([2.5, -1.5], key=math.fabs), square_root is math.sqrt, limit())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn fun_08_a_function_of_a_module_a_function_imports_is_a_value() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def measure() -> int:\n",
+        "    import math as numbers\n",
+        "    floor_of: Callable[[float], int] = numbers.floor\n",
+        "    return floor_of(2.5)\n",
+        "print(measure())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn fun_08_a_method_read_through_a_builtin_value_binds_it() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "words: list[str] = []\n",
+        "add: Callable[[str], None] = words.append\n",
+        "join: Callable[[list[str]], str] = '-'.join\n",
+        "print(sorted(['b', 'a'], key='ab'.index), add, join)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let cases = [
+        (
+            "words = ['a']\nadd = words.append\n",
+            "E0203",
+            "`append` of a list[str] as a value needs the `Callable` type its context expects",
+        ),
+        (
+            "from collections.abc import Callable\nwords = ['a']\n\
+             add: Callable[[int], None] = words.append\n",
+            "E0404",
+            "`object` of `append` must be a str, and this is an int",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            (code, message),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn fun_14_a_builtin_type_is_a_function_of_its_arguments() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "print(sorted(['10', '9'], key=int), sorted([10, 9], key=str))\n",
+        "parse: Callable[[str], int] = int\n",
+        "items: Callable[[str], list[str]] = list\n",
+        "print(parse('4'), items('ab'), parse == int)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let found =
+        messages("from collections.abc import Callable\nparse: Callable[[list[int]], int] = int\n");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, "E0404");
+}
+
+#[test]
+fn fun_16_a_class_as_a_callable_is_planned() {
+    let source = "from collections.abc import Callable\nclass Box:\n    def __init__(self, size: int) -> None:\n        self.size = size\nmake: Callable[[int], Box] = Box\n";
+    assert_eq!(
+        messages(source),
+        [(
+            "E0201".to_owned(),
+            "the class `Box` as a `Callable` value is planned for TyPy 0.14 (FUN-16)".to_owned(),
+            "FUN-16".to_owned(),
+        )]
+    );
+}
+
+#[test]
+fn lib_23_callable_takes_one_value_by_position() {
+    let cases = [
+        (
+            "print(callable())\n",
+            "callable() takes exactly one argument (0 given)",
+        ),
+        (
+            "print(callable(1, 2))\n",
+            "callable() takes exactly one argument (2 given)",
+        ),
+        (
+            "print(callable(obj=1))\n",
+            "callable() takes no keyword arguments",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            ("E0404", message)
+        );
+    }
+    assert_eq!(
+        app("def f() -> None:\n    pass\nprint(callable(f), callable(len), callable(1))\n"),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn fun_13_a_function_with_defaults_or_variadic_parameters_fits_through_an_adapter() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def total(*values: int) -> int:\n",
+        "    return sum(values)\n",
+        "def scale(value: int, by: int = 2) -> int:\n",
+        "    return value * by\n",
+        "def pick(first: int, *rest: int, **named: int) -> int:\n",
+        "    return first\n",
+        "def apply(function: Callable[[int, int], int]) -> int:\n",
+        "    return function(1, 2)\n",
+        "twice: Callable[[int], int] = scale\n",
+        "summed: Callable[[int, int, int], int] = total\n",
+        "print(apply(total), apply(pick), sorted([3, 1], key=scale), twice is scale, summed is total)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let cases = [
+        (
+            "from collections.abc import Callable\ndef scale(value: int, by: int = 2) -> int:\n    \
+             return value\nf: Callable[[str], int] = scale\n",
+            "E0404",
+        ),
+        (
+            "def total(*values: int) -> int:\n    return 0\nf = total\n",
+            "E0203",
+        ),
+    ];
+    for (source, code) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(found[0].0, code, "{source}");
+    }
+}
+
+#[test]
+fn fun_09_a_class_method_read_as_a_value_binds_its_class() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "class Box:\n",
+        "    @classmethod\n",
+        "    def make(cls, size: int) -> int:\n",
+        "        return size\n",
+        "class BigBox(Box):\n",
+        "    pass\n",
+        "box: Box = BigBox()\n",
+        "made: Callable[[int], int] = Box.make\n",
+        "through: Callable[[int], int] = box.make\n",
+        "print(made(1), through(2), made == Box.make, BigBox.make)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let generic = concat!(
+        "class Box[T]:\n",
+        "    @classmethod\n",
+        "    def make(cls) -> int:\n",
+        "        return 1\n",
+        "box = Box[int]()\n",
+        "made = box.make\n",
+    );
+    let found = messages(generic);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        (found[0].0.as_str(), found[0].2.as_str()),
+        ("E0201", "CLS-30")
+    );
+}
+
+#[test]
+fn fun_09_a_static_method_read_through_an_instance_is_its_classs_own() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "class Box:\n",
+        "    @staticmethod\n",
+        "    def double(value: int) -> int:\n",
+        "        return value * 2\n",
+        "class BigBox(Box):\n",
+        "    @staticmethod\n",
+        "    def double(value: int) -> int:\n",
+        "        return value * 20\n",
+        "box: Box = BigBox()\n",
+        "chosen: Callable[[int], int] = box.double\n",
+        "print(chosen(1), chosen is BigBox.double)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn fun_06_a_decorated_function_binds_what_its_decorators_return() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "def trace(function: Callable[[int], int]) -> Callable[[int], int]:\n",
+        "    def wrapper(value: int) -> int:\n",
+        "        return function(value)\n",
+        "    return wrapper\n",
+        "def twice[T](function: Callable[[T], T]) -> Callable[[T], T]:\n",
+        "    return lambda value: function(function(value))\n",
+        "@trace\n",
+        "def increment(value: int) -> int:\n",
+        "    return value + 1\n",
+        "@twice\n",
+        "def shout(text: str) -> str:\n",
+        "    return text + '!'\n",
+        "def outer() -> int:\n",
+        "    @trace\n",
+        "    def inner(value: int) -> int:\n",
+        "        return value\n",
+        "    return inner(3)\n",
+        "print(increment(1), shout('a'), outer())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    // A `Callable` names no parameters, so a decorated function takes none by keyword.
+    let keyword = concat!(
+        "from collections.abc import Callable\n",
+        "def trace(function: Callable[[int], int]) -> Callable[[int], int]:\n",
+        "    return function\n",
+        "@trace\n",
+        "def increment(value: int) -> int:\n",
+        "    return value + 1\n",
+        "print(increment(value=1))\n",
+    );
+    assert_eq!(app(keyword), ["E0404"]);
+}
+
+#[test]
+fn fun_06_a_decorated_function_inside_a_block_of_a_function_binds_what_its_decorators_return() {
+    let definitions = "from collections.abc import Callable\n\
+                       def keep(function: Callable[[int], int]) -> Callable[[int], int]:\n    \
+                       return function\n";
+    // Each `BODY` stands for the decorated function and a call of it, at its indentation.
+    let blocks = [
+        "    if flag:\nBODY",
+        "    for _ in range(2):\nBODY",
+        "    while flag:\nBODY        break\n",
+        "    with open('x') as _:\nBODY",
+        "    try:\nBODY    except ValueError:\n        pass\n",
+        "    try:\n        pass\n    except ValueError:\nBODY",
+        "    try:\n        pass\n    except ValueError:\n        pass\n    else:\nBODY",
+        "    try:\n        pass\n    finally:\nBODY",
+        "    match flag:\n        case True:\n    BODY",
+    ];
+    for block in blocks {
+        let body = "        @keep\n        def inner(value: int) -> int:\n            return value\n\
+                    \x20       print(inner(1))\n";
+        let body = if block.ends_with("    BODY") {
+            body.lines().fold(String::new(), |mut text, line| {
+                text.push_str("    ");
+                text.push_str(line);
+                text.push('\n');
+                text
+            })
+        } else {
+            body.to_owned()
+        };
+        let block = block.replace("    BODY", "BODY").replace("BODY", &body);
+        let source = format!("{definitions}def outer(flag: bool) -> None:\n{block}");
+        assert_eq!(app(&source), Vec::<String>::new(), "{source}");
+    }
+    // A function in a block of the module is refused for that, and its decorators are not.
+    let module = format!(
+        "{definitions}if True:\n    @keep\n    def inner(value: int) -> int:\n        \
+         return value\n"
+    );
+    assert_eq!(app(&module), ["E0202"]);
 }

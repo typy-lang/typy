@@ -121,6 +121,10 @@ fn each_wrong_table_is_e0107_under_mem_08() {
             "`allocator.library` is \"lib/pool\"",
         ),
         (
+            &format!("[allocator]\n{all}library = \"{}\"\n", "a".repeat(256)),
+            "which is not the name of a library",
+        ),
+        (
             &format!("[allocator]\n{all}library = true\n"),
             "`allocator.library` is a boolean, not a string",
         ),

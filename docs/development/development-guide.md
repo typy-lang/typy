@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.25 |
+| Version | 0.28 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-18 |
@@ -86,8 +86,8 @@ The `macos-15` job of CI does the same on every pull request.
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
 | `make test` | Runs the unit tests with `cargo nextest` |
-| `make coverage` | Runs the tests with coverage on the stable toolchain and fails below 95 percent of lines |
-| `make coverage-branches` | Runs the tests with coverage on the pinned nightly toolchain and fails below 95 percent of lines or of branches (NFR-11); `make check` runs it |
+| `make coverage` | Runs the tests with coverage on the stable toolchain and fails below 96 percent of lines |
+| `make coverage-branches` | Runs the tests with coverage on the pinned nightly toolchain and fails below 96 percent of lines or of branches (NFR-11); `make check` runs it |
 | `make test-int` | Runs the integration tests: the conformance suite and its sanitizer run, the golden files and the pipeline |
 | `make test-e2e` | Runs the end-to-end tests of the `typy` executable |
 | `make test-all` | Runs `make test` and `make miri` |
@@ -95,7 +95,7 @@ The `macos-15` job of CI does the same on every pull request.
 | `make docs-lint` | Lints every Markdown file with markdownlint-cli2 |
 | `make docs` | Builds the documentation site into `site/` with `scripts/build-docs.sh`: Zensical in strict mode, which fails on a link to a page or an anchor that does not exist (DOC-05). The first run installs Zensical 0.1.1 and its dependencies from `scripts/docs-requirements.txt`, each checked against its sha256, into a CPython 3.14 environment at `/var/cache/typy/docs` in the dev container, about 20 MB to download, which a container built anew installs again. Open `site/index.html`, or serve the directory, to read the result |
 | `make ascii-check` | Fails on any non-ASCII byte in tracked text files, except rendered SVG |
-| `make traceability` | Fails when a requirement has no row in the test plan's matrix, or a document cites an ID that is not defined |
+| `make traceability` | Fails when a requirement has no row in the test plan's matrix, a document cites an ID that is not defined, or a diagnostic plans a requirement for another release than the SRS gives it |
 | `make diagrams` | Renders every PlantUML source to the SVG beside it |
 | `make diagrams-check` | Renders, then fails when an SVG differs from the one staged |
 | `make unicode-tables` | Writes `crates/typy-runtime/src/string/unicode/tables.rs` from the `unicodedata` of CPython 3.15 (OI-15); never edit that file by hand |
@@ -295,11 +295,16 @@ each release's branch stays on origin and an issue can be traced to it.
    gate again: `main` changes only through pull requests whose latest
    commit passed it, so the tag's tree has.
 5. A maintainer approves the `release` environment.
-6. The publish job creates the GitHub release with the three archives and
-   their SHA-256, using the workflow's short-lived token and no long-lived
-   one. It then downloads them back, checks each SHA-256, unpacks the
-   x86-64 archive and runs a program with it; the AArch64 and macOS
-   archives ran one on their own runners when they were built.
+6. The publish job attests each archive's build provenance with
+   `actions/attest-build-provenance`, which signs it through Sigstore with
+   the workflow's OIDC identity, and checks each with `gh attestation
+   verify`, so no signing key is kept (NFR-26). It then creates the GitHub
+   release with the three archives, their SHA-256 and their bills of
+   materials, using the workflow's short-lived token and no long-lived one.
+   It downloads them back, checks each SHA-256 and the x86-64 archive's
+   attestation, unpacks that archive and runs a program with it; the
+   AArch64 and macOS archives ran one on their own runners when they were
+   built.
 7. Publishing the release deploys its documentation: the documentation job
    calls `pages.yml`, which builds the site from the tag in strict mode and
    deploys it to <https://typy-lang.org> (DOC-05). A run of `pages.yml`
@@ -320,6 +325,15 @@ LLVM statically and, on Linux, needs glibc 2.39 or later and `libstdc++`,
 and on macOS 11 or later only `libSystem`, `libc++` and `libiconv`, which
 `scripts/check-executable-needs.sh` checks before the archive is packed,
 and a C toolchain to link programs. LLVM's licence comes from its archive.
+
+`scripts/write-sbom.py` then writes the archive's bill of materials,
+`sbom.cdx.json`, in CycloneDX 1.6: every file of the archive with its
+SHA-256, every crate the compiler and the runtime link with its licence,
+from `cargo tree`, LLVM and the Rust standard library, dated by the commit
+so the bill is reproducible (NFR-25). Once the archive is packed,
+`scripts/check-sbom.py` fails when the bill misses a file, a crate or a
+library, and a copy of the bill goes beside the archive as
+`typy-X.Y.Z-HOST.cdx.json`.
 
 A release that breaks compatibility goes out as a release candidate first,
 with a version such as `1.0.0-rc.1`, which the workflow marks as a

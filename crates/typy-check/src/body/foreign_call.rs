@@ -276,7 +276,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the error for a library used other than to call its functions, which is
-    /// planned for 1.0 (FFI-09).
+    /// planned for 0.13 (FFI-09).
     pub(super) fn library_as_value(&mut self, name: &str, span: Span) -> TypedExpr {
         self.error(
             Diagnostic::new(
@@ -284,7 +284,7 @@ impl BodyChecker<'_> {
                 span,
                 format!(
                     "the library `{name}` used other than to call its functions is planned for \
-                     TyPy 1.0 (FFI-09)"
+                     TyPy 0.13 (FFI-09)"
                 ),
             )
             .with_rule(RuleId::FFI_09)

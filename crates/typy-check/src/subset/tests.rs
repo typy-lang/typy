@@ -70,11 +70,11 @@ fn later_features_name_their_release_and_rule() {
     let cases = [
         (
             "@d\nclass C:\n    pass\n",
-            "class decorators are planned for TyPy 0.10 (FUN-06)",
+            "class decorators other than `@dataclass` are planned for TyPy 1.0 (CLS-38)",
         ),
         (
             "@decorated\nclass C[T]:\n    pass\n",
-            "class decorators are planned for TyPy 0.10 (FUN-06)",
+            "class decorators other than `@dataclass` are planned for TyPy 1.0 (CLS-38)",
         ),
         (
             "x = [i async for i in y]\n",
@@ -82,19 +82,23 @@ fn later_features_name_their_release_and_rule() {
         ),
         (
             "def f[*Ts](x: int) -> int:\n    return x\n",
-            "`*Ts` and `**P` type parameters are planned for TyPy 1.0 (GEN-06)",
+            "`*Ts` and `**P` type parameters are planned for TyPy 0.13 (GEN-06)",
         ),
         (
-            "@d\ndef f() -> None:\n    pass\n",
-            "decorators are planned for TyPy 0.10 (FUN-06)",
+            "class C:\n    @d\n    def m(self) -> None:\n        pass\n",
+            "decorators of methods are planned for TyPy 0.14 (FUN-15)",
+        ),
+        (
+            "class C:\n    @staticmethod\n    @d\n    def m() -> None:\n        pass\n",
+            "decorators of methods are planned for TyPy 0.14 (FUN-15)",
         ),
         (
             "f = lambda *a: 0\n",
-            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.10 (FUN-13)",
+            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.11 (FUN-19)",
         ),
         (
             "def f(a: int = g()) -> None:\n    pass\n",
-            "default values other than constants are planned for TyPy 1.0 (EXP-16)",
+            "default values other than constants are planned for TyPy 1.0 (EXP-20)",
         ),
         (
             "def f() -> None:\n    print((yield 1))\n",
@@ -308,6 +312,7 @@ fn nonlocal_where_cpython_rejects_it_is_a_syntax_error() {
 fn yield_where_cpython_rejects_it_is_a_syntax_error() {
     let cases = [
         ("yield 1\n", Some("'yield' outside function")),
+        ("print((yield 1))\n", Some("'yield' outside function")),
         (
             "def f() -> list[int]:\n    return [(yield x) for x in []]\n",
             Some("'yield' inside list comprehension"),
@@ -383,6 +388,35 @@ fn global_after_a_use_an_assignment_or_an_annotation_is_a_syntax_error() {
             ),
             None => assert!(found.is_empty(), "{source:?} gave {found:?}"),
         }
+    }
+}
+
+#[test]
+fn assigning_debug_or_binding_a_name_twice_in_a_pattern_is_a_syntax_error() {
+    let cases = [
+        ("print((__debug__ := 1))\n", "cannot assign to __debug__"),
+        (
+            "match 1:\n    case __debug__:\n        pass\n",
+            "cannot assign to __debug__",
+        ),
+        (
+            "match [1, 2]:\n    case [x, x]:\n        pass\n",
+            "multiple assignments to name 'x' in pattern",
+        ),
+        // The names an alternative binds count once, against the rest of the pattern.
+        (
+            "match [1, [2]]:\n    case [x, ([x] | [x])]:\n        pass\n",
+            "multiple assignments to name 'x' in pattern",
+        ),
+    ];
+    for (source, expected) in cases {
+        let found = diagnostics(source);
+        assert!(
+            found
+                .iter()
+                .any(|(code, message)| code == "E0103" && message == expected),
+            "{source:?} gave {found:?}"
+        );
     }
 }
 

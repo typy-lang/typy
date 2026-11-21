@@ -183,7 +183,7 @@ impl BodyChecker<'_> {
                 position += 1;
                 continue;
             }
-            let ty = Self::version_tuple(self.expression(value)).ty;
+            let ty = self.tuple_expression(value).ty;
             match (&ty, unpacked) {
                 (Type::Tuple(items), true) if !tail => {
                     for item in items {

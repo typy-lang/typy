@@ -440,7 +440,7 @@ fn rejected_programs_give_their_codes() {
         ("for i in range(\"a\"):\n    pass\n", &["E0404"]),
         ("x: int = 1\nx: str = \"a\"\n", &["E0402"]),
         ("print(__file__)\n", &["E0202"]),
-        ("print(len)\n", &["E0201"]),
+        ("print(len)\n", &["E0203"]),
         ("print(int(1, 2, 3))\n", &["E0404"]),
         ("print(str(1, 2))\n", &["E0404"]),
         ("print(ord(1))\n", &["E0404"]),
@@ -505,7 +505,10 @@ fn messages_use_the_right_article_and_python_names() {
     );
     assert_eq!(
         messages("print(len)\n"),
-        ["using `len` as a value is planned for TyPy 0.10 (FUN-08)"]
+        [
+            "`len` takes arguments of more than one type, so as a value it needs the \
+             `Callable` type its context expects"
+        ]
     );
     assert_eq!(
         messages("print(undefined)\n"),
@@ -601,7 +604,7 @@ fn errors_inside_compound_statements_are_found() {
         ("def f() -> None:\n    print(y)\n    y = 1\n", &["E0306"]),
         ("print(print(1) + 1)\n", &["E0401"]),
         ("def f() -> None:\n    pass\nprint(f(1))\n", &["E0404"]),
-        ("print(sum)\n", &["E0201"]),
+        ("print(sum)\n", &["E0203"]),
         ("print(\"a\"[True])\n", &["E0404"]),
     ];
     for (source, expected) in cases {
@@ -860,7 +863,7 @@ fn each_builtin_call_name_and_statement_rule_gives_its_code() {
         ),
         // Functions and builtins are not values; no requirement provides warnings or
         // exception groups.
-        ("x = len\n", &["E0201"]),
+        ("x = len\n", &["E0203"]),
         ("x = UserWarning\n", &["E0202"]),
         ("x = ExceptionGroup\n", &["E0202"]),
         // A return value of another type (TYP-03, TYP-09).
@@ -1091,10 +1094,13 @@ fn builtins_of_one_iterable_give_their_codes() {
         ("x = sum([1], start=0, start=1)\n", &["E0103"]),
         ("x = sum([1], key=1)\n", &["E0404"]),
         ("x = sorted()\n", &["E0404"]),
-        ("x = sorted([1], key=abs)\n", &["E0201"]),
+        ("x = sorted([1], key=len)\n", &["E0404"]),
         ("x = sorted([1], reverse=1)\n", &["E0404"]),
         ("x = sorted([1], cmp=1)\n", &["E0404"]),
-        ("x = sorted([1], **{})\n", &["E0201"]),
+        (
+            "options = {'key': None}\nx = sorted([1], **options)\n",
+            &["E0201"],
+        ),
         ("x = sorted((1, 'a'))\n", &["E0411"]),
         ("x = sorted(3)\n", &["E0411"]),
         ("x = sorted(missing)\n", &["E0205"]),
@@ -1102,7 +1108,7 @@ fn builtins_of_one_iterable_give_their_codes() {
         ("x = min([1], default=1, default=2)\n", &["E0103"]),
         ("x = any(5)\n", &["E0411"]),
         ("x = [1]\nx.sort(True)\n", &["E0404"]),
-        ("x = [1]\nx.sort(key=abs)\n", &["E0201"]),
+        ("x = [1]\nx.sort(key=len)\n", &["E0404"]),
         ("x = [1]\nx.sort(order=1)\n", &["E0404"]),
         ("x = [1]\nx.sort(reverse=True, reverse=False)\n", &["E0103"]),
         ("x = [1]\nx.append(1, key=2)\n", &["E0404"]),
@@ -1207,7 +1213,10 @@ fn round_gives_python_s_result_types_and_codes() {
         ("x = round(True)\n", &["E0406"]),
         ("x = round(1.5, digits=1)\n", &["E0404"]),
         ("x = round(1.5, 1, ndigits=1)\n", &["E0404"]),
-        ("x = round(1.5, **{})\n", &["E0201"]),
+        (
+            "options = {'ndigits': 1}\nx = round(1.5, **options)\n",
+            &["E0201"],
+        ),
         ("x = round(missing)\n", &["E0205"]),
     ];
     for (source, expected) in cases {
@@ -1304,7 +1313,7 @@ fn str_method_arguments_bind_by_position_and_name() {
         ("x = 'a'.strip(**{})\n", &["E0201"]),
         ("x = 'a'.format()\n", &["E0412"]),
         ("x = 'a'.center(5, fillchar='*')\n", &["E0404"]),
-        ("x = [1]\nx.sort(key=abs)\n", &["E0201"]),
+        ("x = [1]\nx.sort(key=len)\n", &["E0404"]),
     ];
     for (source, expected) in cases {
         assert_eq!(&rejected(source), expected, "\n{source}");
@@ -1796,7 +1805,7 @@ else:
 #[test]
 fn statements_and_expressions_outside_the_subset_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
-        ("@d\ndef f() -> None:\n    pass\n", &["E0201"]),
+        ("@d\ndef f() -> None:\n    pass\n", &["E0205"]),
         ("def f[*Ts](a: int) -> None:\n    pass\n", &["E0201"]),
         ("return 1\n", &["E0103"]),
         ("break\n", &["E0103"]),
@@ -2295,7 +2304,7 @@ fn isinstance_narrows_variables_where_its_test_holds() {
     );
     let cases: &[(&str, &[&str])] = &[
         ("print(isinstance(1))\n", &["E0404"]),
-        ("print(issubclass(int, object))\n", &["E0201"]),
+        ("print(issubclass(int, 1))\n", &["E0401"]),
         (
             "class A:\n    pass\nclass B(A):\n    def f(self) -> None:\n        super().missing(1)\n",
             &["E0414"],
@@ -2305,7 +2314,7 @@ fn isinstance_narrows_variables_where_its_test_holds() {
             &["E0414"],
         ),
         ("print(isinstance(1, int, x=2))\n", &["E0404"]),
-        ("t = int\nprint(isinstance(1, t))\n", &["E0201"]),
+        ("t = (int, 3)\nprint(isinstance(1, t))\n", &["E0401"]),
         ("print(isinstance(1, Missing))\n", &["E0205"]),
         (
             "class A:\n    pass\nclass B(A):\n    def __init__(self) -> None:\n        self.b = 1\n\

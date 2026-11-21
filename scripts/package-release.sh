@@ -14,6 +14,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 target="${CARGO_TARGET_DIR:-target}"
 version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+# The development image holds only the pinned oracles, such as `python3.15`;
+# a macOS runner that builds a release has its own `python3`.
+python="$(command -v python3.15 || command -v python3)"
 host="$(rustc -vV | sed -n 's/^host: //p')"
 name="typy-${version}-${host}"
 stage="dist/${name}"
@@ -46,6 +49,8 @@ cargo about generate --frozen -c about.toml -m crates/typy-cli/Cargo.toml about.
 install -m 644 "${LLVM_SYS_231_PREFIX}/LICENSE.TXT" "${licenses}/llvm.txt"
 install -m 644 "$(rustc --print sysroot)/share/doc/rust/COPYRIGHT-library.html" \
     "${licenses}/rust-library.html"
+# The bill of materials lists every file above, so it is written last (NFR-25).
+"${python}" scripts/write-sbom.py "${stage}" "${version}"
 
 epoch="$(git log -1 --format=%ct)"
 gnu_tar=tar
@@ -60,6 +65,8 @@ else
     (cd dist && shasum -a 256 "${name}.tar.gz" > "${name}.tar.gz.sha256")
 fi
 
+"${python}" scripts/check-sbom.py "dist/${name}.tar.gz"
+install -m 644 "${stage}/sbom.cdx.json" "dist/${name}.cdx.json"
 check="$(mktemp -d)"
 trap 'rm -rf "${check}"' EXIT
 tar -xzf "dist/${name}.tar.gz" -C "${check}"

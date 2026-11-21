@@ -332,6 +332,13 @@ fn lists_join_repeat_and_order_item_by_item() {
             values(typy_rt_list_repeat(a, word(-1)).value),
             Vec::<i64>::new()
         );
+        // An empty list repeated any number of times allocates nothing.
+        let empty = ints(&[]);
+        let repeated = typy_rt_list_repeat(empty, word(1 << 40)).value;
+        assert_eq!(values(repeated), Vec::<i64>::new());
+        for list in [empty, repeated] {
+            crate::refcount::typy_rt_decrement(list.cast());
+        }
         let huge = Integer::from_i128(1 << 70).into_word();
         assert_eq!(
             message(typy_rt_list_repeat(a, huge).exception),

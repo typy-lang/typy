@@ -207,6 +207,49 @@ impl BodyChecker<'_> {
             return self.range(range_arguments, range_keywords, true, span);
         }
         let sequence = self.sequence(&arguments[0]);
+        // A value of an abstract collection, held as one of several built-in types, is read
+        // from its last item by the runtime's reversed iterator of the member it holds
+        // (LIB-20).
+        if let TypedExprKind::AsIterable(inner) = &sequence.kind
+            && let Type::Union(members) = &inner.ty
+        {
+            let ordered = members.iter().all(|member| {
+                matches!(
+                    member,
+                    Type::List(_)
+                        | Type::TupleOf(_)
+                        | Type::Str
+                        | Type::Bytes
+                        | Type::Range
+                        | Type::Dict(..)
+                        | Type::DictView(..)
+                )
+            });
+            if !ordered {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(411),
+                        sequence.span,
+                        format!(
+                            "`reversed` needs a sequence, and {} may hold a set, which has no \
+                             order to reverse",
+                            inner.ty.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::LIB_02),
+                );
+            }
+            let ty = match &sequence.ty {
+                Type::Iterable(item) => Type::Iterator(item.clone()),
+                _ => Type::Error,
+            };
+            let span = sequence.span;
+            return LoopSource::Items(Self::typed(
+                TypedExprKind::Reversed(Box::new(sequence)),
+                ty,
+                span,
+            ));
+        }
         // A set has no order, and a file or an iterator gives its items once, front first.
         if matches!(
             sequence.ty,
@@ -312,12 +355,27 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        Self::sequence_of(Self::version_tuple(self.expression(expression)))
+        Self::sequence_of(self.tuple_expression(expression))
     }
 
     /// Returns the checked `value` as the sequence a loop reads, as `sequence` does.
     pub(super) fn sequence_of(value: TypedExpr) -> TypedExpr {
         let value = Self::as_iterator(value);
+        // A union of built-in iterables of one item type, such as a `Sequence[int]`, is gone
+        // over through the runtime's iterator of the member it holds (LIB-20, ADR-0086).
+        if let Type::Union(members) = &value.ty
+            && members
+                .iter()
+                .all(|member| !matches!(member, Type::Tuple(_)))
+            && let Some(item) = common_item(members)
+        {
+            let span = value.span;
+            return Self::typed(
+                TypedExprKind::AsIterable(Box::new(value)),
+                Type::Iterable(Box::new(item)),
+                span,
+            );
+        }
         let Type::Tuple(items) = &value.ty else {
             return value;
         };
@@ -389,4 +447,18 @@ impl BodyChecker<'_> {
         };
         LoopSource::Items(error)
     }
+}
+
+/// Returns the type of the items every member of a union gives when it is iterated, when they
+/// give one type.
+fn common_item(members: &[Type]) -> Option<Type> {
+    let (first, rest) = members.split_first()?;
+    let item = first.iterable_item()?;
+    rest.iter()
+        .all(|member| {
+            member
+                .iterable_item()
+                .is_some_and(|each| each.matches(&item))
+        })
+        .then_some(item)
 }

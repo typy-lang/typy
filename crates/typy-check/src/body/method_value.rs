@@ -26,6 +26,9 @@ impl BodyChecker<'_> {
         name: &Identifier,
         span: Span,
     ) -> TypedExpr {
+        if self.class_method_named(class, &name.name) {
+            return self.class_method_value_of(object, class, name, span);
+        }
         if let Some(refused) = self.refused_method_value(class, name, span) {
             return refused;
         }
@@ -33,42 +36,64 @@ impl BodyChecker<'_> {
             .program
             .method(class, &name.name)
             .unwrap_or(FunctionId(0));
-        let overrides = self.overrides_of(class, &name.name);
-        if self.is_static_method(class, &name.name) {
-            if !overrides.is_empty() {
-                return self.planned_method_value(
-                    name,
-                    "a static method a subclass defines again",
-                    span,
-                );
+        let mut overrides = self.overrides_of(class, &name.name, false);
+        // A subclass whose override is held otherwise is bound through an adapter to the
+        // signature of the method read, which takes what the method takes (FUN-09, CLS-04).
+        for (each, function) in &mut overrides {
+            if self.is_adapted(*each, &name.name) {
+                *function = match self.adapter_to(*each, &name.name, method) {
+                    Some(adapter) => adapter,
+                    None => self
+                        .program
+                        .value_adapter(*each, &name.name, (*function, method)),
+                };
             }
+        }
+        let is_static = self.is_static_method(class, &name.name);
+        if is_static && overrides.is_empty() {
             let value = self.function_value(method, &name.name, span);
             return Self::after(object, value);
-        }
-        if overrides.iter().any(|(each, _)| {
-            self.is_static_method(*each, &name.name) || self.is_adapted(*each, &name.name)
-        }) {
-            return self.planned_method_value(
-                name,
-                "a method a subclass overrides with other parameters or a result held otherwise",
-                span,
-            );
         }
         let signature = &self.program.signatures[method.0 as usize];
         let ty = Type::Callable {
             parameters: signature
                 .parameters
                 .iter()
-                .skip(1)
+                .skip(usize::from(!is_static))
                 .map(|parameter| parameter.ty.clone())
                 .collect(),
             returns: Box::new(signature.returns.clone()),
         };
+        if is_static
+            || overrides
+                .iter()
+                .any(|(each, _)| self.is_static_method(*each, &name.name))
+        {
+            // The method of each class that defines it as a method binds the object, and a
+            // static method is the function itself; an override that is neither held
+            // otherwise nor adapted takes and gives values held as the method's (FUN-09,
+            // CLS-35, ADR-0079).
+            let binds = std::iter::once(class)
+                .chain(overrides.iter().map(|(each, _)| *each))
+                .filter(|each| !self.is_static_method(*each, &name.name))
+                .collect();
+            let functions = std::iter::once((class, method)).chain(overrides).collect();
+            return Self::typed(
+                TypedExprKind::ChosenFunction {
+                    object: Box::new(object),
+                    functions,
+                    binds,
+                },
+                ty,
+                span,
+            );
+        }
         let methods = std::iter::once((class, method)).chain(overrides).collect();
         Self::typed(
             TypedExprKind::BoundMethod {
                 object: Box::new(object),
                 methods,
+                binds_class: false,
             },
             ty,
             span,
@@ -87,6 +112,9 @@ impl BodyChecker<'_> {
         if let Some(refused) = self.refused_method_value(class, name, span) {
             return refused;
         }
+        if self.class_method_named(class, &name.name) {
+            return self.class_method_value_of(object, class, name, span);
+        }
         let method = self
             .program
             .method(class, &name.name)
@@ -95,18 +123,30 @@ impl BodyChecker<'_> {
         Self::after(object, value)
     }
 
-    /// Returns the error for a method that is no value of one `Callable` type: a class
-    /// method, which binds the class it is read through, planned for 0.10 (FUN-09), and a
-    /// method with type parameters of its own or a keyword-only parameter, E0202, and one with
-    /// `*args` or `**kwargs`, planned for 0.10 (FUN-13), as for a function.
+    /// Returns the error for a method that is no value of one `Callable` type: a property,
+    /// whose value through its class is a `property` object, planned for 1.0 (FUN-17); a method
+    /// with type parameters of its own or a keyword-only parameter, E0202; and one with
+    /// `*args` or `**kwargs`, planned for 0.11 (FUN-19), as for a function.
     fn refused_method_value(
         &mut self,
         class: ClassId,
         name: &Identifier,
         span: Span,
     ) -> Option<TypedExpr> {
-        if self.class_method_named(class, &name.name) {
-            return Some(self.planned_method_value(name, "a class method", span));
+        if self.property_getter(class, &name.name).is_some() {
+            let class_name = &self.program.classes[class.0 as usize].name;
+            let message = format!(
+                "`{class_name}.{}` is a property, and a property read through its class as a \
+                 value is planned for TyPy 1.0 (FUN-17)",
+                name.name
+            );
+            return Some(
+                self.error(
+                    Diagnostic::new(DiagnosticCode::error(201), name.span, message)
+                        .with_rule(RuleId::FUN_17),
+                    span,
+                ),
+            );
         }
         let info = &self.program.classes[class.0 as usize];
         let qualified = format!("{}.{}", info.name, name.name);
@@ -146,26 +186,15 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns E0201 for a method of a kind whose value is planned for 0.10 (FUN-09).
-    fn planned_method_value(&mut self, name: &Identifier, what: &str, span: Span) -> TypedExpr {
-        self.error(
-            Diagnostic::new(
-                DiagnosticCode::error(201),
-                name.span,
-                format!(
-                    "`{}` is {what}, and using one as a value is planned for TyPy 0.10 (FUN-09)",
-                    name.name
-                ),
-            )
-            .with_rule(RuleId::FUN_09),
-            span,
-        )
-    }
-
     /// Returns each class derived from `class` that defines the method `name` itself, with
     /// its method, each after the classes it derives from, so the last whose test holds is
     /// the object's own class's.
-    fn overrides_of(&self, class: ClassId, name: &str) -> Vec<(ClassId, FunctionId)> {
+    fn overrides_of(
+        &self,
+        class: ClassId,
+        name: &str,
+        class_methods: bool,
+    ) -> Vec<(ClassId, FunctionId)> {
         let depth = |each: ClassId| {
             std::iter::successors(Some(each), |current| {
                 self.program.classes[current.0 as usize].base
@@ -183,10 +212,89 @@ impl BodyChecker<'_> {
             .classes
             .iter()
             .filter(|info| derives(info.id))
-            .filter_map(|info| info.method(name).map(|method| (info.id, method)))
+            .filter_map(|info| {
+                let method = if class_methods {
+                    info.class_methods
+                        .iter()
+                        .find(|(each, _)| each == name)
+                        .map(|(_, copy)| *copy)
+                } else {
+                    info.method(name)
+                };
+                method.map(|method| (info.id, method))
+            })
             .collect();
         found.sort_by_key(|(each, _)| depth(*each));
         found
+    }
+
+    /// Returns the copy of the class method `name` that `class` has (ADR-0025).
+    fn class_method_copy(&self, class: ClassId, name: &str) -> Option<FunctionId> {
+        self.program.classes[class.0 as usize]
+            .class_methods
+            .iter()
+            .find(|(each, _)| each == name)
+            .map(|(_, copy)| *copy)
+    }
+
+    /// Returns the class method `name` of `class` as a value (FUN-09, ADR-0079): a bound method
+    /// of the copy of the class it is read through, which binds that class; read through an
+    /// instance, of the copy of the instance's own class, which binds `type(instance)`. A
+    /// class method of a generic class read through an instance is planned for 0.14 (CLS-30).
+    fn class_method_value_of(
+        &mut self,
+        object: TypedExpr,
+        class: ClassId,
+        name: &Identifier,
+        span: Span,
+    ) -> TypedExpr {
+        let through_instance = !matches!(object.ty, Type::TypeObject(_));
+        if through_instance
+            && let Type::Instance(instance) = &object.ty
+            && instance.generic.is_some()
+        {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    name.span,
+                    format!(
+                        "`{}` is a class method of a generic class, and reading one through an \
+                         instance is planned for TyPy 0.14 (CLS-30)",
+                        name.name
+                    ),
+                )
+                .with_rule(RuleId::CLS_30),
+                span,
+            );
+        }
+        let copy = self
+            .class_method_copy(class, &name.name)
+            .unwrap_or(FunctionId(0));
+        let signature = &self.program.signatures[copy.0 as usize];
+        let ty = Type::Callable {
+            parameters: signature
+                .parameters
+                .iter()
+                .skip(1)
+                .map(|parameter| parameter.ty.clone())
+                .collect(),
+            returns: Box::new(signature.returns.clone()),
+        };
+        let overrides = if through_instance {
+            self.overrides_of(class, &name.name, true)
+        } else {
+            Vec::new()
+        };
+        let methods = std::iter::once((class, copy)).chain(overrides).collect();
+        Self::typed(
+            TypedExprKind::BoundMethod {
+                object: Box::new(object),
+                methods,
+                binds_class: through_instance,
+            },
+            ty,
+            span,
+        )
     }
 
     /// Returns true when `class` defines `name` as a class method.
@@ -195,6 +303,35 @@ impl BodyChecker<'_> {
             .class_methods
             .iter()
             .any(|(each, _)| each == name)
+    }
+
+    /// Returns the adapter of the method `name` of `class` when it takes what `method`, the
+    /// method read, takes: when it adapts the override to `method` itself or to a method of
+    /// the same signature.
+    fn adapter_to(&self, class: ClassId, name: &str, method: FunctionId) -> Option<FunctionId> {
+        let info = &self.program.classes[class.0 as usize];
+        let (_, base, _) = info.adapted.iter().find(|(each, ..)| each == name)?;
+        let same = |left: FunctionId, right: FunctionId| {
+            let (left, right) = (
+                &self.program.signatures[left.0 as usize],
+                &self.program.signatures[right.0 as usize],
+            );
+            left.returns == right.returns
+                && left.parameters.len() == right.parameters.len()
+                && left
+                    .parameters
+                    .iter()
+                    .zip(&right.parameters)
+                    .skip(1)
+                    .all(|(left, right)| left.ty == right.ty)
+        };
+        if *base != method && !same(*base, method) {
+            return None;
+        }
+        info.adapters
+            .iter()
+            .find(|(each, _)| each == name)
+            .map(|(_, adapter)| *adapter)
     }
 
     /// Returns true when `class` overrides `name` with a method held otherwise than its

@@ -165,6 +165,14 @@ impl FunctionLowerer<'_> {
             (TyirType::Bool | BOOL_OR_NONE, TyirType::Bool | BOOL_OR_NONE) => {
                 self.same_singleton(left, right, span)
             }
+            // Two function values are one function when they stand for it, as `len` filling
+            // two `Callable` types does (ADR-0076).
+            (TyirType::FUNCTION, TyirType::FUNCTION) => {
+                let left = self.bits(Self::borrowed(left.value, left.ty), span);
+                let right = self.bits(Self::borrowed(right.value, right.ty), span);
+                self.call_runtime(RuntimeFunction::SameFunction, vec![left, right], span)
+                    .value
+            }
             (
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
                 TyirType::Object(_) | TyirType::Optional(OptionalBase::Object(_)),
@@ -333,9 +341,12 @@ impl FunctionLowerer<'_> {
             (left_type, right_type) if equal_by_type(left_type, right_type, comparison) => {
                 return self.objects_equality(comparison == Comparison::Equal, left, right, span);
             }
-            // An instance of a class without `__eq__` is equal only to itself (CLS-07).
+            // An instance of a class without `__eq__` is equal only to itself (CLS-07), and so
+            // is an exception, whose classes `__eq__` the checker does not call (EXC-20).
             (TyirType::Object(id), _)
-                if id.class_index().is_some() || id == typy_tyir::TypeId::TYPE =>
+                if id.class_index().is_some()
+                    || id == typy_tyir::TypeId::TYPE
+                    || id == typy_tyir::TypeId::EXCEPTION =>
             {
                 return self.instance_equality(comparison == Comparison::Equal, left, right, span);
             }

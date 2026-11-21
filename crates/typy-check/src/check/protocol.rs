@@ -87,7 +87,7 @@ fn in_own_method(span: Span, protocol: &str) -> Diagnostic {
         span,
         format!(
             "the protocol `{protocol}` in the signature of a protocol's method is planned for \
-             TyPy 1.0 (GEN-17)"
+             TyPy 0.13 (GEN-17)"
         ),
     )
     .with_rule(RuleId::GEN_17)
@@ -132,7 +132,7 @@ fn planned_member(span: Span, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        format!("{what} in a protocol are planned for TyPy 1.0 (GEN-17)"),
+        format!("{what} in a protocol are planned for TyPy 0.13 (GEN-17)"),
     )
     .with_rule(RuleId::GEN_17)
 }

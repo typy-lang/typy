@@ -2,7 +2,7 @@
 //! checked, with the names each module's imports bind, so a scan can follow a class's chain
 //! of bases across modules (CLS-21, CLS-25).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use typy_diagnostics::Span;
 use typy_source::Module;
@@ -125,6 +125,27 @@ impl<'tree> ClassIndex<'tree> {
             _ => return None,
         };
         self.classes.contains_key(&key).then_some(key)
+    }
+
+    /// Returns each class that a class of the index derives from, directly or through its
+    /// bases, so a value whose static class is one of them may hold an instance of another
+    /// (ADR-0084). A base given type arguments, such as `Box[int]`, counts as its generic
+    /// class, which its copies answer as (ADR-0028).
+    pub(crate) fn derived_from(&self) -> BTreeSet<ClassKey> {
+        let mut found = BTreeSet::new();
+        for (class, facts) in &self.classes {
+            let Some(base) = facts.bases.first() else {
+                continue;
+            };
+            let base = match base {
+                Expr::Subscript { value, .. } => value.as_ref(),
+                other => other,
+            };
+            if let Some(base) = self.class_of(&class.0, base) {
+                found.extend(self.chain(&base));
+            }
+        }
+        found
     }
 
     /// Returns `class` and each base of it the index holds, nearest first.

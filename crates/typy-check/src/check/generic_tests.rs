@@ -2,13 +2,18 @@
 //! each checked as the compiler checks it (GEN-01 to GEN-03, GEN-08, TYP-14, SMT-10).
 
 use camino::Utf8PathBuf;
-use typy_source::{Project, ProjectSettings};
+use typy_source::{Project, ProjectSettings, PythonFloor};
 
 use super::TypeChecker;
 
 /// Returns the code of each diagnostic of a one-module program, or nothing when it is
 /// accepted.
 fn codes(source: &str) -> Vec<String> {
+    codes_at(source, PythonFloor::V3_12)
+}
+
+/// Returns the code of each diagnostic of a one-module program checked for `floor`.
+fn codes_at(source: &str, floor: PythonFloor) -> Vec<String> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let base = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
@@ -19,7 +24,9 @@ fn codes(source: &str) -> Vec<String> {
     ));
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("app.py"), source).unwrap();
-    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
+    let mut settings = ProjectSettings::new(root.clone());
+    settings.python_floor = floor;
+    let project = Project::load(&root.join("app.py"), settings).unwrap();
     let found = match TypeChecker::check(&project) {
         Ok(_) => Vec::new(),
         Err(diagnostics) => diagnostics
@@ -98,7 +105,14 @@ fn every_one_file_case_of_unions_aliases_and_generics_gets_its_outcome() {
                 continue;
             }
             let text = std::fs::read_to_string(&path).unwrap();
-            let found = codes(&text);
+            // A program is checked for the Python floor the suite runs it at.
+            let floor = text
+                .lines()
+                .find_map(|line| line.strip_prefix("# typy-python: "))
+                .map_or(PythonFloor::V3_12, |floor| {
+                    PythonFloor::parse(floor).unwrap()
+                });
+            let found = codes_at(&text, floor);
             let wanted = text
                 .lines()
                 .find_map(|line| line.strip_prefix("# typy-expect: rejected "))

@@ -36,7 +36,8 @@ impl BodyChecker<'_> {
             .iter()
             .position(|each| matches!(each, Pattern::Star { .. }));
         let fixed = patterns.len() - usize::from(star.is_some());
-        let value = self.expression(subject);
+        // A named tuple matches as the tuple of its fields (CLS-27).
+        let value = self.tuple_expression(subject);
         let known_length = match &value.ty {
             Type::Tuple(items) => Some(items.len()),
             Type::List(_) | Type::TupleOf(_) | Type::Range => None,

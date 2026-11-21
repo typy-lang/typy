@@ -863,22 +863,31 @@ mod tests {
 
     use super::ClosureScope;
 
+    /// Returns the names of the parameters and the body of the function `source` defines
+    /// first.
+    fn first_function(source: &str) -> (Vec<String>, Vec<Stmt>) {
+        let file = SourceFile::from_text(FileId(0), "app.py".into(), source);
+        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
+        match tree.body.into_iter().next() {
+            Some(Stmt::FunctionDef {
+                parameters, body, ..
+            }) => (
+                parameters
+                    .into_iter()
+                    .map(|parameter| parameter.name.name)
+                    .collect(),
+                body,
+            ),
+            _ => panic!("the source defines a function first"),
+        }
+    }
+
     /// Returns, for the one function `source` defines, the captures of each of its nested
     /// functions in source order, and its cell variables.
     fn scope(source: &str) -> (Vec<Vec<String>>, Vec<String>) {
-        let file = SourceFile::from_text(FileId(0), "app.py".into(), source);
-        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
-        let Some(Stmt::FunctionDef {
-            parameters, body, ..
-        }) = tree.body.first()
-        else {
-            panic!("the source defines a function first");
-        };
-        let names: Vec<&str> = parameters
-            .iter()
-            .map(|parameter| parameter.name.name.as_str())
-            .collect();
-        let found = ClosureScope::of(&names, body, &BTreeSet::new());
+        let (parameters, body) = first_function(source);
+        let names: Vec<&str> = parameters.iter().map(String::as_str).collect();
+        let found = ClosureScope::of(&names, &body, &BTreeSet::new());
         let captures = found
             .captures
             .values()
@@ -890,12 +899,8 @@ mod tests {
     /// Returns, for the one function `source` defines, the group of each of its nested
     /// functions in source order, empty for one in none.
     fn groups(source: &str) -> Vec<Vec<String>> {
-        let file = SourceFile::from_text(FileId(0), "app.py".into(), source);
-        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
-        let Some(Stmt::FunctionDef { body, .. }) = tree.body.first() else {
-            panic!("the source defines a function first");
-        };
-        let found = ClosureScope::of(&[], body, &BTreeSet::new());
+        let (_, body) = first_function(source);
+        let found = ClosureScope::of(&[], &body, &BTreeSet::new());
         found
             .captures
             .keys()
@@ -1042,12 +1047,8 @@ mod tests {
     /// Returns, for the one function `source` defines, its cell variables and the variables
     /// its nested functions assign through `nonlocal`.
     fn rebound(source: &str) -> (Vec<String>, Vec<String>) {
-        let file = SourceFile::from_text(FileId(0), "app.py".into(), source);
-        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
-        let Some(Stmt::FunctionDef { body, .. }) = tree.body.first() else {
-            panic!("the source defines a function first");
-        };
-        let found = ClosureScope::of(&[], body, &BTreeSet::new());
+        let (_, body) = first_function(source);
+        let found = ClosureScope::of(&[], &body, &BTreeSet::new());
         (
             found.cells.into_iter().collect(),
             found.rebound.into_iter().collect(),
@@ -1076,17 +1077,11 @@ mod tests {
 
     #[test]
     fn smt_09_a_variable_named_nonlocal_passes_through_the_function_in_between() {
-        let file = SourceFile::from_text(
-            FileId(0),
-            "app.py".into(),
+        let (_, body) = first_function(
             "def middle() -> None:\n    def inner() -> None:\n        nonlocal far\n        far = 1\n",
         );
-        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
-        let Some(Stmt::FunctionDef { body, .. }) = tree.body.first() else {
-            panic!("the source defines a function");
-        };
         let enclosing: BTreeSet<String> = ["far".to_owned()].into();
-        let found = ClosureScope::of(&[], body, &enclosing);
+        let found = ClosureScope::of(&[], &body, &enclosing);
         let captures: Vec<Vec<String>> = found
             .captures
             .values()
@@ -1094,7 +1089,8 @@ mod tests {
             .collect();
         assert_eq!(captures, [vec!["far".to_owned()]]);
         // `far` is the enclosing function's, so this function neither keeps nor rebinds it.
-        assert!(found.cells.is_empty() && found.rebound.is_empty());
+        assert!(found.cells.is_empty());
+        assert!(found.rebound.is_empty());
     }
 
     #[test]
@@ -1210,17 +1206,11 @@ mod tests {
 
     #[test]
     fn fun_04_the_enclosing_functions_variables_pass_through_to_a_nested_function() {
-        let file = SourceFile::from_text(
-            FileId(0),
-            "app.py".into(),
+        let (_, body) = first_function(
             "def middle() -> None:\n    def inner() -> int:\n        return far + near\n    near = 1\n",
         );
-        let tree = parse(&file, PythonFloor::V3_12).expect("the source parses");
-        let Some(Stmt::FunctionDef { body, .. }) = tree.body.first() else {
-            panic!("the source defines a function");
-        };
         let enclosing: BTreeSet<String> = ["far".to_owned()].into();
-        let found = ClosureScope::of(&[], body, &enclosing);
+        let found = ClosureScope::of(&[], &body, &enclosing);
         let captures: Vec<Vec<String>> = found
             .captures
             .values()

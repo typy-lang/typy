@@ -6,6 +6,233 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-21
+
+### Added
+
+- A method read as a value through a protocol value, such as
+  `area = shape.area`, and through an instance whose subclass defines the
+  method again as a static method, or overrides it with a parameter or
+  result held otherwise, such as `int | None` for `int`. The value is a
+  bound method of the object's own method, or that static method, and is
+  written, compared and hashed as it, as CPython's is (FUN-09).
+- A call of a builtin, a function value, a protocol method or an exception
+  class takes `*` of a tuple display or a variable holding a fixed tuple,
+  and `**` of a dict display with `str` literal keys, such as
+  `max(*point)` or `print(*row, **{"sep": "-"})` (EXP-19).
+- `map(function, iterable, ...)` and `filter(function, iterable)`, with
+  `filter(None, iterable)`: lazy iterators that take a function or method
+  of the program, a `lambda` or a built-in such as `int`, go on after the
+  function raises, and are written as `<map object at 0x...>`, as CPython's
+  are (LIB-23). From Python floor 3.14, `map` takes `strict=True`.
+- Classes derived from `typing.NamedTuple`: built by position or by name,
+  read by field name and as the tuple of their fields by an index, a slice,
+  `len`, `in`, a loop, unpacking and a sequence pattern, printed, compared,
+  ordered and hashed as that tuple, also with a plain tuple, and an
+  instance of `tuple` (CLS-27). The body may hold methods, properties,
+  class and static methods and class variables, a class derived from one
+  may add methods, and a generic one is copied as any generic class.
+  `_fields`, `_asdict()` and `_replace(field=value)` are given, `_replace`
+  making an instance of the receiver's own class. What CPython raises when
+  the class statement runs, assigning a field, and `_replace` with a name
+  that is no field are refused with CPython's text.
+- `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set`,
+  `MutableSet`, `Collection`, `Container`, `Reversible`, `KeysView`,
+  `ValuesView` and `ItemsView` of `collections.abc` and `typing`, and
+  `typing.AbstractSet`, as types that hold the built-in collections CPython
+  registers with them, such as a list, a tuple, bytes or a range for
+  `Sequence[int]`, or the views of a dict for `Set[str]` (LIB-20). One that
+  only reads its items takes a collection of a derived class's instances,
+  such as a `list[Square]` for a `Sequence[Shape]`; `reversed`, slices,
+  `isinstance` and class patterns take them as CPython does; and messages
+  name them as written, such as `Sequence[int]`. A loop and the built-ins
+  of one iterable go over a union of built-in iterables of one item type.
+- `issubclass(class, classes)` with a class or a tuple of classes, named or
+  held in a value, answering as CPython does; a value that is no class is
+  refused with CPython's `TypeError` message (CLS-19).
+- A class pattern may name a class held in a variable or a parameter, such
+  as `case kind(size=1):`, tested when the program runs, with keyword
+  sub-patterns; positional ones are planned for 0.14 (CLS-18, CLS-40).
+  `Union[...]` and `Optional[...]` in `isinstance` take such a class too.
+- `isinstance` and `issubclass` take a tuple of classes held in a value,
+  such as `kinds = (int, float)` or a `tuple[type[Shape], ...]`, evaluated
+  once and tested class by class (CLS-18, CLS-19).
+- `isinstance` takes a class held in a value, such as `isinstance(shape,
+  kind)` with `kind = type(other)` or a parameter of type `type[Square]`,
+  alone or in a tuple with named classes, tested when the program runs; a
+  class whose type names one narrows the value to it (CLS-18).
+- Decorators on functions at the top of a module or nested in a function,
+  also inside an `if`, a loop, a `with`, a `try` or a `match` there:
+  any expression that takes the function, evaluated from the top down and
+  applied from the bottom up when the `def` runs, the name holding what the
+  outermost returns, also inside the function; generic decorators too
+  (FUN-06). A call through a decorated name passes its arguments by
+  position.
+- A nested function, a `lambda` or a generator expression inside a generic
+  function, or inside a function with a protocol parameter, is accepted and
+  made in each copy of the function, with Python's `__qualname__`, such as
+  `pair_with.<locals>.make` (FUN-10). A copy of a generic function or class
+  shows its name without type arguments.
+- A built-in function is a value where a `Callable` is expected, such as
+  `sorted(words, key=len)`, `max(rows, key=len)` or `measure:
+  Callable[[str], int] = len`, written `<built-in function len>`, of the
+  type `builtin_function_or_method`. `chr` and `ord` are values with no
+  `Callable` expected; any other built-in function needs one, E0203
+  (FUN-08). Two values of one built-in are one function, also where they
+  fill different `Callable` types: `is`, `==` and `hash` treat them as one,
+  as CPython does (ADR-0076).
+- A method of a built-in type read through the type is a value where a
+  `Callable` is expected, such as `sorted(words, key=str.lower)` or `add:
+  Callable[[list[int], int], None] = list.append`, written `<method 'lower'
+  of 'str' objects>`, of the type `method_descriptor` (FUN-08).
+- A function of `math` or `sys` is a value where a `Callable` is expected,
+  such as `sorted(values, key=math.fabs)` or `root: Callable[[float],
+  float] = math.sqrt`, written `<built-in function sqrt>`; with no
+  `Callable` expected it is E0203, where it was planned (FUN-08).
+- A method read through a built-in value is a value where a `Callable` is
+  expected, such as `add: Callable[[str], None] = words.append` or
+  `key="ab".index`, bound to that value and written `<built-in method
+  append of list object at 0x...>`; with no `Callable` expected it is
+  E0203, where it was E0412 (FUN-08).
+- A built-in type whose call TyPy types, such as `int`, `str` or `list`, is a
+  function where a `Callable` is expected, such as `sorted(numbers,
+  key=str)` or `parse: Callable[[str], int] = int`, written `<class 'int'>`
+  (FUN-14). A class of the program there is refused as planned for 0.14
+  (FUN-16), where it was E0402 or E0404.
+- A function of the module with defaults, `*args` or `**kwargs` is a value
+  where a `Callable` its parameters take is expected, such as
+  `apply(total, 2, 3)` with `def total(*values: int)`, or `twice:
+  Callable[[int], int] = scale` with a default for its second parameter;
+  it is the same function to `is` and `==`. Read where no `Callable` is
+  expected it is E0203 (FUN-13).
+- A class method read as a value, such as `make = Box.make` or `box.make`,
+  is a bound method of the class it is read through, or of the instance's
+  own class, as CPython binds `cls`: `box.make` of a `BigBox` makes a
+  `BigBox` (FUN-09). A static method read through an instance whose
+  subclasses define it again is the function of the instance's own class.
+- `callable(x)` is true for a function value, a built-in function, method
+  or type, and a class, and false for any other value, as CPython answers
+  (LIB-23).
+- Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
+  of its files, with their SHA-256, and of the crates and libraries the
+  compiler holds, with their licences; a copy is published beside the
+  archive (NFR-25).
+- Each release archive is attested with its build provenance, signed
+  through Sigstore without a key the project keeps; `gh attestation verify
+  ARCHIVE --repo typy-lang/typy` checks it (NFR-26).
+
+### Changed
+
+- `ctypes.POINTER`, `pointer`, `byref`, `sizeof`, `CDLL` and `cdll` read
+  as values, such as `size = ctypes.sizeof`, are refused as planned for
+  0.13 under FFI-10, with the other `ctypes` uses planned there. The
+  message named 0.10 (FUN-08).
+- `enumerate`, `zip` and `reversed` read as values, such as
+  `key=reversed`, are refused as their calls outside a `for` loop, a
+  comprehension or an iterable argument are, planned for after 1.0. The
+  message named 0.10 (FUN-08).
+- `typing` names and type aliases as values (TYP-18), nested functions with
+  type parameters of their own (FUN-18), and nested functions, methods and
+  `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19), and
+  `*` and `**` of a value only the run knows in a call of a builtin, a
+  function value, a protocol method or an exception class (EXP-22) are
+  refused as planned for 0.11, where the messages named 0.10 and TYP-18,
+  FUN-10, FUN-13 or EXP-19.
+- A `type[C]` holds `C` or a class derived from it: a `type[Square]` passes
+  where a `type[Shape]` is expected, and `type(x)` of an instance whose
+  class has subclasses is a `type[C]` of its static class (CLS-18). When a
+  class derives from `C`, calling a class held in a variable, a parameter
+  or `type(x)`, or reaching a class variable or class method through it,
+  is refused as planned for 0.14 (CLS-39); 0.9 called the static class.
+  Call the class by its name instead.
+- `from typing import ...` and `from collections.abc import ...` report
+  every name a later release gives, not only the first. `typing.AbstractSet`
+  is refused as planned for 0.10 (LIB-20), where it was "not given"
+  (E0425), and `Sized`, `Hashable` and `MappingView` as planned for 0.14
+  (LIB-24).
+- A decorator on a method is refused as planned for 0.14 (FUN-15), and a
+  class decorator other than `@dataclass` as planned for 1.0 (CLS-38);
+  0.10 brings decorators of functions (FUN-06). `property`,
+  `staticmethod` and `classmethod` as values are refused as planned for
+  1.0 (FUN-17). The messages named FUN-06 for every decorator and FUN-08
+  for those names.
+- A keyword argument a builtin does not take is refused with CPython's
+  message, such as "Cannot specify a default for max() with multiple
+  positional arguments" or "abs() takes no keyword arguments", where the
+  message said the builtin "takes no keyword arguments in TyPy 0.1" (LIB-01).
+- A name `typing`, `collections.abc` or `dataclasses` does not give is
+  refused with the names that module gives; the message listed the names of
+  `typing` for each and left out `Generator` and `Callable` (LIB-17).
+- The messages for a builtin called with too many or too few arguments, and
+  for an annotation that names no type, no longer name TyPy 0.1; the latter
+  says the name is not a built-in type, a class or a type alias (STD-04).
+- Generics and `ctypes` features planned for 1.0 are now planned for 0.13
+  (GEN-06, GEN-11 to GEN-17, FFI-06, FFI-07, FFI-09 to FFI-11), and the
+  class rules planned for 1.0 for 0.14 (CLS-28 to CLS-37). The E0201
+  messages that refuse them name the new release.
+- The refusal of a default value other than a constant names EXP-20, the
+  requirement that plans it for 1.0, not EXP-16, which TyPy meets.
+
+### Fixed
+
+- A call that unpacks with `*` or `**` and names a function that is not
+  defined, or a builtin TyPy does not provide, such as `divmod(*pair)`, is
+  refused for that name with E0205 or E0202. The message said the
+  unpacking was planned for a later release (EXP-22).
+
+- A fixed tuple, such as `(1, 2)`, passed or assigned where a union with a
+  `tuple[T, ...]` member is expected, such as `tuple[int, ...] | str`, is
+  accepted as that member, as CPython runs it. It was refused with E0404
+  or E0402 (TYP-14).
+- A generic function whose parameters or result name a type parameter
+  inside a `Callable` or a `Generator`, such as `def apply[T](value: T,
+  change: Callable[[T], T]) -> T` or a generic generator that yields `T`,
+  is accepted, and its type parameters are solved from those arguments.
+  It was refused with E0404 or E0405 (GEN-01).
+- `type(x)` of an instance whose class has subclasses, such as a `Circle`
+  held as a `Shape`, is a class known only when the program runs. Calling
+  it, or reading a class variable or a class method through it, is refused
+  with E0201, planned for 0.14 (CLS-39), and passing it where a
+  `type[Shape]` is expected with E0404. TyPy took it for the static class,
+  so `type(shape)()` made a `Shape` and `type(shape).kind` read `Shape`'s
+  variable, where CPython uses `Circle`'s. Call the class by its name, or
+  pass a function that makes the object.
+- A property read through its class as a value, such as `getter = Box.v`,
+  is refused with E0201, planned for 1.0 (FUN-17). TyPy took it for the
+  getter, so calling the value ran the getter, where CPython raises
+  `TypeError: 'property' object is not callable`.
+- A library called on a thread its C host created with a stack smaller than
+  `RLIMIT_STACK` raises `RecursionError` for a recursion too deep for that
+  stack; on Linux the process ended with a segmentation fault (FFI-15).
+- A call that unpacks a tuple holding an instance of a derived class into a
+  `Base | None` parameter compiles; it ended in an internal error (E9001)
+  (EXP-17).
+- A fixed tuple, a collection or an iterator passed where a union of
+  iterables and iterators is expected, or of an iterable and another type,
+  such as `Iterable[int] | int`, compiles and runs as in CPython. A fixed
+  tuple aborted the program with "an object has an unknown type", and the
+  others ended in an internal error (E9001) (TYP-15).
+- `==` and `!=` of two exceptions compare them by identity, as CPython
+  does; they ended in an internal error (E9001). An exception class that
+  defines `__eq__` or `__ne__` is refused with E0201, planned for 1.0
+  (EXC-20), since TyPy does not call it yet (EXP-06).
+- A library whose `__all__` exports a function under the name of a C
+  function the module calls through `ctypes`, such as `labs` beside
+  `libc.labs`, is refused with E0429 at the name, since the export would
+  take the C function's place; it ended in an internal error (E9001)
+  (FFI-05).
+- An f-string `{value:c}` of `-2**63`, the smallest C `long`, raises
+  CPython's `OverflowError: %c arg not in range(0x110000)`, not "Python
+  int too large to convert to C long", since the value fits a C `long`
+  (LEX-07).
+- `x += y` where the class of `x` has an `__iadd__` whose parameter does
+  not take `y` is refused with E0404. TyPy called `__add__` instead, where
+  CPython calls `__iadd__` whatever `y` is (CLS-20).
+- An override that takes a parameter by keyword only, or by position only,
+  where its base method takes it by position or by keyword is refused with
+  E0404. TyPy ran a call through the base that CPython refuses with
+  `TypeError` (CLS-04).
+
 ## [0.9.0] - 2026-11-20
 
 ### Added
@@ -1390,7 +1617,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/typy-lang/typy/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/typy-lang/typy/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/typy-lang/typy/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/typy-lang/typy/compare/v0.6.0...v0.7.0

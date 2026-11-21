@@ -60,6 +60,24 @@ impl FunctionLowerer<'_> {
         iterator
     }
 
+    /// Returns a new iterator that reads `source`, an `Iterable[T]` of the built-in sequences,
+    /// dicts and views of an abstract collection, from its last item (LIB-20).
+    pub(crate) fn reversed_of(&mut self, source: &TypedExpr, span: Span) -> Lowered {
+        let lowered = self.expression(source);
+        let item = match &source.ty {
+            Type::Iterable(item) => item.as_ref().clone(),
+            other => other.clone(),
+        };
+        let pair = self.pair_layout(&item, span);
+        let iterator = self.call_runtime(
+            RuntimeFunction::IteratorReversed,
+            vec![lowered.value, pair],
+            span,
+        );
+        self.release(lowered, span);
+        iterator
+    }
+
     /// Returns a new iterator over an `Iterable[T]`, which the runtime makes of the kind the
     /// object's header says; a pair of a dict's items is built in the layout of `item`.
     pub(crate) fn iterable_iterator(

@@ -185,6 +185,12 @@ pub enum RuntimeFunction {
     /// A new bound method of the descriptor and the instance, which it holds a reference to
     /// (FUN-05).
     MethodNew,
+    /// A new method of a built-in type read through a value, such as `words.append`, of a
+    /// hidden function's descriptor and the value (FUN-08, ADR-0077).
+    BuiltinMethodNew,
+    /// A bound method of a descriptor and an instance, or a static method's function object,
+    /// as the `bool` says (FUN-09).
+    MethodOrFunction,
     /// Raises `NameError` for a captured variable, named by the `str`, that has no value yet
     /// (FUN-04).
     FreeVariableUnbound,
@@ -210,6 +216,10 @@ pub enum RuntimeFunction {
     ExceptionKeep,
     ExceptionSetArguments,
     IteratorNew,
+    /// A new iterator that reads a list, a `tuple[T, ...]`, a `str`, a `bytes`, a range, a
+    /// dict or a view of one from its last item, held as an `Iterable[T]`, with the layout of
+    /// the pair of a view of items (LIB-20).
+    IteratorReversed,
     IterableIterator,
     /// What `next()` steps for a value held as an `Iterator[T]`: the iterator itself, or a
     /// wrapper of an instance of a class with `__next__` (TYP-20).
@@ -298,6 +308,14 @@ pub enum RuntimeFunction {
     /// Whether two objects of any types are equal, through the `equal` slot of the class
     /// that decides, as a union of objects compares them (GEN-10).
     ObjectsEqual,
+    /// Whether a type object is a class or derives from another, both as words (CLS-18).
+    TypeDerivesFrom,
+    /// Whether a type object is or derives from one of the classes a `tuple[type, ...]`
+    /// holds, both as words (CLS-18, CLS-19).
+    TypeDerivesFromAny,
+    /// Whether two function values stand for one function: the same object, or two objects
+    /// of functions that capture nothing whose descriptors name one identity (ADR-0076).
+    SameFunction,
     /// An `int` as a `double` for a `c_float` or `c_double` argument at the position the
     /// second argument gives, or `ctypes.ArgumentError` for one too large (FFI-03).
     CtypesFloatArgument,
@@ -501,7 +519,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 375] = [
+    pub const ALL: [Self; 381] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -674,6 +692,8 @@ impl RuntimeFunction {
         Self::TypeAliasName,
         Self::TypeAliasModule,
         Self::MethodNew,
+        Self::BuiltinMethodNew,
+        Self::MethodOrFunction,
         Self::FreeVariableUnbound,
         Self::ExceptionNew,
         Self::ExceptionPartText,
@@ -695,6 +715,7 @@ impl RuntimeFunction {
         Self::ExceptionKeep,
         Self::ExceptionSetArguments,
         Self::IteratorNew,
+        Self::IteratorReversed,
         Self::IterableIterator,
         Self::IteratorStepper,
         Self::Iter,
@@ -752,6 +773,9 @@ impl RuntimeFunction {
         Self::SliceEqual,
         Self::ObjectHasTypeId,
         Self::ObjectsEqual,
+        Self::SameFunction,
+        Self::TypeDerivesFrom,
+        Self::TypeDerivesFromAny,
         Self::CtypesFloatArgument,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
@@ -986,7 +1010,10 @@ impl RuntimeFunction {
             Self::SliceIndex => signature(&[TyirType::SLICE, Int, Int], Int, true),
             Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
             Self::ObjectHasTypeId => signature(&[Bits, Int], Bool, false),
-            Self::ObjectsEqual => signature(&[Bits, Bits], Bool, false),
+            Self::ObjectsEqual
+            | Self::SameFunction
+            | Self::TypeDerivesFrom
+            | Self::TypeDerivesFromAny => signature(&[Bits, Bits], Bool, false),
             Self::CtypesFloatArgument => signature(&[Int, Int], Float, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked | Self::FreeVariableUnbound => {
@@ -1107,7 +1134,10 @@ impl RuntimeFunction {
             Self::TypeAliasName | Self::TypeAliasModule => {
                 signature(&[TyirType::TYPE_ALIAS], STR, false)
             }
-            Self::MethodNew => signature(&[Bits, Bits], TyirType::FUNCTION, false),
+            Self::MethodNew | Self::BuiltinMethodNew => {
+                signature(&[Bits, Bits], TyirType::FUNCTION, false)
+            }
+            Self::MethodOrFunction => signature(&[Bits, Bits, Bool], TyirType::FUNCTION, false),
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1133,6 +1163,7 @@ impl RuntimeFunction {
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
+            Self::IteratorReversed => signature(&[TyirType::ITERABLE, Bits], ITERATOR, false),
             // An instance's `__iter__` may raise (TYP-20).
             Self::IterableIterator | Self::Iter => {
                 signature(&[TyirType::ITERABLE, Bits], ITERATOR, true)
@@ -1480,6 +1511,8 @@ impl RuntimeFunction {
             Self::TypeAliasName => "type_alias_name",
             Self::TypeAliasModule => "type_alias_module",
             Self::MethodNew => "method_new",
+            Self::BuiltinMethodNew => "builtin_method_new",
+            Self::MethodOrFunction => "method_or_function",
             Self::FreeVariableUnbound => "free_variable_unbound",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",
@@ -1501,6 +1534,7 @@ impl RuntimeFunction {
             Self::ExceptionKeep => "exception_keep",
             Self::ExceptionSetArguments => "exception_set_arguments",
             Self::IteratorNew => "iterator_new",
+            Self::IteratorReversed => "iterator_reversed",
             Self::IterableIterator => "iterable_iterator",
             Self::IteratorStepper => "iterator_stepper",
             Self::Iter => "iter",
@@ -1558,6 +1592,9 @@ impl RuntimeFunction {
             Self::SliceEqual => "slice_equal",
             Self::ObjectHasTypeId => "object_has_type_id",
             Self::ObjectsEqual => "objects_equal",
+            Self::SameFunction => "same_function",
+            Self::TypeDerivesFrom => "type_derives_from",
+            Self::TypeDerivesFromAny => "type_derives_from_any",
             Self::CtypesFloatArgument => "ctypes_float_argument",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",

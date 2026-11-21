@@ -210,6 +210,23 @@ impl BodyChecker<'_> {
             CompareOperator::Eq | CompareOperator::NotEq => {
                 if !l.can_test_equality(&r) {
                     self.comparison_error(&l, &r, span);
+                } else if let Some(class) = [&l, &r]
+                    .into_iter()
+                    .find_map(|side| self.exception_with_equality(side))
+                {
+                    // CPython calls the class's own method, which TyPy does not call for an
+                    // exception yet, and comparing by identity would answer otherwise.
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            span,
+                            format!(
+                                "`==` and `!=` of an exception whose class, `{class}`, defines \
+                                 `__eq__` or `__ne__` are planned for TyPy 1.0 (EXC-20)"
+                            ),
+                        )
+                        .with_rule(RuleId::EXC_20),
+                    );
                 }
             }
             CompareOperator::Lt
@@ -284,6 +301,19 @@ impl BodyChecker<'_> {
             .with_help("convert with `int(...)` first"),
         );
         Type::Error
+    }
+
+    /// Returns the name of the class of an exception of `ty` that defines `__eq__` or `__ne__`,
+    /// itself or through a base of the program, which `==` and `!=` call in CPython.
+    fn exception_with_equality(&self, ty: &Type) -> Option<String> {
+        let Type::Exception(exception) = ty else {
+            return None;
+        };
+        let class = exception.class_id()?;
+        ["__eq__", "__ne__"]
+            .iter()
+            .any(|name| self.program.method(class, name).is_some())
+            .then(|| exception.name().to_owned())
     }
 
     pub(super) fn comparison_error(&mut self, left: &Type, right: &Type, span: Span) {

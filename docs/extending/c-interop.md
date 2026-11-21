@@ -141,8 +141,11 @@ returns other values needs an export of these types that calls it. An
 `int` result outside `int64_t` raises `OverflowError`, which ends the
 process as any exception does. The runtime is not safe to call from two
 threads at once, so a program calls a library's exports from one thread at
-a time; each call may come from a different thread. Each library holds its
-own copy of the runtime, so a program may link several TyPy libraries.
+a time; each call may come from a different thread. A recursion too deep
+for the calling thread's stack raises `RecursionError`, also on a thread the
+program created with a stack smaller than the main thread's. Each library
+holds its own copy of the runtime, so a program may link several TyPy
+libraries.
 
 An export may not take a name the runtime calls in the C library, such as
 `read`, `free` or `sqrt`, or one C keeps for itself, such as `__init`; the
@@ -304,17 +307,19 @@ says, and CPython runs the same program through `ctypes`.
 
 ## Planned
 
-Planned for 1.0 are methods and class attributes other than `_fields_`
+Planned for 0.13 are methods and class attributes other than `_fields_`
 in a structure, `_fields_` assigned after the class statement, bit
 fields, a subclass of a structure, and `ctypes.Union` (FFI-11); and
 `c_char`, `c_wchar`, `c_wchar_p`, `create_string_buffer`, `cast` and
 `addressof`, pointers to and arrays of pointers and arrays, arrays whose
 length is not an integer literal, array slices, `byref` other than as a C
-function's argument, assigning a pointer's `contents`, and `ctypes`
-classes as values, in annotations, `isinstance` and `type` (FFI-10), so a
-function takes and returns the values of an object rather than the object.
+function's argument, assigning a pointer's `contents`, `ctypes` classes
+as values, in annotations, `isinstance` and `type`, and `POINTER`,
+`pointer`, `byref`, `sizeof`, `CDLL` and `cdll` as values, such as
+`size = ctypes.sizeof` (FFI-10), so a function takes and returns the
+values of an object rather than the object.
 A library or a C function used as a value, stored, passed or printed, is
-planned for 1.0 too (FFI-09):
+planned for 0.13 too (FFI-09):
 
 <!-- typy-expect: rejected E0201 at 4:7 -->
 ```python

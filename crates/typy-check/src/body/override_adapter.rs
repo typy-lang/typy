@@ -91,8 +91,10 @@ impl Program {
         let module = self.class_modules[class.0 as usize].clone();
         self.functions.push(Some(TypedFunction {
             id,
-            name: format!("<adapter {name}>"),
-            qualified_name: format!("{class_name}.<adapter {name}>"),
+            // A bound method of the adapter is the override's: it is written, compared and
+            // hashed as the override (FUN-09).
+            name: name.to_owned(),
+            qualified_name: format!("{class_name}.{name}"),
             module,
             signature,
             parameters: symbols,

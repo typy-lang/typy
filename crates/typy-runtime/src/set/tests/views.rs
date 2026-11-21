@@ -130,6 +130,8 @@ fn items_views_combine_as_in_cpython_with_their_own_symmetric_difference() {
     let (first, second) = (view(squares, 2), view(threes, 2));
     let (a, b) = (address(first), address(second));
     assert_eq!(combined(a, b, 1, true), "{(0, 0)}");
+    // The smaller view on the left tests each item of the larger one.
+    assert_eq!(combined(b, a, 1, true), "{(0, 0)}");
     assert_eq!(
         combined(a, b, 3, true),
         "{(7, 49), (2, 4), (4, 16), (9, 9), (1, 1), (5, 25), (8, 64), (6, 36), (12, 12), \

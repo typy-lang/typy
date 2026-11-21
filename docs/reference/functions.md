@@ -20,10 +20,74 @@
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
-Decorators, built-in functions as values, class methods and protocol
-methods as values, nested functions of generic functions, and functions
-with `*args` or `**kwargs` as values are planned for 0.10 (FUN-06, FUN-08
-to FUN-10, FUN-13).
+A built-in function is a value where a `Callable` is expected, such as
+`sorted(words, key=len)` or `measure: Callable[[str], int] = len`, and is
+written `<built-in function len>` (FUN-08). So is a method of a built-in
+type read through the type, such as `sorted(words, key=str.lower)` or
+`add: Callable[[list[int], int], None] = list.append`, written
+`<method 'lower' of 'str' objects>`, a method read through a built-in
+value, such as `add: Callable[[str], None] = words.append` or
+`key="-".join`, written `<built-in method append of list object at
+0x...>`, and a function of `math` or `sys`, such as `key=math.fabs`. A
+built-in type is a function of its arguments there too, such as
+`sorted(numbers, key=str)` or `parse: Callable[[str], int] = int`, written
+`<class 'int'>` (FUN-14). With
+no `Callable` expected, `chr` and `ord` have their one type, and any other
+built-in function or method is E0203, since its arguments may be of
+several types.
+
+A nested function inside a generic function, or inside a function with a
+protocol parameter, is checked and made in each copy of the function, and
+keeps Python's `__qualname__`, such as `pair_with.<locals>.make` (FUN-10).
+
+A method read through a protocol value, such as `area = shape.area`, is
+a bound method of the method of the object's class, written, compared and
+hashed as that method (FUN-09). So is a method read through an instance
+whose subclass defines it again as a static method, or overrides it with a
+parameter or a result held otherwise, such as `int | None` for `int`: the
+value has the type of the method read, and calls the object's own method.
+
+A nested function or a method with `*args` or `**kwargs` as a value is
+planned for 0.11 (FUN-19), and so is a nested function with type parameters of its
+own (FUN-18). A class of the program as a `Callable` is planned for 0.14
+(FUN-16).
+
+## Decorators
+
+A decorator on a function at the top of a module or nested in a function,
+also inside an `if`, a loop, a `with`, a `try` or a `match` there, is any
+expression that takes the function, as CPython allows (FUN-06).
+The decorators are evaluated from the top down and applied from the bottom
+up when the `def` runs, and the name holds what the outermost returns, so
+a read of the name, also inside the function, reads that value. A
+decorator may be generic, such as one that takes a `Callable[[T], T]`.
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable
+
+
+def trace(function: Callable[[int], int]) -> Callable[[int], int]:
+    def wrapper(value: int) -> int:
+        print("calling with", value)
+        return function(value)
+
+    return wrapper
+
+
+@trace
+def increment(value: int) -> int:
+    return value + 1
+
+
+print(increment(2))
+```
+
+The name holds a `Callable` value, which names no parameters, so a call
+through it passes its arguments by position: `increment(value=2)` is
+E0404. A generic function cannot be decorated, since it is no one value
+(E0202). Decorators of methods are planned for 0.14 (FUN-15), and class
+decorators other than `@dataclass` for 1.0 (CLS-38).
 
 ## Variable numbers of arguments
 
@@ -56,11 +120,15 @@ names `*args` or `**kwargs` itself.
 Methods, `__init__`, nested functions and generic functions take them
 too; a type parameter is solved from the arguments `*args` takes, as in
 `def first[T](*items: T) -> T`. An override keeps the `*args` and
-`**kwargs` of the method it overrides, E0404 (CLS-04). Reading such a
-function as a value, and `*args` or `**kwargs` in a `lambda`, are planned
-for 0.10 (FUN-13); call it from a `lambda` that takes the arguments the
-`Callable` passes. A call may also unpack its arguments; see
-[Unpacking in a call](#unpacking-in-a-call).
+`**kwargs` of the method it overrides, E0404 (CLS-04). A function of the
+module with defaults, `*args` or `**kwargs` is a value where a `Callable`
+is expected that its parameters take, such as `apply(total, 2, 3)` or
+`twice: Callable[[int], int] = scale` with `by: int = 2`; it is called
+with the `Callable`'s arguments by position, and stays the same function
+to `is` and `==` (FUN-13). Read where nothing is expected, it is E0203. A
+nested function or a method with them as a value, and `*args` or
+`**kwargs` in a `lambda`, are planned for 0.11 (FUN-19). A call may also
+unpack its arguments; see [Unpacking in a call](#unpacking-in-a-call).
 
 ## Unpacking in a call
 
@@ -104,10 +172,21 @@ value must fit, E0404, or else the first value's, which the others must
 have, E0409, and which must fit each of those parameters. The values of
 the `**` dicts
 have one type too, which must fit each parameter a keyword may still
-fill and the values of `**kwargs`. `*` and `**` in a call of a builtin
-other than `print`, of a function value, of a protocol method or of an
-exception class, and `**` in a call of `print`, are planned for 0.10
-(EXP-19).
+fill and the values of `**kwargs`.
+
+A call of a builtin, a function value, a protocol method or an exception
+class takes `*` of a tuple display or of a variable that holds a fixed
+tuple, and `**` of a dict display whose keys are `str` literals, each
+written out as the values it gives (EXP-19):
+
+<!-- typy-expect: accepted -->
+```python
+point = (7, 3)
+print(max(*point), min(*(4, 9, 2)), *point, **{"sep": "-"})
+```
+
+The same unpacking of a list or another iterable, or of a dict held in a
+variable, in such a call is planned for 0.11 (EXP-22).
 
 ## Nested functions
 
@@ -512,10 +591,11 @@ These forms are refused:
 | A generic function as a value, which has one copy for each set of types | E0202 |
 | A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
-| A function, nested function or method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.10 | E0201 (FUN-13) |
-| `*` or `**` in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and `**` in a call of `print`, planned for 0.10 | E0201 (EXP-19) |
+| A nested function or a method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.11 | E0201 (FUN-19) |
+| A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
+| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and such `**` in a call of `print`, planned for 0.11 | E0201 (EXP-22) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
-| A class method as a value; a static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
+| A property read through its class as a value, such as `Box.v`, which is a `property` object, planned for 1.0 | E0201 (FUN-17) |
 | A call of a value that is not a function, such as an `int` | E0401 |
 
 ## Example

@@ -24,19 +24,31 @@ xcode-select --install
 
 Download the archive for your machine and its `.sha256` file from the
 [release page](https://github.com/typy-lang/typy/releases):
-`typy-0.9.0-x86_64-unknown-linux-gnu.tar.gz` on x86_64 or
-`typy-0.9.0-aarch64-unknown-linux-gnu.tar.gz` on AArch64 Linux, as
+`typy-0.10.0-x86_64-unknown-linux-gnu.tar.gz` on x86_64 or
+`typy-0.10.0-aarch64-unknown-linux-gnu.tar.gz` on AArch64 Linux, as
 `uname -m` names the machine. Check the archive and unpack it:
 
 ```sh
-archive="typy-0.9.0-$(uname -m)-unknown-linux-gnu"
+archive="typy-0.10.0-$(uname -m)-unknown-linux-gnu"
 sha256sum --check "$archive.tar.gz.sha256"
 tar -xzf "$archive.tar.gz"
 export PATH="$PWD/$archive/bin:$PATH"
 typy --version
 ```
 
-On a Mac the archive is `typy-0.9.0-aarch64-apple-darwin.tar.gz`, which
+Each archive carries an attestation of where and how it was built, signed
+without a key the project keeps. With the GitHub command line you check
+it before you unpack the archive:
+
+```sh
+gh attestation verify "$archive.tar.gz" --repo typy-lang/typy
+```
+
+The archive's `sbom.cdx.json`, also published beside it, is its bill of
+materials: each file with its SHA-256, and each crate and library the
+compiler holds with its licence.
+
+On a Mac the archive is `typy-0.10.0-aarch64-apple-darwin.tar.gz`, which
 [Using TyPy on macOS](../using/macos.md) installs, clearing the quarantine
 a browser download carries.
 

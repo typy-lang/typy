@@ -138,6 +138,7 @@ impl FunctionLowerer<'_> {
         &mut self,
         object: &TypedExpr,
         methods: &[(ClassId, FunctionId)],
+        binds_class: bool,
         span: Span,
     ) -> Lowered {
         let instance = self.expression(object);
@@ -155,8 +156,98 @@ impl FunctionLowerer<'_> {
             let own = descriptor(self, *method);
             chosen = self.select(found, own, chosen, TyirType::Bits);
         }
+        // A class method binds the object's class, which it holds as CPython's `cls` (FUN-09).
+        let bound = if binds_class {
+            self.runtime_type(instance, &object.ty, span)
+        } else {
+            Self::borrowed(instance.value, instance.ty)
+        };
+        let bits = self.bits(Self::borrowed(bound.value, bound.ty), span);
+        // A method of a built-in type read through a value is written as CPython writes a
+        // built-in method (FUN-08).
+        let new = if matches!(
+            self.program.builtin_values.get(&methods[0].1),
+            Some(typy_check::BuiltinValue::Method)
+        ) {
+            RuntimeFunction::BuiltinMethodNew
+        } else {
+            RuntimeFunction::MethodNew
+        };
+        let made = self.call_runtime(new, vec![chosen, bits], span);
+        self.release(instance, span);
+        made
+    }
+
+    /// Returns the function among `functions` of the class of the instance `object` gives,
+    /// chosen by the same tests as `bound_method`, after evaluating the object: the static
+    /// method of the instance's own class (FUN-09).
+    pub(crate) fn chosen_function(
+        &mut self,
+        object: &TypedExpr,
+        functions: &[(ClassId, FunctionId)],
+        span: Span,
+    ) -> Lowered {
+        let instance = self.expression(object);
+        let constant = |this: &mut Self, function: FunctionId| {
+            this.constant(Constant::Function(typy_tyir::FunctionId(function.0)), span)
+        };
+        let mut chosen = constant(self, functions[0].1);
+        for (class, function) in &functions[1..] {
+            let name = self.program.class(*class).name.clone();
+            let test = MemberTest::Class(TypeObjectOf::Instance(*class, name));
+            let found = self.member_found(instance, &test, span);
+            let own = constant(self, *function);
+            chosen = self.select(found, own, chosen, TyirType::FUNCTION);
+        }
+        self.release(instance, span);
+        Self::borrowed(chosen, TyirType::FUNCTION)
+    }
+
+    /// Returns the value of a static method read through `object` when a class in `binds`
+    /// defines it again as a method: for such a class, a bound method of its method and the
+    /// object; for any other, the static method of its class, chosen by the same tests as
+    /// `bound_method` (FUN-09).
+    pub(crate) fn chosen_value(
+        &mut self,
+        object: &TypedExpr,
+        functions: &[(ClassId, FunctionId)],
+        binds: &[ClassId],
+        span: Span,
+    ) -> Lowered {
+        let instance = self.expression(object);
+        let choice = |this: &mut Self, (class, function): (ClassId, FunctionId)| {
+            let id = typy_tyir::FunctionId(function.0);
+            let bound = binds.contains(&class);
+            let constant = if bound {
+                Constant::MethodDescriptor(id)
+            } else {
+                Constant::Function(id)
+            };
+            let value = this.constant(constant, span);
+            // A descriptor is an address already; a function object is read as one.
+            let bits = if bound {
+                value
+            } else {
+                this.bits(Self::borrowed(value, TyirType::FUNCTION), span)
+            };
+            let binds = this.constant(Constant::Bool(bound), span);
+            (bits, binds)
+        };
+        let (mut chosen, mut bound) = choice(self, functions[0]);
+        for (class, function) in &functions[1..] {
+            let name = self.program.class(*class).name.clone();
+            let test = MemberTest::Class(TypeObjectOf::Instance(*class, name));
+            let found = self.member_found(instance, &test, span);
+            let (own, own_bound) = choice(self, (*class, *function));
+            chosen = self.select(found, own, chosen, TyirType::Bits);
+            bound = self.select(found, own_bound, bound, TyirType::Bool);
+        }
         let bits = self.bits(Self::borrowed(instance.value, instance.ty), span);
-        let made = self.call_runtime(RuntimeFunction::MethodNew, vec![chosen, bits], span);
+        let made = self.call_runtime(
+            RuntimeFunction::MethodOrFunction,
+            vec![chosen, bits, bound],
+            span,
+        );
         self.release(instance, span);
         made
     }

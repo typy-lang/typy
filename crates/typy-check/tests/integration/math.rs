@@ -186,9 +186,9 @@ fn other_uses_of_math_give_their_codes() {
         ("import math\nprint(math.prod([1.0], begin=2))\n", "E0404"),
         ("import math\nprint(math.prod([1.0], start='a'))\n", "E0201"),
         ("import math\nprint(math.prod(['a']))\n", "E0201"),
-        ("from math import prod\nf = prod\n", "E0201"),
-        ("import math\nf = math.sqrt\n", "E0201"),
-        ("from math import sqrt\nf = sqrt\n", "E0201"),
+        ("from math import prod\nf = prod\n", "E0203"),
+        ("import math\nf = math.sqrt\n", "E0203"),
+        ("from math import sqrt\nf = sqrt\n", "E0203"),
         ("import math\nprint(math.pi())\n", "E0401"),
         ("import math.special\n", "E0206"),
     ] {

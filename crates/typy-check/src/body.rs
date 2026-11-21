@@ -4,6 +4,7 @@ mod accessor;
 mod binding;
 mod builtin_call;
 mod builtin_module;
+mod builtin_value;
 mod call;
 mod call_expression;
 mod cdata;
@@ -30,6 +31,7 @@ mod generic_call;
 mod generic_copy;
 mod override_adapter;
 mod override_copy;
+mod protocol_method_value;
 mod protocol_value;
 mod static_bridge;
 mod truth_bridge;
@@ -54,6 +56,7 @@ mod list;
 mod list_call;
 mod locals;
 mod loop_source;
+mod map_filter;
 mod matching;
 mod math_call;
 mod math_iterable;
@@ -62,6 +65,7 @@ mod method_value;
 mod module_context;
 mod name;
 mod named;
+mod named_tuple;
 mod nested_function;
 mod open_call;
 mod open_options;
@@ -70,6 +74,7 @@ mod operator_method;
 mod os_error;
 mod pattern_class;
 mod pattern_coverage;
+mod pattern_held_class;
 mod pattern_mapping;
 mod pattern_sequence;
 mod percent;
@@ -125,6 +130,9 @@ pub(crate) struct BodyChecker<'program> {
     local_order: Vec<SymbolId>,
     /// The variables an assignment expression in the body assigns (EXP-13).
     named_targets: Vec<SymbolId>,
+    /// The `Callable` expected of the attribute read at this span, which a method of a
+    /// built-in value takes as its type (FUN-08); set only while that read is checked.
+    expected_method: Option<(Span, Vec<Type>, Option<Type>)>,
     declared: BTreeMap<SymbolId, Type>,
     types: BTreeMap<SymbolId, Type>,
     assigned: Assigned,
@@ -148,6 +156,8 @@ pub(crate) struct BodyChecker<'program> {
     splitting: Vec<(each_member::Split, Type)>,
     /// The class and instance of the method being checked, which `super()` reads.
     method: Option<class::Initializing>,
+    /// `cls` of the class method being checked, which holds its class exactly (ADR-0025).
+    class_parameter: Option<SymbolId>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
     reported_incomplete: bool,
     /// How many `except` clauses enclose the statement being checked, in this function.
@@ -202,6 +212,7 @@ impl<'program> BodyChecker<'program> {
             locals: BTreeMap::new(),
             local_order: Vec::new(),
             named_targets: Vec::new(),
+            expected_method: None,
             declared: BTreeMap::new(),
             types: BTreeMap::new(),
             assigned: Some(BTreeSet::new()),
@@ -210,6 +221,7 @@ impl<'program> BodyChecker<'program> {
             returns,
             initializing: None,
             method: None,
+            class_parameter: None,
             narrowings: Vec::new(),
             splitting: Vec::new(),
             following: Vec::new(),
@@ -268,13 +280,21 @@ impl<'program> BodyChecker<'program> {
                 *span,
             );
             checker.locals.insert(name.clone(), symbol);
-            checker.types.insert(symbol, parameter.ty.clone());
+            // A parameter of an abstract collection holds the built-in collection given, and
+            // takes another as its declared type says (LIB-20).
+            if parameter.ty.has_abstract() {
+                checker.declared.insert(symbol, parameter.ty.clone());
+            }
+            checker
+                .types
+                .insert(symbol, parameter.ty.without_abstract());
             checker
                 .assigned
                 .get_or_insert_with(BTreeSet::new)
                 .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
         }
+        checker.class_parameter = checker.class_method_parameter(definition, parameters.first());
         if let (Some(class), true, Some(instance)) = (
             definition.class,
             definition.takes_instance,
@@ -326,8 +346,10 @@ impl<'program> BodyChecker<'program> {
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
         // protocol has (GEN-04).
-        let generic =
-            program.generic(function).is_some() || program.is_opaque_copy(function) || protocol;
+        let generic = program.generic(function).is_some()
+            || program.is_opaque_copy(function)
+            || program.generic_pass.is_some()
+            || protocol;
         program.functions[function.0 as usize] = Some(TypedFunction {
             id: function,
             name: definition.name.clone(),
@@ -482,7 +504,30 @@ impl<'program> BodyChecker<'program> {
         }
     }
 
+    /// Returns `cls` of a class method, the first of `first`, which holds its class exactly
+    /// (ADR-0025); `None` for any other function.
+    fn class_method_parameter(
+        &self,
+        definition: &Definition<'_>,
+        first: Option<&SymbolId>,
+    ) -> Option<SymbolId> {
+        let class = definition.class?;
+        let static_method = self.program.classes[class.0 as usize]
+            .static_methods
+            .contains(&definition.name);
+        (!definition.takes_instance && !static_method)
+            .then_some(first.copied())
+            .flatten()
+    }
+
     pub(super) fn typed(kind: TypedExprKind, ty: Type, span: Span) -> TypedExpr {
+        // A value of a declared abstract collection is the built-in collection it holds
+        // (LIB-20, ADR-0086).
+        let ty = if ty.has_abstract() {
+            ty.without_abstract()
+        } else {
+            ty
+        };
         TypedExpr { kind, ty, span }
     }
 }

@@ -9,7 +9,7 @@ use typy_source::syntax::{Constant, Expr};
 
 use super::BodyChecker;
 use crate::check::{AnnotationName, annotation_name};
-use crate::typed::ClassId;
+use crate::typed::{ClassId, TypedExpr};
 use crate::types::{AbstractClass, TypeObjectOf};
 
 impl BodyChecker<'_> {
@@ -19,13 +19,14 @@ impl BodyChecker<'_> {
     pub(super) fn typing_classes(
         &mut self,
         expression: &Expr,
+        held: &mut Vec<TypedExpr>,
     ) -> Result<Option<Vec<TypeObjectOf>>, Option<Box<Diagnostic>>> {
         if let Expr::Subscript { value, index, .. } = expression
             && let Some(name) = self.standard_name(value)
         {
             return match name {
                 AnnotationName::Optional | AnnotationName::Union => {
-                    self.union_classes(name, index).map(Some)
+                    self.union_classes(name, index, held).map(Some)
                 }
                 _ => Err(Some(type_error(
                     expression,
@@ -36,6 +37,9 @@ impl BodyChecker<'_> {
         let Some(name) = self.standard_name(expression) else {
             return Ok(None);
         };
+        if let AnnotationName::Abstract(collection) = name {
+            return Ok(Some(self.abstract_collection_classes(collection)));
+        }
         Ok(Some(vec![match name {
             AnnotationName::Iterable(_) => self.abstract_class(AbstractClass::Iterable),
             AnnotationName::Iterator(_) => self.abstract_class(AbstractClass::Iterator),
@@ -70,6 +74,52 @@ impl BodyChecker<'_> {
             }
             _ => return Ok(None),
         }]))
+    }
+
+    /// Returns the classes `isinstance` tests for an abstract collection (LIB-20, ADR-0086):
+    /// the built-in types CPython registers with one that has no `__subclasshook__`, and for
+    /// `Container`, `Collection` and `Reversible`, which CPython reads by their methods, those
+    /// types and the classes of the program that define the methods.
+    fn abstract_collection_classes(
+        &self,
+        collection: crate::abstract_type::AbstractCollection,
+    ) -> Vec<TypeObjectOf> {
+        use crate::abstract_type::AbstractCollection;
+        use crate::types::View;
+        let views = [
+            TypeObjectOf::View(View::Keys),
+            TypeObjectOf::View(View::Values),
+            TypeObjectOf::View(View::Items),
+        ];
+        match collection {
+            AbstractCollection::Sequence => vec![
+                TypeObjectOf::List,
+                TypeObjectOf::Tuple,
+                TypeObjectOf::Str,
+                TypeObjectOf::Bytes,
+                TypeObjectOf::Range,
+            ],
+            AbstractCollection::MutableSequence => vec![TypeObjectOf::List],
+            AbstractCollection::Mapping | AbstractCollection::MutableMapping => {
+                vec![TypeObjectOf::Dict]
+            }
+            AbstractCollection::Set => vec![
+                TypeObjectOf::Set,
+                TypeObjectOf::View(View::Keys),
+                TypeObjectOf::View(View::Items),
+            ],
+            AbstractCollection::MutableSet => vec![TypeObjectOf::Set],
+            AbstractCollection::KeysView => vec![views[0].clone()],
+            AbstractCollection::ValuesView => vec![views[1].clone()],
+            AbstractCollection::ItemsView => vec![views[2].clone()],
+            AbstractCollection::Container => vec![self.abstract_class(AbstractClass::Container)],
+            AbstractCollection::Collection => {
+                vec![self.abstract_class(AbstractClass::Collection)]
+            }
+            AbstractCollection::Reversible => {
+                vec![self.abstract_class(AbstractClass::Reversible)]
+            }
+        }
     }
 
     /// Returns how a class pattern's class names an alias of `typing`, which is no class, so
@@ -115,6 +165,7 @@ impl BodyChecker<'_> {
         &mut self,
         name: AnnotationName,
         index: &Expr,
+        held: &mut Vec<TypedExpr>,
     ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {
         let members: Vec<&Expr> = match index {
             Expr::Tuple { elements, .. } => elements.iter().collect(),
@@ -140,7 +191,7 @@ impl BodyChecker<'_> {
                 classes.push(TypeObjectOf::NoneType);
                 continue;
             }
-            classes.extend(self.isinstance_classes(member)?);
+            classes.extend(self.isinstance_classes_holding(member, held)?);
         }
         if name == AnnotationName::Optional {
             classes.push(TypeObjectOf::NoneType);
@@ -155,6 +206,9 @@ impl BodyChecker<'_> {
             AbstractClass::Iterable => &["__iter__"],
             AbstractClass::Iterator => &["__iter__", "__next__"],
             AbstractClass::Generator => &["__iter__", "__next__", "send", "throw", "close"],
+            AbstractClass::Container => &["__contains__"],
+            AbstractClass::Collection => &["__len__", "__iter__", "__contains__"],
+            AbstractClass::Reversible => &["__reversed__", "__iter__"],
         };
         let implementers = (0..self.program.classes.len())
             .map(|index| ClassId(super::program::id(index)))

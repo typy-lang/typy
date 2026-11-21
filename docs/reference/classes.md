@@ -17,6 +17,7 @@ class body or assigned in `__init__`, and has one type.
 | `NotImplemented`, returned by an operator or comparison method to give way | CLS-21 |
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
+| A class derived from `typing.NamedTuple`, whose instances are tuples of its fields | CLS-27 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -127,13 +128,15 @@ print([shape.describe() for shape in shapes])
 
 An override takes the base method's parameters in the same order and
 with the same names. Each parameter accepts the type the base's takes,
-and the result is one the base's result type accepts, as type checkers
+by position and by keyword wherever the base's does, since CPython gives
+the override the arguments a call through the base passes, and the
+result is one the base's result type accepts, as type checkers
 require; a mismatch is E0404. A parameter with a default in the base
 has one in the override, which may differ: a call that leaves it out
 takes the default of the object's class, as in CPython. An override may
 take or return a type held differently from the base's, such as
 `int | None` where the base has `int`; with a default of its own for
-such a parameter it is planned for 1.0 (CLS-34).
+such a parameter it is planned for 0.14 (CLS-34).
 `__init__` is not compared, since it runs only on the class being made.
 
 <!-- typy-expect: rejected E0404 at 7:9 -->
@@ -152,6 +155,31 @@ A subclass may declare an attribute of its base again only with the
 same type. The base of a class is `object`, an exception class or a
 class of the program defined before it; a built-in type such as `int` or
 `list` is E0201, and several bases are planned for after 1.0.
+
+A value of type `type[C]` holds `C` or a class derived from it, as in
+CPython: a `type[Square]` passes where a `type[Shape]` is expected, and
+`type(x)` of an instance whose static class is `Shape` is a `type[Shape]`
+that holds the class the instance has when the program runs, which
+`print`, `__name__`, `is`, `==`, `isinstance` and `issubclass` read (CLS-18,
+ADR-0084). When a class of the program derives from `C`, calling such a
+value, or reading a class variable or a class method through it, is
+planned for 0.14 (CLS-39); call the class by its name instead. `cls` in a
+class method holds its own class, and is called as it is.
+
+<!-- typy-expect: rejected E0201 at 11:12 -->
+```python
+class Shape:
+    pass
+
+
+class Circle(Shape):
+    pass
+
+
+def copy(shape: Shape) -> Shape:
+    kind = type(shape)
+    return kind()
+```
 
 ## Calling the base with `super()`
 
@@ -190,7 +218,7 @@ so no attribute is read before it holds a value. `super()` outside a
 method is E0414. `super(Base, self)` names the enclosing class or one of
 its bases, and the method found is that of the nearest base of `Base`, as
 in CPython (CLS-26); with an instance other than `self` it is planned for
-1.0 (CLS-29).
+0.14 (CLS-29).
 
 A method may also be called through a class with the instance first,
 `Shape.describe(square)`, which runs the method that class holds or
@@ -246,8 +274,17 @@ A test also narrows after an `if` whose body cannot fall through, such
 as `if not isinstance(shape, Circle): return`, and in the right operand
 of `and`. When the checker can tell the answer, as for
 `isinstance(3, int)`, nothing is tested when the program runs; `bool`
-counts as `int`, as in CPython. A class held in a variable, and
-`issubclass`, are planned for 0.10 (CLS-18, CLS-19).
+counts as `int`, as in CPython. A class held in a value, such as
+`isinstance(shape, kind)` with `kind = type(other)` or a parameter of type
+`type[Square]`, is tested when the program runs, and narrows the value to
+the class its type names (CLS-18). `issubclass(class, classes)` tests a
+class against a class or a tuple of them, named or held in a value, as
+CPython answers: `issubclass(bool, int)` is `True` (CLS-19). Either test
+takes a tuple of classes held in a value, such as `kinds = (int, float)`
+or a `tuple[type[Shape], ...]`, and tests each class in order. A value
+that is no class, or a tuple with one, is E0401, as CPython raises
+`TypeError`. A class pattern may name a class held in a variable too, as
+[Compound statements](compound-statements.md#class-patterns) shows.
 
 ## Class variables and defaults
 
@@ -371,13 +408,13 @@ that gives the class or one of its instances, which is evaluated first,
 as in CPython. A class method is called through its class, also a
 subclass defined in another module, which gets a copy of its own, and
 through an instance, which passes the instance's class as `cls`
-(CLS-25). Through an instance of a generic class it is planned for 1.0
+(CLS-25). Through an instance of a generic class it is planned for 0.14
 (CLS-30). Assigning a class variable through a subclass that inherits
 it gives the subclass a variable of its own, as in CPython: the
 subclass, its subclasses and their instances read it from then on, and
 the base keeps its own (CLS-25). Assigning it through a variable that
 holds such a subclass, such as `cls` in a class method, is planned for
-1.0 (CLS-31).
+0.14 (CLS-31).
 
 ## Comparison methods
 
@@ -459,9 +496,11 @@ reflected method may run, the operator's type joins the two methods'
 results, such as `int | str` (CLS-22). `x += y` calls
 the class's in-place method, such as `__iadd__`, when it defines one,
 and `x = x + y` otherwise, for any target: an item or an attribute of an
-expression is evaluated once, as in CPython (CLS-20). An in-place method
-that only a subclass of the target's class defines is planned for 1.0
-(CLS-32).
+expression is evaluated once, as in CPython (CLS-20). CPython calls the
+in-place method whatever `y` is, so an in-place method whose parameter
+does not take `y` is refused (E0404), never passed over for `__add__`.
+An in-place method that only a subclass of the target's class defines is
+planned for 0.14 (CLS-32).
 
 ## Giving way with `NotImplemented`
 
@@ -511,7 +550,7 @@ method first, then the methods of `x + y`. A method that returns
 from the same base the return type `T | NotImplementedType`, so a direct
 call such as `a.__eq__(b)` may give `NotImplemented`, which
 `result is NotImplemented` tests. A method that may return both `None`
-and `NotImplemented` is planned for 1.0 (CLS-33), and `return
+and `NotImplemented` is planned for 0.14 (CLS-33), and `return
 NotImplemented` in any other function is E0405.
 
 ## Container methods
@@ -656,7 +695,106 @@ print(first, Path("b"), {Point(1, 2), Point(1, 2)})
 ```
 
 The other options of `field`, such as `repr` or `compare`, `kw_only` and
-`weakref_slot` are planned for 1.0 (CLS-28).
+`weakref_slot` are planned for 0.14 (CLS-28).
+
+## Named tuples
+
+A class derived from `NamedTuple` of `typing` declares its fields as
+annotated names, each with a constant default or none. Its instances are
+tuples of the fields: they are built by position or by name, read by
+field name, and printed, compared and hashed as the tuple of their fields
+is, also with a plain tuple or another named tuple, as in CPython
+(CLS-27, ADR-0088):
+
+<!-- typy-expect: accepted -->
+```python
+from typing import NamedTuple
+
+
+class Point(NamedTuple):
+    x: int
+    y: int = 0
+
+    def norm(self) -> int:
+        return abs(self.x) + abs(self.y)
+
+
+p = Point(3, -4)
+x, y = p
+print(p, p.x, p[1], len(p), p.norm(), x + y)
+print(p == (3, -4), sorted([p, Point(1)]), isinstance(p, tuple))
+match p:
+    case Point(x=3, y=b):
+        print("x is 3 and y is", b)
+```
+
+An index, a slice, `len`, `in`, a loop, unpacking, a sequence pattern,
+`+` and a comparison read the named tuple as the tuple of its fields,
+with the rules of a fixed tuple: an index is an integer literal, and a
+loop needs fields of one type. The class body may hold methods,
+properties, class methods, static methods and class variables, and a
+class derived from a named tuple may add methods. A generic named tuple,
+such as `class Pair[T](NamedTuple)`, is copied for its type arguments
+as any generic class is. `sorted` of a list of named tuples needs fields
+that order, such as numbers, strings, or lists or tuples of them.
+
+As in CPython, a field without a default after one with a default, a
+field name that starts with an underscore, a `ClassVar` field, a member
+named `__init__`, `__new__`, `_replace` or another name `NamedTuple`
+keeps, and a second base are errors, reported with CPython's text.
+Assigning a field is refused, where CPython raises `AttributeError:
+can't set attribute`. A named tuple where a plain tuple is expected is
+refused; `tuple(p)` gives the plain tuple:
+
+<!-- typy-expect: rejected E0414 at 9:1 -->
+```python
+from typing import NamedTuple
+
+
+class Point(NamedTuple):
+    x: int
+
+
+point = Point(1)
+point.x = 5
+```
+
+`_fields` holds the names of the fields, and `_asdict()` gives a dict of
+them with their values. `_replace` makes a new instance with the fields
+it is given by name and the others of the instance it is called on, of
+that instance's own class, also where the variable's type is a base;
+a name that is no field is refused with CPython's text:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import NamedTuple
+
+
+class Point(NamedTuple):
+    x: int
+    y: int = 0
+
+
+class Labelled(Point):
+    def label(self) -> str:
+        return f"P{self.x}"
+
+
+def moved(point: Point) -> Point:
+    return point._replace(x=point.x + 1)
+
+
+print(moved(Point(1, 2)), moved(Labelled(5)), Point._fields)
+print(Point(3)._asdict())
+```
+
+`_make`, `_field_defaults`, and `_replace` read as a value, called
+through the class or given `**` arguments are planned for 0.14 (CLS-43).
+A named tuple made by a call, such as `NamedTuple("P", [("x", int)])`, a
+class derived from a named tuple with `__new__`, `__init__` or
+attributes of its own, and one that defines `__len__`, `__getitem__`,
+`__iter__` or `__contains__` are planned for 1.0 (CLS-41), and a named
+tuple where a plain tuple is expected also for 1.0 (CLS-42).
 
 ## Attributes are declared
 

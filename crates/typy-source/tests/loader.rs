@@ -205,6 +205,56 @@ fn modules_that_cannot_be_found_or_read_are_reported_at_their_import() {
 }
 
 #[test]
+fn an_imported_file_that_is_not_utf8_is_reported_with_its_import() {
+    let (_directory, root) = project(&[("app.py", "x = 1\nimport bad\n")]);
+    std::fs::write(root.join("bad.py"), b"x = \"\xff\"\n").unwrap();
+    let failure = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap_err();
+    assert_eq!(
+        errors(&failure),
+        [(
+            "E0102".to_owned(),
+            "`bad.py` is not valid UTF-8 at byte 5".to_owned(),
+            "bad.py:1".to_owned()
+        )]
+    );
+    let diagnostic = failure.diagnostics.iter().next().unwrap();
+    let [label] = diagnostic.labels() else {
+        panic!("one label: {:?}", diagnostic.labels());
+    };
+    assert_eq!(label.text, "imported here");
+    assert_eq!(failure.path(label.span.file()), "app.py");
+    assert_eq!(
+        failure.position(label.span.file(), label.span.start()).line,
+        2
+    );
+}
+
+#[test]
+fn a_library_module_is_named_by_an_ascii_identifier() {
+    for name in ["1tools", "my-tools", "t\u{e9}l\u{e9}"] {
+        let file = format!("{name}.py");
+        let (_directory, root) = project(&[(file.as_str(), "x = 1\n")]);
+        let mut settings = ProjectSettings::new(root.clone());
+        settings.library = true;
+        let failure = Project::load(&root.join(&file), settings).unwrap_err();
+        let diagnostic = failure.diagnostics.iter().next().unwrap();
+        assert_eq!(diagnostic.code().to_string(), "E0429", "{name}");
+        assert!(
+            diagnostic
+                .message()
+                .ends_with(&format!("`{name}` is not an ASCII identifier")),
+            "{name}: {}",
+            diagnostic.message()
+        );
+    }
+    let (_directory, root) = project(&[("_tools2.py", "x = 1\n")]);
+    let mut settings = ProjectSettings::new(root.clone());
+    settings.library = true;
+    let project = Project::load(&root.join("_tools2.py"), settings).unwrap();
+    assert_eq!(names(&project), ["_tools2"]);
+}
+
+#[test]
 fn a_relative_import_beyond_the_top_package_is_reported() {
     let failure = load(&[
         ("app.py", "import pkg\n"),

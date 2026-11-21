@@ -29,7 +29,7 @@ impl Walker {
                 Some(default) if crate::check::factory_call(default).is_some() => {}
                 Some(default) => self.report(
                     default.span(),
-                    planned("default values other than constants", "1.0", RuleId::EXP_16),
+                    planned("default values other than constants", "1.0", RuleId::EXP_20),
                 ),
             }
         }
@@ -48,8 +48,8 @@ impl Walker {
                 variadic.span,
                 planned(
                     "`*args` and `**kwargs` in a `lambda`",
-                    "0.10",
-                    RuleId::FUN_13,
+                    "0.11",
+                    RuleId::FUN_19,
                 ),
             );
         }
@@ -93,13 +93,13 @@ impl Walker {
                     ),
                 }
                 // A method may carry one of the decorators of CLS-06; the checker reads which.
-                let method_decorator = place == Place::Class
-                    && matches!(decorators.as_slice(), [one] if is_method_decorator(one));
-                if !method_decorator && let Some(decorator) = decorators.first() {
-                    self.report(
-                        decorator.span(),
-                        planned("decorators", "0.10", RuleId::FUN_06),
-                    );
+                // The decorators of any other function are rewritten before this walk (FUN-06).
+                if place == Place::Class
+                    && !matches!(decorators.as_slice(), [one] if is_method_decorator(one))
+                    && let Some(decorator) = decorators.first()
+                {
+                    let feature = planned("decorators of methods", "0.14", RuleId::FUN_15);
+                    self.report(decorator.span(), feature);
                 }
                 self.type_parameters(type_parameters);
                 self.parameters(parameters);
@@ -320,13 +320,13 @@ impl Walker {
             if parameter.kind != TypeParameterKind::Type {
                 self.report(
                     parameter.span,
-                    planned("`*Ts` and `**P` type parameters", "1.0", RuleId::GEN_06),
+                    planned("`*Ts` and `**P` type parameters", "0.13", RuleId::GEN_06),
                 );
             }
             if parameter.default.is_some() {
                 self.report(
                     parameter.span,
-                    planned("defaults of type parameters", "1.0", RuleId::GEN_06),
+                    planned("defaults of type parameters", "0.13", RuleId::GEN_06),
                 );
             }
             match &parameter.bound {

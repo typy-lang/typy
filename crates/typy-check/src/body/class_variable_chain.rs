@@ -34,6 +34,20 @@ impl Program {
             .collect()
     }
 
+    /// Notes the classes of the program that some class derives from.
+    pub(crate) fn set_derived_classes(
+        &mut self,
+        found: std::collections::BTreeSet<crate::check::class_index::ClassKey>,
+    ) {
+        self.derived_classes = found;
+    }
+
+    /// Returns true when a class of the program derives from `class`, also in a module
+    /// checked later, so a value whose static class is `class` may hold another's instance.
+    pub(super) fn has_derived_class(&self, class: ClassId) -> bool {
+        self.derived_classes.contains(&self.class_key(class))
+    }
+
     /// Returns the module and the name of a class.
     fn class_key(&self, class: ClassId) -> (String, String) {
         (

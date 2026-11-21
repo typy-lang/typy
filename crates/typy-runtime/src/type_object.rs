@@ -318,6 +318,46 @@ pub unsafe extern "C" fn typy_rt_objects_equal(
     unsafe { crate::list::objects_equal(left, right) }
 }
 
+/// Returns whether the type `class` is `base` or derives from it, as `isinstance` with a
+/// class held in a value and `issubclass` test (CLS-18, CLS-19).
+///
+/// # Safety
+///
+/// `class` and `base` point to live type objects.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_type_derives_from(
+    class: *const TypeObject,
+    base: *const TypeObject,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    unsafe { crate::exception::classes::derives_from(&*class, &*base) }
+}
+
+/// Returns whether the type object `class` is or derives from one of the type objects the
+/// `tuple[type, ...]` `classes` holds, as `isinstance` and `issubclass` test a tuple of
+/// classes whose length the program does not know when it compiles (CLS-18, CLS-19).
+///
+/// # Safety
+///
+/// `class` points to a live type object, and `classes` to a live tuple whose items are
+/// addresses of live type objects.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_type_derives_from_any(
+    class: *const TypeObject,
+    classes: *const crate::list::ListObject,
+) -> bool {
+    // SAFETY: the caller's guarantee.
+    let classes = unsafe { &*classes };
+    (0..classes.length).any(|index| {
+        // SAFETY: `index` is below the length, and each item is a type object's address.
+        let word = unsafe { classes.item(index) };
+        let base =
+            core::ptr::with_exposed_provenance::<TypeObject>(usize::try_from(word).unwrap_or(0));
+        // SAFETY: the caller's guarantee.
+        unsafe { crate::exception::classes::derives_from(&*class, &*base) }
+    })
+}
+
 /// Returns whether the heap object at `object` is an instance of `class`: its type is
 /// `class` or derives from it, as `isinstance` tests (CLS-09).
 ///
@@ -372,6 +412,11 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             crate::header::TEXT_FILE_TYPE_ID => &crate::text_file::TEXT_FILE,
             crate::header::CDATA_TYPE_ID => &crate::cdata::CDATA,
             crate::header::FUNCTION_TYPE_ID => &crate::function::FUNCTION,
+            crate::header::BUILTIN_FUNCTION_TYPE_ID | crate::header::BUILTIN_METHOD_TYPE_ID => {
+                &crate::function::BUILTIN_FUNCTION
+            }
+            crate::header::METHOD_DESCRIPTOR_TYPE_ID => &crate::function::METHOD_DESCRIPTOR,
+            crate::header::BUILTIN_TYPE_FUNCTION_TYPE_ID => &crate::function::BUILTIN_TYPE_FUNCTION,
             crate::header::METHOD_TYPE_ID => &crate::method::METHOD,
             crate::header::GENERATOR_TYPE_ID => &crate::generator::GENERATOR,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),

@@ -334,7 +334,18 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(part, callees);
             }
         }
-        TypedExprKind::IsInstance(test) => expression(&test.value, callees),
+        TypedExprKind::IsInstance(test) => {
+            expression(&test.value, callees);
+            for class in &test.held {
+                expression(class, callees);
+            }
+        }
+        TypedExprKind::IsSubclass { class, bases } => {
+            expression(class, callees);
+            for base in bases {
+                expression(base, callees);
+            }
+        }
         TypedExprKind::EachMember(each) => {
             expression(&each.value, callees);
             for (_, body) in &each.arms {
@@ -528,7 +539,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 }
             }
         }
-        TypedExprKind::Iter(source) => expression(source, callees),
+        TypedExprKind::Iter(source) | TypedExprKind::Reversed(source) => {
+            expression(source, callees);
+        }
         TypedExprKind::Next {
             iterator,
             method,
@@ -561,7 +574,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::TypeOf(object)
         | TypedExprKind::TypeName(object)
         | TypedExprKind::TypeAliasPart { alias: object, .. }
-        | TypedExprKind::BoundMethod { object, .. } => expression(object, callees),
+        | TypedExprKind::BoundMethod { object, .. }
+        | TypedExprKind::ProtocolMethod { object, .. }
+        | TypedExprKind::ChosenFunction { object, .. } => expression(object, callees),
         TypedExprKind::VersionRead { value, result } => {
             expression(value, callees);
             expression(result, callees);

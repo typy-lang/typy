@@ -20,6 +20,8 @@ pub(crate) struct FitsScope {
     before: BTreeSet<(ClassId, ClassId)>,
     /// The table of iterator classes it replaced, put back too (TYP-20).
     iterations: std::collections::BTreeMap<ClassId, crate::iterator_fits::Iteration>,
+    /// The table of the classes' bases it replaced, put back too (CLS-18).
+    bases: std::collections::BTreeMap<ClassId, Vec<ClassId>>,
 }
 
 impl FitsScope {
@@ -29,7 +31,12 @@ impl FitsScope {
         let table: BTreeSet<(ClassId, ClassId)> = fits.into_iter().collect();
         let before = FITS.with(|cell| cell.replace(table));
         let iterations = crate::iterator_fits::take();
-        Self { before, iterations }
+        let bases = crate::class_bases::take();
+        Self {
+            before,
+            iterations,
+            bases,
+        }
     }
 }
 
@@ -44,8 +51,9 @@ pub struct ProgramScope {
 impl ProgramScope {
     /// Opens a scope with the tables of `program`.
     pub fn open(program: &crate::typed::TypedProgram) -> Self {
-        let scope = FitsScope::new(program.fits.0.iter().copied());
-        crate::iterator_fits::reset(&program.fits.1);
+        let scope = FitsScope::new(program.fits.protocols.iter().copied());
+        crate::iterator_fits::reset(&program.fits.iterations);
+        crate::class_bases::reset(&program.fits.bases);
         Self { _scope: scope }
     }
 }
@@ -55,6 +63,7 @@ impl Drop for FitsScope {
         let before = std::mem::take(&mut self.before);
         FITS.with(|cell| cell.replace(before));
         crate::iterator_fits::reset(&self.iterations);
+        crate::class_bases::reset(&self.bases);
     }
 }
 

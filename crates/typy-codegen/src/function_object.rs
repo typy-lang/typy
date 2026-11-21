@@ -14,8 +14,11 @@ use typy_tyir::{FunctionId, TupleTypeId, TyirType, ValueId};
 use crate::abi::{function_type, value_type};
 use crate::error::CodegenError;
 use crate::function::{FunctionEmitter, Shared};
-use crate::layout::{FUNCTION_TYPE_ID, IMMORTAL};
-use crate::statics::Statics;
+use crate::layout::{
+    BUILTIN_FUNCTION_TYPE_ID, BUILTIN_TYPE_FUNCTION_TYPE_ID, FUNCTION_TYPE_ID, IMMORTAL,
+    METHOD_DESCRIPTOR_TYPE_ID,
+};
+use typy_tyir::StandsFor;
 
 /// The field of the object that holds the descriptor: after the header, where an instance
 /// keeps its class (ADR-0012).
@@ -68,11 +71,11 @@ fn bound_type(context: &Context) -> StructType<'_> {
 }
 
 /// Returns the layout of a descriptor: the `str` objects of the function's name and qualified
-/// name, the address of its code, and the descriptor of its captures, null for none
-/// (detailed design section 10.2).
+/// name, the address of its code, the descriptor of its captures, null for none, and the
+/// descriptor of the function it stands for (detailed design section 10.2, ADR-0076).
 fn descriptor_type(context: &Context) -> StructType<'_> {
     let pointer = context.ptr_type(AddressSpace::default()).into();
-    context.struct_type(&[pointer, pointer, pointer, pointer], false)
+    context.struct_type(&[pointer, pointer, pointer, pointer, pointer], false)
 }
 
 /// Returns the immortal function object of `id`, emitting it with its descriptor and its thunk
@@ -87,6 +90,19 @@ pub(crate) fn function_object<'ctx>(
     let context = shared.context;
     let code = thunk(shared, id, Receives::Nothing)?;
     let descriptor = descriptor(shared, id, code, ("function", None))?;
+    shared.statics.add_function_descriptor(id.0, descriptor);
+    // A built-in function used as a value is written as CPython writes one (FUN-08).
+    let stands_for = shared
+        .tyir
+        .functions
+        .get(id.0 as usize)
+        .map_or(StandsFor::Itself, |function| function.stands_for);
+    let type_id = match stands_for {
+        StandsFor::Itself | StandsFor::Adapter(_) => FUNCTION_TYPE_ID,
+        StandsFor::BuiltinFunction => BUILTIN_FUNCTION_TYPE_ID,
+        StandsFor::BuiltinMethod => METHOD_DESCRIPTOR_TYPE_ID,
+        StandsFor::BuiltinType => BUILTIN_TYPE_FUNCTION_TYPE_ID,
+    };
     let object = object_type(context).const_named_struct(&[
         context
             .i32_type()
@@ -94,7 +110,7 @@ pub(crate) fn function_object<'ctx>(
             .into(),
         context
             .i32_type()
-            .const_int(u64::from(FUNCTION_TYPE_ID), false)
+            .const_int(u64::from(type_id), false)
             .into(),
         descriptor.into(),
     ]);
@@ -157,23 +173,49 @@ fn descriptor<'ctx>(
         .functions
         .get(id.0 as usize)
         .ok_or_else(|| CodegenError(format!("fn{} does not exist", id.0)))?;
+    let (stands_for, own_name) = (function.stands_for, function.qualified_name.clone());
     let name = shared.statics.string(shared.module, &function.name);
     let qualified_name = shared
         .statics
         .string(shared.module, &function.qualified_name);
     let captures =
         captures.unwrap_or_else(|| context.ptr_type(AddressSpace::default()).const_null());
+    let global = shared.module.add_global(
+        descriptor_type(context),
+        None,
+        &format!("typy.{kind}.descriptor.{}", id.0),
+    );
+    let own = global.as_pointer_value();
+    // The hidden functions of one built-in stand for it, so they share one identity; any
+    // other function stands for itself (ADR-0076).
+    let identity = match stands_for {
+        StandsFor::Itself => own,
+        // An adapter stands for the function it calls, whose descriptor of the same kind is
+        // its identity: a bound method of it is equal to one of the method itself (FUN-09).
+        StandsFor::Adapter(original) if kind == "method" => method_descriptor(shared, original)?,
+        StandsFor::Adapter(original) => {
+            function_object(shared, original)?;
+            shared
+                .statics
+                .function_descriptor(original.0)
+                .unwrap_or(own)
+        }
+        StandsFor::BuiltinFunction | StandsFor::BuiltinMethod | StandsFor::BuiltinType => {
+            shared.statics.builtin_identity(&own_name, own)
+        }
+    };
     let descriptor = descriptor_type(context).const_named_struct(&[
         name.into(),
         qualified_name.into(),
         code.as_global_value().as_pointer_value().into(),
         captures.into(),
+        identity.into(),
     ]);
-    Ok(Statics::global(
-        shared.module,
-        descriptor.into(),
-        &format!("typy.{kind}.descriptor.{}", id.0),
-    ))
+    global.set_initializer(&descriptor);
+    global.set_constant(true);
+    global.set_linkage(Linkage::Private);
+    global.set_unnamed_addr(true);
+    Ok(own)
 }
 
 /// Emits the code a call through a function object of `id` runs: it takes the object, then

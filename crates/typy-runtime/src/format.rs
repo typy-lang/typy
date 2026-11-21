@@ -315,15 +315,18 @@ fn character(integer: &Integer, spec: &Spec) -> Result<*mut StrObject, *mut Exce
             "Alternate form (#) not allowed with integer format specifier 'c'",
         ));
     }
+    // A C long holds -2**63 to 2**63 - 1.
     let magnitude = integer.magnitude.as_slice();
-    if magnitude.len() > 1 || magnitude.first().is_some_and(|low| *low > i64::MAX as u64) {
+    let largest = i64::MAX.unsigned_abs() + u64::from(integer.negative);
+    if magnitude.len() > 1 || magnitude.first().is_some_and(|low| *low > largest) {
         return Err(raise(
             ExceptionKind::OverflowError,
             "Python int too large to convert to C long",
         ));
     }
+    // Zero is never negative, so a negative value is below 0.
     let point = magnitude.first().copied().unwrap_or(0);
-    if integer.negative && point != 0 || point >= 0x11_0000 {
+    if integer.negative || point >= 0x11_0000 {
         return Err(raise(
             ExceptionKind::OverflowError,
             "%c arg not in range(0x110000)",

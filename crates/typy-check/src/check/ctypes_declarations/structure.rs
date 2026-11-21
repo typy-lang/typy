@@ -20,12 +20,12 @@ pub(crate) fn hidden_id(name: &str) -> Option<u32> {
     name.strip_prefix(HIDDEN)?.strip_suffix('>')?.parse().ok()
 }
 
-/// Returns the error for a form of a structure class planned for 1.0 (FFI-11).
+/// Returns the error for a form of a structure class planned for 0.13 (FFI-11).
 pub(super) fn planned(span: Span, what: &str) -> Diagnostic {
     Diagnostic::new(
         DiagnosticCode::error(201),
         span,
-        format!("{what} is planned for TyPy 1.0 (FFI-11)"),
+        format!("{what} is planned for TyPy 0.13 (FFI-11)"),
     )
     .with_rule(RuleId::FFI_11)
 }

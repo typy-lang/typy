@@ -39,6 +39,29 @@ impl BodyChecker<'_> {
         let (forward, _) = super::operator_method::binary_names(operator);
         let name = format!("__i{}", &forward[2..]);
         let Some(method) = self.operator_method(&current.ty, &name, &value.ty) else {
+            // CPython calls the in-place method whatever the value is, so one that does not
+            // take the value is refused, never passed over for the plain operator's method.
+            if let Some(defined) = self.program.method(class.id, &name)
+                && let Some(expected) = self.program.signatures[defined.0 as usize]
+                    .parameters
+                    .get(1)
+                    .map(|parameter| parameter.ty.clone())
+                && !value.ty.has_error()
+            {
+                let symbol = super::operator_method::binary_symbol(operator, true);
+                let diagnostic = Diagnostic::new(
+                    DiagnosticCode::error(404),
+                    value.span,
+                    format!(
+                        "`{}.{name}` takes {}, and `{symbol}` gives it {}",
+                        class.name,
+                        expected.with_article(),
+                        value.ty.with_article()
+                    ),
+                )
+                .with_rule(RuleId::CLS_20);
+                return Some(self.error(diagnostic, span));
+            }
             if self.program.method(class.id, &name).is_none() && self.defined_below(class.id, &name)
             {
                 self.diagnostics.push(
@@ -47,7 +70,7 @@ impl BodyChecker<'_> {
                         span,
                         format!(
                             "an augmented assignment whose target's class has no `{name}` while \
-                             a class derived from it defines one is planned for TyPy 1.0 \
+                             a class derived from it defines one is planned for TyPy 0.14 \
                              (CLS-32)"
                         ),
                     )

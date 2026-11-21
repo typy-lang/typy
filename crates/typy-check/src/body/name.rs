@@ -142,32 +142,41 @@ impl BodyChecker<'_> {
     }
 
     /// Returns a scalar class of `ctypes` read as a value (FFI-03), the function object of a
-    /// function of the program (FUN-05), or the error for a built-in function read as one,
-    /// which is planned for 0.10 (FUN-08).
+    /// function of the program (FUN-05) or of a built-in function (FUN-08), or the error for
+    /// `enumerate`, `zip` or `reversed`, or a function of `ctypes`, read as one (FFI-10).
     fn function_as_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
         if let Some(super::builtin_module::ModuleFunction::CtypesType(ty)) =
             self.program.module_functions.get(id)
         {
             return Some(Self::cdata_class(crate::ctypes::CData::Scalar(*ty), span));
         }
+        if self.variadic_function(id, span).is_some() {
+            return Some(self.variadic_without_context(id, span));
+        }
         if let Some(function) = self.program.function_ids.get(id).copied() {
             let value = self.function_value(function, id, span);
             return Some(self.through_lazy(id, value));
         }
-        if !self.program.module_functions.contains_key(id) && Builtin::named(id).is_none() {
+        if let Some(builtin) = self.unbound_builtin_function(id, span) {
+            return Some(self.builtin_without_context(builtin, span));
+        }
+        let read = typy_source::syntax::Expr::Name {
+            id: id.to_owned(),
+            span,
+        };
+        if self.module_function_named(&read).is_some() {
+            return Some(self.module_function_without_context(id, span));
+        }
+        if let Some(builtin @ (Builtin::Enumerate | Builtin::Zip | Builtin::Reversed)) =
+            Builtin::named(id)
+        {
+            return Some(self.loop_only(builtin, span));
+        }
+        // Each other function a module gives, which `from` imports, is of `ctypes`.
+        if !self.program.module_functions.contains_key(id) {
             return None;
         }
-        Some(
-            self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!("using `{id}` as a value is planned for TyPy 0.10 (FUN-08)"),
-                )
-                .with_rule(RuleId::FUN_08),
-                span,
-            ),
-        )
+        Some(self.ctypes_value(id, span, span))
     }
 
     /// Reads a module variable from a function: its value as it is now, which may be unbound
@@ -297,7 +306,7 @@ impl BodyChecker<'_> {
                     Diagnostic::new(
                         DiagnosticCode::error(201),
                         span,
-                        format!("using `{id}` as a value is planned for TyPy 0.10 (TYP-18)"),
+                        format!("using `{id}` as a value is planned for TyPy 0.11 (TYP-18)"),
                     )
                     .with_rule(RuleId::TYP_18)
                     .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),

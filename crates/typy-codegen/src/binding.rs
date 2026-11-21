@@ -3,21 +3,11 @@
 
 use std::fmt::Write as _;
 
-use typy_tyir::{CType, TyirExport, TyirLibrary, TyirModule};
+use typy_tyir::{CType, TyirExport, TyirLibrary};
 
-/// Returns the binding module of the library `module` is built as, which loads the shared
-/// library `soname` with `ctypes`, or `None` for an executable.
+/// Returns the stub of the binding module of `library`.
 #[must_use]
-pub fn python_binding(module: &TyirModule, soname: &str) -> Option<String> {
-    let library = module.library.as_ref()?;
-    Some(binding(library, soname))
-}
-
-/// Returns the stub of the binding module of the library `module` is built as, or `None` for
-/// an executable.
-#[must_use]
-pub fn python_stub(module: &TyirModule) -> Option<String> {
-    let library = module.library.as_ref()?;
+pub fn python_stub(library: &TyirLibrary) -> String {
     let mut text = format!(
         "\"\"\"The functions of the C library lib{name}, built by TyPy {version} from \
          {name}.py, as {name}_binding calls them.\"\"\"\n\n__all__ = [{all}]\n\n",
@@ -28,10 +18,13 @@ pub fn python_stub(module: &TyirModule) -> Option<String> {
     for export in &library.exports {
         let _ = writeln!(text, "def {}: ...", signature(export));
     }
-    Some(text)
+    text
 }
 
-fn binding(library: &TyirLibrary, soname: &str) -> String {
+/// Returns the binding module of `library`, which loads the shared library `soname` with
+/// `ctypes`.
+#[must_use]
+pub fn python_binding(library: &TyirLibrary, soname: &str) -> String {
     let handle = handle_name(library);
     let mut text = format!(
         "\"\"\"The C library lib{name}, built by TyPy {version} from {name}.py: loads it with \
@@ -156,7 +149,7 @@ fn python_string(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{binding, handle_name, python_string};
+    use super::{handle_name, python_binding, python_string};
     use typy_tyir::{CType, FunctionId, TyirExport, TyirLibrary};
 
     fn export(name: &str, parameters: &[(&str, CType)], result: Option<CType>) -> TyirExport {
@@ -182,7 +175,7 @@ mod tests {
 
     #[test]
     fn the_binding_declares_each_export_and_wraps_it_in_a_typed_function() {
-        let text = binding(
+        let text = python_binding(
             &library(vec![
                 export(
                     "add",

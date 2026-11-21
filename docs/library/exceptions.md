@@ -79,6 +79,12 @@ except HttpError as error:
     print(error, repr(error), error.status)
 ```
 
+Two exceptions compare by identity with `==` and `!=`, as in CPython: an
+exception is equal only to itself. An exception class that defines
+`__eq__` or `__ne__` is refused (E0201), since TyPy does not call the
+special methods of an exception class yet; that is planned for 1.0
+(EXC-20).
+
 ## Built-in exception classes
 
 | Class | Base |
@@ -282,4 +288,6 @@ planned for 1.0 (E0201, EXC-18): a `BlockingIOError` reads it as
 
 ## Planned
 
+The special methods of an exception class, such as `__eq__` and `__lt__`,
+called by operators and built-in functions, are planned for 1.0 (EXC-20).
 Exception groups and `except*` are planned for after 1.0.

@@ -1,12 +1,15 @@
 //! Checks a call expression: it goes to the program's function, method or class it names,
 //! to a builtin, or through a function value. A call that unpacks with `*` or `**` binds only
-//! to the program's functions, methods and classes and to `print`; any other is planned for
-//! 0.10 (EXP-17, EXP-19, ADR-0073).
+//! to the program's functions, methods and classes and to `print`; any other takes only
+//! unpacking written out in full, and the rest is planned for 0.11 (EXP-17, EXP-19, EXP-22,
+//! ADR-0073).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Expr, Keyword};
+use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
+use crate::builtin::Builtin;
+use crate::exception::BuiltinException;
 use crate::typed::TypedExpr;
 use crate::types::Type;
 
@@ -22,11 +25,27 @@ impl BodyChecker<'_> {
         let Some(at) = unpacking(arguments, keywords) else {
             return self.call_expression(function, arguments, keywords, span);
         };
+        // Unpacking the program shows in full binds as the values it gives, for a callee that
+        // does not bind what it unpacks when the program runs (EXP-19).
+        if !self.binds_when_it_runs(function)
+            && let Some((arguments, keywords)) = self.written_out(arguments, keywords)
+        {
+            return self.call_expression(function, &arguments, &keywords, span);
+        }
         // A callee that takes the unpacked arguments binds them and notes the call; any other
-        // saw each `*value` as an error it does not report, so its diagnostics give way.
+        // saw each `*value` as an error it does not report, so its diagnostics give way, but
+        // for an error in the callee itself, such as a name that is not defined.
         let reported = self.diagnostics.len();
         let call = self.call_expression(function, arguments, keywords, span);
-        if self.unpacking_calls.contains(&span) {
+        let callee = function.span();
+        let callee_refused = self.diagnostics.iter().skip(reported).any(|diagnostic| {
+            diagnostic.span().is_some_and(|at| {
+                at.file() == callee.file()
+                    && at.start() >= callee.start()
+                    && at.end() <= callee.end()
+            })
+        });
+        if self.unpacking_calls.contains(&span) || callee_refused {
             return call;
         }
         self.diagnostics.truncate(reported);
@@ -34,11 +53,11 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 at,
-                "`*` and `**` in a call of a builtin other than `print`, of a function value, \
-                 of a protocol method or of an exception class are planned for TyPy 0.10 \
-                 (EXP-19)",
+                "`*` and `**` of a value only the run knows in a call of a builtin other than \
+                 `print`, of a function value, of a protocol method or of an exception class \
+                 are planned for TyPy 0.11 (EXP-22)",
             )
-            .with_rule(RuleId::EXP_19)
+            .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),
             span,
         )
@@ -85,19 +104,117 @@ impl BodyChecker<'_> {
                         for argument in arguments {
                             self.expression(argument);
                         }
-                        self.error(
-                            Diagnostic::new(
-                                DiagnosticCode::error(401),
-                                function.span(),
-                                format!("{} cannot be called", class.ty.with_article()),
-                            )
-                            .with_rule(RuleId::EXP_02),
-                            span,
-                        )
+                        self.not_callable((None, function.span()), &class.ty, span)
                     }
                 }
             }
         }
+    }
+}
+
+impl BodyChecker<'_> {
+    /// Returns true when the callee binds what a call unpacks when the program runs, with
+    /// CPython's errors: a function, a method or a class of the program, or a class held in a
+    /// variable (ADR-0073). A built-in, a function value and a protocol method take only
+    /// unpacking written out in full.
+    fn binds_when_it_runs(&self, function: &Expr) -> bool {
+        match function {
+            Expr::Name { id, .. } => match self.peek_type(function) {
+                Some(Type::Callable { .. }) => false,
+                Some(_) => true,
+                None => {
+                    self.program.function_ids.contains_key(id)
+                        || self.program.class_ids.contains_key(id)
+                        || !(Builtin::named(id).is_some() || BuiltinException::named(id).is_some())
+                }
+            },
+            Expr::Attribute { value, .. } => {
+                if let Some(module) = self.module_of(value) {
+                    return !super::builtin_module::is_builtin_module(&module);
+                }
+                match self.peek_type(value) {
+                    Some(Type::Instance(class)) => !self.program.is_protocol(class.id),
+                    Some(Type::TypeObject(_)) | None => true,
+                    Some(_) => false,
+                }
+            }
+            _ => true,
+        }
+    }
+
+    /// Returns the arguments and keywords of a call with each `*` of a tuple display or of a
+    /// variable that holds a fixed tuple, and each `**` of a dict display whose keys are
+    /// `str` literals, written out as the values they give, which bind as CPython binds
+    /// them; `None` when one of them gives values only the run knows, or a dict display
+    /// names a key twice, whose first value would still be evaluated.
+    fn written_out(
+        &self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+    ) -> Option<(Vec<Expr>, Vec<Keyword>)> {
+        let mut written = Vec::new();
+        for argument in arguments {
+            let Expr::Starred { value, .. } = argument else {
+                written.push(argument.clone());
+                continue;
+            };
+            match value.as_ref() {
+                Expr::Tuple { elements, .. }
+                    if !elements
+                        .iter()
+                        .any(|element| matches!(element, Expr::Starred { .. })) =>
+                {
+                    written.extend(elements.iter().cloned());
+                }
+                Expr::Name { span, .. } => {
+                    let Some(Type::Tuple(items)) = self.peek_type(value) else {
+                        return None;
+                    };
+                    written.extend((0..items.len()).map(|position| Expr::Subscript {
+                        value: value.clone(),
+                        index: Box::new(Expr::Constant {
+                            value: Constant::Int(position.to_string()),
+                            span: *span,
+                        }),
+                        span: *span,
+                    }));
+                }
+                _ => return None,
+            }
+        }
+        let mut named = Vec::new();
+        for keyword in keywords {
+            if keyword.name.is_some() {
+                named.push(keyword.clone());
+                continue;
+            }
+            let Expr::Dict { keys, values, .. } = &keyword.value else {
+                return None;
+            };
+            let mut seen = Vec::new();
+            for (key, value) in keys.iter().zip(values) {
+                let Some(Expr::Constant {
+                    value: Constant::Str(name),
+                    span,
+                }) = key
+                else {
+                    return None;
+                };
+                if seen.contains(name) {
+                    return None;
+                }
+                seen.push(name.clone());
+                named.push(Keyword {
+                    name: Some(Identifier {
+                        name: name.clone(),
+                        span: *span,
+                    }),
+                    value: value.clone(),
+                    span: *span,
+                });
+            }
+        }
+        Some((written, named))
     }
 }
 

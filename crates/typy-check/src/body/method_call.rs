@@ -145,6 +145,10 @@ impl BodyChecker<'_> {
         if receiver.ty.has_error() {
             return Self::invalid_call(span);
         }
+        let receiver = match self.named_tuple_call(receiver, name, (arguments, keywords), span) {
+            Ok(call) => return call,
+            Err(receiver) => receiver,
+        };
         if name.name == "fromkeys"
             && let Type::TypeObject(Some(of)) = &receiver.ty
             && **of == crate::types::TypeObjectOf::Dict
@@ -154,6 +158,12 @@ impl BodyChecker<'_> {
         if let Type::TypeObject(Some(of)) = &receiver.ty
             && let Some(class) = Self::program_class(of)
         {
+            if let Some(refused) = self.member_through_held_class(&receiver, name) {
+                for argument in arguments {
+                    self.expression(argument);
+                }
+                return refused;
+            }
             return self.class_method_call(class, name, arguments, keywords, span);
         }
         if let Some(class) = receiver.ty.class_id() {

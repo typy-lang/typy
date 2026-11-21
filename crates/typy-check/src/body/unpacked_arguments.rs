@@ -138,7 +138,7 @@ impl BodyChecker<'_> {
     /// Adds a positional argument after the first `*iterable` of unknown length to the tail.
     pub(super) fn add_to_tail(&mut self, tail: &mut Tail, argument: &Expr) {
         if let Expr::Starred { value, .. } = argument {
-            let value = Self::version_tuple(self.expression(value));
+            let value = self.tuple_expression(value);
             self.add_unpacked_to_tail(tail, value);
             return;
         }
@@ -159,7 +159,7 @@ impl BodyChecker<'_> {
     /// Returns a new list of the values of the iterable `value` `*` unpacks, read as a `for`
     /// loop reads them.
     pub(super) fn unpacked_list(&mut self, value: &Expr) -> TypedExpr {
-        let value = Self::version_tuple(self.expression(value));
+        let value = self.tuple_expression(value);
         let span = value.span;
         let sequence = Self::sequence_of(value);
         let (source, item) = self.sequence_source(sequence, "`*`");

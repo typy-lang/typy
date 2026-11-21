@@ -47,7 +47,13 @@ impl BodyChecker<'_> {
             self.bind_after_error(whole, &error);
             return TypedPattern::All(steps);
         }
-        let tested = match self.isinstance_classes(class) {
+        let mut held = Vec::new();
+        let tested = match self.isinstance_classes_holding(class, &mut held) {
+            // A class held in a value is tested when the program runs (CLS-18).
+            Ok(_) if !held.is_empty() => {
+                let held = held.remove(0);
+                return self.held_class_pattern(whole, held, (patterns, keywords), subject, span);
+            }
             Ok(mut classes) if classes.len() == 1 => classes.remove(0),
             other => {
                 let error = match other {

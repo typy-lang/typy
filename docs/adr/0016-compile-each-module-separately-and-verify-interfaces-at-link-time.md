@@ -107,10 +107,16 @@ generation for release builds.
   program, or uses ThinLTO across the objects, so cross-module inlining is
   not lost, and strips debug information. Development builds skip the
   costly optimisations and keep debug information.
-- **Linking.** Static linking comes first. Dynamic linking of TyPy modules
-  needs a stable ABI for object layouts, exception state and type
-  identity, and one shared runtime; it waits until that ABI is fixed after
-  1.0 (OI-23).
+- **The standard library.** A development build compiles each module of
+  the standard library TyPy provides the first time a project needs it,
+  and keeps its object and interface in the user's cache directory,
+  `~/.cache/typy`, for each release, target and mode, so later builds of
+  any project link them without compiling them (CLI-17, OI-25). The
+  release archive ships no prebuilt modules, so it does not grow with
+  each target and mode.
+- **Linking.** Static linking comes first. From 1.0 TyPy modules also link
+  to each other as shared libraries, through the stable ABI and the one
+  shared runtime of ADR-0074 (OI-23).
 
 ## Consequences
 
@@ -131,5 +137,5 @@ generation for release builds.
 
 ## Related requirements
 
-NFR-02, NFR-04, NFR-06, MOD-01, MOD-03, STD-07, ADR-0003, ADR-0005,
-ADR-0007, ADR-0015.
+NFR-02, NFR-04, NFR-06, MOD-01, MOD-03, MOD-16, CLI-17, STD-07, ADR-0003,
+ADR-0005, ADR-0007, ADR-0015, ADR-0074.

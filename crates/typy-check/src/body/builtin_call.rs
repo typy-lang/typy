@@ -42,6 +42,12 @@ impl BodyChecker<'_> {
         if builtin == Builtin::IsInstance {
             return self.call_isinstance(arguments, keywords, span);
         }
+        if builtin == Builtin::Callable {
+            return self.call_callable(arguments, keywords, span);
+        }
+        if builtin == Builtin::IsSubclass {
+            return self.call_issubclass(arguments, keywords, span);
+        }
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
@@ -59,10 +65,10 @@ impl BodyChecker<'_> {
         }
         let values: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
-            .map(|value| {
+            .map(|argument| {
+                let value = self.expression(argument);
                 if builtin == Builtin::Len {
-                    Self::version_tuple(value)
+                    self.tuple_view(value)
                 } else {
                     value
                 }
@@ -129,14 +135,29 @@ impl BodyChecker<'_> {
             other => other,
         };
         if let Some(keyword) = keywords.first() {
+            // `min(a, b, key=f)` and `max` were taken above; any other keyword is CPython's
+            // `TypeError`, with its message.
+            let name = builtin.name();
+            let message = match (
+                builtin,
+                keyword.name.as_ref().map(|name| name.name.as_str()),
+            ) {
+                (Builtin::Min | Builtin::Max, Some("default")) => format!(
+                    "Cannot specify a default for {name}() with multiple positional arguments"
+                ),
+                (Builtin::Min | Builtin::Max, Some("key")) => {
+                    format!("{name} expected at least 1 argument, got {}", values.len())
+                }
+                (Builtin::Min | Builtin::Max, Some(other)) => {
+                    format!("{name}() got an unexpected keyword argument '{other}'")
+                }
+                _ => format!("{name}() takes no keyword arguments"),
+            };
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(404),
                     keyword.span,
-                    format!(
-                        "`{}` takes no keyword arguments in TyPy 0.1",
-                        builtin.name()
-                    ),
+                    format!("{message}: CPython raises `TypeError`"),
                 )
                 .with_rule(RuleId::LIB_01),
                 span,
@@ -163,6 +184,8 @@ impl BodyChecker<'_> {
             | Builtin::Open
             | Builtin::Type
             | Builtin::IsInstance
+            | Builtin::IsSubclass
+            | Builtin::Callable
             | Builtin::Sorted
             | Builtin::Sum
             | Builtin::Any
@@ -183,19 +206,7 @@ impl BodyChecker<'_> {
                 );
             }
             Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        format!(
-                            "`{}` outside a `for` loop, a comprehension or an iterable argument \
-                             is planned for after TyPy 1.0",
-                            builtin.name()
-                        ),
-                    )
-                    .with_rule(RuleId::CST_09),
-                    span,
-                );
+                return self.loop_only(builtin, span);
             }
             Builtin::Range => {
                 if !self.arity(builtin, values.len(), 1..=3, span) {
@@ -497,12 +508,31 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(404),
                 span,
                 format!(
-                    "`{}` takes {expected} arguments in TyPy 0.1, and {given} are given",
+                    "`{}` takes {expected} arguments, and {given} are given",
                     builtin.name()
                 ),
             )
             .with_rule(RuleId::LIB_01),
         );
         false
+    }
+
+    /// Returns E0201 for `enumerate`, `zip` or `reversed` called or read as a value outside
+    /// a `for` loop, a comprehension or an iterable argument, where TyPy makes no object of
+    /// it, which is planned for after 1.0.
+    pub(super) fn loop_only(&mut self, builtin: Builtin, span: Span) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                format!(
+                    "`{}` outside a `for` loop, a comprehension or an iterable argument is \
+                     planned for after TyPy 1.0",
+                    builtin.name()
+                ),
+            )
+            .with_rule(RuleId::CST_09),
+            span,
+        )
     }
 }

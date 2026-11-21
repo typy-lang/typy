@@ -16,6 +16,11 @@ static LIMIT: ProgramCell<usize> = ProgramCell::new(0);
 #[cfg(target_os = "linux")]
 static SIZE: ProgramCell<usize> = ProgramCell::new(0);
 
+/// The key under which each thread other than the main one keeps the limit of its own stack,
+/// made by the first export call on such a thread (ADR-0075).
+#[cfg(target_os = "linux")]
+static THREAD_KEY: ProgramCell<Option<u32>> = ProgramCell::new(None);
+
 /// Returns the stack pointer. The register is read, not the address of a local, because a
 /// sanitizer may keep locals on a separate fake stack, where the check would never fire.
 #[cfg(not(miri))]
@@ -65,10 +70,38 @@ pub(crate) fn record_limit() {
 
 /// Records the lowest address the stack may reach below the current stack pointer: `main`
 /// calls it first, and a library each time an export is called, which may be from another
-/// thread (ADR-0044). On Linux a thread's stack is as large as `RLIMIT_STACK` unless its
-/// creator chose otherwise, so the limit is read once from `getrlimit`.
+/// thread (ADR-0044).
 #[cfg(target_os = "linux")]
 pub(crate) fn record_limit() {
+    record_limit_on(crate::libc::is_main_thread());
+}
+
+/// Records the limit of the main thread's stack, where `main` runs: a program links no code
+/// that reads another thread's stack.
+#[cfg(all(target_os = "linux", not(test)))]
+pub(crate) fn record_main_limit() {
+    LIMIT.with(|kept| *kept = main_limit());
+}
+
+/// Records the limit of the calling thread's stack, which on macOS is always the thread's
+/// own.
+#[cfg(all(target_os = "macos", not(test)))]
+pub(crate) fn record_main_limit() {
+    record_limit();
+}
+
+/// Records the limit of the main thread's stack, or of another thread's own (ADR-0075).
+#[cfg(target_os = "linux")]
+fn record_limit_on(main: bool) {
+    let own = if main { None } else { thread_limit() };
+    let limit = own.unwrap_or_else(main_limit);
+    LIMIT.with(|kept| *kept = limit);
+}
+
+/// Returns the limit of the main thread's stack, which is as large as `RLIMIT_STACK`, below
+/// the current stack pointer; the size is read once from `getrlimit`.
+#[cfg(target_os = "linux")]
+fn main_limit() -> usize {
     let base = stack_pointer();
     let size = SIZE.with(|size| {
         if *size == 0 {
@@ -77,7 +110,26 @@ pub(crate) fn record_limit() {
         }
         *size
     });
-    LIMIT.with(|limit| *limit = base.saturating_sub(size.saturating_sub(MARGIN)));
+    base.saturating_sub(size.saturating_sub(MARGIN))
+}
+
+/// Returns the limit of the calling thread's own stack, which its creator may have made
+/// smaller than `RLIMIT_STACK`: read with `pthread_getattr_np` on the thread's first export
+/// call and kept for the thread, so `/proc/self/maps`, which glibc reads for the main thread,
+/// is never read. `None` when the C library does not give the stack.
+#[cfg(target_os = "linux")]
+fn thread_limit() -> Option<usize> {
+    let key = THREAD_KEY.with(|key| {
+        *key = key.or_else(crate::libc::new_thread_key);
+        *key
+    })?;
+    let kept = crate::libc::thread_value(key);
+    if kept != 0 {
+        return Some(kept);
+    }
+    let limit = crate::libc::thread_stack_low()?.saturating_add(MARGIN);
+    crate::libc::keep_thread_value(key, limit);
+    Some(limit)
 }
 
 /// Raises `RecursionError` when the stack is within the margin of its limit.
@@ -122,19 +174,44 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "macos")]
+    #[cfg_attr(miri, ignore = "Miri cannot read a thread's stack")]
     fn the_limit_lies_within_a_small_threads_own_stack() {
         const SIZE: usize = 256 * 1024;
-        let (stack, limit) = std::thread::Builder::new()
+        let (stack, limit, again) = std::thread::Builder::new()
             .stack_size(SIZE)
             .spawn(|| {
                 record_limit();
-                (super::stack_pointer(), super::LIMIT.with(|limit| *limit))
+                let limit = super::LIMIT.with(|limit| *limit);
+                // A second export call on the thread finds the limit it kept.
+                record_limit();
+                (
+                    super::stack_pointer(),
+                    limit,
+                    super::LIMIT.with(|limit| *limit),
+                )
             })
             .unwrap()
             .join()
             .unwrap();
         assert!(limit < stack, "{limit:#x} {stack:#x}");
         assert!(stack - limit < SIZE, "{limit:#x} {stack:#x}");
+        assert_eq!(again, limit);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    #[cfg_attr(miri, ignore = "Miri cannot call `getrlimit`")]
+    fn the_main_threads_limit_is_rlimit_stack_below_the_stack_pointer() {
+        super::record_limit_on(true);
+        let (stack, limit) = (super::stack_pointer(), super::LIMIT.with(|limit| *limit));
+        let size =
+            usize::try_from(crate::libc::stack_limit().unwrap_or(super::DEFAULT_STACK)).unwrap();
+        // The limit was taken a few frames deeper than `stack`, so it lies at least that far
+        // below it.
+        assert!(
+            limit <= stack.saturating_sub(size.saturating_sub(super::MARGIN)),
+            "{limit:#x} {stack:#x}"
+        );
+        assert!(typy_rt_check_stack().is_null());
     }
 }

@@ -1,7 +1,7 @@
 //! Tests of programs at the edges of what the checker reads: rarely written forms that it
 //! accepts, and the codes it gives what it refuses.
 
-use crate::common::app;
+use crate::common::{app, messages};
 
 #[test]
 fn rarely_written_forms_are_accepted() {
@@ -24,6 +24,9 @@ fn rarely_written_forms_are_accepted() {
         "f = open('x.txt', errors='strict')\n",
         "class Box[T]:\n    def __init__(self, v: T) -> None:\n        self.v = v\ndef f[U](x: U) -> U:\n    b: Box[int] = Box(1)\n    print(b.v)\n    return x\nprint(f(2))\n",
         "type A = int\ntype B = list[A] | dict[A, A]\nx: B = [1]\nprint(x)\n",
+        "from collections.abc import Iterable\ndef f(xs: Iterable[int]) -> bool:\n    \
+         return isinstance(xs, Iterable)\nprint(f([1]))\n",
+        "from typing import Union\nprint(isinstance(1, Union[int, None]))\n",
     ];
     for source in cases {
         assert_eq!(app(source), Vec::<String>::new(), "{source}");
@@ -81,6 +84,8 @@ fn refused_forms_give_their_codes() {
         ("from typing import Union\ny: Union = 1\n", "E0408"),
         // Only `typing` gives `Protocol`.
         ("import math\nclass P(math.Protocol):\n    pass\n", "E0201"),
+        ("print(slice(1, 2, 3, 4))\n", "E0404"),
+        ("print(sorted([1], key=len(5)))\n", "E0404"),
     ];
     for (source, code) in cases {
         let found = app(source);
@@ -89,5 +94,48 @@ fn refused_forms_give_their_codes() {
             Some(*code),
             "{source}\n{found:?}"
         );
+    }
+}
+
+#[test]
+fn refused_forms_give_cpython_s_reason() {
+    let cases = [
+        (
+            "first, *middle, last = (1, 'a')\n",
+            "the starred target takes no items of this tuple, whose items differ, so its list \
+             has no item type",
+        ),
+        (
+            "class One:\n    __match_args__ = ('x',)\n    def __init__(self, x: int) -> None:\n        \
+             self.x = x\nmatch One(1):\n    case One(1, 2):\n        pass\n",
+            "One() accepts 1 positional sub-pattern (2 given): CPython raises `TypeError`",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = messages(source);
+        assert!(
+            found.iter().any(|(_, text, _)| text == message),
+            "{source}\n{found:?}"
+        );
+    }
+}
+
+#[test]
+fn a_value_that_already_failed_gives_no_second_error() {
+    let cases = [
+        ("print(max('a'.nope(), 1, key=abs))\n", "E0412"),
+        (
+            "def pair(a: int, b: int = 0) -> int:\n    return a + b\n\
+             print(pair(**{'a': 'a'.nope()}))\n",
+            "E0412",
+        ),
+        (
+            "class Box:\n    @property\n    def size(self) -> Missing:\n        return 1\n\
+             print(Box().size())\n",
+            "E0205",
+        ),
+    ];
+    for (source, code) in cases {
+        assert_eq!(app(source), [code], "{source}");
     }
 }

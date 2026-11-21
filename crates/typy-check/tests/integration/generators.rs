@@ -179,6 +179,14 @@ fn fun_07_a_generator_s_methods_and_what_its_yield_receives_are_checked() {
             "FUN-07",
         ),
         (
+            "def t() -> Generator[int, tuple[int, int] | None, None]:\n    yield 1\n\n\n\
+             def h() -> Generator[int, tuple[int, int], None]:\n    yield from t()\n",
+            "E0405",
+            "the generator is sent a tuple[int, int], and the one it delegates to receives a \
+             tuple[int, int] | None",
+            "FUN-07",
+        ),
+        (
             "def h() -> Generator[int, None, str]:\n    yield 1\n    return 5\n",
             "E0405",
             "this returns an int, but the generator returns str",
@@ -221,6 +229,11 @@ fn smt_11_yield_from_delegates_and_gives_what_the_generator_returns() {
         "from collections.abc import Generator\n\n\ndef inner() -> Generator[int, int | None, \
          None]:\n    yield 1\n\n\ndef outer() -> Generator[int, int, None]:\n    yield from \
          inner()\n",
+        // `next()` resumes the outer generator with `None`, which an `int` one receives as it
+        // receives `None` from its own `next()`.
+        "from collections.abc import Generator\n\n\ndef inner() -> Generator[int, int, \
+         None]:\n    received = yield 1\n    print(received)\n\n\ndef outer() -> \
+         Generator[int, int | None, None]:\n    yield from inner()\n",
     ] {
         assert_eq!(app(source), Vec::<String>::new(), "{source}");
     }
@@ -237,6 +250,25 @@ fn smt_11_yield_from_delegates_and_gives_what_the_generator_returns() {
         "Return",
     ] {
         assert!(found.contains(line), "{line} missing from\n{found}");
+    }
+    // A `yield from` statement receives nothing back.
+    let found = dump(
+        "from collections.abc import Generator\n\n\ndef inner() -> Generator[int, None, None]:\n    \
+         yield 1\n\n\ndef outer() -> Generator[int, None, None]:\n    yield from inner()\n",
+    );
+    assert!(found.contains("DelegatedItem : int"), "{found}");
+    assert!(!found.contains("DelegatedResult"), "{found}");
+}
+
+#[test]
+fn fun_07_yield_from_with_an_unknown_send_type_gives_one_error() {
+    for (outer, inner) in [("Missing", "int"), ("int", "Missing")] {
+        let source = format!(
+            "from collections.abc import Generator\n\n\ndef inner() -> Generator[int, {inner}, \
+             None]:\n    received = yield 1\n    print(received)\n\n\n\
+             def outer() -> Generator[int, {outer}, None]:\n    yield from inner()\n"
+        );
+        assert_eq!(app(&source), ["E0205"], "{source}");
     }
 }
 
@@ -278,12 +310,6 @@ fn exp_15_a_generator_expression_refuses_what_it_cannot_compile() {
             "E0201",
             "an assignment expression inside a generator expression is planned for TyPy 1.0 \
              (EXP-18)",
-        ),
-        (
-            "def first[T](items: list[T]) -> T:\n    found = list(item for item in items)\n    \
-             return found[0]\n",
-            "E0201",
-            "a generator expression inside a generic function is planned for TyPy 0.10 (FUN-10)",
         ),
         (
             "def f() -> None:\n    values = ((yield v) for v in range(3))\n    print(values)\n",

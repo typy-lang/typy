@@ -110,13 +110,20 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         TEXT_FILE_TYPE_ID => unsafe { crate::text_file::destroy(object) },
         // SAFETY: the type ID says the object is a `ctypes` object.
         crate::header::CDATA_TYPE_ID => unsafe { crate::cdata::destroy(object.cast()) },
-        // SAFETY: the type ID says the object is a function object a `def` made; the
-        // immortal ones are never freed.
-        crate::header::FUNCTION_TYPE_ID => unsafe { crate::function::destroy(object.cast()) },
+        crate::header::FUNCTION_TYPE_ID
+        | crate::header::BUILTIN_FUNCTION_TYPE_ID
+        | crate::header::METHOD_DESCRIPTOR_TYPE_ID
+        | crate::header::BUILTIN_TYPE_FUNCTION_TYPE_ID => {
+            // SAFETY: the type ID says the object is a function object a `def` made; the
+            // immortal ones are never freed.
+            unsafe { crate::function::destroy(object.cast()) };
+        }
         // SAFETY: the type ID says the object is a cell.
         crate::header::CELL_TYPE_ID => unsafe { crate::variable_cell::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a bound method.
-        crate::header::METHOD_TYPE_ID => unsafe { crate::method::destroy(object.cast()) },
+        crate::header::METHOD_TYPE_ID | crate::header::BUILTIN_METHOD_TYPE_ID => unsafe {
+            crate::method::destroy(object.cast());
+        },
         // SAFETY: the type ID says the object is a generator.
         crate::header::GENERATOR_TYPE_ID => unsafe { crate::generator::destroy(object.cast()) },
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),

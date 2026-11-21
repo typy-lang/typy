@@ -170,6 +170,32 @@ impl Program {
         Ok(resolved)
     }
 
+    /// Returns why each name a `from` import of `typing`, `collections.abc` or `dataclasses`
+    /// binds is refused, or nothing for any other statement.
+    pub(crate) fn refused_annotation_names(&self, statement: &Stmt) -> Vec<Diagnostic> {
+        let Stmt::ImportFrom {
+            module,
+            names,
+            level,
+            ..
+        } = statement
+        else {
+            return Vec::new();
+        };
+        let from = module.as_ref().map(|name| name.name.as_str());
+        let Ok(base) = absolute_name(self.package.as_ref(), *level, from) else {
+            return Vec::new();
+        };
+        if !ANNOTATION_MODULES.contains(&base.as_str()) || self.loaded.contains(base.as_str()) {
+            return Vec::new();
+        }
+        names
+            .iter()
+            .filter(|alias| annotation_name(base.as_str(), &alias.name.name).is_none())
+            .map(|alias| not_given(&base, alias))
+            .collect()
+    }
+
     /// Returns the type alias `name` of a module, as an importing module reads it.
     fn alias_value(
         &self,
@@ -361,9 +387,10 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
     .with_rule(RuleId::LIB_08)
 }
 
-/// Returns the error for a name of `typing`, `collections.abc` or `types` that TyPy does not
-/// give: `Any` and `cast` are refused (TYP-10), `NamedTuple` and the abstract collections
-/// are planned for 0.9, and any other name is not given (LIB-17).
+/// Returns the error for a name of `typing`, `collections.abc`, `types` or `dataclasses` that
+/// TyPy does not give: `Any` and `cast` are refused (TYP-10), the views of a dict and some
+/// abstract collections are planned for a later release, and any other name is not given
+/// (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -398,19 +425,17 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_rule(RuleId::TYP_10)
         .with_help("annotate the value with its type, or a union of its types");
     }
-    // The names a later release gives, with the requirement that plans each.
+    // The names a later release gives, with the release and the requirement that plans them
+    // (ADR-0086).
     let planned = match name.as_str() {
-        "NamedTuple" => Some(RuleId::CLS_27),
-        "Sequence" | "MutableSequence" | "Mapping" | "MutableMapping" | "Collection"
-        | "Container" | "Sized" | "Set" | "MutableSet" | "Reversible" | "KeysView"
-        | "ValuesView" | "ItemsView" => Some(RuleId::LIB_20),
+        "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
         _ => None,
     };
-    if let Some(rule) = planned {
+    if let Some((release, rule)) = planned {
         return Diagnostic::new(
             DiagnosticCode::error(201),
             alias.name.span,
-            format!("`{module}.{name}` is planned for TyPy 0.10 ({rule})"),
+            format!("`{module}.{name}` is planned for TyPy {release} ({rule})"),
         )
         .with_rule(rule);
     }
@@ -418,11 +443,89 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         DiagnosticCode::error(425),
         alias.name.span,
         format!(
-            "TyPy's `{module}` gives `Iterator`, `Iterable`, `Optional`, `Union`, `List`, \
-             `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar` and `Protocol`, not `{name}`"
+            "TyPy's `{module}` gives {}, not `{name}`",
+            listed(given_names(module.as_str()))
         ),
     )
     .with_rule(RuleId::LIB_17)
+}
+
+/// Returns the names TyPy gives of `typing`, `collections.abc` or `dataclasses`, each of
+/// which `annotation_name` resolves.
+fn given_names(module: &str) -> &'static [&'static str] {
+    match module {
+        "collections.abc" => &[
+            "Iterator",
+            "Iterable",
+            "Generator",
+            "Callable",
+            "Sequence",
+            "MutableSequence",
+            "Mapping",
+            "MutableMapping",
+            "Set",
+            "MutableSet",
+            "Collection",
+            "Container",
+            "Reversible",
+            "KeysView",
+            "ValuesView",
+            "ItemsView",
+        ],
+        "dataclasses" => &["dataclass", "field"],
+        _ => &[
+            "Iterator",
+            "Iterable",
+            "Generator",
+            "Callable",
+            "Optional",
+            "Union",
+            "List",
+            "Dict",
+            "Set",
+            "Tuple",
+            "Type",
+            "Final",
+            "ClassVar",
+            "Protocol",
+            "NamedTuple",
+            "Sequence",
+            "MutableSequence",
+            "Mapping",
+            "MutableMapping",
+            "AbstractSet",
+            "MutableSet",
+            "Collection",
+            "Container",
+            "Reversible",
+            "KeysView",
+            "ValuesView",
+            "ItemsView",
+        ],
+    }
+}
+
+/// Returns two or more names written as code and joined as a sentence lists them: `a`, `b`
+/// and `c`.
+fn listed(names: &[&str]) -> String {
+    let quoted: Vec<String> = names.iter().map(|name| format!("`{name}`")).collect();
+    let (rest, last) = quoted.split_at(quoted.len() - 1);
+    format!("{} and {}", rest.join(", "), last.concat())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn each_name_a_refusal_lists_is_one_the_module_gives() {
+        for module in ["typing", "collections.abc", "dataclasses"] {
+            for name in super::given_names(module) {
+                assert!(
+                    crate::check::annotation_name(module, name).is_some(),
+                    "{module}.{name}"
+                );
+            }
+        }
+    }
 }
 
 /// Returns the error for a relative import that names no module, with CPython's message.
@@ -453,7 +556,15 @@ impl BodyChecker<'_> {
         let resolved = match self.program.resolve_import(statement) {
             Ok(resolved) => resolved,
             Err(diagnostic) => {
-                self.diagnostics.push(*diagnostic);
+                // Each name `typing` or `collections.abc` does not give is reported, not only
+                // the first.
+                let refused = self.program.refused_annotation_names(statement);
+                if refused.is_empty() {
+                    self.diagnostics.push(*diagnostic);
+                }
+                for each in refused {
+                    self.diagnostics.push(each);
+                }
                 return None;
             }
         };
@@ -739,8 +850,9 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Reads `module.name` of a built-in module: a value as it is, while a function is a value
-    /// only from 0.10 (FUN-08); a refusal points at the name.
+    /// Reads `module.name` of a built-in module: a value as it is, a function of `math` or
+    /// `sys` where a `Callable` is expected (FUN-08), and a `ctypes` function not as a value
+    /// before 0.13 (FFI-10); a refusal points at the name.
     pub(super) fn builtin_attribute(
         &mut self,
         module: &str,
@@ -753,17 +865,32 @@ impl BodyChecker<'_> {
             Ok(BuiltinName::Function(super::builtin_module::ModuleFunction::CtypesType(ty))) => {
                 Self::cdata_class(crate::ctypes::CData::Scalar(ty), span)
             }
-            Ok(BuiltinName::Function(_)) => self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    attribute.span,
-                    format!("using `{module}.{name}` as a value is planned for TyPy 0.10 (FUN-08)"),
-                )
-                .with_rule(RuleId::FUN_08),
-                span,
-            ),
+            Ok(BuiltinName::Function(
+                super::builtin_module::ModuleFunction::Math(_)
+                | super::builtin_module::ModuleFunction::Exit
+                | super::builtin_module::ModuleFunction::GetRecursionLimit
+                | super::builtin_module::ModuleFunction::SetRecursionLimit,
+            )) => self.module_function_without_context(&format!("{module}.{name}"), attribute.span),
+            Ok(BuiltinName::Function(_)) => {
+                self.ctypes_value(&format!("{module}.{name}"), attribute.span, span)
+            }
             Err(diagnostic) => self.error(*diagnostic, span),
         }
+    }
+
+    /// Returns E0201 for a function of `ctypes`, or `ctypes.CDLL` or `ctypes.cdll`, read as a
+    /// value, which TyPy reads only where it compiles a declaration or a C call, so a value
+    /// of one is planned for 0.13 (FFI-10).
+    pub(super) fn ctypes_value(&mut self, shown: &str, at: Span, span: Span) -> TypedExpr {
+        self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                at,
+                format!("using `{shown}` as a value is planned for TyPy 0.13 (FFI-10)"),
+            )
+            .with_rule(RuleId::FFI_10),
+            span,
+        )
     }
 
     /// Returns the type object of a class as a value, an exception class's for one.

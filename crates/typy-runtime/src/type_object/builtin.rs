@@ -317,9 +317,10 @@ pub(crate) static DICT_ITEMS: TypeObject = view("dict_items");
 #[unsafe(export_name = "typy_rt_type_float")]
 pub(crate) static FLOAT: TypeObject = builtin("float");
 
-/// The type of a `bool`, whose values are never objects; `type(True)` gives it.
+/// The type of a `bool`, whose values are never objects; `type(True)` gives it. It derives
+/// from `int`, as in CPython, which a test against a class held in a value reads (CLS-18).
 #[unsafe(export_name = "typy_rt_type_bool")]
-pub(crate) static BOOL: TypeObject = builtin("bool");
+pub(crate) static BOOL: TypeObject = TypeObject::new("bool", &raw const INT);
 
 /// The type of `None`.
 #[unsafe(export_name = "typy_rt_type_none")]

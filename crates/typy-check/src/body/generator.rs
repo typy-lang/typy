@@ -63,6 +63,16 @@ impl BodyChecker<'_> {
     /// Checks `yield value`, or a bare `yield`, which gives `None`, against the type the
     /// generator yields.
     pub(super) fn yield_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
+        TypedStmt::Yield {
+            value: self.yielded(value, span),
+            received: None,
+            span,
+        }
+    }
+
+    /// Returns the value a `yield` gives, `None` for a bare one, checked against the type the
+    /// generator yields.
+    fn yielded(&mut self, value: Option<&Expr>, span: Span) -> TypedExpr {
         let yields = self
             .generator
             .as_ref()
@@ -89,11 +99,7 @@ impl BodyChecker<'_> {
                 .with_rule(RuleId::FUN_07),
             );
         }
-        TypedStmt::Yield {
-            value,
-            received: None,
-            span,
-        }
+        value
     }
 
     /// Checks `target = yield value`, also with an annotation: the `yield`, then the
@@ -103,15 +109,10 @@ impl BodyChecker<'_> {
     pub(super) fn yield_assignment(
         &mut self,
         statement: &Stmt,
-        yielded: &Expr,
+        (value, yielded): (Option<&Expr>, Span),
         span: Span,
     ) -> TypedStmt {
-        let Expr::Yield { value, .. } = yielded else {
-            unreachable!("the statement assigns a `yield`")
-        };
-        let TypedStmt::Yield { value, .. } = self.yield_statement(value.as_deref(), span) else {
-            unreachable!("a `yield` checks as one")
-        };
+        let value = self.yielded(value, span);
         let sends = self
             .generator
             .as_ref()
@@ -119,7 +120,7 @@ impl BodyChecker<'_> {
         self.received = Some(Self::typed(
             TypedExprKind::Received,
             Type::optional(sends),
-            yielded.span(),
+            yielded,
         ));
         let received = self.statement(statement).map(Box::new);
         self.received = None;

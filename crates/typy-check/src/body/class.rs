@@ -122,13 +122,33 @@ impl BodyChecker<'_> {
                 info.name, attribute.name
             )
         } else {
-            format!("`{}` has no attribute `{}`", info.name, attribute.name)
+            format!(
+                "`{}` has no attribute `{}`",
+                info.shown_name(),
+                attribute.name
+            )
         };
         self.diagnostics.push(
             Diagnostic::new(DiagnosticCode::error(414), attribute.span, message)
                 .with_rule(RuleId::CLS_02),
         );
         None
+    }
+
+    /// Returns `value.attribute` when `value` names a module: a name of a built-in module, or
+    /// a variable of a module of the program.
+    fn attribute_of_module(
+        &mut self,
+        value: &Expr,
+        attribute: &Identifier,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let module = self.module_of(value)?;
+        if is_builtin_module(&module) {
+            return Some(self.builtin_attribute(&module, attribute, span));
+        }
+        let read = self.module_attribute(&module, &attribute.name, span);
+        Some(self.through_lazy_module(value, read))
     }
 
     /// Checks `value.attribute`, read as a value.
@@ -138,14 +158,13 @@ impl BodyChecker<'_> {
         attribute: &Identifier,
         span: Span,
     ) -> TypedExpr {
-        if let Some(module) = self.module_of(value) {
-            if is_builtin_module(&module) {
-                return self.builtin_attribute(&module, attribute, span);
-            }
-            let read = self.module_attribute(&module, &attribute.name, span);
-            return self.through_lazy_module(value, read);
+        if let Some(read) = self.attribute_of_module(value, attribute, span) {
+            return read;
         }
         let object = self.instance_object(value);
+        if let Some(refused) = self.refused_member(&object, attribute) {
+            return refused;
+        }
         if let Type::CData(class) = object.ty.clone() {
             return self.cdata_attribute((object, class), attribute, span);
         }
@@ -178,6 +197,12 @@ impl BodyChecker<'_> {
         }
         if let Some(field) = self.os_error_field(&object, attribute, span) {
             return field;
+        }
+        // A method of a built-in value is a value where a `Callable` is expected (FUN-08).
+        if object.ty.class_id().is_none()
+            && crate::method::Method::of(&object.ty, &attribute.name).is_some()
+        {
+            return self.bound_builtin_method(object, attribute, span);
         }
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
@@ -637,7 +662,7 @@ impl BodyChecker<'_> {
                     span,
                 );
             }
-            let message = format!("`{}` has no method `{}`", info.name, name.name);
+            let message = format!("`{}` has no method `{}`", info.shown_name(), name.name);
             for argument in arguments {
                 self.expression(argument);
             }

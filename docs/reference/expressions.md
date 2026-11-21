@@ -76,8 +76,9 @@ parameters than the expected `Callable` passes, is E0203; define the
 function with `def`. A parameter taken by keyword only is E0202, since a
 `Callable` passes every argument by position. A `lambda` that reads a
 variable assigned no type yet where it stands is E0306, since its body is
-checked there. A `lambda` inside a generic function is planned for 0.10
-(FUN-10). A `lambda` stored in a variable that it calls, such as a
+checked there. A `lambda` inside a generic function is checked, and made,
+in each copy of the function, with the copy's types (FUN-10). A `lambda`
+stored in a variable that it calls, such as a
 recursive one inside a function, holds itself through the variable's
 cell: a reference cycle that cycle collection frees in 1.0 (MEM-06).
 
@@ -106,8 +107,8 @@ The item type is that of the element, or the item type of the iterable
 or iterator the context expects, such as `Iterator[int | None]`. A
 generator expression reads the variables around it as a nested function
 does, so one assigned after it is read with its later value. An
-assignment expression inside one is planned for 1.0 (EXP-18), and one
-inside a generic function for 0.10 (FUN-10).
+assignment expression inside one is planned for 1.0 (EXP-18). One inside
+a generic function is made in each copy of the function (FUN-10).
 
 ## Unpacking in displays
 

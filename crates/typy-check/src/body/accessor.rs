@@ -763,7 +763,7 @@ impl BodyChecker<'_> {
             (
                 format!(
                     "calling the class method `{}` of a generic class through an instance is \
-                     planned for TyPy 1.0 (CLS-30)",
+                     planned for TyPy 0.14 (CLS-30)",
                     name.name
                 ),
                 RuleId::CLS_30,
@@ -772,7 +772,7 @@ impl BodyChecker<'_> {
             (
                 format!(
                     "calling the class method `{}`, which has type parameters, through an \
-                     instance is planned for TyPy 1.0 (GEN-16)",
+                     instance is planned for TyPy 0.13 (GEN-16)",
                     name.name
                 ),
                 RuleId::GEN_16,
@@ -790,8 +790,8 @@ impl BodyChecker<'_> {
     }
 
     /// Reports an assignment to a field of a frozen dataclass outside the `__init__`
-    /// `@dataclass` writes, where CPython raises `FrozenInstanceError` (CLS-05); returns true
-    /// when it reports one.
+    /// `@dataclass` writes, where CPython raises `FrozenInstanceError` (CLS-05), or of a named
+    /// tuple outside the `__init__` written for it (CLS-27); returns true when it reports one.
     pub(super) fn refuse_frozen_field(
         &mut self,
         class: ClassId,
@@ -803,13 +803,13 @@ impl BodyChecker<'_> {
         let mut frozen = None;
         while let Some(each) = current {
             let info = &self.program.classes[each.0 as usize];
-            if info.frozen {
-                frozen = Some(each);
+            if let Some(kind) = info.frozen {
+                frozen = Some((each, kind));
                 break;
             }
             current = info.base;
         }
-        let Some(frozen) = frozen else {
+        let Some((frozen, kind)) = frozen else {
             return false;
         };
         let initializing = self.initializing.is_some_and(|initializing| {
@@ -821,19 +821,30 @@ impl BodyChecker<'_> {
         if initializing {
             return false;
         }
-        let name = self.program.classes[frozen.0 as usize].name.clone();
-        self.diagnostics.push(
-            Diagnostic::new(
-                DiagnosticCode::error(414),
-                span,
+        let info = &self.program.classes[frozen.0 as usize];
+        let (name, field) = (&info.name, &attribute.name);
+        // A named tuple's field reads its item, which CPython does not let a program set.
+        let (message, rule) = if kind == crate::check::Frozen::NamedTuple {
+            (
                 format!(
-                    "`{name}` is a frozen dataclass, so its field `{}` is not assigned, as CPython \
-                     raises `FrozenInstanceError`",
-                    attribute.name
+                    "`{name}` is a named tuple, so its field `{field}` is not assigned, as \
+                     CPython raises `AttributeError: can't set attribute`"
                 ),
+                RuleId::CLS_27,
             )
-            .with_rule(RuleId::CLS_05)
-            .with_help("make a new instance with the value instead"),
+        } else {
+            (
+                format!(
+                    "`{name}` is a frozen dataclass, so its field `{field}` is not assigned, as \
+                     CPython raises `FrozenInstanceError`"
+                ),
+                RuleId::CLS_05,
+            )
+        };
+        self.diagnostics.push(
+            Diagnostic::new(DiagnosticCode::error(414), span, message)
+                .with_rule(rule)
+                .with_help("make a new instance with the value instead"),
         );
         true
     }
