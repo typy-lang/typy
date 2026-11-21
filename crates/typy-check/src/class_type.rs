@@ -161,7 +161,18 @@ impl InstanceClass {
 
 impl fmt::Display for InstanceClass {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.name)
+        // A class written for `map` or `filter` is shown as the built-in, with the type
+        // arguments of a copy (ADR-0089).
+        match self
+            .name
+            .split_once(crate::check::builtin_iterators::BUILT_IN)
+        {
+            Some((name, rest)) => {
+                let arguments = rest.split_once(')').map_or("", |(_, arguments)| arguments);
+                write!(formatter, "{name}{arguments}")
+            }
+            None => formatter.write_str(&self.name),
+        }
     }
 }
 

@@ -100,6 +100,12 @@ impl ClassInfo {
             .position(|attribute| attribute.name == name)
     }
 
+    /// Returns the name messages show: a class written for `map` or `filter` is the built-in
+    /// of that name (ADR-0089).
+    pub(crate) fn shown_name(&self) -> &str {
+        super::builtin_iterators::built_in_class(&self.name).unwrap_or(&self.name)
+    }
+
     /// Returns a method by its name.
     pub(crate) fn method(&self, name: &str) -> Option<FunctionId> {
         self.methods

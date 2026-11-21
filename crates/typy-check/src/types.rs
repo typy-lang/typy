@@ -788,7 +788,9 @@ impl Type {
             Self::Set(_) => "set".to_owned(),
             Self::Dict(..) => "dict".to_owned(),
             Self::Optional(_) | Self::NoneType => "NoneType".to_owned(),
-            Self::Instance(class) => class.name.clone(),
+            Self::Instance(class) => crate::check::builtin_iterators::built_in_class(&class.name)
+                .unwrap_or(&class.name)
+                .to_owned(),
             other => other.to_string(),
         }
     }

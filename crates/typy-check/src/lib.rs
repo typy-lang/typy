@@ -30,6 +30,7 @@ mod unprovided;
 pub use body::{COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, member_class, member_test};
 pub use builtin::Builtin;
 pub use check::TypeChecker;
+pub use check::builtin_iterators::built_in_class;
 pub use check::decorators::python_name;
 pub use class_type::{InstanceClass, Operators};
 pub use ctypes::{CData, CType, ForeignFunction, ForeignLibrary, StructureClass, StructureField};

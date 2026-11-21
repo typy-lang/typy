@@ -122,7 +122,11 @@ impl BodyChecker<'_> {
                 info.name, attribute.name
             )
         } else {
-            format!("`{}` has no attribute `{}`", info.name, attribute.name)
+            format!(
+                "`{}` has no attribute `{}`",
+                info.shown_name(),
+                attribute.name
+            )
         };
         self.diagnostics.push(
             Diagnostic::new(DiagnosticCode::error(414), attribute.span, message)
@@ -658,7 +662,7 @@ impl BodyChecker<'_> {
                     span,
                 );
             }
-            let message = format!("`{}` has no method `{}`", info.name, name.name);
+            let message = format!("`{}` has no method `{}`", info.shown_name(), name.name);
             for argument in arguments {
                 self.expression(argument);
             }

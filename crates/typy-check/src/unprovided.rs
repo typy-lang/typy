@@ -27,7 +27,8 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         // they are objects of their own.
         "super" => Some(planned("0.14", RuleId::CLS_36)),
         "property" | "staticmethod" | "classmethod" => Some(planned("1.0", RuleId::FUN_17)),
-        "map" | "filter" => Some(planned("0.10", RuleId::LIB_23)),
+        // A call of either is an object of the class the module is given for it (ADR-0089).
+        "map" | "filter" => Some(planned("1.0", RuleId::LIB_25)),
         _ if CPYTHON_3_12_BUILTINS.contains(&name) => Some(Unprovided::Excluded),
         _ => None,
     }
@@ -195,7 +196,7 @@ mod tests {
         let cases = [
             ("super", "0.14", RuleId::CLS_36),
             ("property", "1.0", RuleId::FUN_17),
-            ("map", "0.10", RuleId::LIB_23),
+            ("map", "1.0", RuleId::LIB_25),
         ];
         for (name, release, rule) in cases {
             assert_eq!(

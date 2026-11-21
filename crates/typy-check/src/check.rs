@@ -1,6 +1,7 @@
 //! Checks a project and builds its typed program (detailed design section 7.2).
 
 mod annotation;
+pub(crate) mod builtin_iterators;
 mod callable_annotation;
 mod class;
 pub(crate) mod ctypes_declarations;
@@ -102,6 +103,8 @@ impl TypeChecker {
                 let mut module = dataclasses.expand(module, &mut diagnostics);
                 // A decorated function binds what its decorators return (FUN-06, ADR-0082).
                 decorators::expand(&mut module.syntax.body);
+                // A module that calls `map` or `filter` gets their classes (LIB-23, ADR-0089).
+                builtin_iterators::expand(&mut module.syntax.body);
                 let aliases = type_alias::expand(&mut module.syntax.body, &mut diagnostics);
                 let (name, package) = (module.name.as_str().to_owned(), module.package());
                 let reading = ctypes_declarations::ReadModule {

@@ -23,6 +23,7 @@ mod generics;
 mod iterator_classes;
 mod lambda_expressions;
 mod lazy_imports;
+mod map_filter;
 mod matching;
 mod math;
 mod modules;

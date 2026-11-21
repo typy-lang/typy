@@ -215,6 +215,7 @@ nav:
           - adr/0086-hold-an-abstract-collection-as-its-built-in-types-range-included.md
           - adr/0087-make-typing-values-constants-written-only-where-the-oracles-agree.md
           - adr/0088-give-a-named-tuple-methods-over-the-tuple-of-its-fields.md
+          - adr/0089-write-map-and-filter-as-generic-iterator-classes-of-the-module.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

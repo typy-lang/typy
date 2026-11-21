@@ -55,6 +55,7 @@ mod list;
 mod list_call;
 mod locals;
 mod loop_source;
+mod map_filter;
 mod matching;
 mod math_call;
 mod math_iterable;

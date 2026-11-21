@@ -409,8 +409,15 @@ fn tyir_class(
         (equal, takes)
     });
     TyirClass {
-        name: class.name.clone(),
-        module: class.module.clone(),
+        // A class written for `map` or `filter` is the built-in of that name (ADR-0089).
+        name: typy_check::built_in_class(&class.name)
+            .unwrap_or(&class.name)
+            .to_owned(),
+        module: if typy_check::built_in_class(&class.name).is_some() {
+            String::new()
+        } else {
+            class.module.clone()
+        },
         fields,
         methods: methods.table(class.id),
         repr: method("__repr__"),

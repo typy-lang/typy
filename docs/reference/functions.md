@@ -41,10 +41,9 @@ protocol parameter, is checked and made in each copy of the function, and
 keeps Python's `__qualname__`, such as `pair_with.<locals>.make` (FUN-10).
 
 These are planned for 0.10 as values: a protocol method, and a nested
-function or method with `*args` or `**kwargs` (FUN-09, FUN-13). So are a
-nested function with type parameters of its own (FUN-10), and `map` and
-`filter` (LIB-23). A class of the program as a `Callable` is planned for
-0.14 (FUN-16).
+function or method with `*args` or `**kwargs` (FUN-09, FUN-13). So is a
+nested function with type parameters of its own (FUN-10). A class of the
+program as a `Callable` is planned for 0.14 (FUN-16).
 
 ## Decorators
 

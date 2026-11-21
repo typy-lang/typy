@@ -77,6 +77,9 @@ impl BodyChecker<'_> {
             let instance = self.new_instance(class, arguments, keywords, span);
             return self.through_lazy(name, instance);
         }
+        if let Some(call) = self.map_filter_call(name, (arguments, keywords), span) {
+            return call;
+        }
         if let Some(builtin) = Builtin::named(name) {
             return self.call_builtin(builtin, arguments, keywords, span);
         }

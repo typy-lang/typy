@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.85 |
+| Version | 2.86 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -1991,6 +1991,25 @@ as a value or through the class, planned for 0.14 (CLS-43).
 `isinstance` of one against `tuple` is
 always true, and `TypedClass::named_tuple` becomes `TyirClass::tuple_base`,
 which gives the type object the runtime's `tuple` as its base.
+`check::builtin_iterators` adds to a module that calls `map` or `filter`,
+and binds neither name nor `next`, a generic iterator class for each form
+it calls (LIB-23, ADR-0089): `map` with each number of iterables, which
+takes `strict` and checks the iterators' lengths with CPython's
+`ValueError` texts when it is true, and `filter` with a function and with
+`None`. Their names, those of their attributes and methods, and the
+imports of `Callable` and `Iterator` their annotations read hold a space,
+and `builtin_iterators::built_in_class` gives `map` or `filter` for them,
+which messages, `InstanceClass`'s `Display` and lowering's `TyirClass`
+name use, with no module, so the runtime writes `<map object at 0x...>`.
+`body/map_filter.rs` checks a call: each iterable becomes its iterator as
+`iter()` makes it, an iterator class's object passing as `Iterator[T]` of
+what `__next__` returns; the function is typed against the item types
+through `lambda`'s `Expected`, as a `key` is; and the call is
+`TypedExprKind::New` of the copy for the item types and the result type,
+with the function first. A call with too few or too many arguments, and a
+keyword other than `strict` from floor 3.14, is E0404 with CPython's text;
+`*` in a call and `map` or `filter` as a value are E0201, planned for 1.0
+(LIB-25).
 `check::type_alias` expands the module's `type` statements
 after the dataclass expansion and before the subset check: it expands each
 alias's value through the aliases it names, reports an alias that reaches

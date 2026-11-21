@@ -13,6 +13,7 @@
 | `sys.argv`, `sys.exit`, `sys.stdout` and `sys.stderr`, `print` with `file` and `flush`, and `input` | LIB-04 |
 | `open` for text files in UTF-8, with `read`, `readline`, `readlines`, `write`, `writelines`, `flush`, `close`, iteration and `with` | LIB-04 |
 | `callable(x)`: true for a function value, a built-in function, method or type, and a class | LIB-23 |
+| `map` and `filter`, lazy iterators that go on after the function raises | LIB-23 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -28,7 +29,7 @@ described in
 [Compound statements](../reference/compound-statements.md#iterators).
 `callable(x)` is decided when the program is compiled for every type but
 an optional or a union, which it tests as `isinstance` does, and it still
-evaluates `x`. `map` and `filter` are planned for 0.10 (LIB-23).
+evaluates `x`.
 
 ## Example
 
@@ -77,6 +78,39 @@ and writes them back, so a key that raises leaves the list as it was, as
 in CPython; CPython leaves undefined what a key sees of the list while it
 is sorted, and in TyPy it sees the items unsorted. A built-in function is
 a key too, such as `key=len` or `key=abs`, called with each item.
+
+## Mapping and filtering
+
+`map(function, iterable, ...)` gives an iterator of the function's
+results for the items of the iterables, taken together and stopping at
+the shortest; `filter(function, iterable)` gives the items for which the
+function's result is true, and `filter(None, iterable)` the true items.
+The function is a function or method of the program, a `lambda`, or a
+built-in such as `int` or `str.upper`, and takes the items as they are.
+Each step calls the function once, and when it raises, the next step goes
+on with the next items, as in CPython (LIB-23, ADR-0089):
+
+<!-- typy-expect: accepted -->
+```python
+words = ["3", "x", "12"]
+numbers = map(int, words)
+print(next(numbers))
+try:
+    next(numbers)
+except ValueError as error:
+    print("skipped:", error)
+print(list(numbers), list(filter(str.isdigit, words)))
+print(list(map(lambda a, b: a * b, [1, 2, 3], [4, 5])))
+```
+
+A `map` or `filter` object is an iterator: a `for` loop, `list`, `next`
+and a parameter of type `Iterator[T]` take it, and it is written as
+`<map object at 0x...>`. With a Python floor of 3.14 or later, `map`
+takes `strict=True`, which raises CPython's `ValueError` when the
+iterables differ in length; below 3.14 it is refused, as CPython 3.12
+and 3.13 raise `TypeError` for it. `map` and `filter` themselves as
+values, such as `f = map`, and `*` in a call of `map` are planned for 1.0
+(LIB-25).
 
 ## Formatting with `%`
 

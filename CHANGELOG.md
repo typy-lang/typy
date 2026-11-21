@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `map(function, iterable, ...)` and `filter(function, iterable)`, with
+  `filter(None, iterable)`: lazy iterators that take a function or method
+  of the program, a `lambda` or a built-in such as `int`, go on after the
+  function raises, and are written as `<map object at 0x...>`, as CPython's
+  are (LIB-23). From Python floor 3.14, `map` takes `strict=True`.
 - Classes derived from `typing.NamedTuple`: built by position or by name,
   read by field name and as the tuple of their fields by an index, a slice,
   `len`, `in`, a loop, unpacking and a sequence pattern, printed, compared,

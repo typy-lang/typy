@@ -83,7 +83,7 @@ supersedes it.
 | [ADR-0075](0075-read-the-stack-of-each-thread-a-library-runs-on-from-the-thread.md) | Read the stack of each thread a library runs on from the thread | Accepted | 2026-11-20 |
 | [ADR-0076](0076-give-a-function-value-the-identity-of-the-function-it-stands-for.md) | Give a function value the identity of the function it stands for | Accepted | 2026-11-20 |
 | [ADR-0077](0077-type-a-built-in-used-as-a-value-by-the-callable-it-fills.md) | Type a built-in used as a value by the `Callable` it fills | Accepted | 2026-11-20 |
-| [ADR-0078](0078-make-map-and-filter-iterator-objects-of-the-runtime.md) | Make `map` and `filter` iterator objects of the runtime | Accepted | 2026-11-20 |
+| [ADR-0078](0078-make-map-and-filter-iterator-objects-of-the-runtime.md) | Make `map` and `filter` iterator objects of the runtime | Superseded by ADR-0089 | 2026-11-20 |
 | [ADR-0079](0079-bind-a-method-value-to-the-method-the-receivers-own-class-runs.md) | Bind a method value to the method the receiver's own class runs | Accepted | 2026-11-20 |
 | [ADR-0080](0080-call-a-function-with-defaults-or-args-through-an-adapter.md) | Call a function with defaults or `*args` through an adapter | Accepted | 2026-11-20 |
 | [ADR-0081](0081-check-a-nested-function-of-a-generic-function-in-each-copy.md) | Check a nested function of a generic function in each copy | Accepted | 2026-11-20 |
@@ -94,3 +94,4 @@ supersedes it.
 | [ADR-0086](0086-hold-an-abstract-collection-as-its-built-in-types-range-included.md) | Hold an abstract collection as its built-in types, `range` included | Accepted | 2026-11-20 |
 | [ADR-0087](0087-make-typing-values-constants-written-only-where-the-oracles-agree.md) | Make typing values constants, written only where the oracles agree | Accepted | 2026-11-20 |
 | [ADR-0088](0088-give-a-named-tuple-methods-over-the-tuple-of-its-fields.md) | Give a named tuple methods over the tuple of its fields | Accepted | 2026-11-21 |
+| [ADR-0089](0089-write-map-and-filter-as-generic-iterator-classes-of-the-module.md) | Write `map` and `filter` as generic iterator classes of the module | Accepted | 2026-11-21 |
