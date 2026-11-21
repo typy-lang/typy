@@ -165,10 +165,21 @@ value must fit, E0404, or else the first value's, which the others must
 have, E0409, and which must fit each of those parameters. The values of
 the `**` dicts
 have one type too, which must fit each parameter a keyword may still
-fill and the values of `**kwargs`. `*` and `**` in a call of a builtin
-other than `print`, of a function value, of a protocol method or of an
-exception class, and `**` in a call of `print`, are planned for 0.10
-(EXP-19).
+fill and the values of `**kwargs`.
+
+A call of a builtin, a function value, a protocol method or an exception
+class takes `*` of a tuple display or of a variable that holds a fixed
+tuple, and `**` of a dict display whose keys are `str` literals, each
+written out as the values it gives (EXP-19):
+
+<!-- typy-expect: accepted -->
+```python
+point = (7, 3)
+print(max(*point), min(*(4, 9, 2)), *point, **{"sep": "-"})
+```
+
+The same unpacking of a list or another iterable, or of a dict held in a
+variable, in such a call is planned for 0.10 (EXP-19).
 
 ## Nested functions
 

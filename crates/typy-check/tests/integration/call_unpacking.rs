@@ -103,7 +103,7 @@ fn exp_19_unpacking_in_a_call_of_any_other_callee_is_planned() {
     for call in [
         "print(max(*[1, 2]))\n",
         "f = pair\nprint(f(*[1, 2]))\n",
-        "print(**{\"sep\": \"-\"})\n",
+        "options = {\"sep\": \"-\"}\nprint(**options)\n",
         "for each in zip(*[[1]]):\n    pass\n",
         "class Failure(Exception):\n    pass\n\n\nerror = Failure(*[\"a\"])\n",
     ] {
@@ -116,6 +116,21 @@ fn exp_19_unpacking_in_a_call_of_any_other_callee_is_planned() {
             "{source}: {found:?}"
         );
     }
+}
+
+#[test]
+fn exp_19_unpacking_written_out_in_full_binds_as_the_values_it_gives() {
+    let source = format!(
+        "{PAIR}from collections.abc import Callable\n\
+         def apply(f: Callable[[int, int], int], pair: tuple[int, int]) -> int:\n    \
+         return f(*pair)\n\
+         point = (1, 2)\n\
+         print(max(*point), min(*(3, 4)), apply(pair, point), **{{\"sep\": \"-\"}})\n\
+         error = ValueError(*(\"bad\", 2))\nwords = [\"a\"]\nwords.append(*(\"b\",))\n"
+    );
+    assert_eq!(app(&source), Vec::<String>::new());
+    let twice = "print(**{\"sep\": \"-\", \"sep\": \"+\"})\n";
+    assert_eq!(app(twice), ["E0201"]);
 }
 
 #[test]

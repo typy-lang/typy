@@ -1097,7 +1097,10 @@ fn builtins_of_one_iterable_give_their_codes() {
         ("x = sorted([1], key=len)\n", &["E0404"]),
         ("x = sorted([1], reverse=1)\n", &["E0404"]),
         ("x = sorted([1], cmp=1)\n", &["E0404"]),
-        ("x = sorted([1], **{})\n", &["E0201"]),
+        (
+            "options = {'key': None}\nx = sorted([1], **options)\n",
+            &["E0201"],
+        ),
         ("x = sorted((1, 'a'))\n", &["E0411"]),
         ("x = sorted(3)\n", &["E0411"]),
         ("x = sorted(missing)\n", &["E0205"]),
@@ -1210,7 +1213,10 @@ fn round_gives_python_s_result_types_and_codes() {
         ("x = round(True)\n", &["E0406"]),
         ("x = round(1.5, digits=1)\n", &["E0404"]),
         ("x = round(1.5, 1, ndigits=1)\n", &["E0404"]),
-        ("x = round(1.5, **{})\n", &["E0201"]),
+        (
+            "options = {'ndigits': 1}\nx = round(1.5, **options)\n",
+            &["E0201"],
+        ),
         ("x = round(missing)\n", &["E0205"]),
     ];
     for (source, expected) in cases {

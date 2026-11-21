@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- A call of a builtin, a function value, a protocol method or an exception
+  class takes `*` of a tuple display or a variable holding a fixed tuple,
+  and `**` of a dict display with `str` literal keys, such as
+  `max(*point)` or `print(*row, **{"sep": "-"})` (EXP-19).
 - `map(function, iterable, ...)` and `filter(function, iterable)`, with
   `filter(None, iterable)`: lazy iterators that take a function or method
   of the program, a `lambda` or a built-in such as `int`, go on after the

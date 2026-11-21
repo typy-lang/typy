@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.90 |
+| Version | 2.91 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -708,9 +708,14 @@ value converted to an `Iterator[T]` becomes `AsIterator`; a `for` over a class
 whose `__iter__` returns an iterator of another kind goes over the call of
 `__iter__` (TYP-20).
 
-A call with `*value` or `**value` goes through `body/call_expression.rs`,
-which keeps it when `bind_to` or `print` binds it and otherwise refuses it
-with E0201, planned for 0.10 (EXP-19). `Argument::passed` says how each
+A call with `*value` or `**value` goes through `body/call_expression.rs`.
+For a callee that `binds_when_it_runs` does not take, a builtin, a function
+value, a protocol method or an exception class, `written_out` gives the
+call's arguments with each `*` of a tuple display or of a variable of a
+fixed tuple as its items, `name[0]` on, and each `**` of a dict display
+with `str` literal keys as keyword arguments, checked as written (EXP-19).
+It keeps a call `bind_to` or `print` binds, and otherwise refuses it with
+E0201, planned for 0.10 (EXP-19). `Argument::passed` says how each
 argument reaches its parameter: `Position`, `Name`, `Keyword` for one
 `**kwargs` takes, `Items` for the items of a tuple of a fixed number of
 items `*` unpacks, each bound as a positional argument, `Tail` for the
