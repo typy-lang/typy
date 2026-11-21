@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.82 |
+| Version | 2.83 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -990,7 +990,13 @@ class whose type names one narrows the value to it. The runtime's `bool`
 derives from `int`, as in CPython. `issubclass(class, classes)`
 (CLS-19) is `TypedExprKind::IsSubclass` of the class and each class of the
 second argument, type objects named or held, which lowering evaluates in
-order and tests with `typy_rt_type_derives_from`. `callable(x)`
+order and tests with `typy_rt_type_derives_from`. An abstract collection
+of `typing` or `collections.abc` names `AnnotationName::Abstract`, whose
+`AbstractCollection::of` gives the union of the built-in collections of
+its item types, or `dict[K, V]` for a mapping (LIB-20, ADR-0086).
+`sequence_of` reads a union of built-in iterables of one item type as an
+`Iterable[T]`, so a loop and the built-ins of one iterable go over it
+through the runtime's iterator of the member it holds. `callable(x)`
 (LIB-23) is an `IsInstanceTest` that holds for a `Callable` or a type
 object, by member for an optional or a union, and a name `names_builtin`
 takes is the constant `True`. Where nothing is expected, `chr` is

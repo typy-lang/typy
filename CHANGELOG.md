@@ -8,6 +8,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set`,
+  `MutableSet`, `Collection`, `Container` and `Reversible` of
+  `collections.abc` and `typing`, and `typing.AbstractSet`, as types that
+  hold the built-in collections CPython registers with them, such as a
+  list, a tuple, bytes or a range for `Sequence[int]` (LIB-20). A loop and
+  the built-ins of one iterable go over a union of built-in iterables of
+  one item type.
 - `issubclass(class, classes)` with a class or a tuple of classes, named or
   held in a value, answering as CPython does; a value that is no class is
   refused with CPython's `TypeError` message (CLS-19).

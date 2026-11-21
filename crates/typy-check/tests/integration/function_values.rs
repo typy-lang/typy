@@ -251,17 +251,15 @@ fn fun_05_a_function_value_compares_and_hashes_by_identity_and_never_orders() {
 
 #[test]
 fn lib_17_the_typing_names_a_later_release_gives_are_planned_for_it() {
-    for (name, rule) in [("NamedTuple", "CLS-27"), ("Sequence", "LIB-20")] {
-        let found = messages(&format!("from typing import {name}\n"));
-        assert_eq!(
-            found,
-            [(
-                "E0201".to_owned(),
-                format!("`typing.{name}` is planned for TyPy 0.10 ({rule})"),
-                rule.to_owned()
-            )]
-        );
-    }
+    let found = messages("from typing import NamedTuple\n");
+    assert_eq!(
+        found,
+        [(
+            "E0201".to_owned(),
+            "`typing.NamedTuple` is planned for TyPy 0.10 (CLS-27)".to_owned(),
+            "CLS-27".to_owned()
+        )]
+    );
 }
 
 /// A class whose method a subclass overrides, and a static method, for the method cases.

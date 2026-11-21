@@ -428,10 +428,7 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     // (ADR-0085, ADR-0086).
     let planned = match name.as_str() {
         "NamedTuple" => Some(("0.10", RuleId::CLS_27)),
-        "Sequence" | "MutableSequence" | "Mapping" | "MutableMapping" | "Collection"
-        | "Container" | "Set" | "MutableSet" | "Reversible" | "KeysView" | "ValuesView"
-        | "ItemsView" => Some(("0.10", RuleId::LIB_20)),
-        "AbstractSet" if module.as_str() == "typing" => Some(("0.10", RuleId::LIB_20)),
+        "KeysView" | "ValuesView" | "ItemsView" => Some(("0.10", RuleId::LIB_20)),
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
         _ => None,
     };
@@ -458,7 +455,21 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
 /// which `annotation_name` resolves.
 fn given_names(module: &str) -> &'static [&'static str] {
     match module {
-        "collections.abc" => &["Iterator", "Iterable", "Generator", "Callable"],
+        "collections.abc" => &[
+            "Iterator",
+            "Iterable",
+            "Generator",
+            "Callable",
+            "Sequence",
+            "MutableSequence",
+            "Mapping",
+            "MutableMapping",
+            "Set",
+            "MutableSet",
+            "Collection",
+            "Container",
+            "Reversible",
+        ],
         "dataclasses" => &["dataclass", "field"],
         _ => &[
             "Iterator",
@@ -475,6 +486,15 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "Final",
             "ClassVar",
             "Protocol",
+            "Sequence",
+            "MutableSequence",
+            "Mapping",
+            "MutableMapping",
+            "AbstractSet",
+            "MutableSet",
+            "Collection",
+            "Container",
+            "Reversible",
         ],
     }
 }

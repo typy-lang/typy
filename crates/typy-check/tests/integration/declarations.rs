@@ -26,7 +26,7 @@ fn a_declaration_typy_cannot_read_as_cpython_does_is_refused() {
         ),
         (
             "import collections.abc\n\n\n\
-            def total(items: collections.abc.Set[int]) -> int:\n    return len(items)\n\n\n\
+            def total(items: collections.abc.Sized) -> int:\n    return 0\n\n\n\
             print(total({1, 2}))\n",
             "E0205",
             "this annotation does not name a type",

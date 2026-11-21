@@ -147,10 +147,48 @@ As in CPython, a bare `Optional` and a subscripted name such as
 `List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
 `False`. The names held in a variable, passed or printed are planned for
-0.10 (TYP-18), and so are `Sequence`, `Mapping` and the other abstract
-collections (LIB-20) and `NamedTuple` (CLS-27). `typing.Any` and
+0.10 (TYP-18), and so is `NamedTuple` (CLS-27). `typing.Any` and
 `typing.cast` are refused, since every value in TyPy has one type
 (TYP-10).
+
+## Abstract collections
+
+`Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set` (and
+`typing.AbstractSet`), `MutableSet`, `Collection`, `Container` and
+`Reversible` of `collections.abc` and `typing` are types that hold each
+built-in collection CPython registers with them, with the items they name
+(LIB-20, ADR-0086):
+
+| Annotation | Holds |
+| --- | --- |
+| `Sequence[T]`, `Reversible[T]` | `list[T]`, `tuple[T, ...]`; `str` for `T` of `str`; `bytes` and `range` for `T` of `int` |
+| `MutableSequence[T]` | `list[T]` |
+| `Mapping[K, V]`, `MutableMapping[K, V]` | `dict[K, V]` |
+| `Set[T]`, `MutableSet[T]` | `set[T]` |
+| `Collection[T]`, `Container[T]` | each sequence of `Sequence[T]`, and `set[T]` |
+
+A value of one is held as the collection it is, and an operation on it,
+such as `len`, an index, `in` or a loop, runs on that collection, as for a
+union. Messages write the type as the union of its collections. Without
+its item types, an abstract collection is E0408. `reversed` of one, the
+views of a dict as members, and lists of instances of a derived class are
+planned for 0.10 (LIB-20); `Sized`, `Hashable` and classes of the program
+for 0.14 (LIB-24).
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Sequence
+
+
+def total(values: Sequence[int]) -> int:
+    result = 0
+    for value in values:
+        result += value
+    return result
+
+
+print(total([1, 2]), total((3, 4)), total(range(5)), total(b"ab"))
+```
 
 ## Unions
 
