@@ -179,7 +179,7 @@ print(max(*point), min(*(4, 9, 2)), *point, **{"sep": "-"})
 ```
 
 The same unpacking of a list or another iterable, or of a dict held in a
-variable, in such a call is planned for 0.10 (EXP-19).
+variable, in such a call is planned for 0.11 (EXP-22).
 
 ## Nested functions
 
@@ -586,7 +586,7 @@ These forms are refused:
 | A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
 | A nested function or a method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.11 | E0201 (FUN-19) |
 | A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
-| `*` or `**` in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and `**` in a call of `print`, planned for 0.10 | E0201 (EXP-19) |
+| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and such `**` in a call of `print`, planned for 0.11 | E0201 (EXP-22) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
 | A static method read through an instance whose subclasses define it again as a method; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
 | A property read through its class as a value, such as `Box.v`, which is a `property` object, planned for 1.0 | E0201 (FUN-17) |

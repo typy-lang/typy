@@ -199,6 +199,8 @@ impl RuleId {
     pub const EXP_19: Self = Self("EXP-19");
     /// A default value other than a constant, such as `-1`, a tuple or a call, shall be accepted and evaluated once, when the function is defined.
     pub const EXP_20: Self = Self("EXP-20");
+    /// `*` of any iterable and `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print`, of a method through a protocol value and of an exception class, `*` in a call of a function value, and `**` in a call of `print`.
+    pub const EXP_22: Self = Self("EXP-22");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
     /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
@@ -527,6 +529,7 @@ impl RuleId {
         Self::EXP_18,
         Self::EXP_19,
         Self::EXP_20,
+        Self::EXP_22,
         Self::FFI_01,
         Self::FFI_02,
         Self::FFI_03,

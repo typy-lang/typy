@@ -1,4 +1,4 @@
-# typy-test: EXP-19
+# typy-test: EXP-22
 # typy-expect: rejected E0201 at 9:11
 def pair(a: int, b: int) -> int:
     return a + b

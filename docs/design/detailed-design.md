@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.91 |
+| Version | 2.92 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -715,7 +715,7 @@ call's arguments with each `*` of a tuple display or of a variable of a
 fixed tuple as its items, `name[0]` on, and each `**` of a dict display
 with `str` literal keys as keyword arguments, checked as written (EXP-19).
 It keeps a call `bind_to` or `print` binds, and otherwise refuses it with
-E0201, planned for 0.10 (EXP-19). `Argument::passed` says how each
+E0201, planned for 0.11 (EXP-22). `Argument::passed` says how each
 argument reaches its parameter: `Position`, `Name`, `Keyword` for one
 `**kwargs` takes, `Items` for the items of a tuple of a fixed number of
 items `*` unpacks, each bound as a positional argument, `Tail` for the

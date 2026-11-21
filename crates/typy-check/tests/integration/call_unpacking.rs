@@ -96,10 +96,10 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 }
 
 #[test]
-fn exp_19_unpacking_in_a_call_of_any_other_callee_is_planned() {
-    let planned = "`*` and `**` in a call of a builtin other than `print`, of a function \
-                   value, of a protocol method or of an exception class are planned for TyPy \
-                   0.10 (EXP-19)";
+fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
+    let planned = "`*` and `**` of a value only the run knows in a call of a builtin other \
+                   than `print`, of a function value, of a protocol method or of an exception \
+                   class are planned for TyPy 0.11 (EXP-22)";
     for call in [
         "print(max(*[1, 2]))\n",
         "f = pair\nprint(f(*[1, 2]))\n",
@@ -112,7 +112,7 @@ fn exp_19_unpacking_in_a_call_of_any_other_callee_is_planned() {
         assert!(
             found
                 .iter()
-                .any(|(code, text, rule)| code == "E0201" && text == planned && rule == "EXP-19"),
+                .any(|(code, text, rule)| code == "E0201" && text == planned && rule == "EXP-22"),
             "{source}: {found:?}"
         );
     }

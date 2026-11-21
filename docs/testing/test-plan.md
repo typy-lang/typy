@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.26 |
+| Version | 1.27 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -363,9 +363,10 @@ that the specification does not define.
 | EXP-16 | 0.1 | IT | `tests/conformance/exp/EXP-16_*.py` |
 | EXP-17 | 0.9 | UT, IT | `typy-source` tests of a starred item; `typy-check` tests of the element types of `*args` and `**kwargs`, of the arguments each takes and refuses, and of each unpacking; runtime tests of `unpack` and of `call_check`, `call_merge` and `call_name` against CPython 3.15's messages; `typy-check` tests of each argument a call unpacks and of each it refuses; `typy-driver` tests that lower each form, pack `*args` and `**kwargs` and bind a call that unpacks; `tests/conformance/exp/EXP-17_*.py`, among them the order in which a call evaluates its arguments |
 | EXP-18 | 1.0 | IT | `tests/conformance/exp/EXP-18_*.py` |
-| EXP-19 | 0.10 | UT, IT | Runtime tests of the call check against each built-in's description, with its message style; `typy-check` tests of `max(*xs)` by item type and of `**` through a function value refused as planned; `tests/conformance/exp/EXP-19_*.py` for built-ins, `print(**options)`, function values and exception classes |
+| EXP-19 | 0.10 | UT, IT | `typy-check` tests of unpacking written out in full in each kind of callee, and of a dict display that names a key twice; `tests/conformance/exp/EXP-19_*.py` for built-ins, `print`, function values and exception classes |
 | EXP-20 | 1.0 | UT | `typy-check` subset test of the refusal while it is planned; a conformance program of each kind of default |
 | EXP-21 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/exp/EXP-21_*.py` |
+| EXP-22 | 0.11 | UT, IT | Runtime tests of the call check against each built-in's description, with its message style; `typy-check` tests of `max(*xs)` by item type and of the refusals while they are planned; `tests/conformance/exp/EXP-22_*.py` for built-ins, `print(**options)`, function values and exception classes |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py`, a list, a `str`, a range, a dict and generators unpacked with CPython 3.15's messages |
 | SMT-03 | 0.1 | IT | `tests/conformance/smt/SMT-03_*.py` |

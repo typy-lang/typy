@@ -116,9 +116,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 - `typing` names and type aliases as values (TYP-18), nested functions with
   type parameters of their own (FUN-18), and nested functions, methods and
-  `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19) are
+  `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19), and
+  `*` and `**` of a value only the run knows in a call of a builtin, a
+  function value, a protocol method or an exception class (EXP-22) are
   refused as planned for 0.11, where the messages named 0.10 and TYP-18,
-  FUN-10 or FUN-13.
+  FUN-10, FUN-13 or EXP-19.
 - A `type[C]` holds `C` or a class derived from it: a `type[Square]` passes
   where a `type[Shape]` is expected, and `type(x)` of an instance whose
   class has subclasses is a `type[C]` of its static class (CLS-18). When a

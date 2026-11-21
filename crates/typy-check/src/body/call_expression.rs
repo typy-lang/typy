@@ -43,11 +43,11 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 at,
-                "`*` and `**` in a call of a builtin other than `print`, of a function value, \
-                 of a protocol method or of an exception class are planned for TyPy 0.10 \
-                 (EXP-19)",
+                "`*` and `**` of a value only the run knows in a call of a builtin other than \
+                 `print`, of a function value, of a protocol method or of an exception class \
+                 are planned for TyPy 0.11 (EXP-22)",
             )
-            .with_rule(RuleId::EXP_19)
+            .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),
             span,
         )

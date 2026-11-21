@@ -1,4 +1,4 @@
-# typy-test: EXP-19
+# typy-test: EXP-22
 # typy-expect: rejected E0201 at 8:15
 class Failure(Exception):
     pass
