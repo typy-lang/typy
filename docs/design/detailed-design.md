@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.96 |
+| Version | 2.97 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -297,7 +297,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0403 | Retired in 0.11: `Any`, `cast` and `object` annotations, which are now E0201, planned (TYP-23 to TYP-25) | TYP-10 |
 | E0404 | Argument of the wrong type | TYP-01 |
 | E0405 | Returned value of the wrong type | TYP-01 |
-| E0406 | Arithmetic on `bool` | DAT-03 |
+| E0406 | `~` of a `bool` | DAT-19 |
 | E0407 | Comparison between unsupported types | EXP-06 |
 | E0408 | `tuple`, `list`, `set` or `dict` annotation without its item types; a `Callable` annotation without its list of parameter types and its result, or with `...` for them | TYP-06, FUN-05 |
 | E0409 | List, set or dict display with items, keys or values of different types | DAT-07, DAT-09, DAT-10 |
@@ -1236,10 +1236,18 @@ and E0411 for anything else. `sorted`, `min` and
 `max` need items that order. `sum` adds `int` or `float` items; a
 `list[float]` needs a `float` start, E0404, because CPython returns the
 `int` 0 for an empty list without one, a type the call could not have. A
-list of `bool` is E0406, as all arithmetic on `bool` is (DAT-03).
+list of `bool` adds as `int`s from an `int` start, through
+`typy_rt_list_sum_bool`, which counts the true items (DAT-19).
 `round(number, ndigits)` gives an `int` for an `int`, and for a `float`
 an `int` without `ndigits` and a `float` with it, as CPython does;
 `ndigits` is an `int`, by position or keyword, and `round` of a `bool` is
+`round` of the `int` it is. Arithmetic takes a `bool` as its `int` (DAT-19,
+ADR-0098): `BodyChecker::bool_operands` holds each `bool` operand beside a
+number, or beside a sequence for `*`, as `int(operand)`, a written `True`
+or `False` as the constant 1 or 0, and keeps `&`, `|` and `^` of two bools;
+`numbers_compared` does the same for comparisons, unary `-` and `+` and
+`abs` take the `int`, an augmented assignment of a numeric union variable is
+checked as `x = x op y` so each member combines, and `~` of a `bool` is
 E0406. `list()` has the expected type, as `[]` does, and `list(source)` is
 `TypedExprKind::ListOf(source)`, a new list of every value the loop source
 gives. The builtins of one iterable take any loop source the same way:

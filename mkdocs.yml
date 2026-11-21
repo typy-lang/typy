@@ -228,6 +228,7 @@ nav:
           - adr/0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md
           - adr/0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md
           - adr/0097-check-the-standard-librarys-signatures-against-typeshed.md
+          - adr/0098-do-arithmetic-on-bool-as-cpython-does.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

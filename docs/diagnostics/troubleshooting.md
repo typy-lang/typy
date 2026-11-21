@@ -614,17 +614,19 @@ def half(n: int) -> int:
 print(half(4))
 ```
 
-## E0406: arithmetic on `bool`
+## E0406: `~` of a `bool`
 
-`True + 1` is valid Python, but TyPy keeps `bool` and `int` apart
-(DAT-03). Convert with `int(flag)` first.
+`~` of a `bool` inverts the `int` it is, so `~True` is `-2`, not
+`False`. CPython 3.12 to 3.15 warn that it is deprecated, and Python 3.16
+removes it, so TyPy refuses it (DAT-19). Any other arithmetic takes a
+`bool` as its `int`, as CPython does: `True + 1` is `2`.
 
 This program gives E0406:
 
 <!-- typy-expect: rejected E0406 at 2:7 -->
 ```python
 done = True
-print(done + 1)
+print(~done)
 ```
 
 This one is correct:
@@ -632,7 +634,7 @@ This one is correct:
 <!-- typy-expect: accepted -->
 ```python
 done = True
-print(int(done) + 1)
+print(not done, ~int(done), done + 1)
 ```
 
 ## E0407: comparison between unsupported types

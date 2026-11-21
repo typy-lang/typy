@@ -46,7 +46,6 @@ impl BodyChecker<'_> {
         }
         match operator {
             Op::BitAnd | Op::BitOr | Op::BitXor if l == Bool && r == Bool => Bool,
-            _ if l == Bool || r == Bool => self.bool_arithmetic(span),
             Op::Add if l == Str && r == Str => Str,
             Op::Add if l == Type::Bytes && r == Type::Bytes => Type::Bytes,
             Op::Mult if (l == Type::Bytes && r == Int) || (l == Int && r == Type::Bytes) => {
@@ -127,7 +126,7 @@ impl BodyChecker<'_> {
                 self.check_truth(operand);
                 Type::Bool
             }
-            _ if ty == Type::Bool => self.bool_arithmetic(span),
+            UnaryOperator::Invert if ty == Type::Bool => self.bool_inversion(span),
             UnaryOperator::USub | UnaryOperator::UAdd if ty.is_numeric() => ty,
             UnaryOperator::Invert if ty == Type::Int => Type::Int,
             _ => {
@@ -314,6 +313,32 @@ impl BodyChecker<'_> {
         operands
     }
 
+    /// Returns the operands of a comparison with each `bool` held as its `int` when the
+    /// others are numbers, so `True == 1` and `True < 2` compare as CPython compares them
+    /// (DAT-19); `is` and `in` keep them.
+    pub(super) fn numbers_compared(
+        operators: &[CompareOperator],
+        operands: Vec<TypedExpr>,
+    ) -> Vec<TypedExpr> {
+        let compares = operators.iter().all(|operator| {
+            !matches!(
+                operator,
+                CompareOperator::Is
+                    | CompareOperator::IsNot
+                    | CompareOperator::In
+                    | CompareOperator::NotIn
+            )
+        });
+        let mixed = operands.iter().any(|operand| operand.ty == Type::Bool)
+            && operands
+                .iter()
+                .any(|operand| matches!(operand.ty, Type::Int | Type::Float));
+        if !compares || !mixed {
+            return operands;
+        }
+        operands.into_iter().map(Self::int_of_bool).collect()
+    }
+
     pub(super) fn operator_error(
         &mut self,
         symbol: &str,
@@ -332,18 +357,83 @@ impl BodyChecker<'_> {
         Type::Error
     }
 
-    /// Reports arithmetic on `bool` values, which TyPy refuses (DAT-03).
-    pub(super) fn bool_arithmetic(&mut self, span: Span) -> Type {
+    /// Reports `~` of a `bool`, which CPython 3.12 and later deprecate with a warning, so TyPy
+    /// refuses it (DAT-19, ADR-0098).
+    pub(super) fn bool_inversion(&mut self, span: Span) -> Type {
         self.diagnostics.push(
             Diagnostic::new(
                 DiagnosticCode::error(406),
                 span,
-                "arithmetic on bool values is not supported",
+                "`~` of a bool is deprecated since CPython 3.12, which warns about it, and \
+                 removed in 3.16, so TyPy refuses it",
             )
-            .with_rule(RuleId::DAT_03)
-            .with_help("convert with `int(...)` first"),
+            .with_rule(RuleId::DAT_19)
+            .with_help("write `not value` to negate it, or `~int(value)` for the int"),
         );
         Type::Error
+    }
+
+    /// Returns `value` as the `int` it is when it is a `bool`, as CPython does arithmetic on a
+    /// `bool`, 0 or 1 (DAT-19, ADR-0098); any other value as it is.
+    pub(super) fn int_of_bool(value: TypedExpr) -> TypedExpr {
+        if value.ty != Type::Bool {
+            return value;
+        }
+        let span = value.span;
+        // A `True` or `False` written in the program is the constant 1 or 0, which an exponent
+        // reads as a literal (EXP-04).
+        if let TypedExprKind::Constant(TypedConstant::Bool(constant)) = value.kind {
+            return Self::typed(
+                TypedExprKind::Constant(TypedConstant::Int(u8::from(constant).to_string())),
+                Type::Int,
+                span,
+            );
+        }
+        Self::typed(
+            TypedExprKind::Builtin {
+                builtin: crate::builtin::Builtin::Int,
+                arguments: vec![value],
+            },
+            Type::Int,
+            span,
+        )
+    }
+
+    /// Returns the operands of `left op right` with each `bool` held as its `int`, as CPython
+    /// adds, multiplies and divides them; `&`, `|` and `^` of two bools keep them, since they
+    /// give a `bool` (DAT-03, DAT-19).
+    pub(super) fn bool_operands(
+        operator: BinaryOperator,
+        left: TypedExpr,
+        right: TypedExpr,
+    ) -> (TypedExpr, TypedExpr) {
+        let bitwise = matches!(
+            operator,
+            BinaryOperator::BitAnd | BinaryOperator::BitOr | BinaryOperator::BitXor
+        );
+        if bitwise && left.ty == Type::Bool && right.ty == Type::Bool {
+            return (left, right);
+        }
+        // A `bool` is an `int` beside a number, and a repeat count beside a sequence; beside
+        // any other value it stays a `bool`, which the error names.
+        let takes_int = |other: &Type| {
+            other.is_numeric_or_bool()
+                || (operator == BinaryOperator::Mult && other.sequence_item().is_some())
+                || (operator == BinaryOperator::Mult && matches!(other, Type::Str | Type::Bytes))
+        };
+        let left_takes = takes_int(&right.ty);
+        let right_takes = takes_int(&left.ty);
+        let left = if left_takes {
+            Self::int_of_bool(left)
+        } else {
+            left
+        };
+        let right = if right_takes {
+            Self::int_of_bool(right)
+        } else {
+            right
+        };
+        (left, right)
     }
 
     /// Returns the name of the class of an exception of `ty` that defines `__eq__` or `__ne__`,
@@ -378,17 +468,9 @@ pub(super) const OBJECT_HELP: &str =
     "an `object` is narrowed first, such as `if isinstance(value, int):`";
 
 fn with_narrowing_help(diagnostic: Diagnostic, left: &Type, right: &Type) -> Diagnostic {
-    let int_or_bool =
-        |ty: &Type| ty.members().contains(&Type::Bool) && ty.members().contains(&Type::Int);
     if *left == Type::Object || *right == Type::Object {
         // An `object` does only what every value does; a test narrows it first (TYP-23).
         diagnostic.with_help(OBJECT_HELP)
-    } else if int_or_bool(left) || int_or_bool(right) {
-        // `isinstance(x, int)` holds for a `bool` too, which TyPy does no arithmetic on (DAT-03).
-        diagnostic.with_help(
-            "`isinstance(x, int)` also holds for a bool, on which TyPy does no arithmetic; test \
-             `type(x) is int`, or `isinstance(x, bool)` first",
-        )
     } else if matches!(left, Type::Optional(_)) || matches!(right, Type::Optional(_)) {
         diagnostic.with_help(
             "an optional value is used after a test shows it is not None, such as `if value is not None:`",

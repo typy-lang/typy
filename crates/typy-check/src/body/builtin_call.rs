@@ -63,7 +63,7 @@ impl BodyChecker<'_> {
         if takes_one_iterable(builtin, arguments.len()) {
             return self.call_over_iterable(builtin, arguments, keywords, span);
         }
-        let values: Vec<TypedExpr> = arguments
+        let mut values: Vec<TypedExpr> = arguments
             .iter()
             .map(|argument| {
                 let value = self.expression(argument);
@@ -268,7 +268,12 @@ impl BodyChecker<'_> {
                 }
                 match &types[0] {
                     Type::Int | Type::Float => types[0].clone(),
-                    Type::Bool => self.bool_arithmetic(values[0].span),
+                    // `abs` of a `bool` is the `int` it is (DAT-19).
+                    Type::Bool => {
+                        let value = values.remove(0);
+                        values.insert(0, Self::int_of_bool(value));
+                        Type::Int
+                    }
                     other => self.operator_error("abs", other, other, values[0].span),
                 }
             }

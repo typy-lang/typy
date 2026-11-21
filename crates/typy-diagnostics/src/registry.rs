@@ -158,7 +158,7 @@ pub const CODES: &[CodeInfo] = &[
     },
     active(404, "argument of the wrong type", RuleId::TYP_01),
     active(405, "returned value of the wrong type", RuleId::TYP_01),
-    active(406, "arithmetic on `bool`", RuleId::DAT_03),
+    active(406, "`~` of a `bool`", RuleId::DAT_19),
     active(407, "comparison between unsupported types", RuleId::EXP_06),
     active(
         408,

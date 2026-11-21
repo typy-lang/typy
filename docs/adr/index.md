@@ -103,3 +103,4 @@ supersedes it.
 | [ADR-0095](0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md) | Follow each CPython version from its final release to its end of life | Accepted | 2026-11-21 |
 | [ADR-0096](0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md) | Run threads in parallel over shared objects with biased reference counts | Accepted | 2026-11-21 |
 | [ADR-0097](0097-check-the-standard-librarys-signatures-against-typeshed.md) | Check the standard library's signatures against typeshed | Accepted | 2026-11-21 |
+| [ADR-0098](0098-do-arithmetic-on-bool-as-cpython-does.md) | Do arithmetic on bool as CPython does | Accepted | 2026-11-21 |

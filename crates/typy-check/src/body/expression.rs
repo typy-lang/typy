@@ -107,6 +107,7 @@ impl BodyChecker<'_> {
                 if let Some(formatted) = self.percent_dynamic(*operator, &left, &right, span) {
                     return formatted;
                 }
+                let (left, right) = Self::bool_operands(*operator, left, right);
                 let ty = self.binary_type(*operator, &left, &right, span);
                 Self::typed(
                     TypedExprKind::Binary {
@@ -127,6 +128,12 @@ impl BodyChecker<'_> {
                 {
                     return call;
                 }
+                // `-` and `+` of a `bool` are of the `int` it is (DAT-19).
+                let operand = match operator {
+                    typy_source::syntax::UnaryOperator::USub
+                    | typy_source::syntax::UnaryOperator::UAdd => Self::int_of_bool(operand),
+                    _ => operand,
+                };
                 let ty = self.unary_type(*operator, &operand, span);
                 Self::typed(
                     TypedExprKind::Unary {
@@ -193,7 +200,8 @@ impl BodyChecker<'_> {
                 ..
             } => {
                 let operands = self.comparison_operands(left, comparators, operators);
-                let mut operands = Self::objects_compared(operators, operands);
+                let operands = Self::objects_compared(operators, operands);
+                let mut operands = Self::numbers_compared(operators, operands);
                 let mut comparators = operands.split_off(1);
                 let mut left = operands.remove(0);
                 // `sys.version_info` held as a value compares as CPython compares it (LIB-16).

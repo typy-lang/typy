@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.117 |
+| Version | 1.118 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -223,7 +223,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- | --- |
 | DAT-01 | `int` shall be an integer without a size limit, as in Python. A value that fits in 63 bits shall be held inline, without a heap allocation. | M | 0.1 | 3.2.4 |
 | DAT-02 | `float` shall be an IEEE 754 double, and `str()` and `repr()` of a `float` shall give the same text as CPython. | M | 0.1 | 3.2.4 |
-| DAT-03 | `bool` shall have the values `True` and `False`. Arithmetic operators on `bool` operands shall be rejected; `&`, `\|`, `^` and `not` shall be accepted. | M | 0.1 | 3.2.4 |
+| DAT-03 | `bool` shall have the values `True` and `False`, and `&`, `\|`, `^` and `not` shall be accepted on them. | M | 0.1 | 3.2.4 |
 | DAT-04 | `None` shall be the only value of its type. | M | 0.1 | 3.2.1 |
 | DAT-05 | `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1. | M | 0.1 | 3.2.5 |
 | DAT-06 | `bytes` shall be an immutable sequence of integers from 0 to 255. | M | 0.2 | 3.2.5 |
@@ -239,6 +239,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-16 | `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results. | S | 0.3 | 3.2.7 |
 | DAT-17 | `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python. | S | 0.3 | 3.2.5 |
 | DAT-18 | `frozendict` (PEP 814) shall be an immutable, hashable mapping with CPython's methods, `\|` and text, under a Python floor of 3.15 or later. | S | 0.12 | 3.2.5 |
+| DAT-19 | Arithmetic on `bool` operands, and `abs`, `round` and `sum` of them, shall give CPython's results, a `bool` taken as the `int` 0 or 1, such as `True + 1 == 2` and `-True == -1`; `~` of a `bool`, which CPython deprecates since 3.12, shall be rejected (ADR-0098). | S | 0.11 | 3.2.4 |
 
 ### 3.6 Expressions (EXP)
 
@@ -597,7 +598,7 @@ cache, unless a row says otherwise.
 | 0.8 | Functions as values: nested functions and closures, `lambda`, `nonlocal`, keyword-only and positional-only parameters, the `key` argument of `sorted`, `list.sort`, `min` and `max` | Attributes, tuple items, captures and cells stored by decreasing alignment |
 | 0.9 | Generators: `yield` and `yield from`, generator functions of `Generator`, `Iterator` and `Iterable` types, generator expressions; classes with `__iter__` and `__next__` as iterators; `*args`, `**kwargs` and unpacking with `*` and `**` | Generator objects of one allocation |
 | 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions of a module with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking written out in full in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass` | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
-| 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable and dict in the calls of built-ins and function values (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
+| 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable and dict in the calls of built-ins and function values (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24); arithmetic on `bool` as CPython does it (DAT-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
 | 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27) | The benchmark suite within 5 times C |
 | 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes` | |
 | 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |

@@ -2,7 +2,8 @@
 
 use super::{
     typy_rt_list_all, typy_rt_list_any, typy_rt_list_extreme, typy_rt_list_keep_extreme,
-    typy_rt_list_sort, typy_rt_list_sort_keyed, typy_rt_list_sum_float, typy_rt_list_sum_int,
+    typy_rt_list_sort, typy_rt_list_sort_keyed, typy_rt_list_sum_bool, typy_rt_list_sum_float,
+    typy_rt_list_sum_int,
 };
 use crate::int::value::Integer;
 use crate::list::operations::typy_rt_list_append;
@@ -324,5 +325,18 @@ fn fun_05_the_kept_extreme_is_the_first_item_of_the_best_key() {
         }
         assert_eq!(int_values(best), [expected]);
         assert_eq!(int_values(best_key).len(), 1);
+    }
+}
+
+#[test]
+fn dat_19_sum_of_bools_counts_the_true_ones_after_the_start() {
+    let flags = list_of(ItemKind::Bool, &[1, 0, 1, 1]);
+    // SAFETY: the list and the words are live.
+    unsafe {
+        assert_eq!(typy_rt_list_sum_bool(flags, word(10)), word(13));
+        assert_eq!(
+            typy_rt_list_sum_bool(list_of(ItemKind::Bool, &[]), word(0)),
+            word(0)
+        );
     }
 }

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.31 |
+| Version | 1.32 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -358,6 +358,7 @@ that the specification does not define.
 | DAT-16 | 0.3 | IT | `tests/conformance/dat/DAT-16_*.py` |
 | DAT-17 | 0.3 | IT | `tests/conformance/dat/DAT-17_*.py` |
 | DAT-18 | 0.12 | UT, IT | `typy-check` tests of each refused change and of the floor 3.15; `tests/conformance/dat/DAT-18_*.py` for its methods, `\|`, hashing and text |
+| DAT-19 | 0.11 | UT, IT | `typy-check` tests of the result type of each operator, `abs`, `round` and `sum` with bool operands and of `~` of a bool; runtime tests of `typy_rt_list_sum_bool`; `tests/conformance/dat/DAT-19_*.py` |
 | EXP-01 | 0.1 | IT | `tests/conformance/exp/EXP-01_*.py` |
 | EXP-02 | 0.1 | IT | `tests/conformance/exp/EXP-02_*.py` |
 | EXP-03 | 0.1 | IT | `tests/conformance/exp/EXP-03_*.py` |

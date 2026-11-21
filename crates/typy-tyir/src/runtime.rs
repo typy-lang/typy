@@ -72,6 +72,8 @@ pub enum RuntimeFunction {
     ListKeepExtreme,
     ListExtreme,
     ListSumInt,
+    /// Adds a start and the number of true items of a list of bools (DAT-19).
+    ListSumBool,
     ListSumFloat,
     ListAny,
     ListAll,
@@ -533,7 +535,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 388] = [
+    pub const ALL: [Self; 389] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -595,6 +597,7 @@ impl RuntimeFunction {
         Self::ListKeepExtreme,
         Self::ListExtreme,
         Self::ListSumInt,
+        Self::ListSumBool,
         Self::ListSumFloat,
         Self::ListAny,
         Self::ListAll,
@@ -1069,7 +1072,9 @@ impl RuntimeFunction {
             Self::ListSort => signature(&[LIST, Int], Unit, false),
             Self::ListSortKeyed => signature(&[LIST, LIST, Int], Unit, false),
             Self::ListKeepExtreme => signature(&[LIST, Bits, LIST, Bits, Int], Unit, false),
-            Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
+            Self::ListSumInt | Self::ListSumBool | Self::MathProdInt => {
+                signature(&[LIST, Int], Int, false)
+            }
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll | Self::MathHasFloat => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
@@ -1428,6 +1433,7 @@ impl RuntimeFunction {
             Self::ListKeepExtreme => "list_keep_extreme",
             Self::ListExtreme => "list_extreme",
             Self::ListSumInt => "list_sum_int",
+            Self::ListSumBool => "list_sum_bool",
             Self::ListSumFloat => "list_sum_float",
             Self::ListAny => "list_any",
             Self::ListAll => "list_all",

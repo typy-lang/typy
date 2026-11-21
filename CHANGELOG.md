@@ -16,6 +16,12 @@ All notable changes to TyPy are recorded here. The format follows
   any other operation (TYP-23). `isinstance(x, int)` narrows to `int |
   bool`, since a bool stays a bool; narrowing to a collection waits for
   `Any` in 0.13.
+- Arithmetic on `bool` as CPython does it: a `bool` beside a number is the
+  `int` 0 or 1, so `True + 1 == 2`, `True / 2 == 0.5`, `-True == -1`,
+  `True == 1`, `abs`, `round` and `sum` of bools, and `"ab" * True`; `&`,
+  `|` and `^` of two bools still give a bool (DAT-19). They were E0406,
+  which now refuses only `~` of a bool, which CPython deprecates and Python
+  3.16 removes.
 
 ### Changed
 

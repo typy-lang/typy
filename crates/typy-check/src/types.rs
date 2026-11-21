@@ -428,6 +428,12 @@ impl Type {
         }
     }
 
+    /// Returns true for `int`, `float` and `bool`, which arithmetic takes (DAT-19).
+    #[must_use]
+    pub const fn is_numeric_or_bool(&self) -> bool {
+        matches!(self, Self::Int | Self::Float | Self::Bool)
+    }
+
     /// Returns true when a value of the type exists when the program runs, which an `object`
     /// can hold: not a C library or a `ctypes` class, which are known only when it compiles.
     #[must_use]

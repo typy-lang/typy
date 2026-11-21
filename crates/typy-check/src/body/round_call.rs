@@ -36,7 +36,12 @@ impl BodyChecker<'_> {
                 }
             }
         }
-        let values: Vec<TypedExpr> = given.iter().map(|value| self.expression(value)).collect();
+        let mut values: Vec<TypedExpr> = given.iter().map(|value| self.expression(value)).collect();
+        // `round` of a `bool` is the `int` it is, with or without digits (DAT-19).
+        if values.first().is_some_and(|value| value.ty == Type::Bool) {
+            let value = values.remove(0);
+            values.insert(0, Self::int_of_bool(value));
+        }
         if !(1..=2).contains(&values.len()) {
             return self.error(
                 Diagnostic::new(
@@ -65,7 +70,6 @@ impl BodyChecker<'_> {
         let result = match (&values[0].ty, values.len()) {
             (Type::Int, _) | (Type::Float, 1) => Type::Int,
             (Type::Float, _) => Type::Float,
-            (Type::Bool, _) => self.bool_arithmetic(values[0].span),
             (other, _) => {
                 let other = other.clone();
                 self.operator_error("round", &other, &other, values[0].span)

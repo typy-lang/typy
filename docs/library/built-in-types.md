@@ -9,7 +9,7 @@ the same exceptions.
 | --- | --- |
 | `int` without a size limit; values that fit in 63 bits are held inline | DAT-01 |
 | `float`, an IEEE 754 double, written as CPython writes it | DAT-02 |
-| `bool`; arithmetic on `bool` is refused | DAT-03 |
+| `bool`; arithmetic takes a `bool` as the `int` 0 or 1, as CPython does, and `~` of one is refused | DAT-03, DAT-19 |
 | `None` | DAT-04 |
 | `str`, a sequence of Unicode code points | DAT-05 |
 | `bytes`, a sequence of integers from 0 to 255 | DAT-06 |

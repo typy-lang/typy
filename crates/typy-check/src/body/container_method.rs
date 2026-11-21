@@ -355,6 +355,7 @@ impl BodyChecker<'_> {
         if let Some(formatted) = self.percent_dynamic(operator, &current, &value, span) {
             return formatted;
         }
+        let (current, value) = Self::bool_operands(operator, current, value);
         let ty = self.binary_type(operator, &current, &value, span);
         Self::typed(
             TypedExprKind::Binary {

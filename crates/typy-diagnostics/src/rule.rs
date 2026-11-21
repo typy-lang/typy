@@ -117,7 +117,7 @@ impl RuleId {
     pub const CST_10: Self = Self("CST-10");
     /// A class with `__getitem__` and no `__iter__` shall be iterable through `__getitem__` with the positions 0, 1, 2 and so on until it raises `IndexError`, in `for`, `in` and every builtin that iterates, as CPython's sequence protocol does.
     pub const CST_11: Self = Self("CST-11");
-    /// `bool` shall have the values `True` and `False`.
+    /// `bool` shall have the values `True` and `False`, and `&`, `|`, `^` and `not` shall be accepted on them.
     pub const DAT_03: Self = Self("DAT-03");
     /// `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1.
     pub const DAT_05: Self = Self("DAT-05");
@@ -145,6 +145,8 @@ impl RuleId {
     pub const DAT_17: Self = Self("DAT-17");
     /// `frozendict` (PEP 814) shall be an immutable, hashable mapping with CPython's methods, `|` and text, under a Python floor of 3.15 or later.
     pub const DAT_18: Self = Self("DAT-18");
+    /// Arithmetic on `bool` operands, and `abs`, `round` and `sum` of them, shall give CPython's results, a `bool` taken as the `int` 0 or 1, such as `True + 1 == 2` and `-True == -1`; `~` of a `bool`, which CPython deprecates since 3.12, shall be rejected (ADR-0098).
+    pub const DAT_19: Self = Self("DAT-19");
     /// Where CPython 3.12 to 3.15 give a `SyntaxWarning` while compiling a program TyPy accepts, TyPy shall give a warning: for an invalid escape sequence and for an assertion that is always true.
     pub const DIA_08: Self = Self("DIA-08");
     /// Raising and catching exceptions shall follow the Language Reference, including matching on base classes.
@@ -536,6 +538,7 @@ impl RuleId {
         Self::DAT_16,
         Self::DAT_17,
         Self::DAT_18,
+        Self::DAT_19,
         Self::DIA_08,
         Self::EXC_01,
         Self::EXC_05,

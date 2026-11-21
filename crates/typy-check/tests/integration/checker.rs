@@ -382,8 +382,7 @@ fn rejected_programs_give_their_codes() {
         ("x = 2j\n", &["E0104"]),
         ("n = 3\nprint(2 ** n)\n", &["E0302"]),
         ("print(1 + \"a\")\n", &["E0401"]),
-        ("print(True + 1)\n", &["E0406"]),
-        ("print(-True)\n", &["E0406"]),
+        ("print(~True)\n", &["E0406"]),
         ("print(1 is 1)\n", &["E0301"]),
         ("print(1 or \"a\")\n", &["E0303"]),
         ("print(1 if True else \"a\")\n", &["E0305"]),
@@ -589,7 +588,6 @@ fn errors_inside_compound_statements_are_found() {
         ("print(max(None, None))\n", &["E0407"]),
         ("print(int(\"a\", \"b\"))\n", &["E0404"]),
         ("print(float(None))\n", &["E0404"]),
-        ("print(abs(True))\n", &["E0406"]),
         ("print(1 @ 2)\n", &["E0202"]),
         ("print(2.0 ** \"a\")\n", &["E0401"]),
         ("x = -8.0\nprint(x ** 0.5)\n", &["E0302"]),
@@ -704,16 +702,19 @@ fn type_of(expression: &str) -> Result<String, Vec<String>> {
 #[test]
 fn each_operator_gives_python_s_result_type_or_its_diagnostic() {
     let cases: &[(&str, Result<&str, &[&str]>)] = &[
-        // bool takes only the bitwise operators and `not` (DAT-03).
+        // The bitwise operators of two bools give a bool (DAT-03); any other arithmetic takes a
+        // bool as the int it is, and `~` of one is refused, as CPython deprecates it (DAT-19).
         ("b & b", Ok("bool")),
         ("b | b", Ok("bool")),
         ("b ^ b", Ok("bool")),
         ("not b", Ok("bool")),
-        ("b + 1", Err(&["E0406"])),
-        ("1 + b", Err(&["E0406"])),
-        ("-b", Err(&["E0406"])),
+        ("b + 1", Ok("int")),
+        ("1 + b", Ok("int")),
+        ("b / 2", Ok("float")),
+        ("b + 1.5", Ok("float")),
+        ("-b", Ok("int")),
         ("~b", Err(&["E0406"])),
-        ("b & i", Err(&["E0406"])),
+        ("b & i", Ok("int")),
         // str concatenation and repetition.
         ("s + s", Ok("str")),
         ("s * i", Ok("str")),
@@ -1088,7 +1089,7 @@ fn builtins_of_one_iterable_give_their_codes() {
     let cases: &[(&str, &[&str])] = &[
         ("x = sum([0.5])\n", &["E0404"]),
         ("x = sum(['a'])\n", &["E0401"]),
-        ("x = sum([True])\n", &["E0406"]),
+        ("x = sum([True], 0.5)\n", &["E0404"]),
         ("x = sum([1], 0.5)\n", &["E0404"]),
         ("x = sum([1], 0, 1)\n", &["E0404"]),
         ("x = sum([1], start=0, start=1)\n", &["E0103"]),
@@ -1210,7 +1211,6 @@ fn round_gives_python_s_result_types_and_codes() {
         ("x = round(1.5, 1, 2)\n", &["E0404"]),
         ("x = round(1.5, 1.5)\n", &["E0404"]),
         ("x = round('a')\n", &["E0401"]),
-        ("x = round(True)\n", &["E0406"]),
         ("x = round(1.5, digits=1)\n", &["E0404"]),
         ("x = round(1.5, 1, ndigits=1)\n", &["E0404"]),
         (
