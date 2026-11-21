@@ -45,6 +45,9 @@ pub enum Constant {
     Module(u32),
     /// The type alias object at this index of `TyirModule::type_aliases` (SMT-12).
     TypeAlias(u32),
+    /// The typing value at this index of `TyirModule::typing_values`, an object whose header
+    /// says what it is (TYP-18).
+    TypingValue(u32),
     /// The address of the descriptor of a tuple type that a list holds, which the runtime
     /// reads to store, count, compare and write its items (ADR-0009).
     TupleDescriptor(TupleTypeId),
@@ -78,6 +81,7 @@ impl Constant {
             Self::TypeObject(_) => TyirType::TYPE,
             Self::Module(_) => TyirType::MODULE,
             Self::TypeAlias(_) => TyirType::TYPE_ALIAS,
+            Self::TypingValue(_) => TyirType::UNION,
             Self::Function(_) => TyirType::FUNCTION,
             Self::TupleDescriptor(_) | Self::CDataClass(_) | Self::MethodDescriptor(_) => {
                 TyirType::Bits
@@ -104,6 +108,7 @@ impl fmt::Display for Constant {
             Self::TypeObject(ty) => write!(formatter, "type {ty}"),
             Self::Module(index) => write!(formatter, "module m{index}"),
             Self::TypeAlias(index) => write!(formatter, "type_alias a{index}"),
+            Self::TypingValue(index) => write!(formatter, "typing_value t{index}"),
             Self::TupleDescriptor(TupleTypeId(id)) => write!(formatter, "descriptor tuple#{id}"),
             Self::CDataClass(id) => write!(formatter, "cdata_class#{id}"),
             Self::Function(id) => write!(formatter, "function fn{}", id.0),

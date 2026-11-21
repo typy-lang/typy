@@ -95,6 +95,7 @@ mod sys_call;
 mod type_alias_value;
 mod type_object;
 mod typing_class;
+mod typing_value;
 mod union;
 mod union_loop;
 mod unpacked_arguments;

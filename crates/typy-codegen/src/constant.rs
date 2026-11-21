@@ -8,6 +8,27 @@ use crate::function::FunctionEmitter;
 use crate::statics::IntEncodingValue;
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
+    /// Returns the immortal static object of a type alias (SMT-12) or a typing value
+    /// (TYP-18), emitted the first time it is used.
+    fn typing_object(&mut self, constant: &Constant) -> inkwell::values::PointerValue<'ctx> {
+        let module = self.shared.module;
+        match constant {
+            Constant::TypeAlias(index) => {
+                let alias = &self.shared.tyir.type_aliases[*index as usize];
+                self.shared
+                    .statics
+                    .type_alias_object(module, *index, &alias.name, &alias.module)
+            }
+            Constant::TypingValue(index) => {
+                let value = &self.shared.tyir.typing_values[*index as usize];
+                self.shared
+                    .statics
+                    .typing_value_object(module, *index, &value.text, &value.key)
+            }
+            _ => unreachable!("only an alias or a typing value is emitted here"),
+        }
+    }
+
     pub(super) fn constant(
         &mut self,
         constant: &Constant,
@@ -41,14 +62,8 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
             | Constant::MethodDescriptor(_)
             | Constant::TupleDescriptor(_)
             | Constant::CDataClass(_) => Some(self.emitted(constant)?),
-            Constant::TypeAlias(index) => {
-                let alias = &self.shared.tyir.type_aliases[*index as usize];
-                Some(
-                    self.shared
-                        .statics
-                        .type_alias_object(self.shared.module, *index, &alias.name, &alias.module)
-                        .into(),
-                )
+            Constant::TypeAlias(_) | Constant::TypingValue(_) => {
+                Some(self.typing_object(constant).into())
             }
             Constant::Module(index) => {
                 let object = &self.shared.tyir.modules[*index as usize];

@@ -67,6 +67,11 @@ pub(crate) struct Program {
     pub(super) exported_aliases: crate::check::AliasTable,
     /// The type aliases read as values, by module and name (SMT-12).
     type_alias_objects: Vec<crate::typed::TypedTypeAlias>,
+    /// The typing values the program reads (TYP-18).
+    typing_value_objects: Vec<crate::typed::TypedTypingValue>,
+    /// The typing values CPython keeps one object of, a name of `typing` or
+    /// `collections.abc`, which `is` may compare (TYP-18).
+    pub(super) single_typing_values: BTreeSet<u32>,
     /// The type aliases of the module being checked, which only its annotations read
     /// (SMT-10).
     pub(super) type_aliases: BTreeSet<String>,
@@ -216,6 +221,8 @@ impl Program {
             imported_aliases: BTreeMap::new(),
             exported_aliases: BTreeMap::new(),
             type_alias_objects: Vec::new(),
+            typing_value_objects: Vec::new(),
+            single_typing_values: BTreeSet::new(),
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
             generic_pass: None,
@@ -513,6 +520,24 @@ impl Program {
                     module: module.to_owned(),
                 });
                 self.type_alias_objects.len() - 1
+            });
+        id(found)
+    }
+
+    /// Returns the index of the typing value of `text` and `key`, adding it on first use
+    /// (TYP-18).
+    pub(super) fn typing_value_object(&mut self, text: &str, key: &str) -> u32 {
+        let found = self
+            .typing_value_objects
+            .iter()
+            .position(|value| value.text == text && value.key == key)
+            .unwrap_or_else(|| {
+                self.typing_value_objects
+                    .push(crate::typed::TypedTypingValue {
+                        text: text.to_owned(),
+                        key: key.to_owned(),
+                    });
+                self.typing_value_objects.len() - 1
             });
         id(found)
     }
@@ -890,6 +915,7 @@ impl Program {
             lazy_imports: self.lazy_imports,
             builtin_modules: self.builtin_modules.into_iter().collect(),
             type_aliases: self.type_alias_objects,
+            typing_values: self.typing_value_objects,
             closes_text_files: self.closes_text_files,
             makes_surrogates: self.makes_surrogates
                 || self.signatures.iter().any(|signature| {

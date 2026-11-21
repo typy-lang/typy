@@ -423,6 +423,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
             crate::header::BOXED_FLOAT_TYPE_ID => &builtin::FLOAT,
             crate::header::BOOL_OBJECT_TYPE_ID => &builtin::BOOL,
             crate::header::NONE_OBJECT_TYPE_ID => &builtin::NONE_TYPE,
+            crate::header::TYPING_VALUE_TYPE_ID => &crate::typing_value::TYPING_VALUE,
             _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
         }
     }

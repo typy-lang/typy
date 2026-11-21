@@ -79,6 +79,9 @@ pub const BOOL_OBJECT_TYPE_ID: u32 = 34;
 /// The type ID of the immortal object `None`, which a value of type `object` holds (TYP-23,
 /// ADR-0090).
 pub const NONE_OBJECT_TYPE_ID: u32 = 35;
+/// The type ID of a typing value, such as `list[int]` or `int | None` read as a value, laid
+/// out as a `TypingValueObject` (TYP-18, ADR-0087).
+pub const TYPING_VALUE_TYPE_ID: u32 = 36;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

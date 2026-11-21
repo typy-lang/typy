@@ -49,6 +49,7 @@ impl BodyChecker<'_> {
                         continue;
                     }
                     let value = self.expression(&field.value);
+                    self.check_typing_text(&value);
                     let conversion = match field.conversion {
                         Some('s') => Some(Conversion::Str),
                         Some('r') => Some(Conversion::Repr),

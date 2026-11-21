@@ -34,6 +34,15 @@ All notable changes to TyPy are recorded here. The format follows
   and `lambda value, by=3: value * by` or `lambda *values: sum(values)`
   (FUN-19). The value is the function itself to `is`, `==`, `hash` and
   `repr`. These were E0201.
+- Typing values: a name of `typing` or `collections.abc`, such a name or a
+  built-in class given type arguments, and a union written with `|` are
+  values that a program stores, passes, compares and writes as CPython
+  3.15 writes them, such as `kinds = [list[int], int | None]` and
+  `Optional[int] == int | None` (TYP-18). Writing one that an older
+  release from the program's floor writes otherwise, such as
+  `print(Optional[int])` below 3.14, is E0202. They were E0201.
+- `isinstance` takes a union written with `|`, such as `isinstance(x, int
+  | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such
   as `def tagged[T](value: T) -> tuple[str, T]` inside a function; each
   call runs the copy for its types, with the variables it captures
@@ -74,6 +83,7 @@ All notable changes to TyPy are recorded here. The format follows
 - `Literal["r", "w"]` in an annotation is refused for `Literal`, which a
   later release gives, and no longer as an annotation written as a
   string.
+- `isinstance(None, Optional[int])` is true, as in CPython; it was false.
 
 ## [0.10.0] - 2026-11-21
 

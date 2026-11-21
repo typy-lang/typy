@@ -453,7 +453,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns true when the program binds `id` where it is read, so it names no built-in.
-    fn binds(&self, id: &str, span: Span) -> bool {
+    pub(super) fn binds(&self, id: &str, span: Span) -> bool {
         self.locals.contains_key(id)
             || self.closure_read(id, span).is_some()
             || self.program.module_symbols.contains_key(id)

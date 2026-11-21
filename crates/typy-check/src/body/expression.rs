@@ -34,6 +34,9 @@ impl BodyChecker<'_> {
         if let Some(part) = self.exception_part_use(expression) {
             return part;
         }
+        if let Some(value) = self.typing_value(expression) {
+            return value;
+        }
         match expression {
             Expr::Constant { value, .. } => {
                 let constant = match value {
@@ -44,10 +47,25 @@ impl BodyChecker<'_> {
                     Constant::Str(value) => TypedConstant::Str(value.clone()),
                     Constant::StrPoints(points) => TypedConstant::StrPoints(points.clone()),
                     Constant::Bytes(value) => TypedConstant::Bytes(value.clone()),
-                    Constant::Complex { .. } | Constant::Ellipsis => {
+                    // The subset check reports an imaginary literal.
+                    Constant::Complex { .. } => {
                         return Self::typed(
                             TypedExprKind::Constant(TypedConstant::None),
                             Type::Error,
+                            span,
+                        );
+                    }
+                    // `...` reaches here only as a type argument of a subscript that is no
+                    // typing value (TYP-18).
+                    Constant::Ellipsis => {
+                        return self.error(
+                            Diagnostic::new(
+                                DiagnosticCode::error(202),
+                                span,
+                                "`...` as a value cannot be compiled by TyPy with CPython's \
+                                 meaning",
+                            )
+                            .with_rule(RuleId::STD_04),
                             span,
                         );
                     }

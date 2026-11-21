@@ -171,6 +171,7 @@ pub(crate) fn is_quiet(expression: &TypedExpr) -> bool {
         | TypedExprKind::ModuleName
         | TypedExprKind::TypeObject(_)
         | TypedExprKind::TypeAliasObject(_)
+        | TypedExprKind::TypingValue(_)
         | TypedExprKind::FunctionValue(_)
         | TypedExprKind::RunningFunction
         | TypedExprKind::Capture(_)

@@ -93,10 +93,10 @@ pub(crate) enum AnnotationName {
     /// in lower case (LIB-17).
     Builtin(&'static str),
     /// `Callable` of `typing` or `collections.abc`, the type of a function value (FUN-05).
-    Callable,
+    Callable(Origin),
     /// An abstract collection of `typing` or `collections.abc`, such as `Sequence`, held as
     /// the union of the built-in types CPython registers with it (LIB-20, ADR-0086).
-    Abstract(AbstractCollection),
+    Abstract(AbstractCollection, Origin),
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -123,7 +123,9 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing" | "collections.abc", "Generator") => {
             Some(AnnotationName::Generator(origin(module)))
         }
-        ("typing" | "collections.abc", "Callable") => Some(AnnotationName::Callable),
+        ("typing" | "collections.abc", "Callable") => {
+            Some(AnnotationName::Callable(origin(module)))
+        }
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
@@ -139,9 +141,8 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Tuple") => Some(AnnotationName::Builtin("tuple")),
         ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
-        ("typing" | "collections.abc", _) => {
-            AbstractCollection::named(module, name).map(AnnotationName::Abstract)
-        }
+        ("typing" | "collections.abc", _) => AbstractCollection::named(module, name)
+            .map(|collection| AnnotationName::Abstract(collection, origin(module))),
         _ => None,
     }
 }
@@ -177,7 +178,10 @@ pub(crate) fn is_protocol(
 
 /// Returns the annotation name an expression names: an imported name, or a name read
 /// through one of the modules, such as `typing.Iterator` or `collections.abc.Iterable`.
-fn standard_name(expression: &Expr, scope: &AnnotationScope<'_>) -> Option<AnnotationName> {
+pub(crate) fn standard_name(
+    expression: &Expr,
+    scope: &AnnotationScope<'_>,
+) -> Option<AnnotationName> {
     match expression {
         Expr::Name { id, .. } => scope.names.get(id).copied(),
         Expr::Attribute {
@@ -210,7 +214,10 @@ fn standard_annotation(
             }
         }
         Expr::Subscript { value, index, span }
-            if standard_name(value, scope) == Some(AnnotationName::Callable) =>
+            if matches!(
+                standard_name(value, scope),
+                Some(AnnotationName::Callable(_))
+            ) =>
         {
             super::callable_annotation::callable_annotation(index, *span, scope, diagnostics)
         }
@@ -224,7 +231,7 @@ fn standard_annotation(
         }
         // `Sequence[int]` is the union of the built-in sequences of `int` (LIB-20).
         Expr::Subscript { value, index, span }
-            if let Some(AnnotationName::Abstract(collection)) = standard_name(value, scope) =>
+            if let Some(AnnotationName::Abstract(collection, _)) = standard_name(value, scope) =>
         {
             let written: Vec<&Expr> = match index.as_ref() {
                 Expr::Tuple { elements, .. } => elements.iter().collect(),
@@ -347,11 +354,11 @@ fn bare_standard(
             );
             Type::Error
         }
-        AnnotationName::Callable => {
+        AnnotationName::Callable(_) => {
             diagnostics.push(super::callable_annotation::callable_form(annotation.span()));
             Type::Error
         }
-        AnnotationName::Abstract(collection) => {
+        AnnotationName::Abstract(collection, _) => {
             diagnostics.push(abstract_form(collection, annotation.span()));
             Type::Error
         }

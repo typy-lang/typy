@@ -2202,7 +2202,40 @@ its name and hashes it by identity, and `typy_rt_type_alias_name` and
 one are E0401, as CPython raises `TypeError`; an alias a function or a
 class defines, an alias given its type arguments, and `__value__` and
 `__type_params__` read as values are E0201, planned for 0.11 (TYP-18)
-(SMT-12). `Final` follows TYP-08:
+(SMT-12).
+
+`body/typing_value.rs` reads a typing value (TYP-18, ADR-0087).
+`expression_or_class` asks `typing_value` first for a name or an
+attribute that `standard_name` resolves, a subscript of such a name or of
+`list`, `dict`, `set`, `tuple` or `type`, and a `|` chain, each when
+nothing of the program binds the name. `part` reads the expression as a
+`Part`: its text as a built-in or `collections.abc` generic writes it, its
+text as a `typing` generic writes it, with `None` as `NoneType`, its text
+alone where that differs, such as `<class 'collections.abc.Iterator'>`,
+its key, and the floor from which every oracle writes it alike. A class
+of the program is `module.Name`, a type alias `module.Name`, written
+alike from 3.15, and a type parameter its own name, keyed by the
+function, so every copy writes `list[T]`. `Part::union` flattens unions,
+drops a member whose key an earlier one has, writes the rest with ` | `,
+keys them by the sorted set of their keys, and is written alike from 3.14
+when `Optional` or `Union` spells it; a union of one class is that class.
+`AnnotationName::Callable` and `Abstract` keep their `Origin`, which
+decides the module a name is written with. The value is
+`TypedExprKind::TypingValue`, an index into `TypedProgram::typing_values`
+of text and key, and its type is `Type::Typing(floor)`: 12 when every
+oracle from the program's floor writes it alike, else the floor that
+does. A newer floor's value fits where an older one's does not, and only
+a value of 12 is an `object`. `check_typing_text` refuses a value of a
+newer floor, also in a collection, where `print`, `str`, `repr`, an
+f-string or `%` writes it, and `typing_identity` allows `is` only between
+two names, which `Program::single_typing_values` notes. The subset walker
+lets `...` reach the checker only as a type argument of `tuple`, `Tuple`
+or `Callable`. The type is held as `TyirType::UNION`; lowering gives
+`Constant::TypingValue`, and codegen emits one immortal static object of
+type ID 36 for each, a header then the text and the key as `str`
+objects. The runtime's typing value type writes the text, and compares
+and hashes by the key. `isinstance` tests each member of a `|` union, as
+`typing_classes` tests `Union[...]`. `Final` follows TYP-08:
 `body::locals::declare` records each `Final` variable in
 `Program::final_variables` with the name its declaration assigns, and `assign`
 and `module_attribute_target` refuse any other with E0414; a class body's
@@ -2324,8 +2357,8 @@ default the result has the item type, or is optional when the default is
 gives `TracebackType` and `ModuleType`, as `AnnotationName`s that
 `resolve_import` binds for annotations only (TYP-15): a name imported from
 them, or a name bound to one of the modules, such as `typing.Iterable`,
-enters `AnnotationScope::names` or `standard`, and its use as a value is
-E0201, planned for 0.11 (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
+enters `AnnotationScope::names` or `standard`; read as a value it is a
+typing value (TYP-18). `Iterator[T]` is `Type::Iterator(T)`,
 `TracebackType` is `Type::Traceback` and `ModuleType` is `Type::AnyModule`,
 a module whose attributes are unknown, E0412. `Iterable[T]` is
 `Type::Iterable(T)`: any built-in iterable or iterator whose items have

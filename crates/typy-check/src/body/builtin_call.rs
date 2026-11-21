@@ -354,6 +354,9 @@ impl BodyChecker<'_> {
                 } else {
                     1..=1
                 };
+                if let Some(value) = values.first() {
+                    self.check_typing_text(value);
+                }
                 if !self.arity(builtin, values.len(), allowed, span) {
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
@@ -430,6 +433,7 @@ impl BodyChecker<'_> {
             let value = self
                 .written_part(argument, false)
                 .unwrap_or_else(|| self.expression(argument));
+            self.check_typing_text(&value);
             values.push(value);
         }
         if !each.is_empty() {

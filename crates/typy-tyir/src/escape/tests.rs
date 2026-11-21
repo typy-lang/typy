@@ -70,6 +70,7 @@ fn module(mut functions: Vec<TyirFunction>) -> TyirModule {
         }],
         modules: Vec::new(),
         type_aliases: Vec::new(),
+        typing_values: Vec::new(),
         functions,
         strings: Vec::new(),
         str_points: Vec::new(),

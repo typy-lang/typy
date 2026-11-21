@@ -75,6 +75,8 @@ pub enum TypedExprKind {
     Submodule(String),
     /// The type alias object at this index of `TypedProgram::type_aliases` (SMT-12).
     TypeAliasObject(u32),
+    /// The typing value at this index of `TypedProgram::typing_values` (TYP-18).
+    TypingValue(u32),
     /// A read of `sys.version_info` held as a value: `value` is evaluated, then `result`,
     /// a constant: the tuple of its items, which a tuple's operations read, or a comparison
     /// of them already made (LIB-16).
@@ -778,6 +780,7 @@ impl TypedExpr {
             | TypedExprKind::ModuleName
             | TypedExprKind::TypeObject(_)
             | TypedExprKind::TypeAliasObject(_)
+            | TypedExprKind::TypingValue(_)
             | TypedExprKind::FunctionValue(_)
             | TypedExprKind::Capture(_)
             | TypedExprKind::RunningFunction

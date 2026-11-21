@@ -21,6 +21,28 @@ impl BodyChecker<'_> {
         expression: &Expr,
         held: &mut Vec<TypedExpr>,
     ) -> Result<Option<Vec<TypeObjectOf>>, Option<Box<Diagnostic>>> {
+        // A union written with `|` tests each of its members, as CPython does (TYP-18).
+        if let Expr::BinOp {
+            left,
+            operator: typy_source::syntax::BinaryOperator::BitOr,
+            right,
+            ..
+        } = expression
+        {
+            let mut classes = Vec::new();
+            for member in [left.as_ref(), right.as_ref()] {
+                if let Expr::Constant {
+                    value: Constant::None,
+                    ..
+                } = member
+                {
+                    classes.push(TypeObjectOf::NoneType);
+                    continue;
+                }
+                classes.extend(self.isinstance_classes_holding(member, held)?);
+            }
+            return Ok(Some(classes));
+        }
         if let Expr::Subscript { value, index, .. } = expression
             && let Some(name) = self.standard_name(value)
         {
@@ -37,7 +59,7 @@ impl BodyChecker<'_> {
         let Some(name) = self.standard_name(expression) else {
             return Ok(None);
         };
-        if let AnnotationName::Abstract(collection) = name {
+        if let AnnotationName::Abstract(collection, _) = name {
             return Ok(Some(self.abstract_collection_classes(collection)));
         }
         Ok(Some(vec![match name {

@@ -36,6 +36,7 @@ use typy_source::{Module, Project};
 
 pub(crate) use annotation::{
     ANNOTATION_MODULES, AnnotationName, AnnotationScope, Origin, annotation_name, annotation_type,
+    standard_name,
 };
 
 /// The names a module's imports give its annotations: each module's classes by the name

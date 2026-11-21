@@ -308,28 +308,27 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::Downcast(Box::new(read)), narrowed, span)
     }
 
-    /// Reports a name that only annotations read: a type alias of the module, or a name of
-    /// `typing`, `collections.abc` or `types`.
+    /// Returns a type alias read as a value, and reports a name that only annotations read:
+    /// a module of `typing`, `collections.abc` or `types` itself, or a name whose class
+    /// depends on the import that ran last; a name of those modules is a typing value
+    /// (TYP-18).
     fn annotation_only(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
         if let Some(alias) = self.type_alias_value(id, span) {
             return Some(alias);
         }
-        if self.program.annotation_names.contains_key(id)
-            || self.program.annotation_modules.contains_key(id)
-        {
-            return Some(
-                self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        format!("using `{id}` as a value is planned for TyPy 0.11 (TYP-18)"),
-                    )
-                    .with_rule(RuleId::TYP_18)
-                    .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),
-                    span,
-                ),
-            );
-        }
-        None
+        let message = if let Some(module) = self.program.annotation_modules.get(id) {
+            format!(
+                "the module `{module}` is read through its names, such as `{id}.Optional`, \
+                 and is no value itself"
+            )
+        } else if self.program.annotation_names.contains_key(id) {
+            format!("`{id}` is read only in annotations, `isinstance` and class patterns")
+        } else {
+            return None;
+        };
+        Some(self.error(
+            Diagnostic::new(DiagnosticCode::error(202), span, message).with_rule(RuleId::TYP_18),
+            span,
+        ))
     }
 }

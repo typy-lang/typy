@@ -792,8 +792,11 @@ fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
         return abstract_outcome(ty, *kind, implementers);
     }
     match (ty, class) {
-        // An `object` may hold an instance of any class (TYP-23).
-        (Type::Object, TypeObjectOf::Object) => Outcome::Always,
+        // An `object` may hold an instance of any class (TYP-23), and `None` is the one
+        // instance of its class.
+        (Type::Object, TypeObjectOf::Object) | (Type::NoneType, TypeObjectOf::NoneType) => {
+            Outcome::Always
+        }
         (Type::Object, _) => Outcome::Checked,
         // A union is an instance when each member is, and is not when no member is.
         (Type::Union(members), _) => {

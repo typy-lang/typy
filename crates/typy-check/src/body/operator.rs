@@ -176,35 +176,7 @@ impl BodyChecker<'_> {
         }
         match operator {
             CompareOperator::Is | CompareOperator::IsNot => {
-                // Two instances, or optional instances, are the same object or not. `True`,
-                // `False` and `None` are each the only object of its value, so `bool` and
-                // `bool | None` values compare by identity too (EXP-08).
-                let instance = |ty: &Type| match ty {
-                    Type::Optional(inner) => has_identity(inner),
-                    other => has_identity(other),
-                };
-                let singleton =
-                    |ty: &Type| *ty == Type::Bool || *ty == Type::Optional(Box::new(Type::Bool));
-                let booleans = singleton(&l) && singleton(&r);
-                // A method's result may be `NotImplemented`, which `is` finds (CLS-21).
-                let giving_way = (l == Type::NotImplemented && r.may_give_way())
-                    || (r == Type::NotImplemented && l.may_give_way());
-                if l != Type::NoneType
-                    && r != Type::NoneType
-                    && !booleans
-                    && !giving_way
-                    && !(instance(&l) && instance(&r))
-                {
-                    self.diagnostics.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(301),
-                            span,
-                            format!("`is` compares identity, which is defined only against None, between bools or between objects here; these are {l} and {r}"),
-                        )
-                        .with_rule(RuleId::EXP_08)
-                        .with_help("use `==` to compare values"),
-                    );
-                }
+                self.identity_types((left, right), span);
             }
             CompareOperator::Eq | CompareOperator::NotEq => {
                 if !l.can_test_equality(&r) {
@@ -500,6 +472,46 @@ fn binary_symbol(operator: BinaryOperator) -> &'static str {
         BinaryOperator::BitXor => "^",
         BinaryOperator::BitAnd => "&",
         BinaryOperator::FloorDiv => "//",
+    }
+}
+
+impl BodyChecker<'_> {
+    /// Checks `left is right`: two instances, or optional instances, are the same object or
+    /// not. `True`, `False` and `None` are each the only object of its value, so `bool` and
+    /// `bool | None` values compare by identity too (EXP-08), and two names of `typing` are
+    /// each one object (TYP-18).
+    fn identity_types(&mut self, (left, right): (&TypedExpr, &TypedExpr), span: Span) {
+        let (l, r) = (&left.ty, &right.ty);
+        if matches!(l, Type::Typing(_)) || matches!(r, Type::Typing(_)) {
+            self.typing_identity(left, right, span);
+            return;
+        }
+        let instance = |ty: &Type| match ty {
+            Type::Optional(inner) => has_identity(inner),
+            other => has_identity(other),
+        };
+        let singleton =
+            |ty: &Type| *ty == Type::Bool || *ty == Type::Optional(Box::new(Type::Bool));
+        let booleans = singleton(l) && singleton(r);
+        // A method's result may be `NotImplemented`, which `is` finds (CLS-21).
+        let giving_way = (*l == Type::NotImplemented && r.may_give_way())
+            || (*r == Type::NotImplemented && l.may_give_way());
+        if *l != Type::NoneType
+            && *r != Type::NoneType
+            && !booleans
+            && !giving_way
+            && !(instance(l) && instance(r))
+        {
+            self.diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(301),
+                    span,
+                    format!("`is` compares identity, which is defined only against None, between bools or between objects here; these are {l} and {r}"),
+                )
+                .with_rule(RuleId::EXP_08)
+                .with_help("use `==` to compare values"),
+            );
+        }
     }
 }
 

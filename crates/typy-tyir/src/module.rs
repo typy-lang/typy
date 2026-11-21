@@ -39,6 +39,16 @@ pub struct TyirTypeAlias {
     pub module: String,
 }
 
+/// A typing value: its text, as CPython 3.15 writes it, and the key that equal values share
+/// (TYP-18).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TyirTypingValue {
+    /// The value's text.
+    pub text: String,
+    /// The key it compares and hashes by.
+    pub key: String,
+}
+
 /// Every function of the program, the string pool, and the entry function.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TyirModule {
@@ -50,6 +60,8 @@ pub struct TyirModule {
     pub modules: Vec<TyirModuleObject>,
     /// The type alias objects, indexed as `Constant::TypeAlias` names them (SMT-12).
     pub type_aliases: Vec<TyirTypeAlias>,
+    /// The typing values, indexed as `Constant::TypingValue` names them (TYP-18).
+    pub typing_values: Vec<TyirTypingValue>,
     /// The string constants, indexed by `StringId`.
     pub strings: Vec<String>,
     /// The code points of the string constants that hold a surrogate, indexed as

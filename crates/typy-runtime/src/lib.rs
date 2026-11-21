@@ -83,6 +83,7 @@ mod text_file;
 mod tuple;
 mod type_alias;
 mod type_object;
+mod typing_value;
 mod unpack;
 mod variable_cell;
 mod version;

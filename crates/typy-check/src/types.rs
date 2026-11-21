@@ -120,6 +120,10 @@ pub enum Type {
     /// held by value boxed, and narrowed before any operation `object` does not define
     /// (TYP-23, ADR-0090).
     Object,
+    /// A typing value, such as `list[int]` or `int | None` read as a value, which every
+    /// oracle from the Python floor `3.N` writes alike, `N` being the number held (TYP-18,
+    /// ADR-0087).
+    Typing(u8),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -264,6 +268,7 @@ impl TypeObjectOf {
             | Type::Optional(_)
             | Type::Union(_)
             | Type::Object
+            | Type::Typing(_)
             | Type::Parameter(_)
             | Type::Error => {
                 return None;
@@ -441,12 +446,19 @@ impl Type {
         !matches!(self, Self::ForeignLibrary(_) | Self::CDataClass(_))
     }
 
+    /// The floor a typing value's type names when every oracle from the program's floor writes
+    /// it alike (TYP-18).
+    pub const TYPING_ALIKE: u8 = 12;
+
     /// Returns true when a value of this type may be stored where `target` is declared: a
     /// value of the same type, `None` or a `T` where `T | None` is declared, which the checker
     /// wraps (TYP-03, TYP-06, TYP-09).
     #[must_use]
     pub fn is_assignable_to(&self, target: &Self) -> bool {
         match (self, target) {
+            // A typing value an oracle from the program's floor writes otherwise is no
+            // `object`, which a program may write anywhere (TYP-18).
+            (Self::Typing(floor), Self::Object) => *floor == Self::TYPING_ALIKE,
             // An `object` holds any value that exists when the program runs (TYP-23).
             (_, Self::Object) => self.has_value(),
             (Self::Error, _)
@@ -461,6 +473,9 @@ impl Type {
                 own == other || other.takes(&own.members)
             }
             (_, Self::Abstract(collection)) => collection.takes(self),
+            // A typing value written alike from an older floor may stand where one written
+            // alike only from a newer floor is held (TYP-18).
+            (Self::Typing(own), Self::Typing(target)) => own <= target,
             (Self::Abstract(own), _) => own.members.is_assignable_to(target),
             // A class is held where a base's class is: a `type[C]` holds `C` or a class
             // derived from it (CLS-18, ADR-0084).
@@ -503,7 +518,9 @@ impl Type {
     pub fn is_upcast_to(&self, target: &Self) -> bool {
         match (self, target) {
             // Any other value becomes an `object`, boxed when it is held by value (TYP-23).
-            (_, Self::Object) => !matches!(self, Self::Object | Self::Error) && self.has_value(),
+            (_, Self::Object) => {
+                !matches!(self, Self::Object | Self::Error) && self.is_assignable_to(target)
+            }
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
             // A function value is held where a `Callable` it fits is, as the same object.
@@ -624,6 +641,7 @@ impl Type {
             (Self::Error, _)
             | (_, Self::Error)
             | (Self::TypeObject(_), Self::TypeObject(_))
+            | (Self::Typing(_), Self::Typing(_))
             | (Self::Callable { .. }, Self::Callable { .. }) => true,
             // The runtime compares items by the list's own item kind, so two lists compare when
             // their items have one type.
@@ -726,6 +744,7 @@ impl Type {
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
+                | Self::Typing(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
@@ -753,6 +772,7 @@ impl Type {
                 | Self::Iterable(_)
                 | Self::Module(_)
                 | Self::TypeAlias
+                | Self::Typing(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
@@ -998,6 +1018,11 @@ impl fmt::Display for Type {
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
             Self::TypeAlias => formatter.write_str("TypeAliasType"),
+            Self::Typing(Self::TYPING_ALIKE) => formatter.write_str("typing value"),
+            Self::Typing(floor) => write!(
+                formatter,
+                "typing value written alike only from Python 3.{floor}"
+            ),
             Self::VersionInfo => formatter.write_str("sys.version_info"),
             Self::NotImplemented => formatter.write_str("NotImplementedType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),

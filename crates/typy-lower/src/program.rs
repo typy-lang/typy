@@ -81,14 +81,8 @@ pub fn lower(program: &TypedProgram) -> Result<TyirModule, Diagnostics> {
             functions,
             globals: module_globals.globals,
             modules: module_objects(program),
-            type_aliases: program
-                .type_aliases
-                .iter()
-                .map(|alias| typy_tyir::TyirTypeAlias {
-                    name: alias.name.clone(),
-                    module: alias.module.clone(),
-                })
-                .collect(),
+            type_aliases: type_alias_objects(program),
+            typing_values: typing_value_objects(program),
             strings,
             str_points,
             tuple_types,
@@ -437,4 +431,28 @@ fn tyir_class(
         tuple_base: class.named_tuple && class.base.is_none(),
         public: class.generic.map(|generic| generic.0),
     }
+}
+
+/// Returns the type alias objects the program reads (SMT-12).
+fn type_alias_objects(program: &TypedProgram) -> Vec<typy_tyir::TyirTypeAlias> {
+    program
+        .type_aliases
+        .iter()
+        .map(|alias| typy_tyir::TyirTypeAlias {
+            name: alias.name.clone(),
+            module: alias.module.clone(),
+        })
+        .collect()
+}
+
+/// Returns the typing values the program reads (TYP-18).
+fn typing_value_objects(program: &TypedProgram) -> Vec<typy_tyir::TyirTypingValue> {
+    program
+        .typing_values
+        .iter()
+        .map(|value| typy_tyir::TyirTypingValue {
+            text: value.text.clone(),
+            key: value.key.clone(),
+        })
+        .collect()
 }

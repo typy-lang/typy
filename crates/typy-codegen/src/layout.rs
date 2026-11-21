@@ -31,6 +31,8 @@ pub(crate) const METHOD_DESCRIPTOR_TYPE_ID: u32 = 29;
 /// The type ID of the object of a built-in type called as a function, such as `int` in
 /// `key=int`, laid out as a function object (FUN-14, ADR-0077).
 pub(crate) const BUILTIN_TYPE_FUNCTION_TYPE_ID: u32 = 31;
+/// The type ID of a typing value, such as `list[int]` read as a value (TYP-18).
+pub(crate) const TYPING_VALUE_TYPE_ID: u32 = 36;
 /// The smallest integer held inline: -2^62.
 pub const INLINE_MIN: i128 = -(1 << 62);
 /// The largest integer held inline: 2^62 - 1.

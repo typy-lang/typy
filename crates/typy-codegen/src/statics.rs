@@ -23,6 +23,7 @@ pub(crate) struct Statics<'ctx> {
     type_objects: BTreeMap<u32, PointerValue<'ctx>>,
     modules: BTreeMap<u32, PointerValue<'ctx>>,
     type_aliases: BTreeMap<u32, PointerValue<'ctx>>,
+    typing_values: BTreeMap<u32, PointerValue<'ctx>>,
     function_objects: BTreeMap<u32, PointerValue<'ctx>>,
     method_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
     closure_descriptors: BTreeMap<u32, PointerValue<'ctx>>,
@@ -44,6 +45,7 @@ impl<'ctx> Statics<'ctx> {
             type_objects: BTreeMap::new(),
             modules: BTreeMap::new(),
             type_aliases: BTreeMap::new(),
+            typing_values: BTreeMap::new(),
             function_objects: BTreeMap::new(),
             method_descriptors: BTreeMap::new(),
             closure_descriptors: BTreeMap::new(),
@@ -289,6 +291,28 @@ impl<'ctx> Statics<'ctx> {
             &format!("typy.type_alias.{index}"),
         );
         self.type_aliases.insert(index, pointer);
+        pointer
+    }
+
+    /// Returns the typing value at `index`: an immortal header, then its text and its key as
+    /// `str` objects (TYP-18). Each distinct value has one.
+    pub(crate) fn typing_value_object(
+        &mut self,
+        module: &Module<'ctx>,
+        index: u32,
+        text: &str,
+        key: &str,
+    ) -> PointerValue<'ctx> {
+        if let Some(pointer) = self.typing_values.get(&index) {
+            return *pointer;
+        }
+        let pointer = self.two_strings(
+            module,
+            crate::layout::TYPING_VALUE_TYPE_ID,
+            [text, key],
+            &format!("typy.typing_value.{index}"),
+        );
+        self.typing_values.insert(index, pointer);
         pointer
     }
 

@@ -411,7 +411,16 @@ impl Walker {
             },
             Expr::Subscript { value, index, .. } => {
                 self.expression(value);
-                self.expression(index);
+                // `tuple[int, ...]` and `Callable[..., R]` are typing values (TYP-18).
+                let typing_arguments = names_variadic_generic(value);
+                match index.as_ref() {
+                    Expr::Tuple { elements, .. } if typing_arguments => {
+                        for element in elements.iter().filter(|each| !is_ellipsis(each)) {
+                            self.expression(element);
+                        }
+                    }
+                    other => self.expression(other),
+                }
             }
             Expr::Name { .. } => {}
             Expr::Slice {
@@ -506,6 +515,28 @@ fn names_literal(value: &Expr) -> bool {
         Expr::Name { id, .. }
             | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
             if id == "Literal"
+    )
+}
+
+/// Returns true when a subscript of `value` may take `...` as a type argument: `tuple`,
+/// `Tuple` or `Callable` (TYP-18).
+fn names_variadic_generic(value: &Expr) -> bool {
+    matches!(
+        value,
+        Expr::Name { id, .. }
+            | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
+            if matches!(id.as_str(), "tuple" | "Tuple" | "Callable")
+    )
+}
+
+/// Returns true for `...`.
+const fn is_ellipsis(expression: &Expr) -> bool {
+    matches!(
+        expression,
+        Expr::Constant {
+            value: Constant::Ellipsis,
+            ..
+        }
     )
 }
 

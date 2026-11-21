@@ -174,7 +174,8 @@ The older names of `typing` spell the types above: `Optional[int]` is
 `Tuple` and `Type` are `list`, `dict`, `set`, `tuple` and `type` (LIB-17).
 `Iterable`, `Iterator` and `Generator`, of either module, and `List`,
 `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of
-`typing` may also be the class of `isinstance`, answered as CPython
+`typing` may also be the class of `isinstance`, and so may a union written
+with `|`, such as `isinstance(x, int | None)`, answered as CPython
 answers them: a list is `Iterable` and not an `Iterator`, its iterator is
 both, a generator is all three, and a class is `Iterable` when it, or a
 base, defines `__iter__`, an `Iterator` when it also defines `__next__`,
@@ -210,9 +211,52 @@ print(describe(None), describe(3), describe([1]), describe(Bag()))
 As in CPython, a bare `Optional` and a subscripted name such as
 `List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
-`False`. The names held in a variable, passed or printed are planned for
-0.11 (TYP-18). `NamedTuple` is a base for a named tuple's class, as
+`False`. `NamedTuple` is a base for a named tuple's class, as
 [Classes](classes.md#named-tuples) describes (CLS-27).
+
+## Typing values
+
+A name of `typing` or `collections.abc`, such a name or a built-in class
+given type arguments, and a union of types written with `|` are values of
+their own, as in CPython (TYP-18, ADR-0087). A typing value is written as
+CPython 3.15 writes it, and compares and hashes as CPython compares it: a
+union by its members, whatever their order or spelling, so
+`Optional[int] == int | None`, while `List[int] == list[int]` is false. A
+union of one class, such as `int | int`, is that class.
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable, Iterator
+from typing import Dict, Optional
+
+
+class Box:
+    pass
+
+
+kinds = [list[int], dict[str, list[int]], tuple[int, ...], Box | None]
+print(kinds, Dict[str, None], Callable[[int], str], Iterator)
+print(Optional[int] == int | None, {list[int]: "list"}[list[int]])
+print(isinstance(None, int | None), int | int)
+```
+
+Some of these values are written differently by older CPython releases:
+`Optional[...]`, `Union[...]` and a bare `typing.Union` are written as
+`int | None` and `<class 'typing.Union'>` only from 3.14, and a type
+alias inside a typing value is written with its module, such as
+`list[__main__.Score]`, only from 3.15. Writing one with `print`, `str`,
+`repr`, an f-string or `%` below the floor that writes it alike is E0202;
+set the floor to that release to write it. Storing, passing, comparing
+and hashing it are accepted from any floor, but such a value is no
+`object`, which a program may write anywhere.
+
+`is` compares two names of `typing` or `collections.abc`, each one object
+in CPython. Between other typing values it is E0202, since CPython keeps
+one object of some, such as `typing.Iterator[int]`, and makes others
+anew, such as `list[int]`. A function of `typing`, such as `cast`, read
+as a value is E0202, and so is the module `typing` itself. An annotation
+for typing values, calling one, and reading one through `type()`,
+`__origin__` or `__args__` are planned for 1.0 (TYP-22).
 
 These forms are planned, and each is E0201 until its release:
 
