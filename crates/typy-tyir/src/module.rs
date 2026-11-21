@@ -30,13 +30,17 @@ pub struct TyirModuleObject {
     pub path: String,
 }
 
-/// A type alias object: the alias's name and the name of its module (SMT-12).
+/// A type alias object: the alias's name, the name of its module and its qualified name
+/// (SMT-12, TYP-18).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TyirTypeAlias {
     /// The alias's name.
     pub name: String,
     /// The qualified name of the module that defines it.
     pub module: String,
+    /// Its qualified name: its name, or for one a function or a class defines, the names
+    /// around it, such as `make.<locals>.Local`.
+    pub qualified_name: String,
 }
 
 /// A typing value: its text, as CPython 3.15 writes it, and the key that equal values share

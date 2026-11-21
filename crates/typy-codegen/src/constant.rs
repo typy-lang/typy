@@ -15,9 +15,12 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         match constant {
             Constant::TypeAlias(index) => {
                 let alias = &self.shared.tyir.type_aliases[*index as usize];
-                self.shared
-                    .statics
-                    .type_alias_object(module, *index, &alias.name, &alias.module)
+                let names = [
+                    alias.name.as_str(),
+                    alias.module.as_str(),
+                    alias.qualified_name.as_str(),
+                ];
+                self.shared.statics.type_alias_object(module, *index, names)
             }
             Constant::TypingValue(index) => {
                 let value = &self.shared.tyir.typing_values[*index as usize];

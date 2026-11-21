@@ -368,7 +368,7 @@ pub fn member_test(member: &Type) -> Option<MemberTest> {
         Type::TextFile | Type::BinaryFile(_) | Type::DescriptorFile(_) => {
             MemberTest::Kind(RuntimeKind::File)
         }
-        Type::TypeAlias => MemberTest::Kind(RuntimeKind::TypeAlias),
+        Type::TypeAlias(_) => MemberTest::Kind(RuntimeKind::TypeAlias),
         Type::VersionInfo => MemberTest::Kind(RuntimeKind::VersionInfo),
         Type::NotImplemented => MemberTest::Kind(RuntimeKind::NotImplemented),
         other => MemberTest::Class(member_class(other)?),
@@ -384,7 +384,7 @@ pub fn member_class(member: &Type) -> Option<TypeObjectOf> {
         Type::Iterator(_)
         | Type::Iterable(_)
         | Type::Module(_)
-        | Type::TypeAlias
+        | Type::TypeAlias(_)
         | Type::VersionInfo
         | Type::NotImplemented
         | Type::AnyModule

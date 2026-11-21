@@ -76,7 +76,7 @@ impl FunctionLowerer<'_> {
                 | Type::Generator { .. }
                 | Type::Iterable(_)
                 | Type::Module(_)
-                | Type::TypeAlias
+                | Type::TypeAlias(_)
                 | Type::VersionInfo
                 | Type::NotImplemented
                 | Type::AnyModule

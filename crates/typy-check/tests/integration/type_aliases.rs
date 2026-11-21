@@ -101,12 +101,20 @@ fn aliases_typy_does_not_compile_are_refused() {
         ),
         ("type Score = int\nScore()\n", "E0401"),
         ("type Score = int\nprint(isinstance(1, Score))\n", "E0401"),
-        ("type Score = int\nprint(Score.__value__)\n", "E0201"),
         ("type Score = int\nprint(Score.size)\n", "E0412"),
-        ("type Pair[T] = tuple[T, T]\nprint(Pair[int])\n", "E0201"),
+        ("type Score = int\nprint(Score[int])\n", "E0401"),
+        ("type Pair[T] = tuple[T, T]\nprint(Pair[int])\n", "E0202"),
         (
             "def f() -> None:\n    type Local = int\n    print(Local)\n",
+            "E0202",
+        ),
+        (
+            "def f() -> None:\n    type Local[T] = list[T]\n    x = Local[int]\n",
             "E0201",
+        ),
+        (
+            "type Score = int\nheld = Score\nprint(held.__value__)\n",
+            "E0202",
         ),
         ("type Score = int\nScore = 3\n", "E0202"),
         ("type Score = int\nclass Score:\n    pass\n", "E0202"),

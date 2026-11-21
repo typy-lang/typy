@@ -531,7 +531,7 @@ fn has_identity(ty: &Type) -> bool {
                 | Type::Generator { .. }
                 | Type::Traceback
                 | Type::Module(_)
-                | Type::TypeAlias
+                | Type::TypeAlias(_)
                 | Type::VersionInfo
                 | Type::NotImplemented
                 | Type::AnyModule

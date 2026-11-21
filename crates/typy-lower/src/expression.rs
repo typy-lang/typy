@@ -328,6 +328,10 @@ impl FunctionLowerer<'_> {
                 self.call_value(callee, arguments, ty, span)
             }
             // A type alias object is immortal, so it is borrowed (SMT-12).
+            TypedExprKind::NewTypeAlias(index) => {
+                let description = self.constant(Constant::TypeAlias(*index), span);
+                self.call_runtime(RuntimeFunction::TypeAliasNew, vec![description], span)
+            }
             TypedExprKind::TypingValue(index) => {
                 let value = self.constant(Constant::TypingValue(*index), span);
                 Self::borrowed(value, TyirType::UNION)

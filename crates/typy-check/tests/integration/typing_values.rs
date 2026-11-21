@@ -41,6 +41,31 @@ fn typ_18_each_kind_of_typing_value_is_a_value() {
 }
 
 #[test]
+fn typ_18_an_alias_s_value_type_parameters_and_arguments_are_read() {
+    for source in [
+        "type Score = int\ntype Pair[T] = tuple[T, T]\ntype Plain = int | None\n\
+         type Again = Score\ntype Nothing = None\n\
+         print(Score.__value__, Pair.__value__, Plain.__value__, Nothing.__value__)\n\
+         print(Pair.__type_params__, Score.__type_params__, Again.__value__ is Score)\n\
+         print(Pair[int] == Pair[str], {Pair[int]: 1}[Pair[int]])\n",
+        "def make() -> list[str]:\n    type Local[T] = dict[str, T]\n    \
+         return [Local.__name__, str(Local.__value__), str(Local.__type_params__)]\n\n\n\
+         print(make())\n",
+        "class Holder:\n    type Inner = str\n\n\n\
+         print(Holder.Inner.__value__, Holder.Inner.__type_params__)\n",
+    ] {
+        assert_eq!(messages(source), Vec::new(), "{source}");
+    }
+    let found = dump("def make() -> str:\n    type Local = int\n    return Local.__name__\n");
+    assert!(found.contains("NewTypeAlias"), "{found}");
+    // An alias a function or a class defines is written alike from 3.15.
+    let written = "def make() -> None:\n    type Local = int\n    print(Local)\n\n\n\
+                   class Holder:\n    type Inner = str\n\n\nprint(Holder.Inner)\nmake()\n";
+    assert_eq!(codes_at(written, PythonFloor::V3_12), ["E0202", "E0202"]);
+    assert_eq!(codes_at(written, PythonFloor::V3_15), Vec::<String>::new());
+}
+
+#[test]
 fn typ_18_a_value_is_a_constant_of_its_text() {
     let found = dump("print(list[int | None])\n");
     assert!(found.contains("TypingValue 0"), "{found}");
@@ -132,6 +157,33 @@ fn typ_18_what_no_typing_value_gives_is_refused_with_the_reason() {
             "E0202",
             "this typing value is written alike only from Python 3.14, and an older CPython \
              from the program's floor, 3.12, writes it otherwise",
+        ),
+        (
+            "type Score = int\nheld = Score\nprint(held.__type_params__)\n",
+            "E0202",
+            "`__type_params__` is read only through the name of an alias, whose `type` \
+             statement TyPy reads",
+        ),
+        (
+            "type Score = int\nprint(Score[int])\n",
+            "E0401",
+            "Only generic type aliases are subscriptable: CPython raises `TypeError`",
+        ),
+        (
+            "def f() -> None:\n    type Local[T] = list[T]\n    print(Local[int])\n",
+            "E0201",
+            "an alias a function or a class defines, or one held in a variable, given type \
+             arguments as a value is planned for TyPy 1.0 (TYP-22)",
+        ),
+        (
+            "def f() -> None:\n    type Local = int\n    Local()\n",
+            "E0401",
+            "'typing.TypeAliasType' object is not callable: CPython raises `TypeError`",
+        ),
+        (
+            "class Box[T]:\n    pass\n\n\ntype Boxed = Box[int]\nprint(Boxed.__value__)\n",
+            "E0202",
+            "this alias's value is no typing value TyPy reads, so `__value__` is not read",
         ),
     ];
     for (source, code, message) in refusals {

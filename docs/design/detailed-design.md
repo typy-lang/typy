@@ -2199,10 +2199,25 @@ compares two reads. The runtime's `typing.TypeAliasType` writes an alias as
 its name and hashes it by identity, and `typy_rt_type_alias_name` and
 `typy_rt_type_alias_module` give `__name__` and `__module__`
 (`TypedExprKind::TypeAliasPart`). Calling an alias and `isinstance` with
-one are E0401, as CPython raises `TypeError`; an alias a function or a
-class defines, an alias given its type arguments, and `__value__` and
-`__type_params__` read as values are E0201, planned for 0.11 (TYP-18)
-(SMT-12).
+one are E0401, as CPython raises `TypeError` (SMT-12). An alias object
+also holds its qualified name, which its `repr` writes.
+`Program::alias_sources` keeps each alias's type parameters and its value
+as its `type` statement writes them, those of a module's top level and
+of its classes from `prepare_module`, those of a function from
+`local_type_alias`. `body/alias_value.rs` reads `__type_params__` as a
+tuple of typing values keyed by the alias, and `__value__` by writing the
+value with `typing_value` in the names of the alias's module
+(`AliasRendering`, `swap_module_context`), or as a class, an alias or
+`None`; it finds the alias from `TypeAliasObject`, the variable
+`alias_symbols` notes, or a class value named after the alias. A generic
+alias of a module given type arguments is a typing value keyed by the
+alias. A function's `type` statement binds a variable of the function
+to `TypedExprKind::NewTypeAlias`, which `typy_rt_type_alias_new` makes
+anew from the alias's static description each time it runs; a class's
+alias is a class value that reads the hidden name `<type alias
+Class.Name>`. Both are `Type::TypeAlias(15)` below the floor 3.15, since
+CPython 3.15 writes their qualified names, and `check_typing_text`
+refuses writing them there.
 
 `body/typing_value.rs` reads a typing value (TYP-18, ADR-0087).
 `expression_or_class` asks `typing_value` first for a name or an

@@ -441,6 +441,7 @@ fn type_alias_objects(program: &TypedProgram) -> Vec<typy_tyir::TyirTypeAlias> {
         .map(|alias| typy_tyir::TyirTypeAlias {
             name: alias.name.clone(),
             module: alias.module.clone(),
+            qualified_name: alias.qualified_name.clone(),
         })
         .collect()
 }

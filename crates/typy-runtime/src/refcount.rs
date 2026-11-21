@@ -130,6 +130,9 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         crate::header::GENERATOR_TYPE_ID => unsafe { crate::generator::destroy(object.cast()) },
         // SAFETY: the type ID says the object is a boxed `int`.
         crate::header::BOXED_INT_TYPE_ID => unsafe { crate::boxed::destroy_int(object.cast()) },
+        // A type alias a function's `type` statement made shares its description's strings;
+        // the aliases of a module are immortal.
+        crate::header::TYPE_ALIAS_TYPE_ID => crate::allocator::free(object.cast()),
         _ => crate::libc::abort_with(b"typy runtime: an object has an unknown type\n"),
     }
 }

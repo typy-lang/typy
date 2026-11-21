@@ -446,6 +446,8 @@ impl RuleId {
     pub const TYP_18: Self = Self("TYP-18");
     /// An operation on a union whose members the runtime cannot tell apart by class or kind, such as two iterators, two file kinds or an iterable, shall be accepted.
     pub const TYP_19: Self = Self("TYP-19");
+    /// A typing value shall have the annotations `types.GenericAlias`, `types.UnionType` and `typing.TypeAliasType` where every oracle from the program's floor gives it that class, and shall be callable, testable with `isinstance` when held in a variable, and read through `type()`, `__origin__`, `__args__`, `__name__`, `typing.get_origin` and `typing.get_args` as CPython reads them; so shall the attributes of a type parameter, and an alias a function defines given its type arguments.
+    pub const TYP_22: Self = Self("TYP-22");
     /// A parameter, variable, attribute, collection item or result annotated `object` shall hold a value of any type, support `==`, `!=`, `is`, `hash`, `str`, `repr`, truth, `type()` and `isinstance`, and narrow by `isinstance`, a class pattern and `type(x) is C`, as Java narrows `Object` (ADR-0090).
     pub const TYP_23: Self = Self("TYP-23");
     /// `typing.cast(T, value)` shall give `value` as a `T` when it is one, and raise `TypeError` when it is not (ADR-0091).
@@ -687,6 +689,7 @@ impl RuleId {
         Self::TYP_17,
         Self::TYP_18,
         Self::TYP_19,
+        Self::TYP_22,
         Self::TYP_23,
         Self::TYP_24,
         Self::TYP_25,

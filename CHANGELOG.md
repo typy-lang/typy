@@ -41,6 +41,12 @@ All notable changes to TyPy are recorded here. The format follows
   `Optional[int] == int | None` (TYP-18). Writing one that an older
   release from the program's floor writes otherwise, such as
   `print(Optional[int])` below 3.14, is E0202. They were E0201.
+- A type alias's `__value__` and `__type_params__`, a generic alias given
+  type arguments such as `Pair[int]`, and an alias a function or a class
+  defines read as a value; a function's alias is a new object each time
+  its `type` statement runs, as in CPython (TYP-18). They were E0201. An
+  alias without type parameters given some is E0401, as CPython raises
+  `TypeError`.
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such

@@ -11,6 +11,9 @@ pub struct TypedTypeAlias {
     pub name: String,
     /// The qualified name of its module.
     pub module: String,
+    /// Its qualified name: its name, or for one a function or a class defines, the names
+    /// around it, such as `make.<locals>.Local` (TYP-18).
+    pub qualified_name: String,
 }
 
 /// A typing value a program reads (TYP-18): its text, as CPython 3.15 writes it, and the key

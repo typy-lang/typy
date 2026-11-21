@@ -594,6 +594,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::ClassVariable(_)
         | TypedExprKind::TypeAliasObject(_)
         | TypedExprKind::TypingValue(_)
+        | TypedExprKind::NewTypeAlias(_)
         | TypedExprKind::FunctionValue(_)
         | TypedExprKind::Capture(_)
         | TypedExprKind::RunningFunction

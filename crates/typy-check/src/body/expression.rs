@@ -359,18 +359,11 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                // CPython gives a generic alias, a value of `typing` (TYP-18).
-                if value.ty == Type::TypeAlias {
-                    return self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            "a type alias given its type arguments as a value is planned for \
-                             TyPy 0.11 (TYP-18)",
-                        )
-                        .with_rule(RuleId::TYP_18),
-                        span,
-                    );
+                // A generic alias of a module given type arguments is a typing value (TYP-18);
+                // one a function or a class defines, or one held in a variable, waits for
+                // TYP-22.
+                if matches!(value.ty, Type::TypeAlias(_)) {
+                    return self.subscripted_alias(&value, span);
                 }
                 if value.ty != Type::Str {
                     return self.error(

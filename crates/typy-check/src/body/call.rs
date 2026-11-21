@@ -219,6 +219,18 @@ impl BodyChecker<'_> {
                 span,
             );
         }
+        // A type alias is a `typing.TypeAliasType`, which CPython does not call (SMT-12).
+        if let Type::TypeAlias(_) = ty {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    at,
+                    "'typing.TypeAliasType' object is not callable: CPython raises `TypeError`",
+                )
+                .with_rule(RuleId::SMT_12),
+                span,
+            );
+        }
         let message = match callee {
             Some(name) => format!("`{name}` is {} and cannot be called", ty.with_article()),
             None => format!("{} cannot be called", ty.with_article()),

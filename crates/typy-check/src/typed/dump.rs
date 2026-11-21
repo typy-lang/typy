@@ -496,6 +496,7 @@ impl Dump<'_> {
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::TypeAliasObject(index) => format!("TypeAliasObject {index}"),
             TypedExprKind::TypingValue(index) => format!("TypingValue {index}"),
+            TypedExprKind::NewTypeAlias(index) => format!("NewTypeAlias {index}"),
             TypedExprKind::FunctionValue(function) => format!(
                 "FunctionValue {}",
                 self.program.function(*function).qualified_name

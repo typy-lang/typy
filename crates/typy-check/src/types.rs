@@ -90,8 +90,11 @@ pub enum Type {
     Range,
     /// A `slice`, of bounds that are each an `int` or `None` (CLS-23).
     Slice,
-    /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12).
-    TypeAlias,
+    /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12), which every
+    /// oracle from the Python floor `3.N` writes alike, `N` being the number held: an alias a
+    /// function or a class defines is written with its qualified name only from 3.15
+    /// (TYP-18).
+    TypeAlias(u8),
     /// `sys.version_info` held as a value, whose items are those of CPython 3.15.0 (LIB-16).
     VersionInfo,
     /// The type of `NotImplemented`, which an operator or comparison method returns to give
@@ -262,7 +265,7 @@ impl TypeObjectOf {
             | Type::ForeignLibrary(_)
             | Type::CData(_)
             | Type::CDataClass(_)
-            | Type::TypeAlias
+            | Type::TypeAlias(_)
             | Type::VersionInfo
             | Type::NotImplemented
             | Type::Optional(_)
@@ -458,7 +461,9 @@ impl Type {
         match (self, target) {
             // A typing value an oracle from the program's floor writes otherwise is no
             // `object`, which a program may write anywhere (TYP-18).
-            (Self::Typing(floor), Self::Object) => *floor == Self::TYPING_ALIKE,
+            (Self::Typing(floor) | Self::TypeAlias(floor), Self::Object) => {
+                *floor == Self::TYPING_ALIKE
+            }
             // An `object` holds any value that exists when the program runs (TYP-23).
             (_, Self::Object) => self.has_value(),
             (Self::Error, _)
@@ -475,7 +480,8 @@ impl Type {
             (_, Self::Abstract(collection)) => collection.takes(self),
             // A typing value written alike from an older floor may stand where one written
             // alike only from a newer floor is held (TYP-18).
-            (Self::Typing(own), Self::Typing(target)) => own <= target,
+            (Self::Typing(own), Self::Typing(target))
+            | (Self::TypeAlias(own), Self::TypeAlias(target)) => own <= target,
             (Self::Abstract(own), _) => own.members.is_assignable_to(target),
             // A class is held where a base's class is: a `type[C]` holds `C` or a class
             // derived from it (CLS-18, ADR-0084).
@@ -670,7 +676,7 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
@@ -684,7 +690,7 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
@@ -743,7 +749,7 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
                 | Self::Typing(_)
                 | Self::VersionInfo
                 | Self::AnyModule
@@ -771,7 +777,7 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
                 | Self::Typing(_)
                 | Self::VersionInfo
                 | Self::AnyModule
@@ -1017,7 +1023,11 @@ impl fmt::Display for Type {
             } => write!(formatter, "Generator[{yields}, {sends}, {returns}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
-            Self::TypeAlias => formatter.write_str("TypeAliasType"),
+            Self::TypeAlias(Self::TYPING_ALIKE) => formatter.write_str("TypeAliasType"),
+            Self::TypeAlias(floor) => write!(
+                formatter,
+                "TypeAliasType written alike only from Python 3.{floor}"
+            ),
             Self::Typing(Self::TYPING_ALIKE) => formatter.write_str("typing value"),
             Self::Typing(floor) => write!(
                 formatter,

@@ -533,11 +533,42 @@ print(Score, Score.__name__, Score.__module__, type(Score), kinds[0] is Score)
 ```
 
 As in CPython, calling an alias, or giving it to `isinstance`, is E0401.
-An alias a function or a class defines read as a value, whose text
-CPython 3.15 changed, an alias given its type arguments as a value, and
-an alias's `__value__` and `__type_params__` are planned for 0.11
-(TYP-18). Two aliases compare with `is`; `==` between them is E0407, as
-for module objects.
+Two aliases compare with `is`; `==` between them is E0407, as for module
+objects.
+
+An alias's `__value__` is what its `type` statement writes, a class or a
+typing value read in the names of the alias's module, and its
+`__type_params__` is the tuple of its type parameters, each written by
+its name (TYP-18). A generic alias given type arguments is a typing
+value, such as `Pair[int]`, and an alias without type parameters given
+some is E0401, as CPython raises `TypeError`. An alias a function
+defines is a variable of the function, which each run of its `type`
+statement gives a new alias; one a class defines is a class variable,
+read as `Holder.Inner`.
+
+<!-- typy-expect: accepted -->
+```python
+type Score = int
+type Pair[T] = tuple[T, T]
+
+
+def make() -> list[str]:
+    type Local = list[int]
+    return [Local.__name__, str(Local.__value__)]
+
+
+print(Score.__value__, Pair.__value__, Pair.__type_params__)
+print(make(), Pair[int] == Pair[int])
+```
+
+CPython 3.15 writes an alias a function or a class defines by its
+qualified name, such as `make.<locals>.Local`, and an alias given type
+arguments with its module, such as `__main__.Pair[int]`, where older
+releases write `Local` and `Pair[int]`; writing these below the floor
+3.15 is E0202, as for any typing value. `__value__` and `__type_params__`
+are read through the alias's own name, and an alias held in another
+variable is E0202 there. An alias a function or a class defines given
+type arguments is planned for 1.0 (TYP-22).
 
 ## Example
 

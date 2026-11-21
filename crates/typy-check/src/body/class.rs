@@ -186,7 +186,7 @@ impl BodyChecker<'_> {
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
         }
-        if object.ty == Type::TypeAlias {
+        if matches!(object.ty, Type::TypeAlias(_)) {
             return self.type_alias_attribute(object, attribute, span);
         }
         if object.ty == Type::VersionInfo {

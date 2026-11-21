@@ -52,7 +52,7 @@ pub(crate) struct ImportedNames {
     pub(crate) standard: BTreeMap<String, String>,
 }
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
-pub(crate) use class::{ClassInfo, Frozen, class_value_variable, class_values};
+pub(crate) use class::{ClassInfo, Frozen, class_alias_name, class_value_variable, class_values};
 pub(crate) use definition::{
     Definition, FunctionParts, factory_call, function_definition, resolve_type_parameters,
 };

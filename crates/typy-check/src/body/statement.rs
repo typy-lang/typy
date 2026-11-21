@@ -448,6 +448,14 @@ impl BodyChecker<'_> {
                 return self.import_statement(statement, *span);
             }
             Stmt::FunctionDef { .. } if self.in_function() => return self.nested_def(statement),
+            Stmt::TypeAlias {
+                name,
+                type_parameters,
+                value,
+                span,
+            } if self.in_function() => {
+                return self.local_type_alias((name, type_parameters, value), *span);
+            }
             // `global` changes where names resolve, which `declare_globals` did.
             // The aliases are expanded in the annotations, and a program reads none as a value.
             // A module's functions are checked on their own.

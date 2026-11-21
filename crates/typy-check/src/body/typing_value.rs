@@ -114,7 +114,33 @@ impl Part {
     }
 }
 
+/// The alias whose value is being written: its module and qualified name, which keys its
+/// type parameters, and their names.
+#[derive(Clone, Debug)]
+pub(super) struct AliasRendering {
+    pub(super) owner: String,
+    pub(super) parameters: Vec<String>,
+}
+
 impl BodyChecker<'_> {
+    /// Returns true when the program binds `id` where it is read: in the running function or
+    /// the module, or, while an alias's value is written, in the alias's module.
+    fn bound_here(&self, id: &str, span: Span) -> bool {
+        if self.alias_rendering.is_none() {
+            return self.binds(id, span);
+        }
+        self.program.module_symbols.contains_key(id)
+            || self.program.function_ids.contains_key(id)
+            || self.program.class_ids.contains_key(id)
+            || self.program.module_functions.contains_key(id)
+    }
+
+    /// Returns true when `id` is a variable of the running function, which no alias's value
+    /// reads.
+    fn local_here(&self, id: &str) -> bool {
+        self.alias_rendering.is_none() && self.locals.contains_key(id)
+    }
+
     /// Returns `expression` as a typing value when it is one: a name of `typing` or
     /// `collections.abc`, such a name or a built-in class given type arguments, or a union of
     /// types written with `|`; `None` for any other expression, which is checked as it is.
@@ -220,7 +246,7 @@ impl BodyChecker<'_> {
             Expr::Attribute { value, .. } => root_name(value),
             _ => None,
         }?;
-        if self.binds(root.0, root.1) {
+        if self.bound_here(root.0, root.1) {
             return None;
         }
         let scope = super::locals::annotation_scope(self.program);
@@ -229,7 +255,7 @@ impl BodyChecker<'_> {
 
     /// Returns the annotation name `id` names alone, when nothing of the program binds it.
     fn typing_name_of(&self, id: &str, span: Span) -> Option<AnnotationName> {
-        if self.binds(id, span) {
+        if self.bound_here(id, span) {
             return None;
         }
         self.program.annotation_names.get(id).copied()
@@ -256,6 +282,29 @@ impl BodyChecker<'_> {
                 span,
             ),
         )
+    }
+
+    /// Returns the module and name of the alias of a module `id` names, its own or one it
+    /// imports, when nothing of the running function binds it.
+    pub(super) fn module_alias(&self, id: &str, span: Span) -> Option<(String, String)> {
+        if self.local_here(id) || (self.alias_rendering.is_none() && self.binds(id, span)) {
+            return None;
+        }
+        if let Some(alias) = self.program.imported_aliases.get(id) {
+            return Some((alias.module.clone(), alias.name.clone()));
+        }
+        self.program
+            .type_aliases
+            .contains(id)
+            .then(|| (self.program.module.clone(), id.to_owned()))
+    }
+
+    /// Returns how many type parameters the alias `name` of `module` has.
+    fn alias_parameters(&self, module: &str, name: &str) -> Option<usize> {
+        self.program
+            .alias_sources
+            .get(&(module.to_owned(), name.to_owned()))
+            .map(|source| source.parameters.len())
     }
 
     /// Returns E0408 for `Optional` given other than one type, which CPython refuses.
@@ -285,10 +334,15 @@ impl BodyChecker<'_> {
     /// arguments: a built-in class, or a name of `typing` or `collections.abc`.
     fn generic_base(&self, value: &Expr) -> Option<Base> {
         if let Expr::Name { id, span } = value
-            && !self.binds(id, *span)
+            && !self.bound_here(id, *span)
             && matches!(id.as_str(), "list" | "dict" | "set" | "tuple" | "type")
         {
             return Some(Base::Builtin(id.clone()));
+        }
+        if let Expr::Name { id, span } = value
+            && let Some((module, name)) = self.module_alias(id, *span)
+        {
+            return Some(Base::Alias { module, name });
         }
         let name = self.standard_name_of(value)?;
         Some(match name {
@@ -379,8 +433,22 @@ impl BodyChecker<'_> {
         if let Some(name) = self.typing_name_of(id, span) {
             return name_part(name);
         }
+        // An alias's type parameter is written by its name, keyed by the alias.
+        if let Some(rendering) = &self.alias_rendering
+            && rendering.parameters.iter().any(|parameter| parameter == id)
+        {
+            return Some(Part::new(
+                id.to_owned(),
+                format!("typevar:alias:{}.{id}", rendering.owner),
+                OLDEST,
+                PartKind::Class,
+            ));
+        }
         // A type parameter is written by its name in every copy (GEN-03).
-        if self.program.type_arguments.contains_key(id) && !self.binds(id, span) {
+        if self.alias_rendering.is_none()
+            && self.program.type_arguments.contains_key(id)
+            && !self.binds(id, span)
+        {
             let owner = without_type_arguments(&self.qualified_name);
             return Some(Part::new(
                 id.to_owned(),
@@ -390,7 +458,7 @@ impl BodyChecker<'_> {
             ));
         }
         if let Some(class) = self.program.class_ids.get(id).copied()
-            && !self.locals.contains_key(id)
+            && !self.local_here(id)
         {
             let module = &self.program.class_modules[class.0 as usize];
             let name = &self.program.classes[class.0 as usize].name;
@@ -399,7 +467,7 @@ impl BodyChecker<'_> {
         }
         let alias = if let Some(alias) = self.program.imported_aliases.get(id) {
             Some((alias.module.clone(), alias.name.clone()))
-        } else if self.program.type_aliases.contains(id) && !self.locals.contains_key(id) {
+        } else if self.program.type_aliases.contains(id) && !self.local_here(id) {
             Some((self.program.module.clone(), id.to_owned()))
         } else {
             None
@@ -412,7 +480,7 @@ impl BodyChecker<'_> {
                 PartKind::Class,
             ));
         }
-        if self.binds(id, span) {
+        if self.bound_here(id, span) {
             return None;
         }
         TypeObjectOf::named(id).map(|class| {
@@ -441,6 +509,18 @@ impl BodyChecker<'_> {
             }
             Base::Union => Some(Part::union(arguments, true)),
             Base::Builtin(name) => Some(generic(&name, &arguments, text_of)),
+            // A generic alias given type arguments, as many as written, as CPython takes them,
+            // is written with its module only from 3.15.
+            Base::Alias { module, name } => {
+                if self.alias_parameters(&module, &name)? == 0 {
+                    return None;
+                }
+                let mut part = generic(&format!("{module}.{name}"), &arguments, text_of);
+                part.key = format!("alias:{}", part.key);
+                part.floor = ALIASES_ALIKE;
+                part.alone_floor = ALIASES_ALIKE;
+                Some(part)
+            }
             Base::Named(named) => {
                 let prefix = format!("{}.{}", named.module, named.name);
                 let text = if named.module == "typing" {
@@ -458,6 +538,8 @@ impl BodyChecker<'_> {
 enum Base {
     /// A built-in class, such as `list`.
     Builtin(String),
+    /// A type alias of a module, by its module and name.
+    Alias { module: String, name: String },
     /// `typing.Optional`.
     Optional,
     /// `typing.Union`.
@@ -589,7 +671,7 @@ fn key_of(part: &Part) -> &str {
 
 /// Returns a function's qualified name without the type arguments of the copy it is, as
 /// `pair[int]` gives `pair`, so every copy names its type parameters alike.
-fn without_type_arguments(name: &str) -> String {
+pub(super) fn without_type_arguments(name: &str) -> String {
     let mut shown = String::with_capacity(name.len());
     let mut depth = 0_usize;
     for character in name.chars() {
@@ -632,7 +714,7 @@ fn root_name(expression: &Expr) -> Option<(&String, Span)> {
 /// typing value, itself or in a collection.
 fn typing_floor(ty: &Type) -> Option<u8> {
     match ty {
-        Type::Typing(floor) => Some(*floor),
+        Type::Typing(floor) | Type::TypeAlias(floor) => Some(*floor),
         Type::List(item) | Type::Set(item) | Type::TupleOf(item) | Type::Optional(item) => {
             typing_floor(item)
         }

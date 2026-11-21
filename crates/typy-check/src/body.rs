@@ -1,6 +1,7 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
 mod accessor;
+mod alias_value;
 mod binding;
 mod builtin_call;
 mod builtin_module;
@@ -180,7 +181,9 @@ pub(crate) struct BodyChecker<'program> {
     nonlocal_names: BTreeMap<String, SymbolId>,
     /// The type aliases the body's `type` statements define, which annotations read
     /// (SMT-12).
-    local_aliases: BTreeSet<String>,
+    /// The alias whose value is being written, whose names are its module's and its own
+    /// type parameters (TYP-18).
+    alias_rendering: Option<typing_value::AliasRendering>,
     /// Whether the next expression checked may be a `ctypes` class, as the value of an
     /// assignment to a name is; checking it clears this (FFI-03).
     class_allowed: bool,
@@ -237,7 +240,7 @@ impl<'program> BodyChecker<'program> {
             nonlocal_names: BTreeMap::new(),
             generator: None,
             received: None,
-            local_aliases: BTreeSet::new(),
+            alias_rendering: None,
             class_allowed: false,
             qualified_name: String::new(),
             closure_scope: closure_scope::ClosureScope::default(),

@@ -69,6 +69,13 @@ pub(crate) struct Program {
     type_alias_objects: Vec<crate::typed::TypedTypeAlias>,
     /// The typing values the program reads (TYP-18).
     typing_value_objects: Vec<crate::typed::TypedTypingValue>,
+    /// Each type alias of the program as its `type` statement writes it, by its module and
+    /// qualified name: its type parameters and its value, which `__type_params__` and
+    /// `__value__` read (TYP-18).
+    pub(super) alias_sources: BTreeMap<(String, String), AliasSource>,
+    /// The variable each `type` statement of a function or a class binds, with the index of
+    /// its alias's object (TYP-18).
+    pub(super) alias_symbols: BTreeMap<crate::typed::SymbolId, u32>,
     /// The typing values CPython keeps one object of, a name of `typing` or
     /// `collections.abc`, which `is` may compare (TYP-18).
     pub(super) single_typing_values: BTreeSet<u32>,
@@ -223,6 +230,8 @@ impl Program {
             type_alias_objects: Vec::new(),
             typing_value_objects: Vec::new(),
             single_typing_values: BTreeSet::new(),
+            alias_sources: BTreeMap::new(),
+            alias_symbols: BTreeMap::new(),
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
             generic_pass: None,
@@ -367,7 +376,8 @@ impl Program {
         }
     }
 
-    /// Notes the module about to be checked, whose imports resolve against its package.
+    /// Notes the module about to be checked, whose imports resolve against its package, and
+    /// the sources of its type aliases.
     pub(crate) fn prepare_module(&mut self, module: &typy_source::Module) {
         self.type_aliases = module
             .syntax
@@ -378,6 +388,39 @@ impl Program {
                 _ => None,
             })
             .collect();
+        // A class's aliases are named after the class, as CPython 3.15 writes them.
+        let mut found = Vec::new();
+        for statement in &module.syntax.body {
+            match statement {
+                typy_source::syntax::Stmt::TypeAlias {
+                    name,
+                    type_parameters,
+                    value,
+                    ..
+                } => found.push((name.name.clone(), AliasSource::of(type_parameters, value))),
+                typy_source::syntax::Stmt::ClassDef {
+                    name: class, body, ..
+                } => {
+                    for each in body {
+                        if let typy_source::syntax::Stmt::TypeAlias {
+                            name,
+                            type_parameters,
+                            value,
+                            ..
+                        } = each
+                        {
+                            let qualified = format!("{}.{}", class.name, name.name);
+                            found.push((qualified, AliasSource::of(type_parameters, value)));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (name, source) in found {
+            self.alias_sources
+                .insert((module.name.as_str().to_owned(), name), source);
+        }
         self.package = module.package();
         module.name.as_str().clone_into(&mut self.module);
         self.lazy_modules = typy_source::lazy_modules(&module.syntax.body);
@@ -507,21 +550,31 @@ impl Program {
             .collect()
     }
 
-    /// Returns the index of the object of the type alias `name` of `module`, adding it on
-    /// first use (SMT-12).
-    pub(super) fn type_alias_object(&mut self, module: &str, name: &str) -> u32 {
+    /// Returns the index of the object of the type alias `qualified_name` of `module`, named
+    /// `name`, adding it on first use (SMT-12, TYP-18).
+    pub(super) fn type_alias_object(
+        &mut self,
+        module: &str,
+        (name, qualified_name): (&str, &str),
+    ) -> u32 {
         let found = self
             .type_alias_objects
             .iter()
-            .position(|alias| alias.module == module && alias.name == name)
+            .position(|alias| alias.module == module && alias.qualified_name == qualified_name)
             .unwrap_or_else(|| {
                 self.type_alias_objects.push(crate::typed::TypedTypeAlias {
                     name: name.to_owned(),
                     module: module.to_owned(),
+                    qualified_name: qualified_name.to_owned(),
                 });
                 self.type_alias_objects.len() - 1
             });
         id(found)
+    }
+
+    /// Returns the type alias the object at `index` is: its module, name and qualified name.
+    pub(super) fn type_alias_of(&self, index: u32) -> &crate::typed::TypedTypeAlias {
+        &self.type_alias_objects[index as usize]
     }
 
     /// Returns the index of the typing value of `text` and `key`, adding it on first use
@@ -1008,4 +1061,28 @@ pub(super) fn note_bases(class: ClassId, instance: &Type) {
 
 pub(super) fn id(index: usize) -> u32 {
     u32::try_from(index).unwrap_or(u32::MAX)
+}
+
+/// A type alias as its `type` statement writes it: the names of its type parameters and its
+/// value, before any alias it names is expanded (TYP-18).
+#[derive(Clone, Debug)]
+pub(crate) struct AliasSource {
+    pub(super) parameters: Vec<String>,
+    pub(super) value: typy_source::syntax::Expr,
+}
+
+impl AliasSource {
+    /// Returns the source of an alias of `parameters` and `value`.
+    pub(super) fn of(
+        parameters: &[typy_source::syntax::TypeParameter],
+        value: &typy_source::syntax::Expr,
+    ) -> Self {
+        Self {
+            parameters: parameters
+                .iter()
+                .map(|parameter| parameter.name.name.clone())
+                .collect(),
+            value: value.clone(),
+        }
+    }
 }

@@ -41,7 +41,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Range => TyirType::RANGE,
         Type::Slice => TyirType::SLICE,
         Type::Module(_) | Type::AnyModule => TyirType::MODULE,
-        Type::TypeAlias => TyirType::TYPE_ALIAS,
+        Type::TypeAlias(_) => TyirType::TYPE_ALIAS,
         Type::VersionInfo => TyirType::VERSION_INFO,
         Type::NotImplemented => TyirType::NOT_IMPLEMENTED,
         // A binary file is the same runtime object as a text file, with flags of its own.

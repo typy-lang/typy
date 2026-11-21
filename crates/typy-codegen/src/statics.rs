@@ -262,32 +262,33 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.modules.get(&index) {
             return *pointer;
         }
-        let pointer = self.two_strings(
+        let pointer = self.string_object(
             module,
             crate::layout::MODULE_TYPE_ID,
-            [name, path],
+            &[name, path],
             &format!("typy.module.{index}"),
         );
         self.modules.insert(index, pointer);
         pointer
     }
 
-    /// Returns the type alias object at `index`: an immortal header, then the alias's name and
-    /// its module's name as `str` objects (SMT-12). Each alias has one, so `is` compares them.
+    /// Returns the type alias object at `index`: an immortal header, then the alias's name,
+    /// its module's name and its qualified name as `str` objects (SMT-12, TYP-18). Each alias
+    /// of a module has one, so `is` compares them; one a function defines is its description,
+    /// which each run of the `type` statement copies.
     pub(crate) fn type_alias_object(
         &mut self,
         module: &Module<'ctx>,
         index: u32,
-        name: &str,
-        module_name: &str,
+        [name, module_name, qualified_name]: [&str; 3],
     ) -> PointerValue<'ctx> {
         if let Some(pointer) = self.type_aliases.get(&index) {
             return *pointer;
         }
-        let pointer = self.two_strings(
+        let pointer = self.string_object(
             module,
             crate::layout::TYPE_ALIAS_TYPE_ID,
-            [name, module_name],
+            &[name, module_name, qualified_name],
             &format!("typy.type_alias.{index}"),
         );
         self.type_aliases.insert(index, pointer);
@@ -306,42 +307,40 @@ impl<'ctx> Statics<'ctx> {
         if let Some(pointer) = self.typing_values.get(&index) {
             return *pointer;
         }
-        let pointer = self.two_strings(
+        let pointer = self.string_object(
             module,
             crate::layout::TYPING_VALUE_TYPE_ID,
-            [text, key],
+            &[text, key],
             &format!("typy.typing_value.{index}"),
         );
         self.typing_values.insert(index, pointer);
         pointer
     }
 
-    /// Returns a new immortal static object of type `type_id` that holds two `str` objects.
-    fn two_strings(
+    /// Returns a new immortal static object of type `type_id` that holds `str` objects of
+    /// `texts`.
+    fn string_object(
         &mut self,
         module: &Module<'ctx>,
         type_id: u32,
-        [first, second]: [&str; 2],
+        texts: &[&str],
         symbol: &str,
     ) -> PointerValue<'ctx> {
-        let first = self.string(module, first);
-        let second = self.string(module, second);
         let context = self.context;
-        let value = context.const_struct(
-            &[
-                context
-                    .i32_type()
-                    .const_int(u64::from(IMMORTAL), false)
-                    .into(),
-                context
-                    .i32_type()
-                    .const_int(u64::from(type_id), false)
-                    .into(),
-                first.into(),
-                second.into(),
-            ],
-            false,
-        );
+        let mut fields: Vec<inkwell::values::BasicValueEnum<'ctx>> = vec![
+            context
+                .i32_type()
+                .const_int(u64::from(IMMORTAL), false)
+                .into(),
+            context
+                .i32_type()
+                .const_int(u64::from(type_id), false)
+                .into(),
+        ];
+        for text in texts {
+            fields.push(self.string(module, text).into());
+        }
+        let value = context.const_struct(&fields, false);
         let global = module.add_global(value.get_type(), None, symbol);
         global.set_initializer(&value);
         global.set_constant(true);

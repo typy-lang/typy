@@ -360,7 +360,7 @@ impl BodyChecker<'_> {
     /// built-in type or exception class.
     fn named_class(&mut self, each: &Expr) -> Result<Named, Option<Box<Diagnostic>>> {
         let typed = self.expression(each);
-        if typed.ty == Type::TypeAlias {
+        if matches!(typed.ty, Type::TypeAlias(_)) {
             return Err(Some(Box::new(
                 Diagnostic::new(
                     DiagnosticCode::error(401),
