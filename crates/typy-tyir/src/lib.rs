@@ -23,7 +23,7 @@ pub use block::{BasicBlock, BlockId};
 pub use builder::FunctionBuilder;
 pub use constant::{Constant, StringId};
 pub use escape::place_instances;
-pub use function::{FunctionId, GeneratorFrame, TyirFunction};
+pub use function::{FunctionId, GeneratorFrame, StandsFor, TyirFunction};
 pub use instruction::Instruction;
 pub use library::{
     CDataShape, CType, TyirCDataClass, TyirExport, TyirField, TyirForeignFunction, TyirLibrary,

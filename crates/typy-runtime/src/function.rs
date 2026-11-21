@@ -103,10 +103,12 @@ unsafe fn identity_of(object: *mut ObjectHeader) -> Option<*const FunctionDescri
     // SAFETY: the caller's guarantee; the type ID says the object is a function object,
     // whose descriptor is an immortal static.
     unsafe {
-        let type_id = (*object).type_id;
-        if type_id != crate::header::FUNCTION_TYPE_ID
-            && type_id != crate::header::BUILTIN_FUNCTION_TYPE_ID
-        {
+        if !matches!(
+            (*object).type_id,
+            crate::header::FUNCTION_TYPE_ID
+                | crate::header::BUILTIN_FUNCTION_TYPE_ID
+                | crate::header::METHOD_DESCRIPTOR_TYPE_ID
+        ) {
             return None;
         }
         let descriptor = (*object.cast::<FunctionObject>()).descriptor;
@@ -182,6 +184,45 @@ unsafe extern "C" fn builtin_function_repr(object: *mut ObjectHeader) -> Raising
     // names are immortal statics.
     unsafe { text.push_str((*(*object.cast::<FunctionObject>()).descriptor).name) };
     push_ascii(&mut text, ">");
+    Raising::ok(text.finish())
+}
+
+/// The type `method_descriptor`, of a method of a built-in type read through the type, such as
+/// `str.upper`, whose object the compiler emits immortal (FUN-08, ADR-0077).
+#[unsafe(export_name = "typy_rt_type_method_descriptor")]
+pub(crate) static METHOD_DESCRIPTOR: TypeObject = TypeObject {
+    hash: Some(function_hash),
+    equal: Some(function_equal),
+    repr: Some(method_descriptor_repr),
+    ..TypeObject::new("method_descriptor", &raw const OBJECT)
+};
+
+/// Returns `repr` of a method of a built-in type: `<method 'upper' of 'str' objects>`, from its
+/// qualified name, `str.upper`, as CPython writes it.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "a function object is a static the compiler aligns for its pointers"
+)]
+unsafe extern "C" fn method_descriptor_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    let mut text = StrBuilder::with_capacity(48);
+    push_ascii(&mut text, "<method '");
+    // SAFETY: the type of the object says it is a function object, whose descriptor and
+    // names are immortal statics.
+    unsafe {
+        let descriptor = (*object.cast::<FunctionObject>()).descriptor;
+        text.push_str((*descriptor).name);
+        push_ascii(&mut text, "' of '");
+        let qualified = (*descriptor).qualified_name;
+        let dot = u32::from(b'.');
+        for index in 0..crate::string::length(qualified) {
+            let point = crate::string::code_point(qualified, index);
+            if point == dot {
+                break;
+            }
+            text.push(point);
+        }
+    }
+    push_ascii(&mut text, "' objects>");
     Raising::ok(text.finish())
 }
 
@@ -293,6 +334,36 @@ mod tests {
             assert!(core::ptr::eq(ty, &raw const super::BUILTIN_FUNCTION));
             let class = crate::type_object::typy_rt_type_text(ty);
             assert_eq!(text(class), "<class 'builtin_function_or_method'>");
+            for each in [repr, class, name, qualified_name] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
+        }
+    }
+
+    #[test]
+    fn fun_08_a_method_of_a_builtin_type_writes_its_name_and_its_type() {
+        let (name, qualified_name) = (from_str("upper"), from_str("str.upper"));
+        let descriptor = super::FunctionDescriptor {
+            name,
+            qualified_name,
+            code: core::ptr::null(),
+            captures: core::ptr::null(),
+            identity: core::ptr::null(),
+        };
+        let function = super::FunctionObject {
+            header: crate::header::ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: crate::header::METHOD_DESCRIPTOR_TYPE_ID,
+            },
+            descriptor: &raw const descriptor,
+        };
+        // SAFETY: the object, its descriptor and the strings are live for the whole test.
+        unsafe {
+            let object = core::ptr::from_ref(&function).cast_mut().cast();
+            let repr = super::method_descriptor_repr(object).value;
+            assert_eq!(text(repr), "<method 'upper' of 'str' objects>");
+            let class = crate::type_object::typy_rt_type_text(crate::type_object::type_of(object));
+            assert_eq!(text(class), "<class 'method_descriptor'>");
             for each in [repr, class, name, qualified_name] {
                 crate::refcount::typy_rt_decrement(each.cast());
             }

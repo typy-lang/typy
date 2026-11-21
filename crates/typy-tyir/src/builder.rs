@@ -31,7 +31,7 @@ pub struct FunctionBuilder {
     slots: Vec<Slot>,
     current: BlockId,
     generator: Option<crate::function::GeneratorFrame>,
-    builtin: bool,
+    stands_for: crate::function::StandsFor,
 }
 
 impl FunctionBuilder {
@@ -60,7 +60,7 @@ impl FunctionBuilder {
             slots: Vec::new(),
             current: BlockId(0),
             generator: None,
-            builtin: false,
+            stands_for: crate::function::StandsFor::Itself,
         }
     }
 
@@ -204,9 +204,9 @@ impl FunctionBuilder {
         self.generator = Some(frame);
     }
 
-    /// Marks the function as standing for a built-in function used as a value (FUN-08).
-    pub fn set_builtin(&mut self, builtin: bool) {
-        self.builtin = builtin;
+    /// Sets what the function stands for as a value (FUN-08).
+    pub fn set_stands_for(&mut self, stands_for: crate::function::StandsFor) {
+        self.stands_for = stands_for;
     }
 
     /// Returns the types of the slots made so far, in order.
@@ -241,7 +241,7 @@ impl FunctionBuilder {
             values: self.values,
             slots: self.slots,
             generator: self.generator,
-            builtin: self.builtin,
+            stands_for: self.stands_for,
         }
     }
 }

@@ -22,17 +22,21 @@ A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
 A built-in function is a value where a `Callable` is expected, such as
 `sorted(words, key=len)` or `measure: Callable[[str], int] = len`, and is
-written `<built-in function len>` (FUN-08). With no `Callable` expected,
-`chr` and `ord` have their one type, and any other built-in function is
-E0203, since its arguments may be of several types.
+written `<built-in function len>` (FUN-08). So is a method of a built-in
+type read through the type, such as `sorted(words, key=str.lower)` or
+`add: Callable[[list[int], int], None] = list.append`, written
+`<method 'lower' of 'str' objects>`. With no `Callable` expected, `chr`
+and `ord` have their one type, and any other built-in function or method
+is E0203, since its arguments may be of several types.
 
-Decorators of functions, methods of built-in types, functions of `math`
-and `sys`, and built-in types as values, class methods and protocol
-methods as values, nested functions of generic functions, functions with
-defaults, `*args` or `**kwargs` as values, and `map`, `filter` and
-`callable` are planned for 0.10 (FUN-06, FUN-08 to FUN-10, FUN-13, FUN-14,
-LIB-23). Decorators of methods are planned for 0.14 (FUN-15), and class
-decorators other than `@dataclass` for 1.0 (CLS-38).
+Decorators of functions are planned for 0.10 (FUN-06), and so are these
+as values: a method read through a built-in value, such as `words.append`,
+a function of `math` or `sys`, a built-in type, a class method, a protocol
+method, and a function with defaults, `*args` or `**kwargs` (FUN-08,
+FUN-09, FUN-13, FUN-14). So are nested functions of generic functions
+(FUN-10), and `map`, `filter` and `callable` (LIB-23). Decorators of
+methods are planned for 0.14 (FUN-15), and class decorators other than
+`@dataclass` for 1.0 (CLS-38).
 
 ## Variable numbers of arguments
 

@@ -99,6 +99,29 @@ impl BodyChecker<'_> {
         if attribute.name == "__name__" {
             return Self::typed(TypedExprKind::TypeName(Box::new(object)), Type::Str, span);
         }
+        // A method of a built-in type is a value where a `Callable` is expected (FUN-08).
+        if let Type::TypeObject(Some(class)) = &object.ty
+            && let Some(receiver) = super::builtin_value::receiver_of(class)
+            && crate::method::Method::of(&receiver, &attribute.name).is_some()
+        {
+            let qualified = format!("{}.{}", class.name(), attribute.name);
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(203),
+                    attribute.span,
+                    format!(
+                        "`{qualified}` as a value needs the `Callable` type its context expects"
+                    ),
+                )
+                .with_rule(RuleId::FUN_08)
+                .with_help(format!(
+                    "annotate the variable with the types you call it with, such as \
+                     `change: Callable[[{0}], {0}] = {qualified}`",
+                    class.name()
+                )),
+                span,
+            );
+        }
         let message = format!(
             "{} has no attribute `{}` in TyPy; it has `__name__`",
             object.ty.with_article(),

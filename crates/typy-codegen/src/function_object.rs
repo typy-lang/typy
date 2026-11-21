@@ -14,7 +14,10 @@ use typy_tyir::{FunctionId, TupleTypeId, TyirType, ValueId};
 use crate::abi::{function_type, value_type};
 use crate::error::CodegenError;
 use crate::function::{FunctionEmitter, Shared};
-use crate::layout::{BUILTIN_FUNCTION_TYPE_ID, FUNCTION_TYPE_ID, IMMORTAL};
+use crate::layout::{
+    BUILTIN_FUNCTION_TYPE_ID, FUNCTION_TYPE_ID, IMMORTAL, METHOD_DESCRIPTOR_TYPE_ID,
+};
+use typy_tyir::StandsFor;
 
 /// The field of the object that holds the descriptor: after the header, where an instance
 /// keeps its class (ADR-0012).
@@ -87,15 +90,15 @@ pub(crate) fn function_object<'ctx>(
     let code = thunk(shared, id, Receives::Nothing)?;
     let descriptor = descriptor(shared, id, code, ("function", None))?;
     // A built-in function used as a value is written as CPython writes one (FUN-08).
-    let builtin = shared
+    let stands_for = shared
         .tyir
         .functions
         .get(id.0 as usize)
-        .is_some_and(|function| function.builtin);
-    let type_id = if builtin {
-        BUILTIN_FUNCTION_TYPE_ID
-    } else {
-        FUNCTION_TYPE_ID
+        .map_or(StandsFor::Itself, |function| function.stands_for);
+    let type_id = match stands_for {
+        StandsFor::Itself => FUNCTION_TYPE_ID,
+        StandsFor::BuiltinFunction => BUILTIN_FUNCTION_TYPE_ID,
+        StandsFor::BuiltinMethod => METHOD_DESCRIPTOR_TYPE_ID,
     };
     let object = object_type(context).const_named_struct(&[
         context
@@ -167,7 +170,7 @@ fn descriptor<'ctx>(
         .functions
         .get(id.0 as usize)
         .ok_or_else(|| CodegenError(format!("fn{} does not exist", id.0)))?;
-    let (builtin, own_name) = (function.builtin, function.name.clone());
+    let (stands_for, own_name) = (function.stands_for, function.qualified_name.clone());
     let name = shared.statics.string(shared.module, &function.name);
     let qualified_name = shared
         .statics
@@ -182,10 +185,10 @@ fn descriptor<'ctx>(
     let own = global.as_pointer_value();
     // The hidden functions of one built-in stand for it, so they share one identity; any
     // other function stands for itself (ADR-0076).
-    let identity = if builtin {
-        shared.statics.builtin_identity(&own_name, own)
-    } else {
+    let identity = if stands_for == StandsFor::Itself {
         own
+    } else {
+        shared.statics.builtin_identity(&own_name, own)
     };
     let descriptor = descriptor_type(context).const_named_struct(&[
         name.into(),

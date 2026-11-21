@@ -533,3 +533,48 @@ fn fun_08_a_name_the_program_binds_is_not_the_builtin() {
     );
     assert_eq!(app(source), Vec::<String>::new());
 }
+
+#[test]
+fn fun_08_a_method_of_a_builtin_type_read_through_the_type_is_a_value() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "words = ['pear', 'Fig']\n",
+        "print(sorted(words, key=str.lower), max(words, key=str.upper))\n",
+        "shout: Callable[[str], str] = str.upper\n",
+        "add: Callable[[list[int], int], None] = list.append\n",
+        "keys: Callable[[dict[str, int]], list[str]] = dict.copy\n",
+        "print(shout is str.upper, shout == str.upper)\n",
+    );
+    let found = messages(source);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        found[0].1,
+        "`dict.copy` called with a dict[str, int] gives a dict[str, int], and this `Callable` \
+         returns list[str]"
+    );
+}
+
+#[test]
+fn fun_08_a_method_of_a_builtin_type_takes_that_type_first() {
+    let cases = [
+        (
+            "from collections.abc import Callable\nshout: Callable[[int], str] = str.upper\n",
+            "E0404",
+            "`str.upper` takes a str as its first argument, and this `Callable` passes an int",
+        ),
+        (
+            "shout = str.upper\n",
+            "E0203",
+            "`str.upper` as a value needs the `Callable` type its context expects",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            (code, message),
+            "{source}"
+        );
+    }
+}

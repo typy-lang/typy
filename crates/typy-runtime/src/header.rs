@@ -58,6 +58,9 @@ pub const GENERATOR_TYPE_ID: u32 = 27;
 /// The type ID of the object of a built-in function used as a value, laid out as a function
 /// object, which CPython writes as `<built-in function NAME>` (FUN-08, ADR-0077).
 pub const BUILTIN_FUNCTION_TYPE_ID: u32 = 28;
+/// The type ID of the object of a method of a built-in type read through the type, such as
+/// `str.upper`, laid out as a function object (FUN-08, ADR-0077).
+pub const METHOD_DESCRIPTOR_TYPE_ID: u32 = 29;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

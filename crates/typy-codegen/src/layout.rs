@@ -25,6 +25,9 @@ pub(crate) const FUNCTION_TYPE_ID: u32 = 24;
 /// The type ID of the object of a built-in function used as a value, laid out as a
 /// function object (FUN-08, ADR-0077).
 pub(crate) const BUILTIN_FUNCTION_TYPE_ID: u32 = 28;
+/// The type ID of the object of a method of a built-in type read through the type, such as
+/// `str.upper`, laid out as a function object (FUN-08, ADR-0077).
+pub(crate) const METHOD_DESCRIPTOR_TYPE_ID: u32 = 29;
 /// The smallest integer held inline: -2^62.
 pub const INLINE_MIN: i128 = -(1 << 62);
 /// The largest integer held inline: 2^62 - 1.

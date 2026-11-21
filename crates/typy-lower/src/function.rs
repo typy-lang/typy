@@ -576,7 +576,11 @@ fn function_builder(
         (builder, None, closure)
     };
     builder.set_qualified_name(function.qualified_name.clone());
-    builder.set_builtin(program.builtin_values.contains(&function.id));
+    builder.set_stands_for(match program.builtin_values.get(&function.id) {
+        Some(typy_check::BuiltinValue::Function) => typy_tyir::StandsFor::BuiltinFunction,
+        Some(typy_check::BuiltinValue::Method) => typy_tyir::StandsFor::BuiltinMethod,
+        None => typy_tyir::StandsFor::Itself,
+    });
     (builder, generator, closure)
 }
 
@@ -586,7 +590,7 @@ pub(crate) fn function_symbol(program: &TypedProgram, function: &TypedFunction) 
         ENTRY_SYMBOL.to_owned()
     } else if function.name == FINISH_NAME {
         FINISH_SYMBOL.to_owned()
-    } else if function.name == "<lambda>" || program.builtin_values.contains(&function.id) {
+    } else if function.name == "<lambda>" || program.builtin_values.contains_key(&function.id) {
         // The lambdas of one function share a `__qualname__`, and so do the hidden functions
         // of one built-in, so each symbol adds the function's number.
         symbol(

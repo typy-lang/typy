@@ -24,7 +24,7 @@ pub use expression::{
 };
 pub use function::{FunctionId, GeneratorTypes, TypedFunction};
 pub use percent::{PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue};
-pub use program::{CapturedVariable, TypedModule, TypedProgram, TypedTypeAlias};
+pub use program::{BuiltinValue, CapturedVariable, TypedModule, TypedProgram, TypedTypeAlias};
 pub use signature::{FunctionSignature, SignatureParameter};
 pub use statement::{
     AssignTarget, Generator, ImportBinding, LoopSource, RaiseCause, TypedCase, TypedHandler,

@@ -879,10 +879,18 @@ impl Program {
             library_version: None,
             warnings: typy_diagnostics::Diagnostics::new(),
             closures: self.closures,
+            // A hidden function of a method is named `type.method` (ADR-0077).
             builtin_values: self
                 .builtin_values
                 .iter()
-                .map(|(.., function)| *function)
+                .map(|(_, name, _, function)| {
+                    let kind = if name.contains('.') {
+                        crate::typed::BuiltinValue::Method
+                    } else {
+                        crate::typed::BuiltinValue::Function
+                    };
+                    (*function, kind)
+                })
                 .collect(),
             cells: self.cells,
             nonlocals: self.nonlocals,

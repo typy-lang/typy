@@ -16,6 +16,10 @@ All notable changes to TyPy are recorded here. The format follows
   (FUN-08). Two values of one built-in are one function, also where they
   fill different `Callable` types: `is`, `==` and `hash` treat them as one,
   as CPython does (ADR-0076).
+- A method of a built-in type read through the type is a value where a
+  `Callable` is expected, such as `sorted(words, key=str.lower)` or `add:
+  Callable[[list[int], int], None] = list.append`, written `<method 'lower'
+  of 'str' objects>`, of the type `method_descriptor` (FUN-08).
 - Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
   of its files, with their SHA-256, and of the crates and libraries the
   compiler holds, with their licences; a copy is published beside the

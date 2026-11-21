@@ -59,9 +59,9 @@ pub struct TypedProgram {
     /// The captures of each nested function, in order, whose code takes its function object
     /// first (FUN-04, ADR-0061).
     pub closures: std::collections::BTreeMap<FunctionId, Vec<CapturedVariable>>,
-    /// The hidden functions that stand for a built-in function used as a value, whose
-    /// objects CPython writes as `<built-in function NAME>` (FUN-08, ADR-0077).
-    pub builtin_values: std::collections::BTreeSet<FunctionId>,
+    /// The hidden functions that stand for a built-in function, or a method of a built-in
+    /// type, used as a value, each with which it stands for (FUN-08, ADR-0077).
+    pub builtin_values: std::collections::BTreeMap<FunctionId, BuiltinValue>,
     /// The variables of each function that live in a cell, which its nested functions share.
     pub cells: std::collections::BTreeMap<FunctionId, std::collections::BTreeSet<SymbolId>>,
     /// The variables nested functions declare `nonlocal`, each a cell variable whose cell is
@@ -74,6 +74,15 @@ pub struct TypedProgram {
         std::collections::BTreeSet<(super::ClassId, super::ClassId)>,
         std::collections::BTreeMap<super::ClassId, crate::iterator_fits::Iteration>,
     ),
+}
+
+/// What a hidden function of a built-in stands for (FUN-08, ADR-0077).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinValue {
+    /// A built-in function, such as `len`.
+    Function,
+    /// A method of a built-in type read through the type, such as `str.upper`.
+    Method,
 }
 
 /// One capture of a nested function: a copy of a variable's value, or the cell it lives in.

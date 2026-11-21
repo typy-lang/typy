@@ -36,9 +36,22 @@ pub struct TyirFunction {
     /// The frame a generator's resume function keeps in its object, or `None` for any other
     /// function (ADR-0063).
     pub generator: Option<GeneratorFrame>,
-    /// Whether the function stands for a built-in function used as a value, whose object is
-    /// written `<built-in function NAME>` (FUN-08, ADR-0077).
-    pub builtin: bool,
+    /// What the function stands for as a value: itself, or a built-in function or a method of
+    /// a built-in type, whose object CPython writes otherwise (FUN-08, ADR-0077).
+    pub stands_for: StandsFor,
+}
+
+/// What a function's object stands for, which its type and its text follow (FUN-08).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum StandsFor {
+    /// The function itself, a `function` object.
+    #[default]
+    Itself,
+    /// A built-in function, such as `len`, a `builtin_function_or_method` object.
+    BuiltinFunction,
+    /// A method of a built-in type read through the type, such as `str.upper`, a
+    /// `method_descriptor` object.
+    BuiltinMethod,
 }
 
 /// What a generator's object holds between steps: the arguments its maker stores, then each

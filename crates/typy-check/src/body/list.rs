@@ -64,7 +64,7 @@ impl BodyChecker<'_> {
             // A `lambda`, and a built-in function, takes its parameter and result types from
             // the `Callable` expected (FUN-08).
             (
-                Expr::Lambda { .. } | Expr::Name { .. },
+                Expr::Lambda { .. } | Expr::Name { .. } | Expr::Attribute { .. },
                 Some(Type::Callable {
                     parameters,
                     returns,
@@ -370,10 +370,7 @@ impl BodyChecker<'_> {
         // `measure is len` reads it (FUN-08).
         let builtins: Vec<bool> = operands
             .iter()
-            .map(|operand| match operand {
-                Expr::Name { id, span } => self.unbound_builtin_function(id, *span).is_some(),
-                _ => false,
-            })
+            .map(|operand| self.names_builtin(operand))
             .collect();
         let mut typed: Vec<Option<TypedExpr>> = operands
             .iter()
