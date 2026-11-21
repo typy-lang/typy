@@ -28,7 +28,7 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         // they are objects of their own.
         "super" => Some(planned("0.14", RuleId::CLS_36)),
         "property" | "staticmethod" | "classmethod" => Some(planned("1.0", RuleId::FUN_17)),
-        "callable" | "map" | "filter" => Some(planned("0.10", RuleId::LIB_23)),
+        "map" | "filter" => Some(planned("0.10", RuleId::LIB_23)),
         _ if CPYTHON_3_12_BUILTINS.contains(&name) => Some(Unprovided::Excluded),
         _ => None,
     }

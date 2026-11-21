@@ -669,3 +669,33 @@ fn fun_16_a_class_as_a_callable_is_planned() {
         )]
     );
 }
+
+#[test]
+fn lib_23_callable_takes_one_value_by_position() {
+    let cases = [
+        (
+            "print(callable())\n",
+            "callable() takes exactly one argument (0 given)",
+        ),
+        (
+            "print(callable(1, 2))\n",
+            "callable() takes exactly one argument (2 given)",
+        ),
+        (
+            "print(callable(obj=1))\n",
+            "callable() takes no keyword arguments",
+        ),
+    ];
+    for (source, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            ("E0404", message)
+        );
+    }
+    assert_eq!(
+        app("def f() -> None:\n    pass\nprint(callable(f), callable(len), callable(1))\n"),
+        Vec::<String>::new()
+    );
+}

@@ -42,6 +42,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::IsInstance {
             return self.call_isinstance(arguments, keywords, span);
         }
+        if builtin == Builtin::Callable {
+            return self.call_callable(arguments, keywords, span);
+        }
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
@@ -178,6 +181,7 @@ impl BodyChecker<'_> {
             | Builtin::Open
             | Builtin::Type
             | Builtin::IsInstance
+            | Builtin::Callable
             | Builtin::Sorted
             | Builtin::Sum
             | Builtin::Any

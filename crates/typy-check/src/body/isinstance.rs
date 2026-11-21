@@ -22,6 +22,66 @@ enum Outcome {
 impl BodyChecker<'_> {
     /// Checks `isinstance(value, class)` with a class, or a tuple of classes, named as values:
     /// a class of the program or a built-in type or exception class.
+    /// Checks `callable(x)` (LIB-23): true for a function value and a class, false for any
+    /// other value, as TyPy has no `__call__`; tested when the program runs only for an
+    /// optional or a union, as `isinstance` tests one, and `x` is evaluated either way.
+    pub(super) fn call_callable(
+        &mut self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let ([value], []) = (arguments, keywords) else {
+            for argument in arguments {
+                self.expression(argument);
+            }
+            let message = if keywords.is_empty() {
+                format!(
+                    "callable() takes exactly one argument ({} given)",
+                    arguments.len()
+                )
+            } else {
+                "callable() takes no keyword arguments".to_owned()
+            };
+            return self.error(
+                Diagnostic::new(DiagnosticCode::error(404), span, message)
+                    .with_rule(RuleId::LIB_23),
+                span,
+            );
+        };
+        // A built-in function, method or type is callable, and reading it has no effect.
+        if self.names_builtin(value) {
+            return Self::typed(
+                TypedExprKind::Constant(crate::typed::TypedConstant::Bool(true)),
+                Type::Bool,
+                span,
+            );
+        }
+        let value = self.expression(value);
+        let calls = |ty: &Type| matches!(ty, Type::Callable { .. } | Type::TypeObject(_));
+        let (always, members) = match &value.ty {
+            Type::Optional(inner) => (calls(inner), Vec::new()),
+            Type::Union(members) => (
+                false,
+                members
+                    .iter()
+                    .map(|member| (calls(member), Vec::new()))
+                    .collect(),
+            ),
+            other => (calls(other), Vec::new()),
+        };
+        let test = crate::typed::IsInstanceTest {
+            value,
+            none_matches: false,
+            always,
+            checks: Vec::new(),
+            narrowed: None,
+            otherwise: None,
+            members,
+        };
+        Self::typed(TypedExprKind::IsInstance(Box::new(test)), Type::Bool, span)
+    }
+
     pub(super) fn call_isinstance(
         &mut self,
         arguments: &[Expr],

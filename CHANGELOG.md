@@ -34,6 +34,9 @@ All notable changes to TyPy are recorded here. The format follows
   key=str)` or `parse: Callable[[str], int] = int`, written `<class 'int'>`
   (FUN-14). A class of the program there is refused as planned for 0.14
   (FUN-16), where it was E0402 or E0404.
+- `callable(x)` is true for a function value, a built-in function, method
+  or type, and a class, and false for any other value, as CPython answers
+  (LIB-23).
 - Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
   of its files, with their SHA-256, and of the crates and libraries the
   compiler holds, with their licences; a copy is published beside the

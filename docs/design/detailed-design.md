@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.74 |
+| Version | 2.75 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -944,10 +944,13 @@ where a `Callable` is expected (FUN-14); its `stands_for` is `BuiltinType`,
 and its object takes the type ID 31, written `<class 'int'>`, of the type
 `type`. A class of the program or an exception class there is E0201,
 planned for 0.14 (FUN-16). The hidden functions of one built-in share the
-descriptor of the first as their identity (ADR-0076). Where nothing is
-expected, `chr` is `Callable[[int], str]` and `ord` `Callable[[str], int]`,
-and any other built-in function, and a method such as `str.upper`, is
-E0203. A built-in compared with a function value takes that value's type.
+descriptor of the first as their identity (ADR-0076). `callable(x)`
+(LIB-23) is an `IsInstanceTest` that holds for a `Callable` or a type
+object, by member for an optional or a union, and a name `names_builtin`
+takes is the constant `True`. Where nothing is expected, `chr` is
+`Callable[[int], str]` and `ord` `Callable[[str], int]`, and any other
+built-in function, and a method such as `str.upper`, is E0203. A built-in
+compared with a function value takes that value's type.
 
 `body/generator_expression.rs` checks a generator expression (EXP-15) as
 a nested generator function, `<genexpr>`, of one parameter, `.0`, the

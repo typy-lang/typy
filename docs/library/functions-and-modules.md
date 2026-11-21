@@ -12,6 +12,7 @@
 | The `math` module: its constants and its functions of numbers | LIB-05 |
 | `sys.argv`, `sys.exit`, `sys.stdout` and `sys.stderr`, `print` with `file` and `flush`, and `input` | LIB-04 |
 | `open` for text files in UTF-8, with `read`, `readline`, `readlines`, `write`, `writelines`, `flush`, `close`, iteration and `with` | LIB-04 |
+| `callable(x)`: true for a function value, a built-in function, method or type, and a class | LIB-23 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -25,6 +26,9 @@ has the same with `decode` and `hex`. Lists have `append`, `pop`,
 `iter` and `next` are
 described in
 [Compound statements](../reference/compound-statements.md#iterators).
+`callable(x)` is decided when the program is compiled for every type but
+an optional or a union, which it tests as `isinstance` does, and it still
+evaluates `x`. `map` and `filter` are planned for 0.10 (LIB-23).
 
 ## Example
 

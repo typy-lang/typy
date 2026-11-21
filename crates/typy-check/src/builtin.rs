@@ -12,6 +12,8 @@ pub enum Builtin {
     Any,
     Bool,
     Bytes,
+    /// `callable(x)`, whether `x` is a function value or a class (LIB-23).
+    Callable,
     Chr,
     Dict,
     Enumerate,
@@ -53,6 +55,7 @@ impl Builtin {
             "any" => Self::Any,
             "bool" => Self::Bool,
             "bytes" => Self::Bytes,
+            "callable" => Self::Callable,
             "chr" => Self::Chr,
             "dict" => Self::Dict,
             "enumerate" => Self::Enumerate,
@@ -94,6 +97,7 @@ impl Builtin {
             Self::Abs
                 | Self::All
                 | Self::Any
+                | Self::Callable
                 | Self::Chr
                 | Self::Input
                 | Self::IsInstance
@@ -139,6 +143,7 @@ impl Builtin {
             Self::Any => "any",
             Self::Bool => "bool",
             Self::Bytes => "bytes",
+            Self::Callable => "callable",
             Self::Chr => "chr",
             Self::Dict => "dict",
             Self::Enumerate => "enumerate",
@@ -183,6 +188,7 @@ mod tests {
             "any",
             "bool",
             "bytes",
+            "callable",
             "chr",
             "dict",
             "enumerate",
