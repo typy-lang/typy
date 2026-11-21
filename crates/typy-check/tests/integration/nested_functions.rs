@@ -90,16 +90,10 @@ fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
              position, so `g` has no `Callable` type",
         ),
         (
-            "def f[T](value: T) -> T:\n    def g() -> T:\n        return value\n    return g()\n",
-            "E0201",
-            "a nested function with type parameters, or inside a generic function, is planned \
-             for TyPy 0.10 (FUN-10)",
-        ),
-        (
             "def f() -> None:\n    def g[T](value: T) -> T:\n        return value\n",
             "E0201",
-            "a nested function with type parameters, or inside a generic function, is planned \
-             for TyPy 0.10 (FUN-10)",
+            "a nested function with type parameters of its own is planned for TyPy 0.10 \
+             (FUN-10)",
         ),
         (
             "def f() -> None:\n    g = 1\n    def g() -> int:\n        return 1\n",
@@ -109,8 +103,8 @@ fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
         (
             "def f() -> int:\n    return 1\n    def g[T](value: T) -> T:\n        return value\n",
             "E0201",
-            "a nested function with type parameters, or inside a generic function, is planned \
-             for TyPy 0.10 (FUN-10)",
+            "a nested function with type parameters of its own is planned for TyPy 0.10 \
+             (FUN-10)",
         ),
         (
             "from typing import Callable\n\n\ndef f(g: Callable[[int, int], int]) -> int:\n    \

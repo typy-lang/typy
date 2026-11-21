@@ -29,7 +29,7 @@ impl BodyChecker<'_> {
         let Some(first) = generators.first() else {
             unreachable!("a generator expression has a `for` clause")
         };
-        if let Some(refused) = self.refused_generator_expression(element, generators, span) {
+        if let Some(refused) = self.refused_generator_expression(element, generators) {
             return refused;
         }
         // The first iterable runs where the expression runs (EXP-15).
@@ -106,25 +106,13 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns E0201 for a generator expression in a generic function, which has a copy for
-    /// each set of types (FUN-10), or with an assignment expression, whose variable belongs
-    /// to the function around it.
+    /// Returns E0201 for a generator expression with an assignment expression, whose variable
+    /// belongs to the function around it.
     fn refused_generator_expression(
         &mut self,
         element: &Expr,
         generators: &[Comprehension],
-        span: Span,
     ) -> Option<TypedExpr> {
-        if !self.program.type_arguments.is_empty() {
-            let diagnostic = Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "a generator expression inside a generic function is planned for TyPy 0.10 \
-                 (FUN-10)",
-            )
-            .with_rule(RuleId::FUN_10);
-            return Some(self.error(diagnostic, span));
-        }
         let mut named = None;
         let mut visit = |expression: &Expr| {
             if let Expr::Named { span, .. } = expression {

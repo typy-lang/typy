@@ -36,10 +36,14 @@ no `Callable` expected, `chr` and `ord` have their one type, and any other
 built-in function or method is E0203, since its arguments may be of
 several types.
 
+A nested function inside a generic function, or inside a function with a
+protocol parameter, is checked and made in each copy of the function, and
+keeps Python's `__qualname__`, such as `pair_with.<locals>.make` (FUN-10).
+
 Decorators of functions are planned for 0.10 (FUN-06), and so are these
-as values: a class method, a protocol method, and a function with
-defaults, `*args` or `**kwargs` (FUN-09, FUN-13). So are nested functions
-of generic functions (FUN-10), and `map`, `filter` and `callable` (LIB-23).
+as values: a protocol method, and a nested function or method with
+`*args` or `**kwargs` (FUN-09, FUN-13). So are a nested function with type
+parameters of its own (FUN-10), and `map` and `filter` (LIB-23).
 Decorators of methods are planned for 0.14 (FUN-15), and so is a class of
 the program as a `Callable` (FUN-16); class decorators other than
 `@dataclass` are planned for 1.0 (CLS-38).

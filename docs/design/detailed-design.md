@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.78 |
+| Version | 2.79 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -839,9 +839,16 @@ cell is read as `CapturedCell(position)` and passed on to a deeper `def` as
 cell variables, also an `except` clause's, whose symbol is the clause's
 own. A cell's type is the variable's once the body around the `def` is
 checked, since an assignment after the `def` may give it. A nested
-function with type parameters, or in a generic function, is planned for
-0.10 (FUN-10). A call of a local variable before an assignment gives it a
-type is read first, so it is E0306.
+function with type parameters of its own is planned for 0.10 (FUN-10).
+One in a generic function, as a `lambda` and a generator expression there,
+is checked in each pass and copy of the function (ADR-0081): while
+`generic_body::check` checks the generic body, `Program::generic_pass`
+makes `check_body_of` keep each nested function as a generic with no body,
+so only the copies, checked by `generic_copies`, make code. Lowering
+writes a copy's `__qualname__` without its type arguments, so
+`pair_with[int].<locals>.make` shows as `pair_with.<locals>.make`. A call
+of a local variable before an assignment gives it a type is read first, so
+it is E0306.
 
 `body/generator.rs` checks generator functions (SMT-11, FUN-07, ADR-0063).
 A function whose body has a `yield` or a `yield from`, outside the
@@ -896,7 +903,7 @@ through either branch of a conditional (`body/conditional.rs`), and
 nothing or a `Callable` of fewer parameters is expected, is E0203; one
 taken by keyword only is E0202. The body is checked where the `lambda`
 stands, with `check_body_of`, so a capture of a variable assigned no type
-yet is E0306, and a `lambda` in a generic function is E0201 (FUN-10).
+yet is E0306.
 Where no result type is expected, the body's type becomes the result:
 the signature holds `Type::Error` while the body is checked, which a
 `return` takes as no expected type, and `settle_lambda_result` gives the
@@ -979,8 +986,7 @@ one an expected `Iterable`, `Iterator` or `Generator` gives, or else the
 element's, which `settle_yields` gives the signature and the generator
 types once the body is checked. The value is `TypedExprKind::CallValue`
 of the `Lambda` with the iterator, of type `Generator[Y, None, None]`. An
-assignment expression inside one is E0201, planned for 1.0 (EXP-18), and
-one inside a generic function E0201 (FUN-10).
+assignment expression inside one is E0201, planned for 1.0 (EXP-18).
 
 The subset walker accepts a starred item in a list, set or tuple display
 and in an unpacking target, and refuses it anywhere else with CPython's

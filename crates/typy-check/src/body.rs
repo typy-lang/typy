@@ -331,8 +331,10 @@ impl<'program> BodyChecker<'program> {
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
         // protocol has (GEN-04).
-        let generic =
-            program.generic(function).is_some() || program.is_opaque_copy(function) || protocol;
+        let generic = program.generic(function).is_some()
+            || program.is_opaque_copy(function)
+            || program.generic_pass.is_some()
+            || protocol;
         program.functions[function.0 as usize] = Some(TypedFunction {
             id: function,
             name: definition.name.clone(),

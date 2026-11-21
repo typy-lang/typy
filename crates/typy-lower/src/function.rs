@@ -575,7 +575,9 @@ fn function_builder(
         let closure = closure_parameter(program, function, &mut builder, tuple_types);
         (builder, None, closure)
     };
-    builder.set_qualified_name(function.qualified_name.clone());
+    // A copy of a generic function, and what it nests, shows Python's `__qualname__`, without
+    // the type arguments its symbol keeps (ADR-0081).
+    builder.set_qualified_name(without_type_arguments(&function.qualified_name));
     builder.set_stands_for(match program.builtin_values.get(&function.id) {
         Some(typy_check::BuiltinValue::Function) => typy_tyir::StandsFor::BuiltinFunction,
         Some(typy_check::BuiltinValue::Method) => typy_tyir::StandsFor::BuiltinMethod,
@@ -586,6 +588,22 @@ fn function_builder(
         None => typy_tyir::StandsFor::Itself,
     });
     (builder, generator, closure)
+}
+
+/// Returns `name` without the type arguments a copy of a generic function or class adds to
+/// it, such as `pair_with[int].<locals>.make`, which Python writes `pair_with.<locals>.make`.
+fn without_type_arguments(name: &str) -> String {
+    let mut shown = String::with_capacity(name.len());
+    let mut depth = 0_usize;
+    for character in name.chars() {
+        match character {
+            '[' => depth += 1,
+            ']' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => shown.push(character),
+            _ => {}
+        }
+    }
+    shown
 }
 
 /// Returns the symbol `function` is emitted under.

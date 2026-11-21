@@ -463,3 +463,29 @@ fn generic_classes_check_their_type_arguments() {
         );
     }
 }
+
+#[test]
+fn fun_10_nested_code_of_a_generic_function_is_checked_in_each_copy() {
+    let source = concat!(
+        "from collections.abc import Callable, Iterator\n",
+        "def pair_with[T](first: T) -> Callable[[T], tuple[T, T]]:\n",
+        "    def make(second: T) -> tuple[T, T]:\n",
+        "        return (first, second)\n",
+        "    return make\n",
+        "def doubled[T](values: list[T]) -> Iterator[tuple[T, T]]:\n",
+        "    return ((value, value) for value in values)\n",
+        "def same[T](value: T) -> Callable[[], T]:\n",
+        "    return lambda: value\n",
+        "print(pair_with(1)(2), pair_with('a')('b'), list(doubled([1])), same(2.5)())\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    // An error in the nested code is reported once, from the check with opaque types.
+    let wrong = concat!(
+        "def pair_with[T](first: T) -> int:\n",
+        "    def make(second: T) -> T:\n",
+        "        return first + second\n",
+        "    return 1\n",
+        "print(pair_with(1), pair_with('a'))\n",
+    );
+    assert_eq!(app(wrong), ["E0401"]);
+}

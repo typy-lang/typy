@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- A nested function, a `lambda` or a generator expression inside a generic
+  function, or inside a function with a protocol parameter, is accepted and
+  made in each copy of the function, with Python's `__qualname__`, such as
+  `pair_with.<locals>.make` (FUN-10). A copy of a generic function or class
+  shows its name without type arguments.
 - A built-in function is a value where a `Callable` is expected, such as
   `sorted(words, key=len)`, `max(rows, key=len)` or `measure:
   Callable[[str], int] = len`, written `<built-in function len>`, of the

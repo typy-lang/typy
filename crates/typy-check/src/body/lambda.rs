@@ -130,19 +130,9 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::Lambda { function, captures }, ty, *span)
     }
 
-    /// Returns E0201 for a `lambda` in a generic function, which has a copy for each set of
-    /// types (FUN-10), and E0306 for one that captures a variable assigned no type yet: its
-    /// body is checked where it stands.
+    /// Returns E0306 for a `lambda` that captures a variable assigned no type yet: its body is
+    /// checked where it stands.
     fn refused_lambda(&mut self, span: Span) -> Option<TypedExpr> {
-        if !self.program.type_arguments.is_empty() {
-            let diagnostic = Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "a `lambda` inside a generic function is planned for TyPy 0.10 (FUN-10)",
-            )
-            .with_rule(RuleId::FUN_10);
-            return Some(self.error(diagnostic, span));
-        }
         let untyped = self.captured_names(span).into_iter().find(|name| {
             self.cell_symbol(name)
                 .is_some_and(|symbol| !self.types.contains_key(&symbol))

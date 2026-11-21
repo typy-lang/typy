@@ -73,6 +73,10 @@ pub(crate) struct Program {
     /// The type each type parameter stands for while a generic body or a copy of it is
     /// checked (GEN-01).
     pub(crate) type_arguments: BTreeMap<String, Type>,
+    /// The generic function whose body is being checked with opaque or constrained types,
+    /// whose nested functions, `lambda`s and generator expressions make no code: each copy
+    /// makes its own (ADR-0081).
+    pub(crate) generic_pass: Option<FunctionId>,
     /// The generic functions of the program and the copies made of them (GEN-03).
     pub(crate) generics: super::generic_copy::Generics,
     /// The classes that satisfy each protocol, and the dispatchers of protocol values
@@ -214,6 +218,7 @@ impl Program {
             type_alias_objects: Vec::new(),
             type_aliases: BTreeSet::new(),
             type_arguments: BTreeMap::new(),
+            generic_pass: None,
             generics: super::generic_copy::Generics::default(),
             protocol_values: super::protocol_value::ProtocolValues::default(),
             class_copies: std::cell::RefCell::default(),

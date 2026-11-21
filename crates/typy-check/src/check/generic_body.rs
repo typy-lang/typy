@@ -16,6 +16,7 @@ pub(super) fn check(
     definition: &Definition<'_>,
     diagnostics: &mut Diagnostics,
 ) {
+    program.generic_pass = Some(id);
     for arguments in combinations(definition) {
         program.type_arguments = definition
             .type_parameters
@@ -31,6 +32,7 @@ pub(super) fn check(
         BodyChecker::check_function(program, id, &checked, diagnostics);
     }
     program.type_arguments.clear();
+    program.generic_pass = None;
 }
 
 /// Returns each list of type arguments the body is checked with: each unconstrained

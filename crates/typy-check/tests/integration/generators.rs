@@ -312,12 +312,6 @@ fn exp_15_a_generator_expression_refuses_what_it_cannot_compile() {
              (EXP-18)",
         ),
         (
-            "def first[T](items: list[T]) -> T:\n    found = list(item for item in items)\n    \
-             return found[0]\n",
-            "E0201",
-            "a generator expression inside a generic function is planned for TyPy 0.10 (FUN-10)",
-        ),
-        (
             "def f() -> None:\n    values = ((yield v) for v in range(3))\n    print(values)\n",
             "E0103",
             "'yield' inside generator expression",

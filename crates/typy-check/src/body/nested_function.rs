@@ -94,19 +94,21 @@ struct OwnedDefinition {
 impl BodyChecker<'_> {
     /// Checks a `def` in a function: its signature now, in the annotations of the function
     /// around it, and its body once that function's is checked. A nested function of a
-    /// generic function, or with type parameters of its own, has a copy for each set of
-    /// types, which is planned for 0.10 (FUN-10).
+    /// generic function is checked in each copy; one with type parameters of its own has a
+    /// copy for each set of types, which is planned for 0.10 (FUN-10).
     pub(super) fn nested_def(&mut self, statement: &Stmt) -> Option<TypedStmt> {
         let parts = FunctionParts::of(statement)?;
         let name = &parts.name.name;
         let symbol = *self.locals.get(name)?;
-        if !parts.type_parameters.is_empty() || !self.program.type_arguments.is_empty() {
+        // A nested function inside a generic function is checked, and compiled, in each copy
+        // (ADR-0081); one with type parameters of its own waits for its copies.
+        if !parts.type_parameters.is_empty() {
             self.diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     parts.name.span,
-                    "a nested function with type parameters, or inside a generic function, is \
-                     planned for TyPy 0.10 (FUN-10)",
+                    "a nested function with type parameters of its own is planned for TyPy 0.10 \
+                     (FUN-10)",
                 )
                 .with_rule(RuleId::FUN_10),
             );
