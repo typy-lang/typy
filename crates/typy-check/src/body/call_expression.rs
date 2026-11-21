@@ -73,6 +73,21 @@ impl BodyChecker<'_> {
         match function {
             // A module's declaration of a library holds nothing to evaluate (FFI-01).
             _ if let Some(library) = self.foreign_library(span) => library,
+            // `typing.cast`, imported by name or read through the module (TYP-24).
+            Expr::Name { id, .. }
+                if self.program.annotation_names.get(id)
+                    == Some(&crate::check::AnnotationName::Cast) =>
+            {
+                self.cast_call(arguments, keywords, span)
+            }
+            Expr::Attribute {
+                value, attribute, ..
+            } if attribute.name == "cast"
+                && matches!(value.as_ref(), Expr::Name { id, .. }
+                    if self.program.annotation_modules.get(id).map(String::as_str) == Some("typing")) =>
+            {
+                self.cast_call(arguments, keywords, span)
+            }
             Expr::Name {
                 id,
                 span: name_span,

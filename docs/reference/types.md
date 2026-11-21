@@ -66,6 +66,32 @@ narrows to `int | bool`, since a `bool` is an `int` and stays a `bool`;
 is planned for 0.13 (TYP-25). Sorting a list of `object` items is E0407,
 as an `object` has no order.
 
+## Casts
+
+`typing.cast(T, value)` gives `value` as a `T` (TYP-24, ADR-0091). A value
+the checker proves is a `T` passes as it is; any other is tested as
+`isinstance` tests it when the program runs, and a value that is not a
+`T` raises `TypeError`, such as `cast to int found str`. CPython trusts
+a cast and goes on with the value, but TyPy reads a value by the layout
+its type gives, so a wrong cast cannot go on. A `bool` is not an `int` in
+TyPy's types (TYP-03), so `cast(int, True)` raises as well.
+
+<!-- typy-expect: accepted -->
+```python
+from typing import cast
+
+record: dict[str, object] = {"name": "ada", "age": 36}
+name = cast(str, record["name"])
+age = cast(int, record["age"])
+print(name.upper(), age + 1)
+```
+
+`T` is a type a test decides from the value's class: a built-in type such
+as `int` or `str`, a class, `object`, `None` and unions of them. A cast to
+a collection of items, such as `list[int]`, is E0404, since a test reads
+the class and not the items, and so is a cast that can never hold, such
+as `cast(str, 3)`.
+
 ## Iterators and iterables
 
 `Iterable[T]` takes any built-in iterable of items of type `T`: a list, a
@@ -192,7 +218,6 @@ These forms are planned, and each is E0201 until its release:
 
 | Form | Release | Requirement |
 | --- | --- | --- |
-| `typing.cast`, checked when the program runs | 0.11 | TYP-24 |
 | A result inferred from `return` statements, and an empty collection's item type from its first use | 0.12 | TYP-26, TYP-27 |
 | `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-28 to TYP-31 |
 | `typing.Any`, bound when the program runs | 0.13 | TYP-25 |

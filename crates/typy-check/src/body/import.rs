@@ -434,7 +434,6 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let typing = module.as_str() == "typing";
     let planned = match name.as_str() {
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
-        "cast" if typing => Some(("0.11", RuleId::TYP_24)),
         "Literal" if typing => Some(("0.12", RuleId::TYP_28)),
         "overload" if typing => Some(("0.12", RuleId::TYP_29)),
         "Self" if typing => Some(("0.12", RuleId::TYP_30)),
@@ -515,6 +514,7 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "KeysView",
             "ValuesView",
             "ItemsView",
+            "cast",
         ],
     }
 }

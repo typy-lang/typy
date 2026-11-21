@@ -653,6 +653,7 @@ impl Dump<'_> {
             TypedExprKind::Upcast(_) => "Upcast".to_owned(),
             TypedExprKind::Downcast(_) => "Downcast".to_owned(),
             TypedExprKind::IsInstance(_) => "IsInstance".to_owned(),
+            TypedExprKind::Cast(cast) => format!("Cast {}", cast.target),
             TypedExprKind::IsSubclass { .. } => "IsSubclass".to_owned(),
             TypedExprKind::EachMember(_) => "EachMember".to_owned(),
             TypedExprKind::CheckedLength(_) => "CheckedLength".to_owned(),

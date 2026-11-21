@@ -307,6 +307,9 @@ pub enum RuntimeFunction {
     NotImplemented,
     /// Raises the `TypeError` of an arithmetic operator whose methods all gave way (CLS-21).
     OperandsUnsupported,
+    /// Raises the `TypeError` of a checked `cast`, named by the cast's type and the value's
+    /// class (TYP-24).
+    CastFailed,
     /// Raises the `TypeError` of an ordering whose methods all gave way (CLS-21).
     OrderingUnsupported,
     /// Raises the exception a method a type object's slot called raised (CLS-22).
@@ -535,7 +538,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 389] = [
+    pub const ALL: [Self; 390] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -789,6 +792,7 @@ impl RuntimeFunction {
         Self::SysVersionInfo,
         Self::NotImplemented,
         Self::OperandsUnsupported,
+        Self::CastFailed,
         Self::OrderingUnsupported,
         Self::SlotRaised,
         Self::SliceNew,
@@ -1249,6 +1253,7 @@ impl RuntimeFunction {
             Self::OperandsUnsupported | Self::OrderingUnsupported => {
                 signature(&[STR, TYPE, TYPE], Unit, true)
             }
+            Self::CastFailed => signature(&[STR, TYPE], Unit, true),
             Self::SysStdout | Self::SysStderr | Self::SysStdin => {
                 signature(&[], TyirType::TEXT_FILE, false)
             }
@@ -1625,6 +1630,7 @@ impl RuntimeFunction {
             Self::SysVersionInfo => "sys_version_info",
             Self::NotImplemented => "not_implemented",
             Self::OperandsUnsupported => "operands_unsupported",
+            Self::CastFailed => "cast_failed",
             Self::OrderingUnsupported => "ordering_unsupported",
             Self::SlotRaised => "slot_raised",
             Self::SliceNew => "slice_new",

@@ -16,6 +16,10 @@ All notable changes to TyPy are recorded here. The format follows
   any other operation (TYP-23). `isinstance(x, int)` narrows to `int |
   bool`, since a bool stays a bool; narrowing to a collection waits for
   `Any` in 0.13.
+- `typing.cast(T, value)`, checked when the program runs: a value of `T`
+  passes, and any other raises `TypeError`, such as `cast to int found
+  str`, where CPython trusts the cast and goes on (TYP-24). A cast to a
+  collection of items, such as `list[int]`, is refused.
 - Arithmetic on `bool` as CPython does it: a `bool` beside a number is the
   `int` 0 or 1, so `True + 1 == 2`, `True / 2 == 0.5`, `-True == -1`,
   `True == 1`, `abs`, `round` and `sum` of bools, and `"ab" * True`; `&`,
@@ -26,7 +30,6 @@ All notable changes to TyPy are recorded here. The format follows
 ### Changed
 
 - The refusals of forms a later release gives now name that release:
-  `typing.cast` 0.11 (TYP-24);
   `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
   to TYP-31); `typing.Any` and `TypedDict` with `Required`,
   `NotRequired` and `ReadOnly` 0.13 (TYP-25, TYP-32); the modules `enum`,
@@ -44,8 +47,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Removed
 
-- E0403 is retired: the `object`, `typing.Any` and `typing.cast` it
-  refused are E0201, planned. `typy explain E0403` says so.
+- E0403 is retired: `object` and `typing.cast`, which it refused, are
+  accepted, and `typing.Any` is E0201, planned for 0.13. `typy explain
+  E0403` says so.
 
 ### Fixed
 

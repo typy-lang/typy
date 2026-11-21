@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.97 |
+| Version | 2.98 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -294,7 +294,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0310 | Attribute whose type is not known yet, because the `__init__` that assigns it is checked later | CLS-01 |
 | E0401 | Operator not defined for these operand types | EXP-02 |
 | E0402 | Assignment changes the type of a variable | TYP-03 |
-| E0403 | Retired in 0.11: `Any`, `cast` and `object` annotations, which are now E0201, planned (TYP-23 to TYP-25) | TYP-10 |
+| E0403 | Retired in 0.11: `object` and `cast` are accepted (TYP-23, TYP-24), and `Any` is E0201, planned (TYP-25) | TYP-10 |
 | E0404 | Argument of the wrong type | TYP-01 |
 | E0405 | Returned value of the wrong type | TYP-01 |
 | E0406 | `~` of a `bool` | DAT-19 |
@@ -1530,6 +1530,18 @@ narrowed value back: `typy_rt_unbox_int`, `typy_rt_unbox_float` and
 for a union, each member tested in the union's order, which puts `bool` before
 `int`, then tagged. An operator method's `other: object`, such as `__eq__`'s,
 takes the operand boxed (`operand_for`).
+
+`typing.cast(T, value)` (TYP-24, ADR-0091) is `AnnotationName::Cast`, which
+`body::cast_call` checks: a value already assignable to `T` is converted as
+any assignment converts it, and any other becomes `TypedExprKind::Cast` of a
+`CastCheck`, an `IsInstanceTest` whose checks are the classes of `T`'s
+members, `int` as `MemberTest::Exact` since a `bool` is no `int` (TYP-03),
+with `T` written for the message. Lowering (`isinstance.rs`) tests the value,
+finds its class before the branch, calls `typy_rt_cast_failed`, which raises
+`TypeError: cast to T found C`, when the test fails, and otherwise narrows the
+value: unboxed from an `object`, unwrapped from an optional, read from a
+tagged union, or downcast. A `T` no test decides, such as `list[int]`, and a
+cast that can never hold are E0404.
 
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union

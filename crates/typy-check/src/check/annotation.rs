@@ -77,6 +77,8 @@ pub(crate) enum AnnotationName {
     Dataclasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
+    /// `typing.cast`, a function a call checks when the program runs (TYP-24).
+    Cast,
     /// `typing.NamedTuple`, the base of a named tuple, which the dataclass expansion reads
     /// (CLS-27).
     NamedTuple,
@@ -127,6 +129,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
+        ("typing", "cast") => Some(AnnotationName::Cast),
         ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
@@ -288,16 +291,8 @@ fn bare_standard(
     match name {
         AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
         AnnotationName::Final => final_elsewhere(annotation, diagnostics),
-        AnnotationName::Dataclasses => {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(408),
-                    annotation.span(),
-                    "`dataclass` and `field` are not types",
-                )
-                .with_rule(RuleId::CLS_05),
-            );
-            Type::Error
+        AnnotationName::Dataclasses | AnnotationName::Cast => {
+            not_a_type(&name, annotation.span(), diagnostics)
         }
         AnnotationName::Protocol => {
             diagnostics.push(
@@ -1040,5 +1035,21 @@ fn planned_open_type(
         .with_rule(rule)
         .with_help("annotate the value with its type, or a union of its types"),
     );
+    Type::Error
+}
+
+/// Returns the error type after reporting a name of `dataclasses` or `typing.cast` used as a
+/// type: they are functions.
+fn not_a_type(
+    name: &AnnotationName,
+    span: typy_diagnostics::Span,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let (message, rule) = if *name == AnnotationName::Cast {
+        ("`cast` is a function, not a type", RuleId::TYP_24)
+    } else {
+        ("`dataclass` and `field` are not types", RuleId::CLS_05)
+    };
+    diagnostics.push(Diagnostic::new(DiagnosticCode::error(408), span, message).with_rule(rule));
     Type::Error
 }

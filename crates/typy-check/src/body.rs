@@ -7,6 +7,7 @@ mod builtin_module;
 mod builtin_value;
 mod call;
 mod call_expression;
+mod cast_call;
 mod cdata;
 mod class;
 mod class_bridge;

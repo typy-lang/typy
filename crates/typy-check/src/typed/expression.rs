@@ -255,6 +255,10 @@ pub enum TypedExprKind {
     TypeOf(Box<TypedExpr>),
     /// The type object a class name or a built-in type name gives as a value.
     TypeObject(Box<crate::types::TypeObjectOf>),
+    /// `typing.cast(T, value)` of a value the checker cannot prove is a `T`: the value is
+    /// tested as `isinstance` tests it and given as a `T`, or `TypeError` is raised (TYP-24,
+    /// ADR-0091).
+    Cast(Box<CastCheck>),
     /// `__name__` of a type object.
     TypeName(Box<TypedExpr>),
     /// An f-string: its literal text and formatted fields, joined in order (LEX-07).
@@ -693,6 +697,16 @@ pub struct IsInstanceTest {
     pub held: Vec<TypedExpr>,
 }
 
+/// The test of a checked `cast` (TYP-24): the value with the classes that find it a `T`, and
+/// `T` as TyPy writes it, which the `TypeError` names.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CastCheck {
+    /// The value and its test.
+    pub test: IsInstanceTest,
+    /// The cast's type, written as messages write types.
+    pub target: String,
+}
+
 /// What a call with a `key` does with the items of its list (FUN-05).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyedOperation {
@@ -864,6 +878,7 @@ impl TypedExpr {
             TypedExprKind::IsInstance(test) => {
                 std::iter::once(&test.value).chain(&test.held).collect()
             }
+            TypedExprKind::Cast(cast) => vec![&cast.test.value],
             TypedExprKind::IsSubclass { class, bases } => {
                 std::iter::once(class.as_ref()).chain(bases).collect()
             }
