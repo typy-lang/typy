@@ -2308,7 +2308,7 @@ fn isinstance_narrows_variables_where_its_test_holds() {
             &["E0414"],
         ),
         ("print(isinstance(1, int, x=2))\n", &["E0404"]),
-        ("t = int\nprint(isinstance(1, t))\n", &["E0201"]),
+        ("t = (int, str)\nprint(isinstance(1, t))\n", &["E0201"]),
         ("print(isinstance(1, Missing))\n", &["E0205"]),
         (
             "class A:\n    pass\nclass B(A):\n    def __init__(self) -> None:\n        self.b = 1\n\

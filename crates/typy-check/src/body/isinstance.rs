@@ -78,6 +78,7 @@ impl BodyChecker<'_> {
             narrowed: None,
             otherwise: None,
             members,
+            held: Vec::new(),
         };
         Self::typed(TypedExprKind::IsInstance(Box::new(test)), Type::Bool, span)
     }
@@ -103,7 +104,8 @@ impl BodyChecker<'_> {
             );
         };
         let value = self.expression(value);
-        let classes = match self.isinstance_classes(classes) {
+        let mut held = Vec::new();
+        let classes = match self.isinstance_classes_holding(classes, Some(&mut held)) {
             Ok(classes) => classes,
             Err(Some(diagnostic)) => return self.error(*diagnostic, span),
             // The class is reported where it is named.
@@ -115,7 +117,43 @@ impl BodyChecker<'_> {
                 );
             }
         };
-        self.isinstance_test(value, &classes, span)
+        let test = self.isinstance_test(value, &classes, span);
+        self.with_held_classes(test, held)
+    }
+
+    /// Returns the test `test` that also asks about `held`, classes held in values, whose
+    /// bound, the class their type names, narrows the value as a named class does (CLS-18).
+    fn with_held_classes(&mut self, test: TypedExpr, held: Vec<TypedExpr>) -> TypedExpr {
+        if held.is_empty() {
+            return test;
+        }
+        let TypedExprKind::IsInstance(mut test_parts) = test.kind else {
+            return test;
+        };
+        // A class read when the program runs narrows only to the class its type bounds it by.
+        let bounds: Option<Vec<TypeObjectOf>> = held
+            .iter()
+            .map(|class| match &class.ty {
+                Type::TypeObject(Some(of)) => Some(of.as_ref().clone()),
+                _ => None,
+            })
+            .collect();
+        if test_parts.checks.is_empty()
+            && !test_parts.always
+            && let Some(bounds) = bounds
+        {
+            let inner = match &test_parts.value.ty {
+                Type::Optional(inner) => inner.as_ref().clone(),
+                other => other.clone(),
+            };
+            let value = test_parts.value.clone();
+            test_parts.narrowed = self.narrowing(&value, &inner, &bounds, false, false);
+        } else {
+            test_parts.narrowed = None;
+            test_parts.otherwise = None;
+        }
+        test_parts.held = held;
+        Self::typed(TypedExprKind::IsInstance(test_parts), Type::Bool, test.span)
     }
 
     /// Returns the test `isinstance(value, classes)` with the classes known, and what it
@@ -167,6 +205,7 @@ impl BodyChecker<'_> {
                 narrowed,
                 otherwise,
                 members,
+                held: Vec::new(),
             })),
             Type::Bool,
             span,
@@ -206,6 +245,16 @@ impl BodyChecker<'_> {
         &mut self,
         classes: &Expr,
     ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {
+        self.isinstance_classes_holding(classes, None)
+    }
+
+    /// Returns the classes the second argument names, and puts each class held in a value
+    /// into `held` when it is given (CLS-18); without it, such a class is planned.
+    fn isinstance_classes_holding(
+        &mut self,
+        classes: &Expr,
+        mut held: Option<&mut Vec<TypedExpr>>,
+    ) -> Result<Vec<TypeObjectOf>, Option<Box<Diagnostic>>> {
         let named = match classes {
             Expr::Tuple { elements, .. } => elements.iter().collect(),
             other => vec![other],
@@ -216,14 +265,20 @@ impl BodyChecker<'_> {
                 found.extend(classes);
                 continue;
             }
-            found.push(self.named_class(each)?);
+            match self.named_class(each)? {
+                Named::Class(class) => found.push(class),
+                Named::Held(value) => match held.as_deref_mut() {
+                    Some(held) => held.push(value),
+                    None => return Err(Some(Box::new(held_class_planned(each.span())))),
+                },
+            }
         }
         Ok(found)
     }
 
     /// Returns the class an expression names as a value: a class of the program, or a
     /// built-in type or exception class.
-    fn named_class(&mut self, each: &Expr) -> Result<TypeObjectOf, Option<Box<Diagnostic>>> {
+    fn named_class(&mut self, each: &Expr) -> Result<Named, Option<Box<Diagnostic>>> {
         let typed = self.expression(each);
         if typed.ty == Type::TypeAlias {
             return Err(Some(Box::new(
@@ -256,17 +311,22 @@ impl BodyChecker<'_> {
             )));
         }
         match typed.kind {
-            TypedExprKind::TypeObject(of) => Ok(*of),
+            TypedExprKind::TypeObject(of) => Ok(Named::Class(*of)),
             _ if typed.ty == Type::Error => Err(None),
+            // A class held in a value is tested when the program runs (CLS-18).
+            _ if matches!(typed.ty, Type::TypeObject(_)) => Ok(Named::Held(typed)),
+            _ if matches!(typed.ty, Type::Tuple(_) | Type::TupleOf(_)) => {
+                Err(Some(Box::new(held_class_planned(each.span()))))
+            }
+            // Any other value is no class: CPython raises `TypeError` for it.
             _ => Err(Some(Box::new(
                 Diagnostic::new(
-                    DiagnosticCode::error(201),
+                    DiagnosticCode::error(401),
                     each.span(),
-                    "`isinstance` with a class held in a variable or computed is \
-                     planned for TyPy 0.10 (CLS-18)",
+                    "isinstance() arg 2 must be a type, a tuple of types, or a union: CPython \
+                     raises `TypeError`",
                 )
-                .with_rule(RuleId::CLS_18)
-                .with_help("name the class, or a tuple of classes, in the call"),
+                .with_rule(RuleId::CLS_09),
             ))),
         }
     }
@@ -571,4 +631,23 @@ fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
             _ => Outcome::Never,
         },
     }
+}
+
+/// A class the second argument of `isinstance` names: one the program names, or one held in
+/// a value, which is tested when the program runs (CLS-18).
+enum Named {
+    Class(TypeObjectOf),
+    Held(TypedExpr),
+}
+
+/// Returns E0201 for a class held in a value where TyPy tests only named classes yet: a class
+/// pattern, and a value that is no type object, such as a tuple of classes in a variable.
+fn held_class_planned(span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        span,
+        "a class held in a tuple, or in a class pattern, is planned for TyPy 0.10 (CLS-18)",
+    )
+    .with_rule(RuleId::CLS_18)
+    .with_help("name the class, or a tuple of classes, in the call")
 }

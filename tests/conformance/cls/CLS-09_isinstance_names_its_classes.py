@@ -1,8 +1,7 @@
 # typy-test: CLS-09
-# typy-expect: rejected E0201 at 8:27
+# typy-expect: rejected E0401 at 7:27
 class Shape:
     pass
 
 
-kind = Shape
-print(isinstance(Shape(), kind))
+print(isinstance(Shape(), 3))

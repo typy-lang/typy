@@ -75,10 +75,9 @@ fn an_operand_an_operator_or_a_display_cannot_take_is_refused() {
             "a str has no method `nope` in TyPy",
         ),
         (
-            "print(isinstance(1, (int, str)[0]))\n",
+            "classes = (int, str)\nprint(isinstance(1, classes))\n",
             "E0201",
-            "`isinstance` with a class held in a variable or computed is planned for TyPy \
-            0.10 (CLS-18)",
+            "a class held in a tuple, or in a class pattern, is planned for TyPy 0.10 (CLS-18)",
         ),
     ];
     for (source, code, message) in refused {

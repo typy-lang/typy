@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `isinstance` takes a class held in a value, such as `isinstance(shape,
+  kind)` with `kind = type(other)` or a parameter of type `type[Square]`,
+  alone or in a tuple with named classes, tested when the program runs; a
+  class whose type names one narrows the value to it (CLS-18).
 - Decorators on functions at the top of a module or nested in a function:
   any expression that takes the function, evaluated from the top down and
   applied from the bottom up when the `def` runs, the name holding what the

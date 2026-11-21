@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.80 |
+| Version | 2.81 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -980,7 +980,14 @@ One of a generic class read through an instance is E0201, planned for
 0.14 (CLS-30). A static method read through an instance whose subclasses
 define it again as static methods of its types is
 `TypedExprKind::ChosenFunction` of the function of each class, chosen by
-the instance's class when the program runs and binding nothing. `callable(x)`
+the instance's class when the program runs and binding nothing. An
+`isinstance` argument that is a type object held in a value, such as
+`type(c)` or a variable of type `type[Square]`, joins
+`IsInstanceTest::held` (CLS-18, ADR-0084): lowering evaluates it after the
+value, and tests the value's runtime type with
+`typy_rt_type_derives_from`, `None` of an optional as `NoneType`; a held
+class whose type names one narrows the value to it. The runtime's `bool`
+derives from `int`, as in CPython. `callable(x)`
 (LIB-23) is an `IsInstanceTest` that holds for a `Callable` or a type
 object, by member for an optional or a union, and a name `names_builtin`
 takes is the constant `True`. Where nothing is expected, `chr` is

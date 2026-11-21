@@ -668,6 +668,9 @@ pub struct IsInstanceTest {
     /// For a union, each member in order: whether every value of it is an instance of one of
     /// the classes, and the tests its value's class decides (TYP-14).
     pub members: Vec<(bool, Vec<MemberTest>)>,
+    /// The classes held in values, each a type object evaluated after `value`, which the
+    /// value's class is tested against when the program runs (CLS-18, ADR-0084).
+    pub held: Vec<TypedExpr>,
 }
 
 /// What a call with a `key` does with the items of its list (FUN-05).
@@ -836,7 +839,9 @@ impl TypedExpr {
                 .flat_map(|(key, value)| [key, value])
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
-            TypedExprKind::IsInstance(test) => vec![&test.value],
+            TypedExprKind::IsInstance(test) => {
+                std::iter::once(&test.value).chain(&test.held).collect()
+            }
             TypedExprKind::EachMember(each) => std::iter::once(&each.value)
                 .chain(each.arms.iter().map(|(_, body)| body))
                 .collect(),

@@ -269,8 +269,12 @@ A test also narrows after an `if` whose body cannot fall through, such
 as `if not isinstance(shape, Circle): return`, and in the right operand
 of `and`. When the checker can tell the answer, as for
 `isinstance(3, int)`, nothing is tested when the program runs; `bool`
-counts as `int`, as in CPython. A class held in a variable, and
-`issubclass`, are planned for 0.10 (CLS-18, CLS-19).
+counts as `int`, as in CPython. A class held in a value, such as
+`isinstance(shape, kind)` with `kind = type(other)` or a parameter of type
+`type[Square]`, is tested when the program runs, and narrows the value to
+the class its type names (CLS-18). A tuple of classes held in a variable,
+a class pattern with such a class, and `issubclass` are planned for 0.10
+(CLS-18, CLS-19).
 
 ## Class variables and defaults
 

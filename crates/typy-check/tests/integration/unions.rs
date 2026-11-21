@@ -202,3 +202,21 @@ fn a_fixed_tuple_of_other_items_is_no_member_of_such_a_union() {
     );
     assert_eq!(app(source), ["E0404"]);
 }
+
+#[test]
+fn cls_18_isinstance_takes_a_class_held_in_a_value() {
+    let source = concat!(
+        "class Shape:\n",
+        "    pass\n",
+        "class Square(Shape):\n",
+        "    def side(self) -> int:\n",
+        "        return 4\n",
+        "shape: Shape = Square()\n",
+        "kind = type(shape)\n",
+        "square_class: type[Square] = Square\n",
+        "if isinstance(shape, square_class):\n",
+        "    print(shape.side())\n",
+        "print(isinstance(shape, kind), isinstance(shape, (Shape, kind)), isinstance(True, type(1)))\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+}

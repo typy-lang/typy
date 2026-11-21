@@ -301,6 +301,8 @@ pub enum RuntimeFunction {
     /// Whether two objects of any types are equal, through the `equal` slot of the class
     /// that decides, as a union of objects compares them (GEN-10).
     ObjectsEqual,
+    /// Whether a type object is a class or derives from another, both as words (CLS-18).
+    TypeDerivesFrom,
     /// Whether two function values stand for one function: the same object, or two objects
     /// of functions that capture nothing whose descriptors name one identity (ADR-0076).
     SameFunction,
@@ -507,7 +509,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 377] = [
+    pub const ALL: [Self; 378] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -760,6 +762,7 @@ impl RuntimeFunction {
         Self::ObjectHasTypeId,
         Self::ObjectsEqual,
         Self::SameFunction,
+        Self::TypeDerivesFrom,
         Self::CtypesFloatArgument,
         Self::SysGetRecursionLimit,
         Self::SysSetRecursionLimit,
@@ -994,7 +997,9 @@ impl RuntimeFunction {
             Self::SliceIndex => signature(&[TyirType::SLICE, Int, Int], Int, true),
             Self::SliceEqual => signature(&[TyirType::SLICE, TyirType::SLICE], Bool, false),
             Self::ObjectHasTypeId => signature(&[Bits, Int], Bool, false),
-            Self::ObjectsEqual | Self::SameFunction => signature(&[Bits, Bits], Bool, false),
+            Self::ObjectsEqual | Self::SameFunction | Self::TypeDerivesFrom => {
+                signature(&[Bits, Bits], Bool, false)
+            }
             Self::CtypesFloatArgument => signature(&[Int, Int], Float, true),
             Self::RangeCheckStep | Self::SysSetRecursionLimit => signature(&[Int], Unit, true),
             Self::NameError | Self::WriteStdoutChecked | Self::FreeVariableUnbound => {
@@ -1570,6 +1575,7 @@ impl RuntimeFunction {
             Self::ObjectHasTypeId => "object_has_type_id",
             Self::ObjectsEqual => "objects_equal",
             Self::SameFunction => "same_function",
+            Self::TypeDerivesFrom => "type_derives_from",
             Self::CtypesFloatArgument => "ctypes_float_argument",
             Self::SysGetRecursionLimit => "sys_getrecursionlimit",
             Self::SysSetRecursionLimit => "sys_setrecursionlimit",
