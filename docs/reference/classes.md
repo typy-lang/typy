@@ -156,11 +156,15 @@ same type. The base of a class is `object`, an exception class or a
 class of the program defined before it; a built-in type such as `int` or
 `list` is E0201, and several bases are planned for after 1.0.
 
-`type(x)` of an instance whose class has subclasses gives the class the
-instance has when the program runs, which `print`, `__name__`, `is` and
-`==` read. Calling that class, or reading a class variable or a class
-method through it, is planned for 0.14 (CLS-39); call the class by its
-name instead.
+A value of type `type[C]` holds `C` or a class derived from it, as in
+CPython: a `type[Square]` passes where a `type[Shape]` is expected, and
+`type(x)` of an instance whose static class is `Shape` is a `type[Shape]`
+that holds the class the instance has when the program runs, which
+`print`, `__name__`, `is`, `==`, `isinstance` and `issubclass` read (CLS-18,
+ADR-0084). When a class of the program derives from `C`, calling such a
+value, or reading a class variable or a class method through it, is
+planned for 0.14 (CLS-39); call the class by its name instead. `cls` in a
+class method holds its own class, and is called as it is.
 
 <!-- typy-expect: rejected E0201 at 11:12 -->
 ```python

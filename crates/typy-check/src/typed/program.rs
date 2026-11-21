@@ -67,13 +67,21 @@ pub struct TypedProgram {
     /// The variables nested functions declare `nonlocal`, each a cell variable whose cell is
     /// the capture at this position of its function object, not a new one (SMT-09).
     pub nonlocals: std::collections::BTreeMap<SymbolId, u32>,
-    /// Each class and protocol it satisfies, and what the instances of each iterator or
-    /// iterable class are, which assignability reads; `ProgramScope` puts them back after
-    /// the check (ADR-0041, TYP-20).
-    pub(crate) fits: (
-        std::collections::BTreeSet<(super::ClassId, super::ClassId)>,
+    /// The tables of the program's classes that assignability reads, which `ProgramScope`
+    /// puts back after the check.
+    pub(crate) fits: ClassTables,
+}
+
+/// The tables of a checked program's classes that assignability reads.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ClassTables {
+    /// Each class and a protocol it satisfies (ADR-0041).
+    pub(crate) protocols: std::collections::BTreeSet<(super::ClassId, super::ClassId)>,
+    /// What the instances of each iterator or iterable class are (TYP-20).
+    pub(crate) iterations:
         std::collections::BTreeMap<super::ClassId, crate::iterator_fits::Iteration>,
-    ),
+    /// The bases of each class, nearest first (CLS-18).
+    pub(crate) bases: std::collections::BTreeMap<super::ClassId, Vec<super::ClassId>>,
 }
 
 /// What a hidden function of a built-in stands for (FUN-08, ADR-0077).

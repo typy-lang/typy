@@ -19,7 +19,7 @@ impl BodyChecker<'_> {
     /// it (FFI-03). Returns `None` for a variable of any other type.
     fn call_class_value(
         &mut self,
-        ty: &Type,
+        (ty, exact): (&Type, bool),
         arguments: &[Expr],
         keywords: &[Keyword],
         span: Span,
@@ -27,6 +27,14 @@ impl BodyChecker<'_> {
         match ty {
             Type::TypeObject(Some(of)) => {
                 let class = Self::program_class(of)?;
+                // A `type[C]` may hold a class derived from `C`, whose `__init__` may take
+                // other arguments (CLS-39, ADR-0084).
+                if !exact && self.program.has_derived_class(class) {
+                    for argument in arguments {
+                        self.expression(argument);
+                    }
+                    return Some(self.not_callable((None, span), &Type::TypeObject(None), span));
+                }
                 Some(self.new_instance(class, arguments, keywords, span))
             }
             Type::CDataClass(class) => Some(self.cdata_new(class, arguments, keywords, span)),
@@ -108,7 +116,8 @@ impl BodyChecker<'_> {
         // a class's type object; CPython raises `TypeError` for an `int` or a `str`.
         if self.in_function() && self.program.module_variables.contains(name) {
             let read = self.name(name, name_span);
-            if let Some(made) = self.call_class_value(&read.ty, arguments, keywords, span) {
+            let held = (&read.ty, false);
+            if let Some(made) = self.call_class_value(held, arguments, keywords, span) {
                 return made;
             }
             if let Type::Callable { .. } = read.ty {
@@ -149,7 +158,10 @@ impl BodyChecker<'_> {
             }
             return TypedExpr { span, ..read };
         };
-        if let Some(made) = self.call_class_value(&ty, arguments, keywords, span) {
+        // `cls` of a class method holds its class exactly, as each class has its own copy
+        // of the method (ADR-0025).
+        let exact = self.is_class_method_class(symbol);
+        if let Some(made) = self.call_class_value((&ty, exact), arguments, keywords, span) {
             return made;
         }
         if matches!(
@@ -184,13 +196,20 @@ impl BodyChecker<'_> {
         ty: &Type,
         span: Span,
     ) -> TypedExpr {
-        if *ty == Type::TypeObject(None) {
+        let held_derived = match ty {
+            Type::TypeObject(Some(of)) => {
+                Self::program_class(of).is_some_and(|class| self.program.has_derived_class(class))
+            }
+            _ => false,
+        };
+        if *ty == Type::TypeObject(None) || held_derived {
             return self.error(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
                     at,
                     "calling a class known only when the program runs, such as `type(x)` of an \
-                     instance whose class has subclasses, is planned for TyPy 0.14 (CLS-39)",
+                     instance whose class has subclasses or a `type[C]` value that may hold a \
+                     class derived from `C`, is planned for TyPy 0.14 (CLS-39)",
                 )
                 .with_rule(RuleId::CLS_39),
                 span,

@@ -102,17 +102,22 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- A `type[C]` holds `C` or a class derived from it: a `type[Square]` passes
+  where a `type[Shape]` is expected, and `type(x)` of an instance whose
+  class has subclasses is a `type[C]` of its static class (CLS-18). When a
+  class derives from `C`, calling a class held in a variable, a parameter
+  or `type(x)`, or reaching a class variable or class method through it,
+  is refused as planned for 0.14 (CLS-39); 0.9 called the static class.
+  Call the class by its name instead.
 - `from typing import ...` and `from collections.abc import ...` report
   every name a later release gives, not only the first. `typing.AbstractSet`
   is refused as planned for 0.10 (LIB-20), where it was "not given"
   (E0425), and `Sized`, `Hashable` and `MappingView` as planned for 0.14
-  (LIB-24). A class derived from `typing.NamedTuple` is refused as planned
-  for 0.10 (CLS-27), where the message named CLS-04.
+  (LIB-24).
 - A decorator on a method is refused as planned for 0.14 (FUN-15), and a
   class decorator other than `@dataclass` as planned for 1.0 (CLS-38);
-  0.10 brings decorators of functions (FUN-06). `map`, `filter` and
-  `callable` are refused as planned for 0.10 under LIB-23, and
-  `property`, `staticmethod` and `classmethod` as values as planned for
+  0.10 brings decorators of functions (FUN-06). `property`,
+  `staticmethod` and `classmethod` as values are refused as planned for
   1.0 (FUN-17). The messages named FUN-06 for every decorator and FUN-08
   for those names.
 - A keyword argument a builtin does not take is refused with CPython's

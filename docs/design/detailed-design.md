@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.86 |
+| Version | 2.87 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -990,7 +990,14 @@ class whose type names one narrows the value to it. The runtime's `bool`
 derives from `int`, as in CPython. `issubclass(class, classes)`
 (CLS-19) is `TypedExprKind::IsSubclass` of the class and each class of the
 second argument, type objects named or held, which lowering evaluates in
-order and tests with `typy_rt_type_derives_from`. Either takes a tuple of
+order and tests with `typy_rt_type_derives_from`. A `type[Sub]` is
+assignable to `type[C]` through `TypeObjectOf::derives_from`, which reads
+`class_bases`, a table of each class's bases noted as the module's classes
+and copies are made, and which `TypedProgram::fits` carries to lowering.
+`may_hold_derived` tells such a value from an exact one, the class's name
+or `cls` of a class method (`BodyChecker::class_parameter`), and a call,
+a class variable or a class method through a value that may hold a
+derived class is E0201 (CLS-39). Either takes a tuple of
 classes held in a value: lowering evaluates it once and tests each item of
 a fixed tuple, or calls `typy_rt_type_derives_from_any` with a
 `tuple[type, ...]`, which goes over its items. An abstract collection

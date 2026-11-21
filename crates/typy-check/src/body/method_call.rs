@@ -158,6 +158,12 @@ impl BodyChecker<'_> {
         if let Type::TypeObject(Some(of)) = &receiver.ty
             && let Some(class) = Self::program_class(of)
         {
+            if let Some(refused) = self.member_through_held_class(&receiver, name) {
+                for argument in arguments {
+                    self.expression(argument);
+                }
+                return refused;
+            }
             return self.class_method_call(class, name, arguments, keywords, span);
         }
         if let Some(class) = receiver.ty.class_id() {

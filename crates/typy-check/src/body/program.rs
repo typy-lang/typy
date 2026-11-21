@@ -337,6 +337,9 @@ impl Program {
         let first_class = self.classes.len();
         self.classes.extend(classes);
         self.class_ids = class_ids;
+        for (class, instance) in &instances {
+            note_bases(*class, instance);
+        }
         self.instances.extend(instances);
         // A generic class's copies are made from its definitions, which have no bridges
         // (CLS-30); a protocol has no instances, and a value of it reaches the methods of the
@@ -909,11 +912,20 @@ impl Program {
                 .collect(),
             cells: self.cells,
             nonlocals: self.nonlocals,
-            fits: (
-                self.protocol_values.fits.clone(),
-                self.protocol_values.iterations.clone(),
-            ),
+            fits: crate::typed::ClassTables {
+                protocols: self.protocol_values.fits.clone(),
+                iterations: self.protocol_values.iterations.clone(),
+                bases: crate::class_bases::table(),
+            },
         }
+    }
+}
+
+/// Notes the bases of `class`, whose instances have the type `instance`, which assignability
+/// reads for `type[C]` (CLS-18).
+pub(super) fn note_bases(class: ClassId, instance: &Type) {
+    if let Type::Instance(own) = instance {
+        crate::class_bases::note(class, own.ancestors.iter().map(|(base, _)| *base).collect());
     }
 }
 

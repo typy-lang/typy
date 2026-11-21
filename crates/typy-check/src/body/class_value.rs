@@ -6,7 +6,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Expr, Identifier};
 
 use super::BodyChecker;
-use crate::typed::{AssignTarget, ClassId, TypedExpr};
+use crate::typed::{AssignTarget, ClassId, SymbolId, TypedExpr, TypedExprKind};
 use crate::types::{Type, TypeObjectOf};
 
 /// What an assignment to a value a class body gives comes to.
@@ -33,6 +33,68 @@ impl BodyChecker<'_> {
             TypeObjectOf::Exception(exception) => exception.class_id(),
             _ => None,
         }
+    }
+
+    /// Returns true when the local `symbol` is `cls` of the class method being checked, which
+    /// holds its class exactly, since each class has its own copy of the method (ADR-0025).
+    pub(super) fn is_class_method_class(&self, symbol: SymbolId) -> bool {
+        self.class_parameter == Some(symbol)
+    }
+
+    /// Returns true when `value`, a type object of `class` or of a class derived from it, may
+    /// hold a derived class: it is neither the class's name nor `cls` of a class method, and
+    /// a class of the program derives from `class` (CLS-39, ADR-0084).
+    pub(super) fn may_hold_derived(&self, value: &TypedExpr, class: ClassId) -> bool {
+        let exact = match &value.kind {
+            TypedExprKind::TypeObject(_) => true,
+            TypedExprKind::Local(symbol) => self.is_class_method_class(*symbol),
+            _ => false,
+        };
+        !exact && self.program.has_derived_class(class)
+    }
+
+    /// Returns the refusal of reading `value.member` as a value: a member of a named tuple
+    /// planned for 0.14 (CLS-43), or one reached through a class that may be derived (CLS-39).
+    pub(super) fn refused_member(
+        &mut self,
+        value: &TypedExpr,
+        member: &Identifier,
+    ) -> Option<TypedExpr> {
+        self.planned_member(&value.ty, member, false)
+            .or_else(|| self.member_through_held_class(value, member))
+    }
+
+    /// Returns the refusal of `value.member` where `value` is a `type[C]` that may hold a
+    /// class derived from `C` and the member is a class method, a class variable or a default
+    /// a derived class may give again, planned for 0.14 (CLS-39); `None` for any other read.
+    pub(super) fn member_through_held_class(
+        &mut self,
+        value: &TypedExpr,
+        member: &Identifier,
+    ) -> Option<TypedExpr> {
+        let Type::TypeObject(Some(of)) = &value.ty else {
+            return None;
+        };
+        let class = Self::program_class(of)?;
+        let reaches =
+            self.has_method(class, &member.name) || self.holder(class, &member.name).is_some();
+        if !reaches || !self.may_hold_derived(value, class) {
+            return None;
+        }
+        Some(self.error(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                member.span,
+                format!(
+                    "`{}` through a `{}` value that may hold a class derived from it is planned \
+                     for TyPy 0.14 (CLS-39)",
+                    member.name, value.ty
+                ),
+            )
+            .with_rule(RuleId::CLS_39)
+            .with_help("name the class, or test the value with `issubclass` first"),
+            member.span,
+        ))
     }
 
     /// Returns the class an expression names: a class's name, or a variable that holds a

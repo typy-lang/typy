@@ -8,8 +8,8 @@ const SHAPES: &str = "class Shape:\n    kind = 'shape'\n    @classmethod\n    de
                       shape: Shape = Circle()\n";
 
 const PLANNED: &str = "calling a class known only when the program runs, such as `type(x)` \
-                       of an instance whose class has subclasses, is planned for TyPy 0.14 \
-                       (CLS-39)";
+                       of an instance whose class has subclasses or a `type[C]` value that may \
+                       hold a class derived from `C`, is planned for TyPy 0.14 (CLS-39)";
 
 #[test]
 fn calling_type_of_an_instance_whose_class_has_subclasses_is_planned() {
@@ -24,18 +24,57 @@ fn calling_type_of_an_instance_whose_class_has_subclasses_is_planned() {
 }
 
 #[test]
-fn class_members_through_type_of_such_an_instance_are_refused() {
-    for statement in ["print(type(shape).kind)", "print(type(shape).make())"] {
+fn class_members_through_type_of_such_an_instance_are_planned() {
+    for (statement, member) in [
+        ("print(type(shape).kind)", "kind"),
+        ("print(type(shape).make())", "make"),
+    ] {
         let source = format!("{SHAPES}{statement}\n");
-        assert_eq!(app(&source), ["E0412"], "{statement}");
+        assert_eq!(
+            messages(&source),
+            [(
+                "E0201".to_owned(),
+                format!(
+                    "`{member}` through a `type[Shape]` value that may hold a class derived from \
+                     it is planned for TyPy 0.14 (CLS-39)"
+                ),
+                "CLS-39".to_owned()
+            )],
+            "{statement}"
+        );
     }
 }
 
 #[test]
-fn type_of_such_an_instance_is_no_type_of_its_static_class() {
-    let source =
-        format!("{SHAPES}def build(kind: type[Shape]) -> None:\n    pass\nbuild(type(shape))\n");
-    assert_eq!(app(&source), ["E0404"]);
+fn type_of_such_an_instance_is_a_type_of_its_static_class() {
+    let source = format!(
+        "{SHAPES}def build(kind: type[Shape]) -> str:\n    return kind.__name__\n\
+         print(build(type(shape)), build(Circle))\n"
+    );
+    assert_eq!(app(&source), Vec::<String>::new());
+}
+
+#[test]
+fn cls_18_a_class_is_held_where_a_base_is_and_calls_through_it_are_planned() {
+    let held = format!(
+        "{SHAPES}kinds: tuple[type[Shape], ...] = (Circle, Shape)\nchosen: type[Shape] = Circle\n\
+         print(isinstance(shape, kinds), chosen is Circle, Circle.make(), Shape.make())\n"
+    );
+    assert_eq!(app(&held), Vec::<String>::new());
+    for statement in [
+        "def made(kind: type[Shape]) -> Shape:\n    return kind()\n",
+        "chosen: type[Shape] = Circle\nprint(chosen())\n",
+    ] {
+        let source = format!("{SHAPES}{statement}");
+        assert_eq!(
+            messages(&source),
+            [("E0201".to_owned(), PLANNED.to_owned(), "CLS-39".to_owned())],
+            "{statement}"
+        );
+    }
+    let in_class_method = "class Shape:\n    @classmethod\n    def make(cls) -> 'Shape':\n        \
+                           return cls()\nclass Circle(Shape):\n    pass\nprint(Circle.make())\n";
+    assert_eq!(app(in_class_method), Vec::<String>::new());
 }
 
 #[test]

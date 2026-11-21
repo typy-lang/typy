@@ -180,6 +180,20 @@ pub enum AbstractClass {
 }
 
 impl TypeObjectOf {
+    /// Returns true when this class is `base` or derives from it: a class of the program from
+    /// a base, an exception class from a base, and `bool` from `int` (CLS-18).
+    #[must_use]
+    pub fn derives_from(&self, base: &Self) -> bool {
+        match (self, base) {
+            (Self::Instance(own, _), Self::Instance(base, _)) => {
+                crate::class_bases::derives(*own, *base)
+            }
+            (Self::Exception(own), Self::Exception(base)) => own.derives_from(base),
+            (Self::Bool, Self::Int) | (_, Self::Object) => true,
+            _ => self == base,
+        }
+    }
+
     /// Returns the type of type objects of `of`, any type object when it is `None`.
     #[must_use]
     pub fn type_of(of: Option<Self>) -> Type {
@@ -397,6 +411,9 @@ impl Type {
             | (Self::NoneType, Self::Optional(_))
             | (Self::Module(_), Self::AnyModule)
             | (Self::TypeObject(_), Self::TypeObject(None)) => true,
+            // A class is held where a base's class is: a `type[C]` holds `C` or a class
+            // derived from it (CLS-18, ADR-0084).
+            (Self::TypeObject(Some(own)), Self::TypeObject(Some(base))) => own.derives_from(base),
             // An exception of a class is one of each of its bases (EXC-01), and so is an
             // instance (CLS-04).
             (Self::Exception(class), Self::Exception(base)) => class.derives_from(base),
@@ -704,7 +721,12 @@ impl Type {
     /// converts to where that type is expected (DAT-14).
     #[must_use]
     pub fn fits_tuple_of(&self, item: &Self) -> bool {
-        matches!(self, Self::Tuple(items) if items.iter().all(|each| each.matches(item)))
+        // A class is held as one of its bases, as the same object (CLS-18).
+        let fits = |each: &Self| match (each, item) {
+            (Self::TypeObject(Some(own)), Self::TypeObject(Some(base))) => own.derives_from(base),
+            _ => each.matches(item),
+        };
+        matches!(self, Self::Tuple(items) if items.iter().all(fits))
     }
 
     /// Returns true when a value of this type has a hash, so it may be an item of a set or a key

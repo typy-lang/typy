@@ -154,6 +154,8 @@ pub(crate) struct BodyChecker<'program> {
     splitting: Vec<(each_member::Split, Type)>,
     /// The class and instance of the method being checked, which `super()` reads.
     method: Option<class::Initializing>,
+    /// `cls` of the class method being checked, which holds its class exactly (ADR-0025).
+    class_parameter: Option<SymbolId>,
     /// Whether a use of the incomplete instance has been reported, so one cause gives one error.
     reported_incomplete: bool,
     /// How many `except` clauses enclose the statement being checked, in this function.
@@ -217,6 +219,7 @@ impl<'program> BodyChecker<'program> {
             returns,
             initializing: None,
             method: None,
+            class_parameter: None,
             narrowings: Vec::new(),
             splitting: Vec::new(),
             following: Vec::new(),
@@ -281,6 +284,16 @@ impl<'program> BodyChecker<'program> {
                 .get_or_insert_with(BTreeSet::new)
                 .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
+        }
+        if let (Some(class), false, Some(first)) = (
+            definition.class,
+            definition.takes_instance,
+            parameters.first(),
+        ) && !checker.program.classes[class.0 as usize]
+            .static_methods
+            .contains(&definition.name)
+        {
+            checker.class_parameter = Some(*first);
         }
         if let (Some(class), true, Some(instance)) = (
             definition.class,

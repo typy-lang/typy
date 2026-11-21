@@ -55,19 +55,10 @@ impl BodyChecker<'_> {
             );
         }
         let value = self.expression(argument);
-        let of = match &value.ty {
-            // An instance of a class some class derives from may be of that class, so its
-            // type object is known only when the program runs (ADR-0084).
-            Type::Instance(class)
-                if self.program.has_derived_class(
-                    class.generic.as_ref().map_or(class.id, |(root, _)| *root),
-                ) =>
-            {
-                None
-            }
-            other => TypeObjectOf::of(other),
-        };
-        let ty = TypeObjectOf::type_of(of);
+        // An instance of a class some class derives from may be of that class, so its type
+        // object is a `type[C]` read when the program runs, whose calls and class members are
+        // planned (CLS-39, ADR-0084).
+        let ty = TypeObjectOf::type_of(TypeObjectOf::of(&value.ty));
         Self::typed(TypedExprKind::TypeOf(Box::new(value)), ty, span)
     }
 

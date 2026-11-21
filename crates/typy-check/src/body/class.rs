@@ -162,7 +162,7 @@ impl BodyChecker<'_> {
             return read;
         }
         let object = self.instance_object(value);
-        if let Some(refused) = self.planned_member(&object.ty, attribute, false) {
+        if let Some(refused) = self.refused_member(&object, attribute) {
             return refused;
         }
         if let Type::CData(class) = object.ty.clone() {
