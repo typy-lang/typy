@@ -530,6 +530,13 @@ impl Dump<'_> {
                     self.program.function(*function).qualified_name
                 )
             }
+            TypedExprKind::ChosenFunction { functions, .. } => {
+                let names: Vec<&str> = functions
+                    .iter()
+                    .map(|(_, function)| self.program.function(*function).qualified_name.as_str())
+                    .collect();
+                format!("ChosenFunction {}", names.join(" "))
+            }
             TypedExprKind::BoundMethod { methods, .. } => {
                 let names: Vec<&str> = methods
                     .iter()

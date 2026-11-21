@@ -175,6 +175,31 @@ impl FunctionLowerer<'_> {
         made
     }
 
+    /// Returns the function among `functions` of the class of the instance `object` gives,
+    /// chosen by the same tests as `bound_method`, after evaluating the object: the static
+    /// method of the instance's own class (FUN-09).
+    pub(crate) fn chosen_function(
+        &mut self,
+        object: &TypedExpr,
+        functions: &[(ClassId, FunctionId)],
+        span: Span,
+    ) -> Lowered {
+        let instance = self.expression(object);
+        let constant = |this: &mut Self, function: FunctionId| {
+            this.constant(Constant::Function(typy_tyir::FunctionId(function.0)), span)
+        };
+        let mut chosen = constant(self, functions[0].1);
+        for (class, function) in &functions[1..] {
+            let name = self.program.class(*class).name.clone();
+            let test = MemberTest::Class(TypeObjectOf::Instance(*class, name));
+            let found = self.member_found(instance, &test, span);
+            let own = constant(self, *function);
+            chosen = self.select(found, own, chosen, TyirType::FUNCTION);
+        }
+        self.release(instance, span);
+        Self::borrowed(chosen, TyirType::FUNCTION)
+    }
+
     /// Calls the code of the function object `callee` gives with `arguments`, and returns
     /// the result as an owned value. A `Callable` type does not say whether its function
     /// raises, so the call always takes the raising form. The function object and each

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.77 |
+| Version | 2.78 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-20 |
@@ -957,7 +957,10 @@ that class's copy, binding the type object; read through an instance, of
 the copy of each class from the static class down, the last whose test
 holds chosen, binding the instance's runtime type, as CPython binds `cls`.
 One of a generic class read through an instance is E0201, planned for
-0.14 (CLS-30). `callable(x)`
+0.14 (CLS-30). A static method read through an instance whose subclasses
+define it again as static methods of its types is
+`TypedExprKind::ChosenFunction` of the function of each class, chosen by
+the instance's class when the program runs and binding nothing. `callable(x)`
 (LIB-23) is an `IsInstanceTest` that holds for a `Callable` or a type
 object, by member for an optional or a union, and a name `names_builtin`
 takes is the constant `True`. Where nothing is expected, `chr` is

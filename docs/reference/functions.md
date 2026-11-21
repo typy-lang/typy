@@ -539,7 +539,7 @@ These forms are refused:
 | A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
 | `*` or `**` in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and `**` in a call of `print`, planned for 0.10 | E0201 (EXP-19) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
-| A static method read through an instance whose subclasses define it again; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
+| A static method read through an instance whose subclasses define it again as a method; a method read through a protocol value; a method read through an instance whose subclass overrides it with parameters or a result held otherwise, planned for 0.10 | E0201 (FUN-09) |
 | A property read through its class as a value, such as `Box.v`, which is a `property` object, planned for 1.0 | E0201 (FUN-17) |
 | A call of a value that is not a function, such as an `int` | E0401 |
 

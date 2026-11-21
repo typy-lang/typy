@@ -43,7 +43,8 @@ All notable changes to TyPy are recorded here. The format follows
 - A class method read as a value, such as `make = Box.make` or `box.make`,
   is a bound method of the class it is read through, or of the instance's
   own class, as CPython binds `cls`: `box.make` of a `BigBox` makes a
-  `BigBox` (FUN-09).
+  `BigBox` (FUN-09). A static method read through an instance whose
+  subclasses define it again is the function of the instance's own class.
 - `callable(x)` is true for a function value, a built-in function, method
   or type, and a class, and false for any other value, as CPython answers
   (LIB-23).

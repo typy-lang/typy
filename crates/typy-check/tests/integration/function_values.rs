@@ -317,9 +317,9 @@ fn fun_09_the_methods_without_one_bound_value_yet_are_planned() {
     let cases = [
         (
             "class B:\n    @staticmethod\n    def s() -> int:\n        return 1\n\
-             class D(B):\n    @staticmethod\n    def s() -> int:\n        return 2\nf = B().s\n",
-            "`s` is a static method a subclass defines again, and using one as a value is \
-             planned for TyPy 0.10 (FUN-09)",
+             class D(B):\n    def s(self) -> int:\n        return 2\nf = B().s\n",
+            "`s` is a static method a subclass defines again otherwise, and using one as a value \
+             is planned for TyPy 0.10 (FUN-09)",
         ),
         (
             "class B:\n    def v(self) -> int | None:\n        return None\n\
@@ -761,4 +761,23 @@ fn fun_09_a_class_method_read_as_a_value_binds_its_class() {
         (found[0].0.as_str(), found[0].2.as_str()),
         ("E0201", "CLS-30")
     );
+}
+
+#[test]
+fn fun_09_a_static_method_read_through_an_instance_is_its_classs_own() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "class Box:\n",
+        "    @staticmethod\n",
+        "    def double(value: int) -> int:\n",
+        "        return value * 2\n",
+        "class BigBox(Box):\n",
+        "    @staticmethod\n",
+        "    def double(value: int) -> int:\n",
+        "        return value * 20\n",
+        "box: Box = BigBox()\n",
+        "chosen: Callable[[int], int] = box.double\n",
+        "print(chosen(1), chosen is BigBox.double)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
 }

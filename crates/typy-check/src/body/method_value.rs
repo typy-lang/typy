@@ -38,15 +38,31 @@ impl BodyChecker<'_> {
             .unwrap_or(FunctionId(0));
         let overrides = self.overrides_of(class, &name.name, false);
         if self.is_static_method(class, &name.name) {
-            if !overrides.is_empty() {
+            let value = self.function_value(method, &name.name, span);
+            if overrides.is_empty() || value.ty.has_error() {
+                return Self::after(object, value);
+            }
+            // A subclass that defines it again as a static method of the same types gives its
+            // own function (FUN-09, ADR-0079); one held otherwise waits for 0.14 (CLS-35).
+            if overrides.iter().any(|(each, _)| {
+                !self.is_static_method(*each, &name.name) || self.is_adapted(*each, &name.name)
+            }) {
                 return self.planned_method_value(
                     name,
-                    "a static method a subclass defines again",
+                    "a static method a subclass defines again otherwise",
                     span,
                 );
             }
-            let value = self.function_value(method, &name.name, span);
-            return Self::after(object, value);
+            let functions = std::iter::once((class, method)).chain(overrides).collect();
+            let ty = value.ty;
+            return Self::typed(
+                TypedExprKind::ChosenFunction {
+                    object: Box::new(object),
+                    functions,
+                },
+                ty,
+                span,
+            );
         }
         if overrides.iter().any(|(each, _)| {
             self.is_static_method(*each, &name.name) || self.is_adapted(*each, &name.name)

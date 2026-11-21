@@ -285,6 +285,9 @@ impl FunctionLowerer<'_> {
                 methods,
                 binds_class,
             } => self.bound_method(object, methods, *binds_class, span),
+            TypedExprKind::ChosenFunction { object, functions } => {
+                self.chosen_function(object, functions, span)
+            }
             TypedExprKind::Keyed {
                 operation,
                 list,
