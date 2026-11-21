@@ -121,19 +121,23 @@ impl BodyChecker<'_> {
     ) -> TypedExpr {
         let items: Vec<TypedExpr> = parameters
             .iter()
-            .map(|parameter| {
-                let key = format!("typevar:alias:{owner}.{parameter}");
-                let index = self.program.typing_value_object(parameter, &key);
-                self.program.single_typing_values.insert(index);
-                Self::typed(
-                    TypedExprKind::TypingValue(index),
-                    Type::Typing(Type::TYPING_ALIKE),
-                    span,
-                )
-            })
+            .map(|parameter| self.type_parameter_value(owner, parameter, span))
             .collect();
         let ty = Type::Tuple(items.iter().map(|item| item.ty.clone()).collect());
         Self::typed(TypedExprKind::Tuple(items), ty, span)
+    }
+
+    /// Returns the type parameter `parameter` of the alias `owner`, a typing value written by
+    /// its name, which CPython keeps one object of.
+    fn type_parameter_value(&mut self, owner: &str, parameter: &str, span: Span) -> TypedExpr {
+        let key = format!("typevar:alias:{owner}.{parameter}");
+        let index = self.program.typing_value_object(parameter, &key);
+        self.program.single_typing_values.insert(index);
+        Self::typed(
+            TypedExprKind::TypingValue(index),
+            Type::Typing(Type::TYPING_ALIKE),
+            span,
+        )
     }
 
     /// Returns the value an alias's `type` statement writes, `value`, read at `span`: a
@@ -152,6 +156,13 @@ impl BodyChecker<'_> {
                 span,
             ),
             Expr::Name { id, .. } => {
+                // The alias's own type parameter, as in `type Id[T] = T`.
+                if let Some(rendering) = &self.alias_rendering
+                    && rendering.parameters.contains(id)
+                {
+                    let owner = rendering.owner.clone();
+                    return self.type_parameter_value(&owner, id, span);
+                }
                 if let Some((module, name)) = self.module_alias(id, span) {
                     return self.type_alias_object(&module, &name, span);
                 }

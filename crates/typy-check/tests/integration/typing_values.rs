@@ -196,3 +196,45 @@ fn typ_18_what_no_typing_value_gives_is_refused_with_the_reason() {
         );
     }
 }
+
+#[test]
+fn typ_18_an_imported_alias_and_a_shadowed_name_are_read_as_cpython_reads_them() {
+    let shapes = "class Point:\n    pass\n\n\ntype Pair[T] = tuple[T, T]\ntype Score = int\n";
+    let accepted = "from shapes import Pair, Score\nkinds = [list[Score], Pair[int], Score | None]\n\
+                    print(kinds == [list[Score], Pair[int], None | Score])\n";
+    assert_eq!(
+        crate::common::codes(&[("app.py", accepted), ("shapes.py", shapes)]),
+        Vec::<String>::new()
+    );
+    // A variable of the function hides a class or an alias of the same name, so the
+    // subscript is no typing value.
+    for source in [
+        "class Box:\n    pass\n\n\ndef f() -> None:\n    Box = [1]\n    print(Box[0])\n",
+        "type Score = int\n\n\ndef f() -> None:\n    Score = [1]\n    print(Score[0])\n",
+    ] {
+        assert_eq!(messages(source), Vec::new(), "{source}");
+    }
+}
+
+#[test]
+fn typ_18_forms_that_give_no_typing_value_are_checked_as_they_are() {
+    for (source, code) in [
+        ("print(None | None)\n", "E0401"),
+        ("import typing\nprint(typing.List is list[int])\n", "E0202"),
+        (
+            "x = 1\ntype A = list[int]\nprint(A.__value__)\nprint(list[x])\n",
+            "E0401",
+        ),
+    ] {
+        let found = messages(source);
+        assert!(
+            found.iter().any(|(each, _, _)| each == code),
+            "{source}: {found:?}"
+        );
+    }
+    // A tuple given as one argument is the arguments, and an alias's own type parameter is
+    // its value, as CPython writes them.
+    let written = "type Id[T] = T\nprint(list[(int, str)], Id.__value__, Id.__value__ == \
+                   Id.__type_params__[0])\n";
+    assert_eq!(messages(written), Vec::new());
+}

@@ -427,6 +427,9 @@ mod tests {
             );
             assert!(!super::typy_rt_same_function(left, other));
             assert!(!super::typy_rt_same_function(first.cast(), second.cast()));
+            // An object is itself, and an object of another type is no function.
+            assert!(super::typy_rt_same_function(left, left));
+            assert!(!super::typy_rt_same_function(left, name.cast()));
             for each in [left, right, other, first.cast(), second.cast()] {
                 crate::refcount::typy_rt_decrement(each);
             }

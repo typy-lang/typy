@@ -116,3 +116,21 @@ fn lib_25_map_as_a_value_and_unpacking_into_it_are_planned() {
         );
     }
 }
+
+#[test]
+fn map_reports_its_source_and_takes_strict_from_the_floor_that_gives_it() {
+    let found = crate::common::messages("print(list(map(str, missing)))\n");
+    assert!(
+        found.iter().any(|(code, _, _)| code == "E0205"),
+        "{found:?}"
+    );
+    let strict = "print(list(map(str, [1], strict=True)))\n";
+    assert!(
+        !crate::common::messages_at(strict, typy_source::PythonFloor::V3_12).is_empty(),
+        "refused at 3.12"
+    );
+    assert_eq!(
+        crate::common::messages_at(strict, typy_source::PythonFloor::V3_14),
+        Vec::new()
+    );
+}

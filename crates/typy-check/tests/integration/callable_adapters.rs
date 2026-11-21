@@ -147,3 +147,40 @@ fn fun_19_a_value_no_adapter_fits_is_refused_with_the_reason() {
         );
     }
 }
+
+#[test]
+fn fun_19_adapters_of_each_kind_fit_or_report_where_they_do_not() {
+    for body in [
+        // A key passes no result type, and a nested function with a default fits it.
+        "def outer() -> list[int]:\n    def add(value: int, more: int = 1) -> int:\n        \
+         return value + more\n    return sorted([3, 1], key=add)\n",
+        // A dataclass's `__init__` with a default factory is read through its class.
+        "from dataclasses import dataclass, field\n\n\n@dataclass\nclass Point:\n    \
+         xs: list[int] = field(default_factory=list)\n\n\n\
+         make: Callable[[Point], None] = Point.__init__\n",
+    ] {
+        let source = format!("{APPLY}{body}");
+        assert_eq!(app(&source), Vec::<String>::new(), "{source}");
+    }
+    for (body, code) in [
+        // A nested function read before its `def` runs reports the read.
+        (
+            "def outer() -> int:\n    value = once(add, 1)\n    def add(value: int, more: int = 1) -> int:\n        \
+             return value + more\n    return value\n",
+            "E0306",
+        ),
+        ("starred = lambda *values: 0\n", "E0203"),
+        (
+            "class Meter:\n    @classmethod\n    def gather(cls, *values: int) -> int:\n        \
+             return sum(values)\n\n\nloose = Meter().gather\n",
+            "E0203",
+        ),
+    ] {
+        let source = format!("{APPLY}{body}");
+        let found = messages(&source);
+        assert!(
+            found.iter().any(|(each, _, _)| each == code),
+            "{source}: {found:?}"
+        );
+    }
+}

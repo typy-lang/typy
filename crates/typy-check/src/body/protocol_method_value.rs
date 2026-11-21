@@ -153,25 +153,25 @@ impl Program {
     }
 
     /// Chooses, for each read of `adapted_reads`, the adapter of the method of each class that
-    /// satisfies the protocol, or the dispatcher's when none does.
+    /// satisfies the protocol, or the dispatcher's when none does. A class satisfies the
+    /// protocol only with a method of the protocol's parameters and defaults, so its adapter
+    /// fits the `Callable` the protocol's did.
     fn write_adapted_reads(&mut self, diagnostics: &mut Diagnostics) {
         let reads = std::mem::take(&mut self.protocol_values.adapted_reads);
         for (key, read) in &reads {
             let mut classes = self.satisfying_classes(read.protocol);
             classes.reverse();
             let mut chosen = Vec::new();
-            for class in classes {
-                let Some(own) = self.method(class, &read.name) else {
-                    continue;
-                };
+            let methods: Vec<(ClassId, FunctionId)> = classes
+                .into_iter()
+                .filter_map(|class| Some((class, self.method(class, &read.name)?)))
+                .collect();
+            for method in methods {
                 let callable = (read.expected.0.as_slice(), read.expected.1.as_ref());
                 let mut checker = BodyChecker::new(self, diagnostics, None);
                 let bound = (read.name.as_str(), true);
-                if let Ok(adapter) =
-                    checker.method_adapter((class, own), bound, callable, read.span)
-                {
-                    chosen.push((class, adapter));
-                }
+                let adapter = checker.method_adapter(method, bound, callable, read.span);
+                chosen.extend(adapter.ok().map(|adapter| (method.0, adapter)));
             }
             if chosen.is_empty() {
                 chosen.push((read.protocol, read.dispatched));

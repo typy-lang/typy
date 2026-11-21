@@ -99,3 +99,32 @@ fn typ_24_a_cast_between_unrelated_classes_always_fails_and_is_refused() {
             .all(|(code, message, _)| code == "E0404" && message.contains("always raises"))
     );
 }
+
+#[test]
+fn typ_24_a_cast_of_each_shape_is_checked_or_reported() {
+    let base = "from typing import cast\n\n\nclass Base:\n    pass\n\n\nclass Derived(Base):\n    pass\n\n\n";
+    for body in [
+        "def f(x: Base | int) -> Derived:\n    return cast(Derived, x)\n",
+        "def f(x: Base | str) -> Derived:\n    return cast(Derived, x)\n",
+        "def f(x: ValueError | int) -> UnicodeError:\n    return cast(UnicodeError, x)\n",
+    ] {
+        let source = format!("{base}{body}");
+        assert_eq!(
+            crate::common::app(&source),
+            Vec::<String>::new(),
+            "{source}"
+        );
+    }
+    for (body, code) in [
+        ("print(cast(int, value=1))\n", "E0404"),
+        ("print(cast(Missing, 1))\n", "E0205"),
+        ("print(cast(int, missing))\n", "E0205"),
+    ] {
+        let source = format!("{base}{body}");
+        let found = crate::common::messages(&source);
+        assert!(
+            found.iter().any(|(each, _, _)| each == code),
+            "{source}: {found:?}"
+        );
+    }
+}
