@@ -61,6 +61,9 @@ pub const BUILTIN_FUNCTION_TYPE_ID: u32 = 28;
 /// The type ID of the object of a method of a built-in type read through the type, such as
 /// `str.upper`, laid out as a function object (FUN-08, ADR-0077).
 pub const METHOD_DESCRIPTOR_TYPE_ID: u32 = 29;
+/// The type ID of a method of a built-in type read through a value, such as `words.append`,
+/// laid out as a bound method (FUN-08, ADR-0077).
+pub const BUILTIN_METHOD_TYPE_ID: u32 = 30;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]

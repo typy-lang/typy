@@ -126,6 +126,9 @@ pub(crate) struct BodyChecker<'program> {
     local_order: Vec<SymbolId>,
     /// The variables an assignment expression in the body assigns (EXP-13).
     named_targets: Vec<SymbolId>,
+    /// The `Callable` expected of the attribute read at this span, which a method of a
+    /// built-in value takes as its type (FUN-08); set only while that read is checked.
+    expected_method: Option<(Span, Vec<Type>, Option<Type>)>,
     declared: BTreeMap<SymbolId, Type>,
     types: BTreeMap<SymbolId, Type>,
     assigned: Assigned,
@@ -203,6 +206,7 @@ impl<'program> BodyChecker<'program> {
             locals: BTreeMap::new(),
             local_order: Vec::new(),
             named_targets: Vec::new(),
+            expected_method: None,
             declared: BTreeMap::new(),
             types: BTreeMap::new(),
             assigned: Some(BTreeSet::new()),

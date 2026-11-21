@@ -40,6 +40,13 @@ impl BodyChecker<'_> {
             {
                 return value;
             }
+            // So does a method read through a built-in value, such as `words.append`.
+            if let (Some(types), Expr::Attribute { span, .. }) = (expected.parameters, expression) {
+                self.expected_method = Some((*span, types.to_vec(), expected.returns.cloned()));
+                let value = self.expression(expression);
+                self.expected_method = None;
+                return value;
+            }
             return self.expression(expression);
         };
         if let Some(refused) = self.refused_lambda(*span) {

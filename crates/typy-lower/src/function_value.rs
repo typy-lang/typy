@@ -156,7 +156,14 @@ impl FunctionLowerer<'_> {
             chosen = self.select(found, own, chosen, TyirType::Bits);
         }
         let bits = self.bits(Self::borrowed(instance.value, instance.ty), span);
-        let made = self.call_runtime(RuntimeFunction::MethodNew, vec![chosen, bits], span);
+        // A method of a built-in type read through a value is written as CPython writes a
+        // built-in method (FUN-08).
+        let new = if self.program.builtin_values.contains_key(&methods[0].1) {
+            RuntimeFunction::BuiltinMethodNew
+        } else {
+            RuntimeFunction::MethodNew
+        };
+        let made = self.call_runtime(new, vec![chosen, bits], span);
         self.release(instance, span);
         made
     }

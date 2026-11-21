@@ -239,6 +239,58 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Returns the method `attribute` of the built-in value `object`, such as `words.append`,
+    /// as a value of the `Callable` the context expects of the read at `span`: a bound method
+    /// of the hidden function that calls the method on its first argument; E0203 where none
+    /// is expected.
+    pub(super) fn bound_builtin_method(
+        &mut self,
+        object: TypedExpr,
+        attribute: &Identifier,
+        span: Span,
+    ) -> TypedExpr {
+        let class = TypeObjectOf::of(&object.ty);
+        let expected = self.expected_method.take().filter(|(at, ..)| *at == span);
+        let (Some(class), Some((_, parameters, returns))) = (class, expected) else {
+            let message = format!(
+                "`{}` of {} as a value needs the `Callable` type its context expects",
+                attribute.name,
+                object.ty.with_article()
+            );
+            return self.error(
+                Diagnostic::new(DiagnosticCode::error(203), attribute.span, message)
+                    .with_rule(RuleId::FUN_08)
+                    .with_help("annotate the variable with the types you call it with"),
+                span,
+            );
+        };
+        let called = Called::Method {
+            class: class.name(),
+            method: &attribute.name,
+        };
+        let all: Vec<Type> = std::iter::once(object.ty.clone())
+            .chain(parameters.iter().cloned())
+            .collect();
+        let value = self.builtin_value(called, span, &all, returns.as_ref());
+        let TypedExprKind::FunctionValue(function) = value.kind else {
+            return value;
+        };
+        let result = self.program.signatures[function.0 as usize].returns.clone();
+        let ty = Type::Callable {
+            parameters,
+            returns: Box::new(result),
+        };
+        // A hidden function binds no class; the one entry is the method the value binds.
+        Self::typed(
+            TypedExprKind::BoundMethod {
+                object: Box::new(object),
+                methods: vec![(crate::typed::ClassId(0), function)],
+            },
+            ty,
+            span,
+        )
+    }
+
     /// Returns the built-in function `id` names where the program binds nothing of that name.
     pub(super) fn unbound_builtin_function(&self, id: &str, span: Span) -> Option<Builtin> {
         let builtin = Builtin::named(id).filter(|builtin| builtin.is_function())?;

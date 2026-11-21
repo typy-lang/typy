@@ -606,3 +606,37 @@ fn fun_08_a_function_of_a_module_a_function_imports_is_a_value() {
     );
     assert_eq!(app(source), Vec::<String>::new());
 }
+
+#[test]
+fn fun_08_a_method_read_through_a_builtin_value_binds_it() {
+    let source = concat!(
+        "from collections.abc import Callable\n",
+        "words: list[str] = []\n",
+        "add: Callable[[str], None] = words.append\n",
+        "join: Callable[[list[str]], str] = '-'.join\n",
+        "print(sorted(['b', 'a'], key='ab'.index), add, join)\n",
+    );
+    assert_eq!(app(source), Vec::<String>::new());
+    let cases = [
+        (
+            "words = ['a']\nadd = words.append\n",
+            "E0203",
+            "`append` of a list[str] as a value needs the `Callable` type its context expects",
+        ),
+        (
+            "from collections.abc import Callable\nwords = ['a']\n\
+             add: Callable[[int], None] = words.append\n",
+            "E0404",
+            "`object` of `append` must be a str, and this is an int",
+        ),
+    ];
+    for (source, code, message) in cases {
+        let found = messages(source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert_eq!(
+            (found[0].0.as_str(), found[0].1.as_str()),
+            (code, message),
+            "{source}"
+        );
+    }
+}

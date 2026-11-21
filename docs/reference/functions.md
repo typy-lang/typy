@@ -25,16 +25,18 @@ A built-in function is a value where a `Callable` is expected, such as
 written `<built-in function len>` (FUN-08). So is a method of a built-in
 type read through the type, such as `sorted(words, key=str.lower)` or
 `add: Callable[[list[int], int], None] = list.append`, written
-`<method 'lower' of 'str' objects>`, and so is a function of `math` or
-`sys`, such as `key=math.fabs`. With no `Callable` expected, `chr` and
-`ord` have their one type, and any other built-in function or method is
-E0203, since its arguments may be of several types.
+`<method 'lower' of 'str' objects>`, a method read through a built-in
+value, such as `add: Callable[[str], None] = words.append` or
+`key="-".join`, written `<built-in method append of list object at
+0x...>`, and a function of `math` or `sys`, such as `key=math.fabs`. With
+no `Callable` expected, `chr` and `ord` have their one type, and any other
+built-in function or method is E0203, since its arguments may be of
+several types.
 
 Decorators of functions are planned for 0.10 (FUN-06), and so are these
-as values: a method read through a built-in value, such as `words.append`,
-a built-in type, a class method, a protocol method, and a function with
-defaults, `*args` or `**kwargs` (FUN-08, FUN-09, FUN-13, FUN-14). So are
-nested functions of generic functions (FUN-10), and `map`, `filter` and
+as values: a built-in type, a class method, a protocol method, and a
+function with defaults, `*args` or `**kwargs` (FUN-09, FUN-13, FUN-14). So
+are nested functions of generic functions (FUN-10), and `map`, `filter` and
 `callable` (LIB-23). Decorators of methods are planned for 0.14 (FUN-15),
 and class decorators other than `@dataclass` for 1.0 (CLS-38).
 

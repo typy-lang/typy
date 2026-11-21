@@ -185,6 +185,9 @@ pub enum RuntimeFunction {
     /// A new bound method of the descriptor and the instance, which it holds a reference to
     /// (FUN-05).
     MethodNew,
+    /// A new method of a built-in type read through a value, such as `words.append`, of a
+    /// hidden function's descriptor and the value (FUN-08, ADR-0077).
+    BuiltinMethodNew,
     /// Raises `NameError` for a captured variable, named by the `str`, that has no value yet
     /// (FUN-04).
     FreeVariableUnbound,
@@ -504,7 +507,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 376] = [
+    pub const ALL: [Self; 377] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -677,6 +680,7 @@ impl RuntimeFunction {
         Self::TypeAliasName,
         Self::TypeAliasModule,
         Self::MethodNew,
+        Self::BuiltinMethodNew,
         Self::FreeVariableUnbound,
         Self::ExceptionNew,
         Self::ExceptionPartText,
@@ -1111,7 +1115,9 @@ impl RuntimeFunction {
             Self::TypeAliasName | Self::TypeAliasModule => {
                 signature(&[TyirType::TYPE_ALIAS], STR, false)
             }
-            Self::MethodNew => signature(&[Bits, Bits], TyirType::FUNCTION, false),
+            Self::MethodNew | Self::BuiltinMethodNew => {
+                signature(&[Bits, Bits], TyirType::FUNCTION, false)
+            }
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1484,6 +1490,7 @@ impl RuntimeFunction {
             Self::TypeAliasName => "type_alias_name",
             Self::TypeAliasModule => "type_alias_module",
             Self::MethodNew => "method_new",
+            Self::BuiltinMethodNew => "builtin_method_new",
             Self::FreeVariableUnbound => "free_variable_unbound",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",

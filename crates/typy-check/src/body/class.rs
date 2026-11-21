@@ -179,6 +179,12 @@ impl BodyChecker<'_> {
         if let Some(field) = self.os_error_field(&object, attribute, span) {
             return field;
         }
+        // A method of a built-in value is a value where a `Callable` is expected (FUN-08).
+        if object.ty.class_id().is_none()
+            && crate::method::Method::of(&object.ty, &attribute.name).is_some()
+        {
+            return self.bound_builtin_method(object, attribute, span);
+        }
         let Some((object, class)) = self.as_instance(object) else {
             return Self::invalid_call(span);
         };

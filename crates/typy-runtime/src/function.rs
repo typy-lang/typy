@@ -166,11 +166,54 @@ unsafe extern "C" fn function_hash(object: *mut ObjectHeader) -> i64 {
 /// object the compiler emits immortal (FUN-08, ADR-0077).
 #[unsafe(export_name = "typy_rt_type_builtin_function")]
 pub(crate) static BUILTIN_FUNCTION: TypeObject = TypeObject {
-    hash: Some(function_hash),
-    equal: Some(function_equal),
-    repr: Some(builtin_function_repr),
+    hash: Some(builtin_hash),
+    equal: Some(builtin_equal),
+    repr: Some(builtin_repr),
     ..TypeObject::new("builtin_function_or_method", &raw const OBJECT)
 };
+
+/// Returns true when `object` is a method of a built-in type read through a value, laid out
+/// as a bound method, rather than a built-in function.
+fn is_bound(object: *mut ObjectHeader) -> bool {
+    // SAFETY: the slots of the type are called with live objects.
+    unsafe { (*object).type_id == crate::header::BUILTIN_METHOD_TYPE_ID }
+}
+
+/// Returns the hash of a `builtin_function_or_method`: as a function, or as a bound method.
+unsafe extern "C" fn builtin_hash(object: *mut ObjectHeader) -> i64 {
+    // SAFETY: the slot is called with a live object of the type.
+    unsafe {
+        if is_bound(object) {
+            crate::method::method_hash(object)
+        } else {
+            function_hash(object)
+        }
+    }
+}
+
+/// Returns true when `right` equals the `builtin_function_or_method` `left`.
+unsafe extern "C" fn builtin_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
+    // SAFETY: the slot is called with live objects.
+    unsafe {
+        if is_bound(left) {
+            crate::method::method_equal(left, right)
+        } else {
+            function_equal(left, right)
+        }
+    }
+}
+
+/// Returns `repr` of a `builtin_function_or_method`: a built-in function's or a bound one's.
+unsafe extern "C" fn builtin_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    // SAFETY: the slot is called with a live object of the type.
+    unsafe {
+        if is_bound(object) {
+            crate::method::builtin_method_repr(object)
+        } else {
+            builtin_function_repr(object)
+        }
+    }
+}
 
 /// Returns `repr` of a built-in function: `<built-in function NAME>`, as CPython writes it.
 #[allow(

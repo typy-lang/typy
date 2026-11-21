@@ -24,6 +24,11 @@ All notable changes to TyPy are recorded here. The format follows
   such as `sorted(values, key=math.fabs)` or `root: Callable[[float],
   float] = math.sqrt`, written `<built-in function sqrt>`; with no
   `Callable` expected it is E0203, where it was planned (FUN-08).
+- A method read through a built-in value is a value where a `Callable` is
+  expected, such as `add: Callable[[str], None] = words.append` or
+  `key="ab".index`, bound to that value and written `<built-in method
+  append of list object at 0x...>`; with no `Callable` expected it is
+  E0203, where it was E0412 (FUN-08).
 - Each release archive holds `sbom.cdx.json`, a CycloneDX bill of materials
   of its files, with their SHA-256, and of the crates and libraries the
   compiler holds, with their licences; a copy is published beside the
