@@ -27,6 +27,44 @@ value.
 | `Generator` of `typing` or `collections.abc` as the class of `isinstance`, and of `collections.abc` in a class pattern | TYP-21 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 | `Callable[[A, ...], R]` from `typing` or `collections.abc`, the type of a function value; see [Functions as values](functions.md#functions-as-values) | FUN-05, NFR-19 |
+| `object`: a value of any type, narrowed by `isinstance`, a class pattern or `type(x) is C` before an operation `object` does not define; see [Objects](#objects) | TYP-23 |
+
+## Objects
+
+A variable, a parameter, an attribute, a result or a collection item of
+type `object` holds a value of any type, as Java's `Object` does (TYP-23,
+ADR-0090). Without a test it does what every value does: `==`, `!=`,
+`is`, `str`, `repr`, an f-string, a truth test, `type()` and
+`isinstance`. An `int`, a `float` and a `bool` compare by their numbers,
+as in CPython, so `1 == 1.0 == True`.
+
+<!-- typy-expect: accepted -->
+```python
+def describe(value: object) -> str:
+    if isinstance(value, str):
+        return value.upper()
+    if type(value) is int:
+        return str(value + 1)
+    match value:
+        case float():
+            return f"{value:.1f}"
+        case None:
+            return "none"
+        case _:
+            return repr(value)
+
+
+items: list[object] = ["a", 1, 2.5, None, (1, "b")]
+print([describe(item) for item in items], items[1] == 1.0)
+```
+
+Any other operation, such as `value + 1` or `value.upper()`, needs a test
+first and is E0401, E0407, E0411 or E0412 without one. `isinstance(x, int)`
+narrows to `int | bool`, since a `bool` is an `int` and stays a `bool`;
+`type(x) is int` narrows to `int` alone. A test of a collection, such as
+`isinstance(x, list)`, is E0201: its items would be of type `Any`, which
+is planned for 0.13 (TYP-25). Sorting a list of `object` items is E0407,
+as an `object` has no order.
 
 ## Iterators and iterables
 
@@ -154,7 +192,6 @@ These forms are planned, and each is E0201 until its release:
 
 | Form | Release | Requirement |
 | --- | --- | --- |
-| `object` as a type, narrowed by `isinstance` and `match` | 0.11 | TYP-23 |
 | `typing.cast`, checked when the program runs | 0.11 | TYP-24 |
 | A result inferred from `return` statements, and an empty collection's item type from its first use | 0.12 | TYP-26, TYP-27 |
 | `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-28 to TYP-31 |

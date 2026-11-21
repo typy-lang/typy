@@ -44,6 +44,7 @@ mod math;
 mod math_iterable;
 mod methods;
 mod module_variable;
+mod object_value;
 mod operator_call;
 mod optional;
 mod ownership;

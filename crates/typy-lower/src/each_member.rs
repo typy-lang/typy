@@ -62,6 +62,13 @@ impl FunctionLowerer<'_> {
                 self.call_runtime(RuntimeFunction::IsInstance, vec![object, class], span)
                     .value
             }
+            // `type(x) is C`: the object's type object is the class's (TYP-23).
+            typy_check::MemberTest::Exact(class) => {
+                let own = self.call_runtime(RuntimeFunction::ObjectType, vec![object], span);
+                let own = self.borrowed_result(own);
+                let class = self.type_object(class, span);
+                self.identical(own, class, span)
+            }
             typy_check::MemberTest::Kind(kind) => {
                 let id = match kind {
                     typy_check::RuntimeKind::Iterator => typy_tyir::TypeId::ITERATOR,

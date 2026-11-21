@@ -116,6 +116,10 @@ pub enum Type {
     /// A declared abstract collection, such as `Sequence[int]`, held as the built-in types it
     /// stands for, which an expression's type is in its place (LIB-20, ADR-0086).
     Abstract(Box<crate::abstract_type::AbstractType>),
+    /// `object`: a value of any type, held as an object whose header says what it is, a value
+    /// held by value boxed, and narrowed before any operation `object` does not define
+    /// (TYP-23, ADR-0090).
+    Object,
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -259,6 +263,7 @@ impl TypeObjectOf {
             | Type::NotImplemented
             | Type::Optional(_)
             | Type::Union(_)
+            | Type::Object
             | Type::Parameter(_)
             | Type::Error => {
                 return None;
@@ -417,9 +422,17 @@ impl Type {
     #[must_use]
     pub fn optional(inner: Self) -> Self {
         match inner {
-            Self::NoneType | Self::Optional(_) | Self::Error => inner,
+            // `object` holds `None` already.
+            Self::NoneType | Self::Optional(_) | Self::Error | Self::Object => inner,
             other => Self::Optional(Box::new(other)),
         }
+    }
+
+    /// Returns true when a value of the type exists when the program runs, which an `object`
+    /// can hold: not a C library or a `ctypes` class, which are known only when it compiles.
+    #[must_use]
+    pub const fn has_value(&self) -> bool {
+        !matches!(self, Self::ForeignLibrary(_) | Self::CDataClass(_))
     }
 
     /// Returns true when a value of this type may be stored where `target` is declared: a
@@ -428,6 +441,8 @@ impl Type {
     #[must_use]
     pub fn is_assignable_to(&self, target: &Self) -> bool {
         match (self, target) {
+            // An `object` holds any value that exists when the program runs (TYP-23).
+            (_, Self::Object) => self.has_value(),
             (Self::Error, _)
             | (_, Self::Error)
             | (Self::NoneType, Self::Optional(_))
@@ -481,6 +496,8 @@ impl Type {
     #[must_use]
     pub fn is_upcast_to(&self, target: &Self) -> bool {
         match (self, target) {
+            // Any other value becomes an `object`, boxed when it is held by value (TYP-23).
+            (_, Self::Object) => !matches!(self, Self::Object | Self::Error) && self.has_value(),
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
             // A function value is held where a `Callable` it fits is, as the same object.
@@ -594,6 +611,8 @@ impl Type {
     #[must_use]
     pub fn can_test_equality(&self, other: &Self) -> bool {
         match (self, other) {
+            // An `object` compares with any value, as the value's own type compares (TYP-23).
+            (Self::Object, other) | (other, Self::Object) => other.has_value(),
             // Two type objects are equal when they are one object (CLS-12), and so are two
             // functions, so any two function values compare (FUN-05).
             (Self::Error, _)
@@ -685,8 +704,10 @@ impl Type {
             }
             // A class orders its instances with `__lt__` and the other operator methods, which
             // are planned for 0.4 (CLS-07).
+            // An `object` defines no order; a value is narrowed first (TYP-23).
             (
                 Self::Parameter(_)
+                | Self::Object
                 | Self::Union(_)
                 | Self::NoneType
                 | Self::Dict(..)
@@ -713,6 +734,7 @@ impl Type {
             | (
                 _,
                 Self::Parameter(_)
+                | Self::Object
                 | Self::Union(_)
                 | Self::NoneType
                 | Self::Dict(..)
@@ -902,7 +924,7 @@ impl Type {
             Self::Exception(class) if class.name().starts_with(['A', 'E', 'I', 'O', 'U']) => {
                 format!("an {class}")
             }
-            Self::Iterator(_) | Self::Iterable(_) => format!("an {self}"),
+            Self::Iterator(_) | Self::Iterable(_) | Self::Object => format!("an {self}"),
             Self::Parameter(parameter) => format!("a value of type {}", parameter.name),
             // The article reads with the first member, as in `an A | B`.
             Self::Union(members) => {
@@ -928,6 +950,7 @@ impl fmt::Display for Type {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Abstract(collection) => write!(formatter, "{collection}"),
+            Self::Object => formatter.write_str("object"),
             Self::Int => formatter.write_str("int"),
             Self::Float => formatter.write_str("float"),
             Self::Bool => formatter.write_str("bool"),

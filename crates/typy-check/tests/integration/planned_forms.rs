@@ -71,14 +71,14 @@ fn each_standard_library_module_of_a_later_release_names_it() {
 }
 
 #[test]
-fn object_as_a_type_is_planned_for_0_11() {
-    let found = messages("def show(value: object) -> None:\n    pass\n");
+fn any_as_a_type_is_planned_for_0_13() {
+    let found = messages("def show(value: Any) -> None:\n    pass\n");
     assert_eq!(
         found,
         [(
             "E0201".to_owned(),
-            "`object` as a type is planned for TyPy 0.11 (TYP-23)".to_owned(),
-            "TYP-23".to_owned(),
+            "`Any` as a type is planned for TyPy 0.13 (TYP-25)".to_owned(),
+            "TYP-25".to_owned(),
         )]
     );
 }

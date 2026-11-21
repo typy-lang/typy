@@ -308,14 +308,16 @@ impl BodyChecker<'_> {
                 Type::Error
             }
             other => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(411),
-                        iterable.span,
-                        format!("{} cannot be iterated over", other.with_article()),
-                    )
-                    .with_rule(RuleId::CST_03),
-                );
+                let mut diagnostic = Diagnostic::new(
+                    DiagnosticCode::error(411),
+                    iterable.span,
+                    format!("{} cannot be iterated over", other.with_article()),
+                )
+                .with_rule(RuleId::CST_03);
+                if *other == Type::Object {
+                    diagnostic = diagnostic.with_help(super::operator::OBJECT_HELP);
+                }
+                self.diagnostics.push(diagnostic);
                 Type::Error
             }
         }

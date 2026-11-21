@@ -30,6 +30,7 @@ mod modules;
 mod named_tuples;
 mod nested_functions;
 mod nonlocal_statement;
+mod object_values;
 mod open;
 mod operands;
 mod operators;

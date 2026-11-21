@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.95 |
+| Version | 2.96 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -1498,6 +1498,30 @@ attribute through a protocol value, a class derived from a protocol, a
 protocol's properties, static and class methods, class variables and defaults,
 a protocol in its own methods' signatures, and a value of a built-in type held
 as a protocol are E0201, planned for 0.13 (GEN-17).
+
+`Type::Object` is `object` (TYP-23, ADR-0090): every type with a value when
+the program runs is assignable to it through `Upcast` (`Type::has_value`
+leaves out a C library and a `ctypes` class), a union that holds it is it,
+and so is `object | None`. Lowering holds it as `TypeId::UNION`. `FunctionLowerer::boxed`
+(`object_value.rs`) makes the object: an object as it is, an `int`, a `float`,
+a `bool` or `None` through `typy_rt_box_int`, `typy_rt_box_float`,
+`typy_rt_box_bool` and `typy_rt_box_none`, an optional by its presence, a tagged
+union member by member, and a fixed tuple as a tuple object of its items, each
+boxed. Without a test an `object` takes `==`, `!=` and `is` with any value
+(`Type::can_test_equality`, `body::operator::objects_compared`, which holds the
+other operand as an `object` too, and `x in items` of `object` items), `str`,
+`repr`, an f-string, `type()`, a truth test and `isinstance`; any other operation
+is the usual error with `operator::OBJECT_HELP`, and `Type::can_order` refuses
+its order. `isinstance` narrows it by `BodyChecker::object_narrowed`: `int` to
+`int | bool`, a class to its instance type, and a collection, whose items would
+be `Any`, is E0201 for TYP-25. `type(x) is C` becomes an `IsInstanceTest` of
+`MemberTest::Exact`, which lowering tests by the identity of the object's type
+object; `int` narrows to `int` alone there. `FunctionLowerer::unboxed` reads a
+narrowed value back: `typy_rt_unbox_int`, `typy_rt_unbox_float` and
+`typy_rt_unbox_bool` for values held by value, a downcast for an object, and
+for a union, each member tested in the union's order, which puts `bool` before
+`int`, then tagged. An operator method's `other: object`, such as `__eq__`'s,
+takes the operand boxed (`operand_for`).
 
 Unions (TYP-14, ADR-0027) add `Type::Union(members)`, which `Type::union` builds
 in normal form in `union_type`: nested unions flatten, `None` makes the union

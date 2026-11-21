@@ -27,8 +27,10 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Set(_) => TyirType::SET,
         Type::Dict(..) => TyirType::DICT,
         Type::DictView(..) => TyirType::VIEW,
-        // A protocol value is an instance of any class that satisfies it (ADR-0041).
+        // A protocol value is an instance of any class that satisfies it (ADR-0041), and an
+        // `object` an object of any type, a value held by value boxed (ADR-0090).
         Type::Instance(class) if class.protocol => TyirType::UNION,
+        Type::Object => TyirType::UNION,
         Type::Instance(class) => TyirType::Object(TypeId::class(class.id.0)),
         Type::TypeObject(_) => TyirType::TYPE,
         Type::Exception(_) => TyirType::EXCEPTION,

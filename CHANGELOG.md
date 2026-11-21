@@ -6,10 +6,21 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `object` as a type: a variable, a parameter, an attribute, a result or a
+  collection item holds a value of any type, such as `items: list[object] =
+  [1, "a", None]` or `def __eq__(self, other: object) -> bool`. It compares,
+  prints and tests its truth as its value does, `1 == 1.0 == True` among
+  them, and `isinstance`, a class pattern or `type(x) is C` narrows it before
+  any other operation (TYP-23). `isinstance(x, int)` narrows to `int |
+  bool`, since a bool stays a bool; narrowing to a collection waits for
+  `Any` in 0.13.
+
 ### Changed
 
 - The refusals of forms a later release gives now name that release:
-  `object` as a type and `typing.cast` 0.11 (TYP-23, TYP-24);
+  `typing.cast` 0.11 (TYP-24);
   `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
   to TYP-31); `typing.Any` and `TypedDict` with `Required`,
   `NotRequired` and `ReadOnly` 0.13 (TYP-25, TYP-32); the modules `enum`,

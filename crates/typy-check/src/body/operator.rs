@@ -271,6 +271,49 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Returns the operands of a comparison with each held as an `object` when one of them
+    /// is one, so the runtime compares the objects as their types compare them (TYP-23); a
+    /// value `in` a collection of `object` items is held as one too.
+    pub(super) fn objects_compared(
+        operators: &[CompareOperator],
+        operands: Vec<TypedExpr>,
+    ) -> Vec<TypedExpr> {
+        let as_object = |operand: TypedExpr| {
+            if operand.ty.is_assignable_to(&Type::Object) {
+                Self::converted(operand, Some(&Type::Object))
+            } else {
+                operand
+            }
+        };
+        let identity_or_equality = operators.iter().all(|operator| {
+            matches!(
+                operator,
+                CompareOperator::Eq
+                    | CompareOperator::NotEq
+                    | CompareOperator::Is
+                    | CompareOperator::IsNot
+            )
+        });
+        if identity_or_equality && operands.iter().any(|operand| operand.ty == Type::Object) {
+            return operands.into_iter().map(as_object).collect();
+        }
+        if let ([CompareOperator::In | CompareOperator::NotIn], [value, container]) =
+            (operators, operands.as_slice())
+            && value.ty != Type::Object
+            && matches!(&container.ty, Type::List(item) | Type::TupleOf(item) | Type::Set(item) | Type::Dict(item, _) if **item == Type::Object)
+        {
+            let mut operands = operands;
+            let container = operands
+                .pop()
+                .unwrap_or_else(|| unreachable!("two operands"));
+            let value = operands
+                .pop()
+                .unwrap_or_else(|| unreachable!("two operands"));
+            return vec![as_object(value), container];
+        }
+        operands
+    }
+
     pub(super) fn operator_error(
         &mut self,
         symbol: &str,
@@ -330,8 +373,23 @@ impl BodyChecker<'_> {
 
 /// Adds to an error about an optional operand how to use the value it holds (TYP-13), and
 /// to one about a union how TyPy uses it member by member (TYP-14).
+/// The help for an operation an `object` does not define (TYP-23).
+pub(super) const OBJECT_HELP: &str =
+    "an `object` is narrowed first, such as `if isinstance(value, int):`";
+
 fn with_narrowing_help(diagnostic: Diagnostic, left: &Type, right: &Type) -> Diagnostic {
-    if matches!(left, Type::Optional(_)) || matches!(right, Type::Optional(_)) {
+    let int_or_bool =
+        |ty: &Type| ty.members().contains(&Type::Bool) && ty.members().contains(&Type::Int);
+    if *left == Type::Object || *right == Type::Object {
+        // An `object` does only what every value does; a test narrows it first (TYP-23).
+        diagnostic.with_help(OBJECT_HELP)
+    } else if int_or_bool(left) || int_or_bool(right) {
+        // `isinstance(x, int)` holds for a `bool` too, which TyPy does no arithmetic on (DAT-03).
+        diagnostic.with_help(
+            "`isinstance(x, int)` also holds for a bool, on which TyPy does no arithmetic; test \
+             `type(x) is int`, or `isinstance(x, bool)` first",
+        )
+    } else if matches!(left, Type::Optional(_)) || matches!(right, Type::Optional(_)) {
         diagnostic.with_help(
             "an optional value is used after a test shows it is not None, such as `if value is not None:`",
         )
@@ -369,6 +427,8 @@ fn binary_symbol(operator: BinaryOperator) -> &'static str {
 fn has_identity(ty: &Type) -> bool {
     match ty {
         Type::Union(members) => members.iter().all(has_identity),
+        // An `object` is an object, and `is` compares two by their addresses (TYP-23).
+        Type::Object => true,
         other => matches!(
             other,
             Type::Instance(..)

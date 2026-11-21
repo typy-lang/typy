@@ -192,7 +192,8 @@ impl BodyChecker<'_> {
                 comparators,
                 ..
             } => {
-                let mut operands = self.comparison_operands(left, comparators, operators);
+                let operands = self.comparison_operands(left, comparators, operators);
+                let mut operands = Self::objects_compared(operators, operands);
                 let mut comparators = operands.split_off(1);
                 let mut left = operands.remove(0);
                 // `sys.version_info` held as a value compares as CPython compares it (LIB-16).
@@ -200,6 +201,12 @@ impl BodyChecker<'_> {
                     && let Some(folded) = Self::version_comparison(*operator, &left, right, span)
                 {
                     return folded;
+                }
+                // `type(x) is C` narrows an `object` `x` (TYP-23).
+                if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice())
+                    && let Some(test) = self.type_is(*operator, &left, right, span)
+                {
+                    return test;
                 }
                 // A comparison of instances may call a comparison method (CLS-07).
                 if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice()) {

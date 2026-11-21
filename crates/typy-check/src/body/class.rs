@@ -99,10 +99,13 @@ impl BodyChecker<'_> {
             Type::Error => None,
             other => {
                 let message = format!("{} has no attributes in TyPy", other.with_article());
-                self.diagnostics.push(
+                let mut diagnostic =
                     Diagnostic::new(DiagnosticCode::error(412), object.span, message)
-                        .with_rule(RuleId::LIB_03),
-                );
+                        .with_rule(RuleId::LIB_03);
+                if *other == Type::Object {
+                    diagnostic = diagnostic.with_help(super::operator::OBJECT_HELP);
+                }
+                self.diagnostics.push(diagnostic);
                 None
             }
         }

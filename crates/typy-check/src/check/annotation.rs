@@ -855,7 +855,9 @@ fn named_type(
         "bytes" => Type::Bytes,
         "range" => Type::Range,
         "slice" => Type::Slice,
-        "Any" | "object" => planned_open_type(id, span, diagnostics),
+        // A value of any type, narrowed before use, as Java holds `Object` (TYP-23, ADR-0090).
+        "object" => Type::Object,
+        "Any" => planned_open_type(id, span, diagnostics),
         "tuple" => {
             diagnostics.push(
                 Diagnostic::new(
@@ -1021,19 +1023,14 @@ fn tuple_annotation(
     )
 }
 
-/// Returns the error type after reporting `object` or `Any` as a type, which a later release
-/// gives: `object` boxed and narrowed (ADR-0090), and `Any` bound when the program runs
-/// (ADR-0094).
+/// Returns the error type after reporting `Any` as a type, which a later release gives, bound
+/// when the program runs (ADR-0094).
 fn planned_open_type(
     id: &str,
     span: typy_diagnostics::Span,
     diagnostics: &mut Diagnostics,
 ) -> Type {
-    let (release, rule) = if id == "object" {
-        ("0.11", RuleId::TYP_23)
-    } else {
-        ("0.13", RuleId::TYP_25)
-    };
+    let (release, rule) = ("0.13", RuleId::TYP_25);
     diagnostics.push(
         Diagnostic::new(
             DiagnosticCode::error(201),

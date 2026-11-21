@@ -125,6 +125,7 @@ impl Type {
                 | Self::CData(_)
                 | Self::TypeObject(_)
                 | Self::Union(_)
+                | Self::Object
         )
     }
 

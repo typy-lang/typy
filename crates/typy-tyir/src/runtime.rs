@@ -191,6 +191,20 @@ pub enum RuntimeFunction {
     /// A bound method of a descriptor and an instance, or a static method's function object,
     /// as the `bool` says (FUN-09).
     MethodOrFunction,
+    /// Boxes an `int` word as an object, for a value of type `object` (TYP-23, ADR-0090).
+    BoxInt,
+    /// Boxes a `float` as an object (TYP-23).
+    BoxFloat,
+    /// Gives the immortal `True` or `False` object (TYP-23).
+    BoxBool,
+    /// Gives the immortal `None` object (TYP-23).
+    BoxNone,
+    /// Reads the `int` word of a boxed `int`, a large integer or a `bool` (TYP-23).
+    UnboxInt,
+    /// Reads the value of a boxed `float` (TYP-23).
+    UnboxFloat,
+    /// Reads the value of `True` or `False` (TYP-23).
+    UnboxBool,
     /// Raises `NameError` for a captured variable, named by the `str`, that has no value yet
     /// (FUN-04).
     FreeVariableUnbound,
@@ -519,7 +533,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 381] = [
+    pub const ALL: [Self; 388] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -694,6 +708,13 @@ impl RuntimeFunction {
         Self::MethodNew,
         Self::BuiltinMethodNew,
         Self::MethodOrFunction,
+        Self::BoxInt,
+        Self::BoxFloat,
+        Self::BoxBool,
+        Self::BoxNone,
+        Self::UnboxInt,
+        Self::UnboxFloat,
+        Self::UnboxBool,
         Self::FreeVariableUnbound,
         Self::ExceptionNew,
         Self::ExceptionPartText,
@@ -1138,6 +1159,13 @@ impl RuntimeFunction {
                 signature(&[Bits, Bits], TyirType::FUNCTION, false)
             }
             Self::MethodOrFunction => signature(&[Bits, Bits, Bool], TyirType::FUNCTION, false),
+            Self::BoxInt => signature(&[Int], TyirType::UNION, false),
+            Self::BoxFloat => signature(&[Float], TyirType::UNION, false),
+            Self::BoxBool => signature(&[Bool], TyirType::UNION, false),
+            Self::BoxNone => signature(&[], TyirType::UNION, false),
+            Self::UnboxInt => signature(&[TyirType::UNION], Int, false),
+            Self::UnboxFloat => signature(&[TyirType::UNION], Float, false),
+            Self::UnboxBool => signature(&[TyirType::UNION], Bool, false),
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1513,6 +1541,13 @@ impl RuntimeFunction {
             Self::MethodNew => "method_new",
             Self::BuiltinMethodNew => "builtin_method_new",
             Self::MethodOrFunction => "method_or_function",
+            Self::BoxInt => "box_int",
+            Self::BoxFloat => "box_float",
+            Self::BoxBool => "box_bool",
+            Self::BoxNone => "box_none",
+            Self::UnboxInt => "unbox_int",
+            Self::UnboxFloat => "unbox_float",
+            Self::UnboxBool => "unbox_bool",
             Self::FreeVariableUnbound => "free_variable_unbound",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",

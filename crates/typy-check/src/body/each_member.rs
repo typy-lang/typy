@@ -29,7 +29,7 @@ impl BodyChecker<'_> {
                 .iter()
                 .filter_map(|test| match test {
                     MemberTest::Kind(kind) => Some(*kind),
-                    MemberTest::Class(_) => None,
+                    MemberTest::Class(_) | MemberTest::Exact(_) => None,
                 })
                 .collect();
             kinds

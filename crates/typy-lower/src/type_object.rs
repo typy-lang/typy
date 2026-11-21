@@ -85,7 +85,8 @@ impl FunctionLowerer<'_> {
                 | Type::DescriptorFile(_)
                 | Type::Traceback
                 | Type::Callable { .. }
-                | Type::Union(_),
+                | Type::Union(_)
+                | Type::Object,
                 _,
             ) => {
                 let object = self.bits(Self::borrowed(lowered.value, lowered.ty), span);

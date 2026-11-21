@@ -2,7 +2,7 @@
 //! ADR-0021).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Expr, Keyword};
+use typy_source::syntax::{CompareOperator, Expr, Keyword};
 
 use super::BodyChecker;
 use crate::class_type::InstanceClass;
@@ -435,6 +435,8 @@ impl BodyChecker<'_> {
                 return None;
             }
             Type::union(kept)
+        } else if *inner == Type::Object {
+            self.object_narrowed(classes, value.span)?
         } else if let Type::Exception(own) = inner {
             let mut tested = Vec::new();
             for class in classes {
@@ -490,6 +492,110 @@ impl BodyChecker<'_> {
             Type::instance(common?)
         };
         self.narrowing_position(value, narrowed)
+    }
+
+    /// Returns `type(x) is C`, or `is not`, for a variable `x` of type `object` and a class
+    /// `C` the program names, as a test that narrows `x` to `C` when it holds (TYP-23); `None`
+    /// for any other comparison.
+    pub(super) fn type_is(
+        &mut self,
+        operator: CompareOperator,
+        left: &TypedExpr,
+        right: &TypedExpr,
+        span: Span,
+    ) -> Option<TypedExpr> {
+        let negated = match operator {
+            CompareOperator::Is => false,
+            CompareOperator::IsNot => true,
+            _ => return None,
+        };
+        let ((TypedExprKind::TypeOf(value), TypedExprKind::TypeObject(class))
+        | (TypedExprKind::TypeObject(class), TypedExprKind::TypeOf(value))) =
+            (&left.kind, &right.kind)
+        else {
+            return None;
+        };
+        if value.ty != Type::Object || super::flow::narrowable_variable(value).is_none() {
+            return None;
+        }
+        let class = class.as_ref().clone();
+        let exact = match &class {
+            TypeObjectOf::Int => Some(Type::Int),
+            _ => self.object_narrowed(std::slice::from_ref(&class), value.span),
+        };
+        let narrowed = exact.map(|narrowed| self.narrowing_index(narrowed));
+        let test = Self::typed(
+            TypedExprKind::IsInstance(Box::new(IsInstanceTest {
+                value: value.as_ref().clone(),
+                none_matches: false,
+                always: false,
+                checks: vec![MemberTest::Exact(class)],
+                narrowed,
+                otherwise: None,
+                members: Vec::new(),
+                held: Vec::new(),
+            })),
+            Type::Bool,
+            span,
+        );
+        Some(if negated {
+            Self::typed(
+                TypedExprKind::Unary {
+                    operator: typy_source::syntax::UnaryOperator::Not,
+                    operand: Box::new(test),
+                },
+                Type::Bool,
+                span,
+            )
+        } else {
+            test
+        })
+    }
+
+    /// Returns the type a true test gives an `object`: the union of the tested classes'
+    /// types, `int` taking `bool` too, as a `bool` is an `int` in CPython and stays a `bool`
+    /// (TYP-23, ADR-0090). A built-in collection or an abstract one is reported: its items'
+    /// type would be `Any`, which is planned (TYP-25), and TyPy holds the items of a collection
+    /// by their own type, so no other item type reads them safely.
+    fn object_narrowed(&mut self, classes: &[TypeObjectOf], span: Span) -> Option<Type> {
+        let mut found = Vec::new();
+        for class in classes {
+            found.extend(match class {
+                TypeObjectOf::Object => return None,
+                TypeObjectOf::Int => vec![Type::Int, Type::Bool],
+                TypeObjectOf::Float => vec![Type::Float],
+                TypeObjectOf::Bool => vec![Type::Bool],
+                TypeObjectOf::Str => vec![Type::Str],
+                TypeObjectOf::Bytes => vec![Type::Bytes],
+                TypeObjectOf::NoneType => vec![Type::NoneType],
+                TypeObjectOf::Type => vec![Type::TypeObject(None)],
+                TypeObjectOf::Range => vec![Type::Range],
+                TypeObjectOf::Slice => vec![Type::Slice],
+                TypeObjectOf::Exception(exception) => vec![Type::Exception(exception.clone())],
+                // A generic class has no instances of its own (GEN-14).
+                TypeObjectOf::Instance(id, _) if self.program.is_opaque_class(*id) => {
+                    return None;
+                }
+                TypeObjectOf::Instance(id, _) => vec![self.program.instance_type(*id)],
+                collection => {
+                    self.diagnostics.push(
+                        Diagnostic::new(
+                            DiagnosticCode::error(201),
+                            span,
+                            format!(
+                                "narrowing an `object` to `{}` needs the type of its items, \
+                                 `Any`, which is planned for TyPy 0.13 (TYP-25)",
+                                collection.name()
+                            ),
+                        )
+                        .with_rule(RuleId::TYP_25)
+                        .with_help("hold the collection in a variable of its own type instead"),
+                    );
+                    return None;
+                }
+            });
+        }
+        Some(Type::union(found))
     }
 
     /// Returns the position of `narrowed` in the function's table of narrowed types, unless
@@ -681,11 +787,14 @@ fn abstract_outcome(
 /// Returns what testing a value of type `ty`, which is not optional, against `class` gives.
 fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
     if let TypeObjectOf::Abstract { kind, implementers } = class
-        && !matches!(ty, Type::Union(_))
+        && !matches!(ty, Type::Union(_) | Type::Object)
     {
         return abstract_outcome(ty, *kind, implementers);
     }
     match (ty, class) {
+        // An `object` may hold an instance of any class (TYP-23).
+        (Type::Object, TypeObjectOf::Object) => Outcome::Always,
+        (Type::Object, _) => Outcome::Checked,
         // A union is an instance when each member is, and is not when no member is.
         (Type::Union(members), _) => {
             let each: Vec<Outcome> = members

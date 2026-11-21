@@ -722,6 +722,8 @@ pub struct EachMember {
 pub enum MemberTest {
     /// The object is an instance of this class.
     Class(crate::types::TypeObjectOf),
+    /// The object's class is this class itself, as `type(x) is C` tests (TYP-23).
+    Exact(crate::types::TypeObjectOf),
     /// The object's header says it is of this kind of the runtime's own objects, which have
     /// no type object to test against.
     Kind(RuntimeKind),

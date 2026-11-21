@@ -238,6 +238,11 @@ impl FunctionLowerer<'_> {
             return borrowed;
         };
         let wanted = self.lowered_type(&parameter.ty);
+        // A parameter of type `object`, such as `other` of `__eq__`, takes the operand boxed
+        // when it is held by value (TYP-23).
+        if parameter.ty == Type::Object && *from != Type::Object {
+            return self.boxed(borrowed, from, span);
+        }
         if value.ty == wanted || (!self.involves_tag(wanted) && !self.involves_tag(value.ty)) {
             return borrowed;
         }
