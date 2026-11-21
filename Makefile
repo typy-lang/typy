@@ -80,7 +80,7 @@ ascii-check: dev ## Fail on non-ASCII text in sources, documents and scripts
 
 traceability: dev ## Fail on requirements without tests, IDs that are not defined, and messages that plan a requirement for another release than the SRS
 	@$(EXEC) scripts/check-traceability.sh
-	@$(EXEC) scripts/check-planned-releases.py
+	@$(EXEC) python3.15 scripts/check-planned-releases.py
 
 diagrams: ## Render every PlantUML source to the SVG next to it
 	@$(COMPOSE) run --rm --quiet-pull diagrams -tsvg -nometadata -failfast2 $(DIAGRAMS)
