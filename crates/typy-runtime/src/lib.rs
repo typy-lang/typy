@@ -38,6 +38,7 @@ macro_rules! export_float {
 pub(crate) use export_float;
 
 mod allocator;
+mod boxed;
 mod byte_buffer;
 mod bytes;
 mod call;

@@ -705,6 +705,11 @@ unsafe fn int_equals_float(word: u64, float: f64) -> bool {
 pub(crate) unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the caller passes live objects, and each type's function takes its own.
     unsafe {
+        // An `int`, a `float` and a `bool` compare by their numbers, also with each other, as
+        // values of type `object` hold them (TYP-23).
+        if crate::boxed::holds_number(left) && crate::boxed::holds_number(right) {
+            return crate::boxed::numbers_equal(left, right);
+        }
         let (left_type, right_type) = (type_of(left), type_of(right));
         if !core::ptr::eq(left_type, right_type) {
             // Objects of two types, as a union of objects holds them: a built-in type is equal

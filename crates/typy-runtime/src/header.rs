@@ -67,6 +67,18 @@ pub const BUILTIN_METHOD_TYPE_ID: u32 = 30;
 /// The type ID of the object of a built-in type called as a function, such as `int` in
 /// `key=int`, laid out as a function object and written as the type (FUN-14, ADR-0077).
 pub const BUILTIN_TYPE_FUNCTION_TYPE_ID: u32 = 31;
+/// The type ID of an `int` boxed where a value of type `object` holds it, laid out as a
+/// `BoxedInt` (TYP-23, ADR-0090).
+pub const BOXED_INT_TYPE_ID: u32 = 32;
+/// The type ID of a `float` boxed where a value of type `object` holds it, laid out as a
+/// `BoxedFloat` (TYP-23, ADR-0090).
+pub const BOXED_FLOAT_TYPE_ID: u32 = 33;
+/// The type ID of the immortal objects `True` and `False`, which a value of type `object`
+/// holds (TYP-23, ADR-0090).
+pub const BOOL_OBJECT_TYPE_ID: u32 = 34;
+/// The type ID of the immortal object `None`, which a value of type `object` holds (TYP-23,
+/// ADR-0090).
+pub const NONE_OBJECT_TYPE_ID: u32 = 35;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]
