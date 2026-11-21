@@ -10,6 +10,8 @@ TyPy and what each release accepts.
 | --- | --- | --- |
 | 1 | [Research](research/research.md) | Approved |
 | 1 | [Research: values whose type is known late](research/static-and-dynamic-values.md) | Approved |
+| 1 | [Research: threads and data races](research/threads-and-data-races.md) | Draft |
+| 1 | [Research: newer Python and a typed standard library](research/newer-python-and-a-typed-standard-library.md) | Draft |
 | 2 | [Software requirements specification](requirements/srs.md) | Approved |
 | 3 | [Use case model](modeling/use-case-model.md) | Approved |
 | 4 | [Domain model](modeling/domain-model.md) | Approved |

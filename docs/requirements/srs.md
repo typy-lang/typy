@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.115 |
+| Version | 1.116 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -648,6 +648,10 @@ resolved issues below.
 | ID | Question | Raised |
 | --- | --- | --- |
 | OI-31 | Which concurrency model does TyPy take, and does safe code promise freedom from data races? The answer decides the object header and how reference counts change, which ADR-0074 fixes at 1.0, so it is settled before 1.0 although threads come after it: CPython's free-threaded build uses biased reference counting, and Swift 6 and Rust check data races when a program compiles. A research note measures three models on TyPy's benchmarks, isolated workers as in Python 3.14's `concurrent.interpreters` (PEP 734), free threads as in CPython's free-threaded build (PEP 703), and sharing that the checker proves safe, and the question is settled in the 0.11 planning. | 2026-11-20 |
+| OI-38 | In which release do template strings (PEP 750) become a planned feature, from the Python floor 3.14? TyPy 0.10 classes them as a form it cannot compile with CPython's meaning, though a template is an immutable object fixed when the expression runs. | 2026-11-21 |
+| OI-39 | In which releases do `Literal`, `@overload`, `Self`, `TypeGuard`, `TypeIs` and `TypedDict` come, and does `Self` move from after 1.0? About one definition in seven of the standard library's stubs is an overload. | 2026-11-21 |
+| OI-40 | In which release do PEP 798's unpacking in comprehensions, `frozendict` (PEP 814) and `math.integer` (PEP 791) come, from the Python floor 3.15? | 2026-11-21 |
+| OI-41 | In which release does the `typy-stdlib` crate of ADR-0007 start, with which modules first, and are its signatures checked against typeshed? | 2026-11-21 |
 
 ## 8. Resolved issues
 

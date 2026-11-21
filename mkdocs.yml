@@ -123,6 +123,8 @@ nav:
       - Overview: engineering.md
       - Research: research/research.md
       - "Research: values whose type is known late": research/static-and-dynamic-values.md
+      - "Research: threads and data races": research/threads-and-data-races.md
+      - "Research: newer Python and a typed standard library": research/newer-python-and-a-typed-standard-library.md
       - Requirements specification: requirements/srs.md
       - Use case model: modeling/use-case-model.md
       - Domain model: modeling/domain-model.md
