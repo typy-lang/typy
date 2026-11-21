@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
 use typy_source::syntax::{Constant, Expr};
 
+use crate::abstract_type::AbstractCollection;
 use crate::exception::{BuiltinException, ExceptionClass};
 use crate::typed::ClassId;
 use crate::types::Type;
@@ -139,86 +140,6 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
             AbstractCollection::named(module, name).map(AnnotationName::Abstract)
         }
         _ => None,
-    }
-}
-
-/// An abstract collection of `typing` and `collections.abc` (LIB-20, ADR-0086).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AbstractCollection {
-    Sequence,
-    MutableSequence,
-    Mapping,
-    MutableMapping,
-    Set,
-    MutableSet,
-    Collection,
-    Container,
-    Reversible,
-}
-
-impl AbstractCollection {
-    /// Returns the abstract collection `name` names, `typing.AbstractSet` being `Set`.
-    fn named(module: &str, name: &str) -> Option<Self> {
-        Some(match (module, name) {
-            (_, "Sequence") => Self::Sequence,
-            (_, "MutableSequence") => Self::MutableSequence,
-            (_, "Mapping") => Self::Mapping,
-            (_, "MutableMapping") => Self::MutableMapping,
-            ("collections.abc", "Set") | ("typing", "AbstractSet") => Self::Set,
-            (_, "MutableSet") => Self::MutableSet,
-            (_, "Collection") => Self::Collection,
-            (_, "Container") => Self::Container,
-            (_, "Reversible") => Self::Reversible,
-            _ => return None,
-        })
-    }
-
-    /// Returns the collection's name, as an annotation writes it.
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Sequence => "Sequence",
-            Self::MutableSequence => "MutableSequence",
-            Self::Mapping => "Mapping",
-            Self::MutableMapping => "MutableMapping",
-            Self::Set => "Set",
-            Self::MutableSet => "MutableSet",
-            Self::Collection => "Collection",
-            Self::Container => "Container",
-            Self::Reversible => "Reversible",
-        }
-    }
-
-    /// Returns the type of the collection of items `arguments` names: each built-in type
-    /// registered with it, with those items (ADR-0086); `None` for arguments of another
-    /// number than it takes.
-    fn of(self, arguments: &[Type]) -> Option<Type> {
-        if matches!(self, Self::Mapping | Self::MutableMapping) {
-            let [key, value] = arguments else {
-                return None;
-            };
-            return Some(Type::Dict(Box::new(key.clone()), Box::new(value.clone())));
-        }
-        let [item] = arguments else {
-            return None;
-        };
-        let boxed = || Box::new(item.clone());
-        // `str` is a sequence of `str`, and `bytes` and `range` of `int`.
-        let mut sequences = vec![Type::List(boxed()), Type::TupleOf(boxed())];
-        match item {
-            Type::Str => sequences.push(Type::Str),
-            Type::Int => sequences.extend([Type::Bytes, Type::Range]),
-            _ => {}
-        }
-        Some(match self {
-            Self::MutableSequence => Type::List(boxed()),
-            Self::Set | Self::MutableSet => Type::Set(boxed()),
-            Self::Sequence | Self::Reversible => Type::union(sequences),
-            Self::Collection | Self::Container => {
-                sequences.push(Type::Set(boxed()));
-                Type::union(sequences)
-            }
-            Self::Mapping | Self::MutableMapping => return None,
-        })
     }
 }
 

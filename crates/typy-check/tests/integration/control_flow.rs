@@ -99,7 +99,8 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             "E0425",
             "TyPy's `collections.abc` gives `Iterator`, `Iterable`, `Generator`, `Callable`, \
             `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set`, `MutableSet`, \
-            `Collection`, `Container` and `Reversible`, not `Awaitable`",
+            `Collection`, `Container`, `Reversible`, `KeysView`, `ValuesView` and `ItemsView`, \
+            not `Awaitable`",
         ),
         (
             "from typing import Awaitable\n",
@@ -107,8 +108,8 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             "TyPy's `typing` gives `Iterator`, `Iterable`, `Generator`, `Callable`, \
             `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar`, \
             `Protocol`, `NamedTuple`, `Sequence`, `MutableSequence`, `Mapping`, \
-            `MutableMapping`, `AbstractSet`, `MutableSet`, `Collection`, `Container` and \
-            `Reversible`, not `Awaitable`",
+            `MutableMapping`, `AbstractSet`, `MutableSet`, `Collection`, `Container`, \
+            `Reversible`, `KeysView`, `ValuesView` and `ItemsView`, not `Awaitable`",
         ),
         (
             "from dataclasses import asdict\n",

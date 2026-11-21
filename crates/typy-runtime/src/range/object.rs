@@ -379,6 +379,22 @@ pub(crate) unsafe fn item(range: *const RangeObject, position: usize) -> Option<
     }
 }
 
+/// Returns the number of values of a range, or `usize::MAX` for one too long to count, which
+/// no loop reaches the end of.
+///
+/// # Safety
+///
+/// `range` points to a live range.
+pub(crate) unsafe fn count(range: *const RangeObject) -> usize {
+    // SAFETY: the caller's guarantee.
+    let length = unsafe { (*range).length };
+    if is_inline(length) {
+        usize::try_from(inline_value(length)).unwrap_or(0)
+    } else {
+        usize::MAX
+    }
+}
+
 /// Returns whether the start, stop, step and length all fit a C `long`, which makes CPython's
 /// iterator of the range a `range_iterator` and not a `longrange_iterator`.
 ///

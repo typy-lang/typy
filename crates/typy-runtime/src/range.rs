@@ -9,7 +9,7 @@
 
 pub(crate) mod object;
 
-pub(crate) use object::{RANGE, destroy, fits_long, item};
+pub(crate) use object::{RANGE, count, destroy, fits_long, item};
 
 use crate::exception::{ExceptionKind, ExceptionObject, raise};
 use crate::int::{typy_rt_int_add, typy_rt_int_compare};

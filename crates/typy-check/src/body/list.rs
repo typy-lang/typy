@@ -39,7 +39,13 @@ impl BodyChecker<'_> {
         // An empty display where an iterable is expected is a list, or a set, of its items.
         let iterable_list;
         let iterable_set;
-        let target = match (expected, expression) {
+        // A display where an abstract collection is expected is built as the built-in types
+        // it holds (LIB-20).
+        let held = expected.map(|expected| match expected {
+            Type::Abstract(collection) => collection.display_members().without_abstract(),
+            other => other.without_abstract(),
+        });
+        let target = match (held.as_ref(), expression) {
             (Some(Type::Optional(inner)), _) => Some(inner.as_ref()),
             (Some(Type::Iterable(item)), Expr::Set { .. } | Expr::SetComp { .. }) => {
                 iterable_set = Type::Set(item.clone());
@@ -157,33 +163,19 @@ impl BodyChecker<'_> {
     /// fixed tuple of items of type `T`, which Python's typing accepts there (DAT-14); returns
     /// any other value as it is.
     pub(super) fn converted(value: TypedExpr, expected: Option<&Type>) -> TypedExpr {
-        let Some(expected) = expected else {
-            return value;
+        // An abstract collection holds a value as one of its built-in types; one of a member's
+        // kind with items of a derived class is that member as it is (LIB-20, ADR-0086).
+        let expected = match expected {
+            None => return value,
+            Some(Type::Abstract(collection)) => {
+                return Self::converted_to_abstract(value, collection);
+            }
+            Some(expected) => expected,
         };
-        // A member of a union that holds a value as another object, an iterable, an iterator
-        // or a `tuple[T, ...]`, takes it as it would alone: a fixed tuple becomes a
-        // `tuple[T, ...]` object first, and a collection or an iterator an iterable. The union
-        // then holds that object.
-        if let Type::Union(members) = expected
-            && value.ty != *expected
-            && !members.contains(&value.ty)
-            && let Some(member) = members.iter().find(|member| {
-                value.ty.is_assignable_to(member)
-                    || matches!(member, Type::TupleOf(item) if value.ty.fits_tuple_of(item))
-            })
-            && matches!(
-                member,
-                Type::Iterable(_) | Type::Iterator(_) | Type::TupleOf(_)
-            )
-        {
-            let value = Self::converted(value, Some(member));
-            let span = value.span;
-            return Self::typed(
-                TypedExprKind::Upcast(Box::new(value)),
-                expected.clone(),
-                span,
-            );
-        }
+        let value = match Self::converted_to_object_member(value, expected) {
+            Ok(held) => return held,
+            Err(value) => value,
+        };
         if value.ty != *expected && value.ty.is_upcast_to(expected) {
             let span = value.span;
             return Self::typed(
@@ -264,6 +256,60 @@ impl BodyChecker<'_> {
             },
             _ => value,
         }
+    }
+
+    /// Returns `value` held as the union `expected` through the member that holds it as
+    /// another object, an iterable, an iterator or a `tuple[T, ...]`, which takes it as it
+    /// would alone: a fixed tuple becomes a `tuple[T, ...]` object first, and a collection or
+    /// an iterator an iterable. The union then holds that object. Gives back the value for
+    /// any other conversion.
+    fn converted_to_object_member(
+        value: TypedExpr,
+        expected: &Type,
+    ) -> Result<TypedExpr, TypedExpr> {
+        let Type::Union(members) = expected else {
+            return Err(value);
+        };
+        let member = members.iter().find(|member| {
+            value.ty.is_assignable_to(member)
+                || matches!(member, Type::TupleOf(item) if value.ty.fits_tuple_of(item))
+        });
+        match member {
+            Some(member @ (Type::Iterable(_) | Type::Iterator(_) | Type::TupleOf(_)))
+                if value.ty != *expected && !members.contains(&value.ty) =>
+            {
+                let value = Self::converted(value, Some(member));
+                let span = value.span;
+                Ok(Self::typed(
+                    TypedExprKind::Upcast(Box::new(value)),
+                    expected.clone(),
+                    span,
+                ))
+            }
+            _ => Err(value),
+        }
+    }
+
+    /// Returns `value` held as the abstract collection `collection`: as the member of its
+    /// kind whose items, or the part of a dict it reads, the value passes for, then as the
+    /// built-in types the collection holds (LIB-20).
+    fn converted_to_abstract(
+        value: TypedExpr,
+        collection: &crate::abstract_type::AbstractType,
+    ) -> TypedExpr {
+        let value = match collection.member_for(&value.ty) {
+            Some(member) if !value.ty.is_assignable_to(&collection.members) => {
+                let member = member.clone();
+                if matches!(value.ty, Type::Tuple(_)) {
+                    Self::converted(value, Some(&member))
+                } else {
+                    let span = value.span;
+                    Self::typed(TypedExprKind::Upcast(Box::new(value)), member, span)
+                }
+            }
+            _ => value,
+        };
+        Self::converted(value, Some(&collection.members))
     }
 
     /// Returns the operands of `left op right` with a fixed tuple beside a `tuple[T, ...]` in

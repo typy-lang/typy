@@ -279,23 +279,21 @@ impl<'program> BodyChecker<'program> {
                 *span,
             );
             checker.locals.insert(name.clone(), symbol);
-            checker.types.insert(symbol, parameter.ty.clone());
+            // A parameter of an abstract collection holds the built-in collection given, and
+            // takes another as its declared type says (LIB-20).
+            if parameter.ty.has_abstract() {
+                checker.declared.insert(symbol, parameter.ty.clone());
+            }
+            checker
+                .types
+                .insert(symbol, parameter.ty.without_abstract());
             checker
                 .assigned
                 .get_or_insert_with(BTreeSet::new)
                 .insert(flow::Fact::Assigned(symbol));
             parameters.push(symbol);
         }
-        if let (Some(class), false, Some(first)) = (
-            definition.class,
-            definition.takes_instance,
-            parameters.first(),
-        ) && !checker.program.classes[class.0 as usize]
-            .static_methods
-            .contains(&definition.name)
-        {
-            checker.class_parameter = Some(*first);
-        }
+        checker.class_parameter = checker.class_method_parameter(definition, parameters.first());
         if let (Some(class), true, Some(instance)) = (
             definition.class,
             definition.takes_instance,
@@ -505,7 +503,30 @@ impl<'program> BodyChecker<'program> {
         }
     }
 
+    /// Returns `cls` of a class method, the first of `first`, which holds its class exactly
+    /// (ADR-0025); `None` for any other function.
+    fn class_method_parameter(
+        &self,
+        definition: &Definition<'_>,
+        first: Option<&SymbolId>,
+    ) -> Option<SymbolId> {
+        let class = definition.class?;
+        let static_method = self.program.classes[class.0 as usize]
+            .static_methods
+            .contains(&definition.name);
+        (!definition.takes_instance && !static_method)
+            .then_some(first.copied())
+            .flatten()
+    }
+
     pub(super) fn typed(kind: TypedExprKind, ty: Type, span: Span) -> TypedExpr {
+        // A value of a declared abstract collection is the built-in collection it holds
+        // (LIB-20, ADR-0086).
+        let ty = if ty.has_abstract() {
+            ty.without_abstract()
+        } else {
+            ty
+        };
         TypedExpr { kind, ty, span }
     }
 }

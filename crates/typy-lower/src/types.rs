@@ -7,6 +7,8 @@ use typy_tyir::{OptionalBase, TupleTypes, TyirType, TypeId};
 /// tuple type with the same items. A checked program has no error types.
 pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
     match ty {
+        // A declared abstract collection is held as the built-in types it holds (LIB-20).
+        Type::Abstract(collection) => tyir_type(&collection.members, tuples),
         Type::Int => TyirType::Int,
         Type::Float => TyirType::Float,
         Type::Bool => TyirType::Bool,

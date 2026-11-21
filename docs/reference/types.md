@@ -155,40 +155,58 @@ CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
 ## Abstract collections
 
 `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set` (and
-`typing.AbstractSet`), `MutableSet`, `Collection`, `Container` and
-`Reversible` of `collections.abc` and `typing` are types that hold each
-built-in collection CPython registers with them, with the items they name
+`typing.AbstractSet`), `MutableSet`, `Collection`, `Container`,
+`Reversible`, `KeysView`, `ValuesView` and `ItemsView` of
+`collections.abc` and `typing` are types that hold each built-in
+collection CPython registers with them, with the items they name
 (LIB-20, ADR-0086):
 
 | Annotation | Holds |
 | --- | --- |
-| `Sequence[T]`, `Reversible[T]` | `list[T]`, `tuple[T, ...]`; `str` for `T` of `str`; `bytes` and `range` for `T` of `int` |
+| `Sequence[T]` | `list[T]`, `tuple[T, ...]`; `str` for `T` of `str`; `bytes` and `range` for `T` of `int` |
 | `MutableSequence[T]` | `list[T]` |
 | `Mapping[K, V]`, `MutableMapping[K, V]` | `dict[K, V]` |
-| `Set[T]`, `MutableSet[T]` | `set[T]` |
-| `Collection[T]`, `Container[T]` | each sequence of `Sequence[T]`, and `set[T]` |
+| `Set[T]` | `set[T]`, the keys of a dict of keys `T`, and the items of a dict when `T` is a pair |
+| `MutableSet[T]` | `set[T]` |
+| `Collection[T]`, `Container[T]` | what `Sequence[T]` and `Set[T]` hold, and the values of a dict of values `T` |
+| `Reversible[T]` | what `Sequence[T]` holds, a dict of keys `T`, and the views of a dict |
+| `KeysView[K]`, `ValuesView[V]`, `ItemsView[K, V]` | the keys, values or items of a dict |
 
 A value of one is held as the collection it is, and an operation on it,
-such as `len`, an index, `in` or a loop, runs on that collection, as for a
-union. Messages write the type as the union of its collections. Without
-its item types, an abstract collection is E0408. `reversed` of one, the
-views of a dict as members, and lists of instances of a derived class are
-planned for 0.10 (LIB-20); `Sized`, `Hashable` and classes of the program
-for 0.14 (LIB-24).
+such as `len`, an index, a slice, `in`, a loop or `reversed`, runs on that
+collection, as for a union. Messages name the type as it is written,
+such as `Sequence[int]`. A collection that only reads its items, every
+one but `MutableSequence`, `MutableMapping` and `MutableSet`, takes a
+collection of instances of a class derived from its item class, as
+`typing` reads it: a `list[Square]` is a `Sequence[Shape]`. A
+`list[bool]` is no `Sequence[int]`, since a `bool` item is held otherwise.
+`isinstance` with one answers as CPython does: a list is a `Sequence`,
+and a class of the program is a `Collection`, a `Container` or a
+`Reversible` when it defines their methods. Without its item types, an
+abstract collection is E0408. `Sized`, `Hashable` and `MappingView`, and
+classes of the program held as `Sequence` or the other collections that
+read no methods, are planned for 0.14 (LIB-24).
 
 <!-- typy-expect: accepted -->
 ```python
 from collections.abc import Sequence
 
 
-def total(values: Sequence[int]) -> int:
-    result = 0
-    for value in values:
-        result += value
-    return result
+class Shape:
+    def __init__(self, size: int) -> None:
+        self.size = size
 
 
-print(total([1, 2]), total((3, 4)), total(range(5)), total(b"ab"))
+class Square(Shape):
+    pass
+
+
+def total(shapes: Sequence[Shape]) -> int:
+    return sum([shape.size for shape in reversed(shapes)])
+
+
+squares = [Square(1), Square(2)]
+print(total(squares), total((Square(3), Shape(4))), isinstance(squares, Sequence))
 ```
 
 ## Unions

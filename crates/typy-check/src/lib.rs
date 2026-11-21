@@ -1,6 +1,7 @@
 //! Resolves names, checks types and the subset rules of a TyPy program (the Checking context).
 #![forbid(unsafe_code)]
 
+mod abstract_type;
 mod body;
 mod builtin;
 mod callable_type;

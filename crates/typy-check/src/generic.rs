@@ -57,6 +57,12 @@ impl Type {
                     item.visit(each);
                 }
             }
+            Self::Abstract(collection) => {
+                for item in &collection.arguments {
+                    item.visit(each);
+                }
+                collection.members.visit(each);
+            }
             Self::Callable {
                 parameters,
                 returns,
@@ -125,6 +131,17 @@ impl Type {
             }
             Self::Tuple(items) => Self::Tuple(items.iter().map(|item| *inner(item)).collect()),
             Self::Union(items) => Self::union(items.iter().map(|item| *inner(item)).collect()),
+            Self::Abstract(collection) => {
+                Self::Abstract(Box::new(crate::abstract_type::AbstractType {
+                    collection: collection.collection,
+                    arguments: collection
+                        .arguments
+                        .iter()
+                        .map(|item| *inner(item))
+                        .collect(),
+                    members: *inner(&collection.members),
+                }))
+            }
             Self::Callable {
                 parameters,
                 returns,
@@ -235,6 +252,9 @@ pub(crate) fn infer(parameter: &Type, argument: &Type, owner: Span, solved: &mut
         // `None` solves nothing, and a value of the base solves the base.
         (Type::Optional(_), Type::NoneType) => {}
         (Type::Optional(item), given) => infer(item, given, owner, solved),
+        // An abstract collection is solved by the items of the collection given, or by the
+        // keys and values of a mapping (LIB-20).
+        (Type::Abstract(collection), given) => infer_abstract(collection, given, owner, solved),
         // A union with one member that holds parameters is solved by what the other members
         // do not take.
         (Type::Union(members), given) => {
@@ -249,6 +269,28 @@ pub(crate) fn infer(parameter: &Type, argument: &Type, owner: Span, solved: &mut
                     .any(|member| given.is_assignable_to(member))
             {
                 infer(open, given, owner, solved);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Solves the parameters an abstract collection's arguments hold from the collection given:
+/// its items, or a mapping's keys and values (LIB-20).
+fn infer_abstract(
+    collection: &crate::abstract_type::AbstractType,
+    given: &Type,
+    owner: Span,
+    solved: &mut [Option<Type>],
+) {
+    match (collection.arguments.as_slice(), given) {
+        ([key, value], Type::Dict(given_key, given_value)) => {
+            infer(key, given_key, owner, solved);
+            infer(value, given_value, owner, solved);
+        }
+        ([item], given) => {
+            if let Some(given) = given.iterable_item() {
+                infer(item, &given, owner, solved);
             }
         }
         _ => {}

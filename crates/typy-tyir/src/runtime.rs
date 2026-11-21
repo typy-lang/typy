@@ -213,6 +213,10 @@ pub enum RuntimeFunction {
     ExceptionKeep,
     ExceptionSetArguments,
     IteratorNew,
+    /// A new iterator that reads a list, a `tuple[T, ...]`, a `str`, a `bytes`, a range, a
+    /// dict or a view of one from its last item, held as an `Iterable[T]`, with the layout of
+    /// the pair of a view of items (LIB-20).
+    IteratorReversed,
     IterableIterator,
     /// What `next()` steps for a value held as an `Iterator[T]`: the iterator itself, or a
     /// wrapper of an instance of a class with `__next__` (TYP-20).
@@ -512,7 +516,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 379] = [
+    pub const ALL: [Self; 380] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -707,6 +711,7 @@ impl RuntimeFunction {
         Self::ExceptionKeep,
         Self::ExceptionSetArguments,
         Self::IteratorNew,
+        Self::IteratorReversed,
         Self::IterableIterator,
         Self::IteratorStepper,
         Self::Iter,
@@ -1153,6 +1158,7 @@ impl RuntimeFunction {
             Self::ExceptionLeave => signature(&[Bits], Unit, false),
             Self::ExceptionSetArguments => signature(&[EXCEPTION, Bits, Bits], Unit, false),
             Self::IteratorNew => signature(&[Bits, Int, Bits], ITERATOR, false),
+            Self::IteratorReversed => signature(&[TyirType::ITERABLE, Bits], ITERATOR, false),
             // An instance's `__iter__` may raise (TYP-20).
             Self::IterableIterator | Self::Iter => {
                 signature(&[TyirType::ITERABLE, Bits], ITERATOR, true)
@@ -1522,6 +1528,7 @@ impl RuntimeFunction {
             Self::ExceptionKeep => "exception_keep",
             Self::ExceptionSetArguments => "exception_set_arguments",
             Self::IteratorNew => "iterator_new",
+            Self::IteratorReversed => "iterator_reversed",
             Self::IterableIterator => "iterable_iterator",
             Self::IteratorStepper => "iterator_stepper",
             Self::Iter => "iter",

@@ -224,6 +224,10 @@ pub enum TypedExprKind {
     },
     /// `iter(source)` of a built-in iterable: a new iterator over it (CST-09).
     Iter(Box<TypedExpr>),
+    /// `reversed(source)` of a value held as an `Iterable[T]` that is one of several built-in
+    /// sequences, or a dict or a view of one: a new iterator that reads it from its last item
+    /// (LIB-20).
+    Reversed(Box<TypedExpr>),
     /// `next(iterator)` or `next(iterator, default)`: the next item of an iterator, or of an
     /// instance whose class's `__next__` is `method`; at the end, the default, or
     /// `StopIteration` without one (CST-08, CST-09).
@@ -965,7 +969,7 @@ impl TypedExpr {
                         .flat_map(|init| init.arguments.iter().map(|argument| &argument.value)),
                 )
                 .collect(),
-            TypedExprKind::Iter(source) => vec![source],
+            TypedExprKind::Iter(source) | TypedExprKind::Reversed(source) => vec![source],
             TypedExprKind::Next {
                 iterator, default, ..
             } => std::iter::once(iterator.as_ref())

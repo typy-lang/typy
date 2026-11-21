@@ -2,6 +2,7 @@
 //! with the source's own rules, as CPython's iterators are (CST-09, ADR-0014).
 
 mod instance;
+mod reversed;
 #[cfg(test)]
 mod tests;
 
@@ -48,6 +49,22 @@ pub(crate) enum IteratorKind {
     /// An instance of a class with `__next__`, stepped inside a loop or a call of `next()`
     /// (TYP-20); the runtime alone makes it.
     Instance = 12,
+    /// `reversed()` of a list; this and the kinds below only the runtime makes (LIB-20).
+    ReversedList = 13,
+    /// `reversed()` of a `tuple[T, ...]`.
+    ReversedTuple = 14,
+    /// `reversed()` of a `str`.
+    ReversedStr = 15,
+    /// `reversed()` of a `bytes`.
+    ReversedBytes = 16,
+    /// `reversed()` of a range.
+    ReversedRange = 17,
+    /// `reversed()` of a dict, or of a view of its keys.
+    ReversedDictKeys = 18,
+    /// `reversed()` of a view of a dict's values.
+    ReversedDictValues = 19,
+    /// `reversed()` of a view of a dict's items.
+    ReversedDictItems = 20,
 }
 
 impl IteratorKind {
@@ -121,6 +138,11 @@ static LONG_RANGE_ITERATOR: TypeObject = iterator_type("longrange_iterator");
 /// named as the file's is.
 /// The type of the iterator that steps an instance, which only the runtime holds.
 static INSTANCE_ITERATOR: TypeObject = iterator_type("iterator");
+static LIST_REVERSE_ITERATOR: TypeObject = iterator_type("list_reverseiterator");
+static REVERSED: TypeObject = iterator_type("reversed");
+static DICT_REVERSE_KEY_ITERATOR: TypeObject = iterator_type("dict_reversekeyiterator");
+static DICT_REVERSE_VALUE_ITERATOR: TypeObject = iterator_type("dict_reversevalueiterator");
+static DICT_REVERSE_ITEM_ITERATOR: TypeObject = iterator_type("dict_reverseitemiterator");
 static TEXT_FILE_ITERATOR: TypeObject = TypeObject {
     module: "_io".as_ptr(),
     module_length: 3,
@@ -144,10 +166,17 @@ pub(crate) unsafe fn type_of(iterator: *const IteratorObject) -> &'static TypeOb
         IteratorKind::DictKeys => &DICT_KEY_ITERATOR,
         IteratorKind::DictValues => &DICT_VALUE_ITERATOR,
         IteratorKind::DictItems => &DICT_ITEM_ITERATOR,
-        IteratorKind::Range => &RANGE_ITERATOR,
+        IteratorKind::Range | IteratorKind::ReversedRange => &RANGE_ITERATOR,
         IteratorKind::LongRange => &LONG_RANGE_ITERATOR,
         IteratorKind::TextFile => &TEXT_FILE_ITERATOR,
         IteratorKind::Instance => &INSTANCE_ITERATOR,
+        IteratorKind::ReversedList => &LIST_REVERSE_ITERATOR,
+        IteratorKind::ReversedTuple | IteratorKind::ReversedStr | IteratorKind::ReversedBytes => {
+            &REVERSED
+        }
+        IteratorKind::ReversedDictKeys => &DICT_REVERSE_KEY_ITERATOR,
+        IteratorKind::ReversedDictValues => &DICT_REVERSE_VALUE_ITERATOR,
+        IteratorKind::ReversedDictItems => &DICT_REVERSE_ITEM_ITERATOR,
     }
 }
 
@@ -216,10 +245,26 @@ pub unsafe extern "C" fn typy_rt_iterator_new(
             _ => 0,
         }
     };
+    // SAFETY: the caller's guarantee for the descriptor of the pair.
+    unsafe { made(source, kind, (0, length), pair_type) }
+}
+
+/// Returns a new iterator of `kind` over `source`, whose reference it takes over, at
+/// `position`, with `length`, the count a set or dict is checked against.
+///
+/// # Safety
+///
+/// `pair_type` is null or a live tuple descriptor of the pair of a dict's items.
+unsafe fn made(
+    source: *mut ObjectHeader,
+    kind: IteratorKind,
+    (position, length): (usize, usize),
+    pair_type: *const TupleType,
+) -> *mut IteratorObject {
     let pair = if pair_type.is_null() {
         core::ptr::null_mut()
     } else {
-        // SAFETY: the compiler gives the descriptor of the pair.
+        // SAFETY: the caller's guarantee.
         crate::allocator::allocate(usize::try_from(unsafe { (*pair_type).size }).unwrap_or(8))
     };
     #[allow(
@@ -234,7 +279,7 @@ pub unsafe extern "C" fn typy_rt_iterator_new(
             header: ObjectHeader::new(ITERATOR_TYPE_ID),
             kind,
             source,
-            position: 0,
+            position,
             length,
             visited: 0,
             current: 0,
@@ -482,18 +527,7 @@ unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::Except
                 if position >= length(text) {
                     return Ok(false);
                 }
-                let point = code_point(text, position);
-                if iterator.kind == IteratorKind::Bytes {
-                    iterator.current = inline(i64::from(point)).unwrap_or(1).cast_unsigned();
-                } else {
-                    let character =
-                        crate::string::typy_rt_chr(inline(i64::from(point)).unwrap_or(1)).value;
-                    let old = core::mem::replace(&mut iterator.held, character);
-                    if !old.is_null() {
-                        typy_rt_decrement(old.cast());
-                    }
-                    iterator.current = character.expose_provenance() as u64;
-                }
+                text_item(iterator, text, position);
             }
             IteratorKind::Set => {
                 let set = source.cast::<SetObject>();
@@ -526,16 +560,49 @@ unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::Except
                 let Some(value) = crate::range::item(source.cast(), position) else {
                     return Ok(false);
                 };
-                crate::refcount::typy_rt_int_decrement(core::mem::replace(
-                    &mut iterator.number,
-                    value,
-                ));
-                iterator.current = value.cast_unsigned();
+                range_item(iterator, value);
             }
+            _ => return reversed::step(iterator),
         }
     }
     iterator.position = position + 1;
     Ok(true)
+}
+
+/// Makes the code point or byte at `index` of `text` the iterator's current item: a byte's
+/// `int` word, or a string of one code point the iterator holds.
+///
+/// # Safety
+///
+/// `text` is the iterator's live `str` or `bytes`, and `index` is below its length.
+unsafe fn text_item(iterator: &mut IteratorObject, text: *const StrObject, index: usize) {
+    // SAFETY: the caller's guarantee.
+    let point = unsafe { code_point(text, index) };
+    if matches!(
+        iterator.kind,
+        IteratorKind::Bytes | IteratorKind::ReversedBytes
+    ) {
+        iterator.current = inline(i64::from(point)).unwrap_or(1).cast_unsigned();
+        return;
+    }
+    // SAFETY: the word is an inline `int`.
+    let character =
+        unsafe { crate::string::typy_rt_chr(inline(i64::from(point)).unwrap_or(1)) }.value;
+    let old = core::mem::replace(&mut iterator.held, character);
+    if !old.is_null() {
+        // SAFETY: the iterator held a reference to its last string.
+        unsafe { typy_rt_decrement(old.cast()) };
+    }
+    iterator.current = character.expose_provenance() as u64;
+}
+
+/// Makes `value`, a new `int` word of a range, the iterator's current item, which it holds.
+fn range_item(iterator: &mut IteratorObject, value: i64) {
+    // SAFETY: the iterator held a reference to its last word.
+    unsafe {
+        crate::refcount::typy_rt_int_decrement(core::mem::replace(&mut iterator.number, value));
+    }
+    iterator.current = value.cast_unsigned();
 }
 
 /// Steps an iterator of a dict's keys, values or items, as CPython's dict iterator does.

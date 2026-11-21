@@ -539,7 +539,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 }
             }
         }
-        TypedExprKind::Iter(source) => expression(source, callees),
+        TypedExprKind::Iter(source) | TypedExprKind::Reversed(source) => {
+            expression(source, callees);
+        }
         TypedExprKind::Next {
             iterator,
             method,

@@ -22,6 +22,11 @@ impl Type {
                     flat.extend(inner.members().iter().cloned());
                 }
                 Self::Union(inner) => flat.extend(inner),
+                // An abstract collection in a union is the types it holds (ADR-0086).
+                Self::Abstract(collection) => match collection.members {
+                    Self::Union(inner) => flat.extend(inner),
+                    other => flat.push(other),
+                },
                 other => flat.push(other),
             }
         }

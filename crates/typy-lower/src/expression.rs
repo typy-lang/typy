@@ -43,6 +43,7 @@ impl FunctionLowerer<'_> {
                 arguments,
             } => self.set_arguments(exception, arguments, span),
             TypedExprKind::Iter(source) => self.iter_of(source, span),
+            TypedExprKind::Reversed(source) => self.reversed_of(source, span),
             TypedExprKind::Next {
                 iterator,
                 method,

@@ -607,6 +607,7 @@ impl Dump<'_> {
             TypedExprKind::NewException { class, .. } => format!("NewException {class}"),
             TypedExprKind::SetArguments { .. } => "SetArguments".to_owned(),
             TypedExprKind::Iter(_) => "Iter".to_owned(),
+            TypedExprKind::Reversed(_) => "Reversed".to_owned(),
             TypedExprKind::Next { method, .. } => if method.is_some() {
                 "Next __next__"
             } else {

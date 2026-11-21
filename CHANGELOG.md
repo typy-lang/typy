@@ -25,12 +25,16 @@ All notable changes to TyPy are recorded here. The format follows
   the class statement runs, assigning a field, and `_replace` with a name
   that is no field are refused with CPython's text.
 - `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set`,
-  `MutableSet`, `Collection`, `Container` and `Reversible` of
-  `collections.abc` and `typing`, and `typing.AbstractSet`, as types that
-  hold the built-in collections CPython registers with them, such as a
-  list, a tuple, bytes or a range for `Sequence[int]` (LIB-20). A loop and
-  the built-ins of one iterable go over a union of built-in iterables of
-  one item type.
+  `MutableSet`, `Collection`, `Container`, `Reversible`, `KeysView`,
+  `ValuesView` and `ItemsView` of `collections.abc` and `typing`, and
+  `typing.AbstractSet`, as types that hold the built-in collections CPython
+  registers with them, such as a list, a tuple, bytes or a range for
+  `Sequence[int]`, or the views of a dict for `Set[str]` (LIB-20). One that
+  only reads its items takes a collection of a derived class's instances,
+  such as a `list[Square]` for a `Sequence[Shape]`; `reversed`, slices,
+  `isinstance` and class patterns take them as CPython does; and messages
+  name them as written, such as `Sequence[int]`. A loop and the built-ins
+  of one iterable go over a union of built-in iterables of one item type.
 - `issubclass(class, classes)` with a class or a tuple of classes, named or
   held in a value, answering as CPython does; a value that is no class is
   refused with CPython's `TypeError` message (CLS-19).

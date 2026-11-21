@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.89 |
+| Version | 2.90 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -1008,8 +1008,27 @@ classes held in a value: lowering evaluates it once and tests each item of
 a fixed tuple, or calls `typy_rt_type_derives_from_any` with a
 `tuple[type, ...]`, which goes over its items. An abstract collection
 of `typing` or `collections.abc` names `AnnotationName::Abstract`, whose
-`AbstractCollection::of` gives the union of the built-in collections of
-its item types, or `dict[K, V]` for a mapping (LIB-20, ADR-0086).
+`AbstractCollection::of` gives `Type::Abstract` of an `AbstractType`: the
+collection, its arguments, and `members`, the built-in types it holds,
+their union, with `None` for the part of a dict a view or a dict read for
+its keys does not read (LIB-20, ADR-0086). Only declared types are
+abstract: `BodyChecker::typed` gives every expression the type
+`without_abstract` makes, a variable's current type is its members while
+`declared` keeps the collection, and lowering maps it to its members.
+`AbstractType::takes` and `member_for` decide assignability, with a
+derived class's instances for the items of a collection that
+`reads_only`, a dict of any other part for a member that reads one part,
+and `converted_to_abstract` retypes such a value as that member by an
+`Upcast` before it joins the union. `infer` solves an abstract
+collection's arguments from the items, or the keys and values, given.
+`reversed` of a value held as `Iterable[T]` of several members is
+`TypedExprKind::Reversed`, which `typy_rt_iterator_reversed` makes an
+iterator of the reversed kinds, from the last item, entry or value of a
+list, a tuple, a `str`, a `bytes`, a range, a dict or a view; a member
+that is a set is E0411. `isinstance` with a nominal collection tests its
+built-in types; `Container`, `Collection` and `Reversible` are
+`AbstractClass` kinds, which also take classes of the program that define
+their methods.
 `sequence_of` reads a union of built-in iterables of one item type as an
 `Iterable[T]`, so a loop and the built-ins of one iterable go over it
 through the runtime's iterator of the member it holds. `callable(x)`
@@ -3003,7 +3022,7 @@ comparisons, calls and counting, terminators, and emission.
 | Type objects | The runtime exports its type objects as `typy_rt_object` and `typy_rt_type_` followed by `int`, `float`, `bool`, `str`, `bytes`, `none`, `list`, `tuple`, `set`, `dict`, `dict_keys`, `dict_values`, `dict_items` or `type`, and its exception classes as `typy_rt_exception_` followed by the class name, such as `typy_rt_exception_ValueError`. The type `type` hashes a type object by identity and writes it as `<class 'name'>`, or `<class 'module.Name'>` for a class |
 | Exception class | A class derived from an exception class has a type object whose base is the runtime's class, such as `typy_rt_exception_ValueError`, or its base's `typy.classN`; whose `repr` and `str` are `typy_rt_exception_repr` and `typy_rt_exception_str` unless it or a base defines `__repr__` or `__str__`; and whose descriptor lays out its attributes after the exception's fixed part of `EXCEPTION_PREFIX`, 96 bytes |
 | Traceback | One immortal object with the type ID 13 and the type `traceback`, exported as `typy_rt_traceback`, written as `<traceback object at 0x...>`; it holds no frames, which the exception keeps for its report (CST-10) |
-| Iterator | Header with the type ID 12, `kind` (0 list, 1 tuple, 2 `str`, 3 `bytes`, 4 set, 5 dict keys, 6 dict values, 7 dict items, 8 an ASCII `str`, 9 a range, 10 a range past a C `long`), `source`, null once exhausted, `position`, `length` and `visited` for the checks of a set or dict, `current`, the borrowed item of the last step, `held`, a `str` iterator's current string, `number`, a range iterator's current `int` word, and `pair_type` and `pair` for a dict's items. Its type object has CPython's name, such as `list_iterator` or `dict_itemiterator`. The compiler gives a range kind 9, and the runtime makes it 10, `longrange_iterator`, when the start, stop, step or length does not fit a C `long`, as CPython does |
+| Iterator | Header with the type ID 12, `kind` (0 list, 1 tuple, 2 `str`, 3 `bytes`, 4 set, 5 dict keys, 6 dict values, 7 dict items, 8 an ASCII `str`, 9 a range, 10 a range past a C `long`, and from 13 to 20 the reversed iterators `typy_rt_iterator_reversed` makes of a list, a tuple, a `str`, a `bytes`, a range, a dict's keys, its values and its items), `source`, null once exhausted, `position`, `length` and `visited` for the checks of a set or dict, `current`, the borrowed item of the last step, `held`, a `str` iterator's current string, `number`, a range iterator's current `int` word, and `pair_type` and `pair` for a dict's items. Its type object has CPython's name, such as `list_iterator` or `dict_itemiterator`. The compiler gives a range kind 9, and the runtime makes it 10, `longrange_iterator`, when the start, stop, step or length does not fit a C `long`, as CPython does |
 | Range | Header with the type ID 14, then `start`, `stop`, `step` and `length`, four `int` words the range owns, so a range reaches past 64 bits as CPython's does. Its type object `typy_rt_type_range` is true when the range is not empty, hashes and compares as CPython's `range_hash` and `range_richcompare` do, by length, then first value, then step, and is written `range(0, 3)` or `range(0, 9, 3)`. A range slot starts as null (DAT-17) |
 | Instance | Header, `class: ptr` to the class's type object, then the attributes laid out as the class's tuple descriptor says. `typy_rt_instance_new(class)` makes one with every attribute zero; the runtime frees it by releasing each attribute the descriptor counts. `typy_rt_instance_on_stack(block, class)` and `typy_rt_instance_off_stack(block)` make and release an instance in a frame block (section 10.4). A class's type object is a private constant `typy.classN`, whose base is the runtime's `typy_rt_object`, whose hash is `typy_rt_identity_hash` and whose `repr` is `typy_rt_instance_repr`, or `typy.classN.repr`, which calls the class's `__repr__` and adds a null exception when it cannot raise |
 | Type object | Header, `name: ptr` to UTF-8 bytes, `name_length: u64`, `base: ptr` (null only for `object`), then five nullable function pointers with the C calling convention: `truth(object) -> bool`, `hash(object) -> i64`, `equal(left, right) -> bool`, `order(left, right, comparison) -> bool` and `repr(object) -> { str, exception }`, then `module: ptr` to UTF-8 bytes, `module_length: u64`, `fields: ptr` to the tuple descriptor of a class's attributes, null for the runtime's own types, and last `str(object) -> { str, exception }`, null when `str` is `repr`. An absent function means what it means for `object`: true, equal only to itself, and no hash, order or text. A class's `str` is `typy.classN.str`, which calls its `__str__`, or null when it has none. The runtime frees its own objects by type ID, so the type objects stay out of a program that never tests, compares or writes an object of unknown type (ADR-0012) |

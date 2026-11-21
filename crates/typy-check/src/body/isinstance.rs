@@ -308,6 +308,25 @@ impl BodyChecker<'_> {
             ]),
             AbstractClass::Generator => tests.push(MemberTest::Kind(RuntimeKind::Generator)),
             AbstractClass::Iterable => {}
+            // The built-in collections are told apart by their classes (LIB-20).
+            AbstractClass::Container | AbstractClass::Collection | AbstractClass::Reversible => {
+                use crate::types::View;
+                let mut builtin = vec![
+                    TypeObjectOf::List,
+                    TypeObjectOf::Tuple,
+                    TypeObjectOf::Str,
+                    TypeObjectOf::Bytes,
+                    TypeObjectOf::Range,
+                    TypeObjectOf::Dict,
+                    TypeObjectOf::View(View::Keys),
+                    TypeObjectOf::View(View::Values),
+                    TypeObjectOf::View(View::Items),
+                ];
+                if *kind != AbstractClass::Reversible {
+                    builtin.push(TypeObjectOf::Set);
+                }
+                tests.extend(builtin.into_iter().map(MemberTest::Class));
+            }
         }
         tests
     }
@@ -596,16 +615,35 @@ fn abstract_outcome(
 ) -> Outcome {
     use crate::types::AbstractClass;
     let always = |yes: bool| if yes { Outcome::Always } else { Outcome::Never };
+    // `Container`, `Collection` and `Reversible` take the built-in collections CPython
+    // registers with them, and no iterator or file (LIB-20).
+    let collection = matches!(
+        kind,
+        AbstractClass::Container | AbstractClass::Collection | AbstractClass::Reversible
+    );
     match ty {
+        Type::Set(_) => always(
+            kind != AbstractClass::Reversible
+                && kind != AbstractClass::Iterator
+                && kind != AbstractClass::Generator,
+        ),
         Type::List(_)
         | Type::Tuple(_)
         | Type::TupleOf(_)
         | Type::Str
         | Type::Bytes
-        | Type::Set(_)
         | Type::Dict(..)
         | Type::DictView(..)
-        | Type::Range => always(kind == AbstractClass::Iterable),
+        | Type::Range => always(kind == AbstractClass::Iterable || collection),
+        Type::Generator { .. }
+        | Type::Iterator(_)
+        | Type::TextFile
+        | Type::BinaryFile(_)
+        | Type::DescriptorFile(_)
+            if collection =>
+        {
+            Outcome::Never
+        }
         // A generator is all three; what an iterator holds, or an iterable, its object knows
         // (TYP-21).
         Type::Generator { .. } => Outcome::Always,

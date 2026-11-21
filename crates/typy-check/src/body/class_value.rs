@@ -287,7 +287,7 @@ impl BodyChecker<'_> {
             self.global_names.insert(variable.clone());
             self.locals.insert(variable.clone(), symbol);
             self.declared.insert(symbol, declared.clone());
-            self.types.insert(symbol, declared);
+            self.types.insert(symbol, declared.without_abstract());
         }
         let target = Expr::Name { id: variable, span };
         Some(

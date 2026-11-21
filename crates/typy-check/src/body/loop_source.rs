@@ -207,26 +207,46 @@ impl BodyChecker<'_> {
             return self.range(range_arguments, range_keywords, true, span);
         }
         let sequence = self.sequence(&arguments[0]);
-        // A sequence of an abstract collection, held as one of several built-in types, is
-        // reversed member by member only from a later step of LIB-20.
+        // A value of an abstract collection, held as one of several built-in types, is read
+        // from its last item by the runtime's reversed iterator of the member it holds
+        // (LIB-20).
         if let TypedExprKind::AsIterable(inner) = &sequence.kind
-            && matches!(inner.ty, Type::Union(_))
+            && let Type::Union(members) = &inner.ty
         {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    sequence.span,
-                    format!(
-                        "`reversed` of {}, which holds one of several sequences, is planned for \
-                         TyPy 0.10 (LIB-20)",
-                        inner.ty.with_article()
-                    ),
+            let ordered = members.iter().all(|member| {
+                matches!(
+                    member,
+                    Type::List(_)
+                        | Type::TupleOf(_)
+                        | Type::Str
+                        | Type::Bytes
+                        | Type::Range
+                        | Type::Dict(..)
+                        | Type::DictView(..)
                 )
-                .with_rule(RuleId::LIB_20),
-            );
-            return LoopSource::Reversed(Self::typed(
-                TypedExprKind::Constant(TypedConstant::None),
-                Type::Error,
+            });
+            if !ordered {
+                self.diagnostics.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(411),
+                        sequence.span,
+                        format!(
+                            "`reversed` needs a sequence, and {} may hold a set, which has no \
+                             order to reverse",
+                            inner.ty.with_article()
+                        ),
+                    )
+                    .with_rule(RuleId::LIB_02),
+                );
+            }
+            let ty = match &sequence.ty {
+                Type::Iterable(item) => Type::Iterator(item.clone()),
+                _ => Type::Error,
+            };
+            let span = sequence.span;
+            return LoopSource::Items(Self::typed(
+                TypedExprKind::Reversed(Box::new(sequence)),
+                ty,
                 span,
             ));
         }

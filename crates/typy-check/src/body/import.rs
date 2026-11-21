@@ -425,10 +425,9 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_rule(RuleId::TYP_10)
         .with_help("annotate the value with its type, or a union of its types");
     }
-    // The names a later release gives, with the release and the requirement that plan each
+    // The names a later release gives, with the release and the requirement that plans them
     // (ADR-0086).
     let planned = match name.as_str() {
-        "KeysView" | "ValuesView" | "ItemsView" => Some(("0.10", RuleId::LIB_20)),
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
         _ => None,
     };
@@ -469,6 +468,9 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "Collection",
             "Container",
             "Reversible",
+            "KeysView",
+            "ValuesView",
+            "ItemsView",
         ],
         "dataclasses" => &["dataclass", "field"],
         _ => &[
@@ -496,6 +498,9 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "Collection",
             "Container",
             "Reversible",
+            "KeysView",
+            "ValuesView",
+            "ItemsView",
         ],
     }
 }
