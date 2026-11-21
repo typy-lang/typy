@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-21
+
 ### Added
 
 - A method read as a value through a protocol value, such as
@@ -1615,7 +1617,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/typy-lang/typy/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/typy-lang/typy/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/typy-lang/typy/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/typy-lang/typy/compare/v0.6.0...v0.7.0
