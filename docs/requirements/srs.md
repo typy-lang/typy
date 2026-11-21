@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.113 |
+| Version | 1.114 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-21 |
@@ -626,6 +626,12 @@ resolved issues below.
 | ID | Question | Raised |
 | --- | --- | --- |
 | OI-31 | Which concurrency model does TyPy take, and does safe code promise freedom from data races? The answer decides the object header and how reference counts change, which ADR-0074 fixes at 1.0, so it is settled before 1.0 although threads come after it: CPython's free-threaded build uses biased reference counting, and Swift 6 and Rust check data races when a program compiles. A research note measures three models on TyPy's benchmarks, isolated workers as in Python 3.14's `concurrent.interpreters` (PEP 734), free threads as in CPython's free-threaded build (PEP 703), and sharing that the checker proves safe, and the question is settled in the 0.11 planning. | 2026-11-20 |
+| OI-32 | Is `object` a type, whose value of a type held by value is boxed and narrowed by `isinstance` and `match` as Java narrows `Object`, and in which release? TyPy rejects it today (TYP-10), although every program the research measured that mypy accepts with it is typable. | 2026-11-21 |
+| OI-33 | Does TyPy infer a function's result from its `return` statements, an empty collection's item type from its first use, and unannotated parameters as type parameters with a copy for each set of argument types, which changes TYP-01? | 2026-11-21 |
+| OI-34 | Which code that defines classes, such as a metaclass, an `Enum` or a class decorator, may the compiler run while it compiles, and how is it shown to give the program CPython's meaning? | 2026-11-21 |
+| OI-35 | Does TyPy accept `Any` as a value whose operations bind when the program runs, with CPython's `TypeError` and `AttributeError`, paid for only where `Any` appears? | 2026-11-21 |
+| OI-36 | Does `typing.cast` compile to a check that raises `TypeError`, as mypyc compiles it, where CPython trusts the cast? | 2026-11-21 |
+| OI-37 | Which CPython versions join the oracle after 3.15, and when does the lowest Python floor rise above 3.12? | 2026-11-21 |
 
 ## 8. Resolved issues
 

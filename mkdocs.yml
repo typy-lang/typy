@@ -122,6 +122,7 @@ nav:
   - Engineering documents:
       - Overview: engineering.md
       - Research: research/research.md
+      - "Research: values whose type is known late": research/static-and-dynamic-values.md
       - Requirements specification: requirements/srs.md
       - Use case model: modeling/use-case-model.md
       - Domain model: modeling/domain-model.md
