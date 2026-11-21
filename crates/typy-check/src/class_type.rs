@@ -26,8 +26,14 @@ pub struct InstanceClass {
     pub protocol: bool,
 }
 
+/// The hidden method the compiler writes for a named tuple, which returns its fields as a
+/// tuple; a name with a space is no Python name, so no program defines or calls it (CLS-27,
+/// ADR-0088).
+pub(crate) const NAMED_TUPLE_FIELDS: &str = " (fields)";
+
 /// The comparison and hash methods a class defines or inherits, which decide whether its
-/// instances can be ordered and hashed (CLS-07, ADR-0026).
+/// instances can be ordered and hashed (CLS-07, ADR-0026), and whether it is a named tuple,
+/// whose instances are tuples (CLS-27).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Operators(u8);
 
@@ -39,6 +45,7 @@ impl Operators {
     const GE: u8 = 16;
     const HASH: u8 = 32;
     const UNHASHABLE: u8 = 64;
+    const NAMED_TUPLE: u8 = 128;
 
     /// Returns what a class offers whose body defines the methods `names` and whose base
     /// offers `base`. A class that defines `__eq__` and not `__hash__` has no hash, as in
@@ -54,6 +61,7 @@ impl Operators {
                 "__le__" => Self::LE,
                 "__ge__" => Self::GE,
                 "__hash__" => Self::HASH,
+                NAMED_TUPLE_FIELDS => Self::NAMED_TUPLE,
                 _ => 0,
             };
         }
@@ -85,6 +93,12 @@ impl Operators {
     #[must_use]
     pub fn compares(self) -> bool {
         self.0 & Self::EQ != 0
+    }
+
+    /// Returns true when the class is a named tuple or derives from one (CLS-27).
+    #[must_use]
+    pub fn named_tuple(self) -> bool {
+        self.0 & Self::NAMED_TUPLE != 0
     }
 }
 

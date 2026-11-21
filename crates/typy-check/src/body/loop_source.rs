@@ -335,7 +335,7 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        Self::sequence_of(Self::version_tuple(self.expression(expression)))
+        Self::sequence_of(self.tuple_expression(expression))
     }
 
     /// Returns the checked `value` as the sequence a loop reads, as `sequence` does.

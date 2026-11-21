@@ -21,6 +21,10 @@ pub struct Attribute {
 /// A class of the program after checking. Its base is `object`, or an exception class
 /// (ADR-0012, CLS-03).
 #[derive(Clone, Debug, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is a fact about the class that lowering reads on its own"
+)]
 pub struct TypedClass {
     /// The class's ID.
     pub id: ClassId,
@@ -62,4 +66,7 @@ pub struct TypedClass {
     /// Whether its instances are iterators or iterables, whose `__iter__` the runtime calls
     /// (TYP-20).
     pub iterates: bool,
+    /// Whether the class is a named tuple or derives from one, whose type object names
+    /// `tuple` as the base of the first (CLS-27, ADR-0088).
+    pub named_tuple: bool,
 }

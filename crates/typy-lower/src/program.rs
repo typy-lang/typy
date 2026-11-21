@@ -427,6 +427,7 @@ fn tyir_class(
             .exception
             .as_ref()
             .is_some_and(|exception| exception.builtin().is_os_error()),
+        tuple_base: class.named_tuple && class.base.is_none(),
         public: class.generic.map(|generic| generic.0),
     }
 }

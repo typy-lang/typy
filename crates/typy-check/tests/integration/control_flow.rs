@@ -106,9 +106,9 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             "E0425",
             "TyPy's `typing` gives `Iterator`, `Iterable`, `Generator`, `Callable`, \
             `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar`, \
-            `Protocol`, `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, \
-            `AbstractSet`, `MutableSet`, `Collection`, `Container` and `Reversible`, not \
-            `Awaitable`",
+            `Protocol`, `NamedTuple`, `Sequence`, `MutableSequence`, `Mapping`, \
+            `MutableMapping`, `AbstractSet`, `MutableSet`, `Collection`, `Container` and \
+            `Reversible`, not `Awaitable`",
         ),
         (
             "from dataclasses import asdict\n",

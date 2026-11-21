@@ -90,6 +90,7 @@ supersedes it.
 | [ADR-0082](0082-bind-a-decorated-functions-name-to-what-its-decorators-return.md) | Bind a decorated function's name to what its decorators return | Accepted | 2026-11-20 |
 | [ADR-0083](0083-describe-each-built-in-so-calls-with-unpacking-bind-when-they-run.md) | Describe each built-in so calls with unpacking bind when they run | Accepted | 2026-11-20 |
 | [ADR-0084](0084-let-type-c-hold-c-or-a-class-derived-from-it.md) | Let `type[C]` hold `C` or a class derived from it | Accepted | 2026-11-20 |
-| [ADR-0085](0085-hold-a-named-tuple-as-an-instance-of-a-class-derived-from-tuple.md) | Hold a named tuple as an instance of a class derived from `tuple` | Accepted | 2026-11-20 |
+| [ADR-0085](0085-hold-a-named-tuple-as-an-instance-of-a-class-derived-from-tuple.md) | Hold a named tuple as an instance of a class derived from `tuple` | Superseded by ADR-0088 | 2026-11-20 |
 | [ADR-0086](0086-hold-an-abstract-collection-as-its-built-in-types-range-included.md) | Hold an abstract collection as its built-in types, `range` included | Accepted | 2026-11-20 |
 | [ADR-0087](0087-make-typing-values-constants-written-only-where-the-oracles-agree.md) | Make typing values constants, written only where the oracles agree | Accepted | 2026-11-20 |
+| [ADR-0088](0088-give-a-named-tuple-methods-over-the-tuple-of-its-fields.md) | Give a named tuple methods over the tuple of its fields | Accepted | 2026-11-21 |

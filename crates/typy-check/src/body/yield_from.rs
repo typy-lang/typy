@@ -30,7 +30,7 @@ impl BodyChecker<'_> {
     /// Returns the source of a `yield from`, checked, and each item it yields, as the
     /// generator yields it; with `result`, sets the type the source returns.
     fn delegation(&mut self, source: &Expr, result: Option<&mut Type>) -> (TypedExpr, TypedExpr) {
-        let value = Self::version_tuple(self.expression(source));
+        let value = self.tuple_expression(source);
         let delegated = match &value.ty {
             Type::Generator { sends, returns, .. } => {
                 Some((sends.as_ref().clone(), returns.as_ref().clone()))

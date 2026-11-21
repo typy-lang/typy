@@ -140,7 +140,7 @@ impl BodyChecker<'_> {
                     .iter()
                     .any(|target| matches!(target, Expr::Tuple { .. } | Expr::List { .. }))
                 {
-                    Self::version_tuple(value)
+                    self.tuple_view(value)
                 } else {
                     value
                 };

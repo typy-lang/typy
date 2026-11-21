@@ -143,6 +143,9 @@ pub struct TyirClass {
     /// Whether the class derives from `OSError`, whose objects a program built with two to
     /// five arguments are written as `[Errno 2] text` (EXC-14, ADR-0035).
     pub os_error: bool,
+    /// Whether the class is a named tuple derived from `NamedTuple`, whose type object names
+    /// the runtime's `tuple` as its base (CLS-27, ADR-0088).
+    pub tuple_base: bool,
     /// For a copy of a generic class, the generic class by its index, which its type object
     /// names as its base and as the class `type()` gives (ADR-0028).
     pub public: Option<u32>,

@@ -693,8 +693,12 @@ fn outcome(ty: &Type, class: &TypeObjectOf) -> Outcome {
                 Outcome::Never
             }
         }
-        // Every value is an `object`, and a `bool` is an `int` in CPython.
+        // Every value is an `object`, a `bool` is an `int` in CPython, and a named tuple is a
+        // `tuple` (CLS-27).
         (_, TypeObjectOf::Object) | (Type::Bool, TypeObjectOf::Int) => Outcome::Always,
+        (Type::Instance(own), TypeObjectOf::Tuple) if own.operators.named_tuple() => {
+            Outcome::Always
+        }
         // These hold an object whose type only the object knows.
         (Type::Iterator(_) | Type::Iterable(_) | Type::AnyModule, _) => Outcome::Checked,
         _ => match TypeObjectOf::of(ty) {

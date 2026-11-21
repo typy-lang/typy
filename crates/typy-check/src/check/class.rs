@@ -65,9 +65,9 @@ pub(crate) struct ClassInfo {
     /// the instance first, which the method table holds in the static method's place (CLS-06).
     pub(crate) static_bridges: Vec<(String, FunctionId)>,
     pub(crate) defaults: Vec<usize>,
-    /// Whether the class is a frozen dataclass, whose fields only the `__init__` `@dataclass`
-    /// writes assigns (CLS-05).
-    pub(crate) frozen: bool,
+    /// Why the fields of the class's instances are assigned only by the `__init__` written
+    /// for it, when they are: a frozen dataclass (CLS-05) or a named tuple (CLS-27).
+    pub(crate) frozen: Option<Frozen>,
     /// Whether `@dataclass` wrote the class's `__init__`.
     pub(crate) generated_init: bool,
     /// What the class body assigns to `__match_args__`, which a class pattern's positional
@@ -81,6 +81,15 @@ pub(crate) struct ClassInfo {
     /// that alone assigns it (TYP-08).
     pub(crate) final_attributes: Vec<(usize, Span)>,
     pub(crate) span: Span,
+}
+
+/// What makes the fields of a class's instances frozen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Frozen {
+    /// `@dataclass(frozen=True)` (CLS-05).
+    Dataclass,
+    /// A named tuple or a class derived from one (CLS-27).
+    NamedTuple,
 }
 
 impl ClassInfo {
@@ -266,7 +275,7 @@ fn derived_type(
         _ => (String::new(), None),
     };
     let Some(base_id) = base_id else {
-        diagnostics.push(unknown_base(&written, span));
+        diagnostics.push(unsupported_base(span));
         return None;
     };
     if base_id >= class.id {
@@ -330,20 +339,6 @@ pub(super) fn method_names(body: &[Stmt]) -> impl Iterator<Item = &str> {
         Stmt::FunctionDef { name, .. } => Some(name.name.as_str()),
         _ => None,
     })
-}
-
-/// Returns the error for a base `written` that names no class of the program: a named tuple,
-/// planned for 0.10 (CLS-27, ADR-0085), or any other base TyPy does not take.
-fn unknown_base(written: &str, span: Span) -> Diagnostic {
-    if matches!(written, "NamedTuple" | "typing.NamedTuple") {
-        return Diagnostic::new(
-            DiagnosticCode::error(201),
-            span,
-            "a class derived from `typing.NamedTuple` is planned for TyPy 0.10 (CLS-27)",
-        )
-        .with_rule(RuleId::CLS_27);
-    }
-    unsupported_base(span)
 }
 
 /// Returns the error for a base other than `object`, an exception class or a class of the
@@ -670,7 +665,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         adapted: Vec::new(),
         adapters: Vec::new(),
         static_bridges: Vec::new(),
-        frozen: false,
+        frozen: None,
         generated_init: false,
         match_args: None,
         init_uses_instance: false,

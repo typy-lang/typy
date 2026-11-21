@@ -249,19 +249,6 @@ fn fun_05_a_function_value_compares_and_hashes_by_identity_and_never_orders() {
     assert_eq!(ordered[0].0, "E0407");
 }
 
-#[test]
-fn lib_17_the_typing_names_a_later_release_gives_are_planned_for_it() {
-    let found = messages("from typing import NamedTuple\n");
-    assert_eq!(
-        found,
-        [(
-            "E0201".to_owned(),
-            "`typing.NamedTuple` is planned for TyPy 0.10 (CLS-27)".to_owned(),
-            "CLS-27".to_owned()
-        )]
-    );
-}
-
 /// A class whose method a subclass overrides, and a static method, for the method cases.
 const METHODS: &str = "\
 class Shape:

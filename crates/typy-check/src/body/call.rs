@@ -314,7 +314,7 @@ impl BodyChecker<'_> {
                 continue;
             }
             if let Expr::Starred { value, .. } = argument {
-                let value = Self::version_tuple(self.expression(value));
+                let value = self.tuple_expression(value);
                 if let Type::Tuple(items) = &value.ty {
                     let count = items.len();
                     let shapes = (&shape, parameters);

@@ -50,7 +50,7 @@ pub(crate) struct ImportedNames {
     pub(crate) standard: BTreeMap<String, String>,
 }
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
-pub(crate) use class::{ClassInfo, class_value_variable, class_values};
+pub(crate) use class::{ClassInfo, Frozen, class_value_variable, class_values};
 pub(crate) use definition::{Definition, FunctionParts, factory_call, function_definition};
 
 use crate::body::{BodyChecker, Program};
@@ -736,7 +736,11 @@ fn mark_dataclasses(
 ) {
     for info in infos {
         if let Some(dataclass) = dataclasses.get(&info.name) {
-            info.frozen = dataclass.frozen;
+            info.frozen = if dataclass.named_tuple {
+                Some(class::Frozen::NamedTuple)
+            } else {
+                dataclass.frozen.then_some(class::Frozen::Dataclass)
+            };
             info.generated_init = dataclass.generated_init;
             if info.match_args.is_none() {
                 info.match_args = dataclass.match_args.clone().map(Ok);

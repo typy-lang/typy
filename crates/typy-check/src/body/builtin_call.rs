@@ -65,10 +65,10 @@ impl BodyChecker<'_> {
         }
         let values: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
-            .map(|value| {
+            .map(|argument| {
+                let value = self.expression(argument);
                 if builtin == Builtin::Len {
-                    Self::version_tuple(value)
+                    self.tuple_view(value)
                 } else {
                     value
                 }

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.83 |
+| Version | 2.84 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-20 |
+| Last updated | 2026-11-21 |
 
 ## 1. Purpose and scope
 
@@ -1961,7 +1961,28 @@ calls it each time (CLS-15). Other options of `field` and `@dataclass`, and
 a `default_factory` in a generic dataclass, are E0201, planned for 0.14
 (CLS-28). A frozen dataclass's
 `ClassInfo::frozen` makes assigning a field E0414 outside the `__init__` the
-expansion wrote. `check::type_alias` expands the module's `type` statements
+expansion wrote. `check::dataclass::named_tuple` expands a class whose base
+names `typing.NamedTuple` in the same pass (CLS-27, ADR-0088): it reports
+what CPython raises when the class statement runs, with its text, as E0404,
+removes the base, and writes `__init__`, `__repr__`, `__eq__`, `__hash__`,
+the order methods when every field's annotation names a number, a string,
+`bytes`, or a list or tuple of them, `__match_args__` and `_fields`, each
+over the tuple of the fields, and the hidden method
+`class_type::NAMED_TUPLE_FIELDS`, which returns that tuple. A method the
+class defines is kept. `DataclassInfo::named_tuple` and
+`ClassInfo::named_tuple` mark the class, a frozen one whose field
+assignment is E0414 with CPython's `AttributeError` text, and
+`Operators::named_tuple` marks it and the classes derived from it, which
+may add methods; `__new__`, `__init__`, attributes of their own and the
+methods of the tuple protocol are E0201, planned for 1.0 (CLS-41).
+`body/named_tuple.rs` reads a named tuple as the tuple of its fields
+through `tuple_view`, which `version_tuple` sites call, and
+`compared_tuples` and `arithmetic_tuples` once the operator methods have
+not taken the operands, by a `TypedExprKind::Call` of the hidden method,
+which evaluates the value once. `isinstance` of one against `tuple` is
+always true, and `TypedClass::named_tuple` becomes `TyirClass::tuple_base`,
+which gives the type object the runtime's `tuple` as its base.
+`check::type_alias` expands the module's `type` statements
 after the dataclass expansion and before the subset check: it expands each
 alias's value through the aliases it names, reports an alias that reaches
 itself and one defined twice, and replaces each alias name in an annotation,

@@ -17,6 +17,7 @@ class body or assigned in `__init__`, and has one type.
 | `NotImplemented`, returned by an operator or comparison method to give way | CLS-21 |
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
+| A class derived from `typing.NamedTuple`, whose instances are tuples of its fields | CLS-27 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -689,6 +690,75 @@ print(first, Path("b"), {Point(1, 2), Point(1, 2)})
 
 The other options of `field`, such as `repr` or `compare`, `kw_only` and
 `weakref_slot` are planned for 0.14 (CLS-28).
+
+## Named tuples
+
+A class derived from `NamedTuple` of `typing` declares its fields as
+annotated names, each with a constant default or none. Its instances are
+tuples of the fields: they are built by position or by name, read by
+field name, and printed, compared and hashed as the tuple of their fields
+is, also with a plain tuple or another named tuple, as in CPython
+(CLS-27, ADR-0088):
+
+<!-- typy-expect: accepted -->
+```python
+from typing import NamedTuple
+
+
+class Point(NamedTuple):
+    x: int
+    y: int = 0
+
+    def norm(self) -> int:
+        return abs(self.x) + abs(self.y)
+
+
+p = Point(3, -4)
+x, y = p
+print(p, p.x, p[1], len(p), p.norm(), x + y)
+print(p == (3, -4), sorted([p, Point(1)]), isinstance(p, tuple))
+match p:
+    case Point(x=3, y=b):
+        print("x is 3 and y is", b)
+```
+
+An index, a slice, `len`, `in`, a loop, unpacking, a sequence pattern,
+`+` and a comparison read the named tuple as the tuple of its fields,
+with the rules of a fixed tuple: an index is an integer literal, and a
+loop needs fields of one type. The class body may hold methods,
+properties, class methods, static methods and class variables, and a
+class derived from a named tuple may add methods. A generic named tuple,
+such as `class Pair[T](NamedTuple)`, is copied for its type arguments
+as any generic class is. `sorted` of a list of named tuples needs fields
+that order, such as numbers, strings, or lists or tuples of them.
+
+As in CPython, a field without a default after one with a default, a
+field name that starts with an underscore, a `ClassVar` field, a member
+named `__init__`, `__new__`, `_replace` or another name `NamedTuple`
+keeps, and a second base are errors, reported with CPython's text.
+Assigning a field is refused, where CPython raises `AttributeError:
+can't set attribute`. A named tuple where a plain tuple is expected is
+refused; `tuple(p)` gives the plain tuple:
+
+<!-- typy-expect: rejected E0414 at 9:1 -->
+```python
+from typing import NamedTuple
+
+
+class Point(NamedTuple):
+    x: int
+
+
+point = Point(1)
+point.x = 5
+```
+
+`_replace`, `_asdict`, `_make` and `_field_defaults` are planned for 0.10
+(CLS-27). A named tuple made by a call, such as `NamedTuple("P", [("x",
+int)])`, a class derived from a named tuple with `__new__`, `__init__` or
+attributes of its own, and one that defines `__len__`, `__getitem__`,
+`__iter__` or `__contains__` are planned for 1.0 (CLS-41), and a named
+tuple where a plain tuple is expected also for 1.0 (CLS-42).
 
 ## Attributes are declared
 

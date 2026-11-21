@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.107 |
+| Version | 1.108 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-20 |
+| Last updated | 2026-11-21 |
 
 ## 1. Introduction
 
@@ -337,7 +337,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-24 | The truth of an instance shall come from the `__bool__` or `__len__` of its own class, also where its static type is a base or a union that tests truth otherwise, and in `any` and `all`. | S | 0.5 | |
 | CLS-25 | A class method shall be callable through an instance and through a subclass defined in another module, a class variable shall be assignable through a subclass, and a static method shall be callable through any expression that gives its class or an instance. | S | 0.5 | |
 | CLS-26 | `super(Class, instance)` shall be accepted with any class of the instance's chain of bases. | S | 0.5 | |
-| CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position, and its values compared, hashed and written as CPython's are (ADR-0085). | S | 0.10 | |
+| CLS-27 | A class derived from `typing.NamedTuple` shall be accepted, its fields read by name and by position, and its values compared, hashed and written as CPython's are (ADR-0088). | S | 0.10 | |
 | CLS-28 | `@dataclass` shall accept the options `kw_only` and `weakref_slot` and options given other than as `True` or `False`, `field` its options `init`, `repr`, `hash`, `compare`, `kw_only` and `metadata`, and a generic dataclass a field with a `default_factory`. | C | 0.14 | |
 | CLS-29 | `super(Class, instance)` shall be accepted with an instance other than the method's own, and outside a method. | C | 0.14 | |
 | CLS-30 | A class method of a generic class shall be callable through an instance. | C | 0.14 | |

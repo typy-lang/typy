@@ -8,6 +8,15 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- Classes derived from `typing.NamedTuple`: built by position or by name,
+  read by field name and as the tuple of their fields by an index, a slice,
+  `len`, `in`, a loop, unpacking and a sequence pattern, printed, compared,
+  ordered and hashed as that tuple, also with a plain tuple, and an
+  instance of `tuple` (CLS-27). The body may hold methods, properties,
+  class and static methods and class variables, a class derived from one
+  may add methods, and a generic one is copied as any generic class. What
+  CPython raises when the class statement runs, and assigning a field, are
+  refused with CPython's text.
 - `Sequence`, `MutableSequence`, `Mapping`, `MutableMapping`, `Set`,
   `MutableSet`, `Collection`, `Container` and `Reversible` of
   `collections.abc` and `typing`, and `typing.AbstractSet`, as types that

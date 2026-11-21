@@ -26,6 +26,7 @@ mod lazy_imports;
 mod matching;
 mod math;
 mod modules;
+mod named_tuples;
 mod nested_functions;
 mod nonlocal_statement;
 mod open;

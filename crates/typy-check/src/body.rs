@@ -63,6 +63,7 @@ mod method_value;
 mod module_context;
 mod name;
 mod named;
+mod named_tuple;
 mod nested_function;
 mod open_call;
 mod open_options;

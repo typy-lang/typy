@@ -76,6 +76,9 @@ pub(crate) enum AnnotationName {
     Dataclasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
+    /// `typing.NamedTuple`, the base of a named tuple, which the dataclass expansion reads
+    /// (CLS-27).
+    NamedTuple,
     /// A name that imports bind to more than one class, whose type depends on the import
     /// that ran last (MOD-14).
     Rebound,
@@ -123,6 +126,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
+        ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
         ("typing", "List") => Some(AnnotationName::Builtin("list")),
@@ -382,6 +386,18 @@ fn bare_standard(
                     "`Protocol` is not a type; a protocol class derives from it",
                 )
                 .with_rule(RuleId::GEN_04),
+            );
+            Type::Error
+        }
+        AnnotationName::NamedTuple => {
+            diagnostics.push(
+                Diagnostic::new(
+                    DiagnosticCode::error(408),
+                    annotation.span(),
+                    "`NamedTuple` is not a type in TyPy; a named tuple's class derives from it",
+                )
+                .with_rule(RuleId::CLS_27)
+                .with_help("annotate the value with the named tuple's class"),
             );
             Type::Error
         }

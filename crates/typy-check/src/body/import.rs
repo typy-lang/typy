@@ -388,8 +388,9 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 }
 
 /// Returns the error for a name of `typing`, `collections.abc`, `types` or `dataclasses` that
-/// TyPy does not give: `Any` and `cast` are refused (TYP-10), `NamedTuple` and the abstract
-/// collections are planned for a later release, and any other name is not given (LIB-17).
+/// TyPy does not give: `Any` and `cast` are refused (TYP-10), the views of a dict and some
+/// abstract collections are planned for a later release, and any other name is not given
+/// (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -425,9 +426,8 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_help("annotate the value with its type, or a union of its types");
     }
     // The names a later release gives, with the release and the requirement that plan each
-    // (ADR-0085, ADR-0086).
+    // (ADR-0086).
     let planned = match name.as_str() {
-        "NamedTuple" => Some(("0.10", RuleId::CLS_27)),
         "KeysView" | "ValuesView" | "ItemsView" => Some(("0.10", RuleId::LIB_20)),
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
         _ => None,
@@ -486,6 +486,7 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "Final",
             "ClassVar",
             "Protocol",
+            "NamedTuple",
             "Sequence",
             "MutableSequence",
             "Mapping",

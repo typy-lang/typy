@@ -862,6 +862,7 @@ impl Program {
                             Some(crate::iterator_fits::Iteration::Iterator(_))
                         ),
                     iterates: !opaque && self.protocol_values.iterations.contains_key(&class.id),
+                    named_tuple: class.frozen == Some(crate::check::Frozen::NamedTuple),
                 }
             })
             .collect()
