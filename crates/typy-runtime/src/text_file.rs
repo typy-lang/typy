@@ -75,6 +75,13 @@ pub struct TextFile {
     next: *mut TextFile,
 }
 
+impl TextFile {
+    /// Returns true for a binary file, which takes `bytes` and no `str`.
+    pub(crate) const fn is_binary(&self) -> bool {
+        self.flags & BINARY != 0
+    }
+}
+
 /// Returns a standard file of `descriptor`, with its flags.
 const fn standard(descriptor: i32, name: &'static str, flags: u32) -> TextFile {
     TextFile {

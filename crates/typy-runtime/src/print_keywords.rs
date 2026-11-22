@@ -4,15 +4,10 @@
 
 use crate::dict::DictObject;
 use crate::exception::{ExceptionKind, ExceptionObject};
+use crate::header::{ObjectHeader, STR_TYPE_ID, TEXT_FILE_TYPE_ID};
+use crate::list::ItemKind;
 use crate::message::MessageBuffer;
 use crate::string::StrObject;
-
-/// The bit of the `usable` mask that says `sep` takes the dict's values.
-const SEP: i64 = 1;
-/// The bit that says `end` takes them.
-const END: i64 = 2;
-/// The bit that says `file` takes them.
-const FILE: i64 = 4;
 
 /// Returns the value of `name` in `merged`, the dict of the keywords `**` gave, with its item
 /// type, or `None` when it has none.
@@ -47,45 +42,73 @@ unsafe fn entry_of(
     }
 }
 
-/// Returns the error `print` raises for a keyword `**` gave whose value it cannot take: a
-/// `sep` or an `end` that is no `str` or `None`, `TypeError`, then a `file` without `write`,
-/// `AttributeError`; null when every value fits. `usable`, an `int` word, has a bit set for
-/// each keyword whose type the dict's values have.
+/// Returns the value `name` holds in `merged` with the value's type, or `None` when the dict
+/// has no such key or holds `None` for it.
+///
+/// # Safety
+///
+/// `merged` points to a live dict of `str` keys.
+unsafe fn held(merged: *const DictObject, name: &str) -> Option<(crate::list::ItemType, u64)> {
+    // SAFETY: the caller's guarantee; the value is a live item of the dict's value type.
+    unsafe { entry(merged, name).and_then(|(ty, value)| ty.held_value(value)) }
+}
+
+/// Returns true when the value `value` of type `ty` is an object of the type ID `type_id`.
+///
+/// # Safety
+///
+/// `value` is a live item of `ty`.
+unsafe fn is_object_of(ty: crate::list::ItemType, value: u64, type_id: u32) -> bool {
+    let object =
+        core::ptr::with_exposed_provenance::<ObjectHeader>(usize::try_from(value).unwrap_or(0));
+    // SAFETY: an item of an object kind is the address of a live object.
+    ty.kind() == ItemKind::Object && unsafe { (*object).type_id } == type_id
+}
+
+/// Returns the error `print` raises for a keyword `**` gave whose value it cannot take, as
+/// each value, not the dict's value type, decides: a `sep` or an `end` that is no `str` or
+/// `None`, `TypeError`, then a `file` without `write`, `AttributeError`, or a binary file,
+/// which takes no `str`, `TypeError`; null when every value fits.
 ///
 /// # Safety
 ///
 /// `merged` points to a live dict of `str` keys.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn typy_rt_print_check(
-    merged: *const DictObject,
-    usable: i64,
-) -> *mut ExceptionObject {
-    let usable = crate::word::inline_value(usable);
-    for (name, bit) in [("sep", SEP), ("end", END)] {
-        // SAFETY: the caller's guarantee.
-        if let Some((ty, value)) = unsafe { entry(merged, name) }
-            && usable & bit == 0
-        {
-            let mut message = MessageBuffer::new();
-            message.push_str(name);
-            message.push_str(" must be None or a string, not ");
-            // SAFETY: the value is a live item of the dict's value type.
-            message.push_str(unsafe { ty.class_name(value) });
-            return message.raise(ExceptionKind::TypeError);
+pub unsafe extern "C" fn typy_rt_print_check(merged: *const DictObject) -> *mut ExceptionObject {
+    // SAFETY: the caller's guarantee; each value is a live item of its type.
+    unsafe {
+        for name in ["sep", "end"] {
+            if let Some((ty, value)) = held(merged, name)
+                && !is_object_of(ty, value, STR_TYPE_ID)
+            {
+                let mut message = MessageBuffer::new();
+                message.push_str(name);
+                message.push_str(" must be None or a string, not ");
+                message.push_str(ty.class_name(value));
+                return message.raise(ExceptionKind::TypeError);
+            }
         }
+        let Some((ty, value)) = held(merged, "file") else {
+            return core::ptr::null_mut();
+        };
+        if !is_object_of(ty, value, TEXT_FILE_TYPE_ID) {
+            let mut message = MessageBuffer::new();
+            message.push_str("'");
+            message.push_str(ty.class_name(value));
+            message.push_str("' object has no attribute 'write'");
+            return message.raise(ExceptionKind::AttributeError);
+        }
+        let file = core::ptr::with_exposed_provenance::<crate::text_file::TextFile>(
+            usize::try_from(value).unwrap_or(0),
+        );
+        if (*file).is_binary() {
+            return crate::exception::raise(
+                ExceptionKind::TypeError,
+                "a bytes-like object is required, not 'str'",
+            );
+        }
+        core::ptr::null_mut()
     }
-    // SAFETY: the caller's guarantee.
-    if let Some((ty, value)) = unsafe { entry(merged, "file") }
-        && usable & FILE == 0
-    {
-        let mut message = MessageBuffer::new();
-        message.push_str("'");
-        // SAFETY: the value is a live item of the dict's value type.
-        message.push_str(unsafe { ty.class_name(value) });
-        message.push_str("' object has no attribute 'write'");
-        return message.raise(ExceptionKind::AttributeError);
-    }
-    core::ptr::null_mut()
 }
 
 /// Returns the `str` the keyword `name` takes from `merged`, borrowed: its value, or `default`
@@ -93,8 +116,8 @@ pub unsafe extern "C" fn typy_rt_print_check(
 ///
 /// # Safety
 ///
-/// `merged` points to a live dict of `str` keys whose values are `str` or `None`, and `name`
-/// and `default` to live `str` objects.
+/// `merged` points to a live dict of `str` keys whose `name` holds a `str` or `None`, as
+/// `typy_rt_print_check` found, and `name` and `default` point to live `str` objects.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_print_text(
     merged: *const DictObject,
@@ -117,14 +140,15 @@ pub unsafe extern "C" fn typy_rt_print_text(
 ///
 /// # Safety
 ///
-/// `merged` points to a live dict of `str` keys whose values are text files or `None`.
+/// `merged` points to a live dict of `str` keys whose `file` holds a text file or `None`, as
+/// `typy_rt_print_check` found.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_print_file(
     merged: *const DictObject,
 ) -> *const crate::text_file::TextFile {
     // SAFETY: the caller's guarantee.
     unsafe {
-        match entry(merged, "file").and_then(|(ty, value)| ty.held_value(value)) {
+        match held(merged, "file") {
             Some((_, file)) => {
                 core::ptr::with_exposed_provenance(usize::try_from(file).unwrap_or(0))
             }

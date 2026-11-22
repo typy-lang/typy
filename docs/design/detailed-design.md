@@ -727,10 +727,13 @@ value. `**` there is E0201, planned for 1.0 (EXP-21). A call of `print` with
 `**` keeps the dicts in `PrintCall::options`; lowering (`print_options.rs`)
 binds the keywords and the dicts against a description of `print` with
 `CallName`, `CallMerge` and `CallCheck`, as for any call, then
-`typy_rt_print_check` raises CPython's error for a `sep` or an `end` of a value
-type that is no `str` and a `file` without `write`, and each keyword no argument
-names takes `typy_rt_print_text`, `typy_rt_print_file` or `typy_rt_print_flush`
-from the merged dict, which lives to the end of the call. `Argument::passed`
+`typy_rt_print_check` raises CPython's error for a `sep` or an `end` whose value
+is no `str` and a `file` whose value has no `write` or is a binary file, each
+value read as the one it holds, so `None` keeps the default whatever the dict's
+value type. Each keyword no argument names takes `typy_rt_print_text`,
+`typy_rt_print_file` or `typy_rt_print_flush` from the merged dict, which lives
+to the end of the call; a keyword reads the dict only when its value type may
+hold what it takes. `Argument::passed`
 says how each argument reaches its parameter: `Position`, `Name`, `Keyword` for
 one `**kwargs` takes, `Items` for the items of a tuple of a fixed number of
 items `*` unpacks, each bound as a positional argument, `Tail` for the list of

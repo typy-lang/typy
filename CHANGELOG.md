@@ -53,7 +53,7 @@ All notable changes to TyPy are recorded here. The format follows
   function (EXP-22). It was E0201. `**` there is planned for 1.0 (EXP-21).
 - `print` takes its keywords from a dict held in a variable,
   `print(*values, **options)`, bound when the call runs with CPython's
-  errors (EXP-22). It was E0201.
+  errors, each checked by the value it holds (EXP-22). It was E0201.
 - A method called through a protocol value takes `*` of any iterable and
   `**` of a dict held in a variable, `shape.scaled(*values, **options)`,
   bound when the call runs as a method of the class it holds binds them,

@@ -38,6 +38,34 @@ fn shown(exception: *mut crate::ExceptionObject) -> String {
 }
 
 #[test]
+fn exp_22_print_checks_each_keyword_by_the_value_it_holds() {
+    let stdout = crate::text_file::typy_rt_sys_stdout().expose_provenance() as u64;
+    let dash = from_str("-");
+    let dash_bits = dash.expose_provenance() as u64;
+    let nothing = dict_of(
+        ItemKind::OptionalObject,
+        &[("sep", 0), ("end", 0), ("file", 0)],
+    );
+    let files = dict_of(
+        ItemKind::OptionalObject,
+        &[("file", stdout), ("sep", dash_bits)],
+    );
+    // SAFETY: the dicts are live for the whole test.
+    unsafe {
+        assert!(super::typy_rt_print_check(nothing).is_null());
+        assert!(super::typy_rt_print_check(files).is_null());
+        assert_eq!(
+            super::typy_rt_print_file(files).expose_provenance() as u64,
+            stdout
+        );
+        for each in [nothing, files] {
+            crate::refcount::typy_rt_decrement(each.cast());
+        }
+        crate::refcount::typy_rt_decrement(dash.cast());
+    }
+}
+
+#[test]
 fn exp_22_print_takes_each_keyword_its_values_fit_and_raises_for_any_other() {
     let dash = from_str("-");
     let dash_bits = dash.expose_provenance() as u64;
@@ -51,14 +79,14 @@ fn exp_22_print_takes_each_keyword_its_values_fit_and_raises_for_any_other() {
     // SAFETY: the dicts and strings are live for the whole test.
     unsafe {
         assert_eq!(
-            shown(super::typy_rt_print_check(texts, inline(1 | 2).unwrap())),
+            shown(super::typy_rt_print_check(texts)),
             "'str' object has no attribute 'write'"
         );
-        assert!(super::typy_rt_print_check(texts, inline(1 | 2 | 4).unwrap()).is_null());
         assert_eq!(
-            shown(super::typy_rt_print_check(numbers, inline(4).unwrap())),
+            shown(super::typy_rt_print_check(numbers)),
             "end must be None or a string, not int"
         );
+        assert!(super::typy_rt_print_check(flags).is_null());
         assert!(core::ptr::eq(
             super::typy_rt_print_text(texts, sep, space),
             dash

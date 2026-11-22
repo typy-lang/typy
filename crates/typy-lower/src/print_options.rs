@@ -86,12 +86,12 @@ impl FunctionLowerer<'_> {
         (sep, end, file, flush): (bool, bool, bool, bool),
         span: Span,
     ) -> Keywords {
-        let texts = matches!(&binding.values, Type::Str | Type::NoneType)
-            || matches!(&binding.values, Type::Optional(inner) if **inner == Type::Str);
-        let files = matches!(
-            &binding.values,
-            Type::TextFile | Type::DescriptorFile(None) | Type::NoneType
-        ) || matches!(&binding.values, Type::Optional(inner) if **inner == Type::TextFile);
+        // A keyword reads the dict only when its values may hold what it takes; any other
+        // value the check refuses.
+        let texts = may_hold(&binding.values, &|ty| *ty == Type::Str);
+        let files = may_hold(&binding.values, &|ty| {
+            matches!(ty, Type::TextFile | Type::DescriptorFile(None))
+        });
         // Each name must be a keyword of `print`; `*args` takes any number of values.
         let none = self.constant(Constant::Int("0".to_owned()), span);
         let names = self.bits(Self::borrowed(binding.names.value, TyirType::DICT), span);
@@ -100,11 +100,9 @@ impl FunctionLowerer<'_> {
             vec![binding.description, none, names],
             span,
         );
-        let usable = i64::from(texts) * 3 + i64::from(files) * 4;
-        let mask = self.constant(Constant::Int(usable.to_string()), span);
         self.call_runtime(
             RuntimeFunction::PrintCheck,
-            vec![binding.merged.value, mask],
+            vec![binding.merged.value],
             span,
         );
         let merged = binding.merged.value;
@@ -128,5 +126,15 @@ impl FunctionLowerer<'_> {
         let flushed =
             (!flush).then(|| self.call_runtime(RuntimeFunction::PrintFlush, vec![merged], span));
         (separator, ending, target, flushed)
+    }
+}
+
+/// Returns true when a value of `ty` may hold a value `wanted` accepts: `ty` itself, the type
+/// an optional holds, or a member of a union.
+fn may_hold(ty: &Type, wanted: &dyn Fn(&Type) -> bool) -> bool {
+    match ty {
+        Type::Optional(inner) => may_hold(inner, wanted),
+        Type::Union(members) => members.iter().any(|member| may_hold(member, wanted)),
+        other => wanted(other),
     }
 }

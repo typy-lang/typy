@@ -1199,7 +1199,7 @@ impl RuntimeFunction {
             }
             Self::TypeAliasNew => signature(&[TyirType::TYPE_ALIAS], TyirType::TYPE_ALIAS, false),
             Self::ValueArity => signature(&[Bits, Int, Int], Unit, true),
-            Self::PrintCheck => signature(&[DICT, Int], Unit, true),
+            Self::PrintCheck => signature(&[DICT], Unit, true),
             Self::PrintText => signature(&[DICT, STR, STR], STR, false),
             Self::PrintFile => signature(&[DICT], TyirType::TEXT_FILE, false),
             Self::PrintFlush => signature(&[DICT], Bool, false),
