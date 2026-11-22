@@ -126,6 +126,7 @@ nav:
       - "Research: values whose type is known late": research/static-and-dynamic-values.md
       - "Research: threads and data races": research/threads-and-data-races.md
       - "Research: newer Python and a typed standard library": research/newer-python-and-a-typed-standard-library.md
+      - "Research: the command lines of compilers": research/compiler-command-lines.md
       - Requirements specification: requirements/srs.md
       - Use case model: modeling/use-case-model.md
       - Domain model: modeling/domain-model.md
@@ -235,6 +236,8 @@ nav:
           - adr/0101-keep-the-hash-of-a-str-in-the-object.md
           - adr/0102-do-arithmetic-on-inline-ints-in-place.md
           - adr/0103-compute-large-ints-up-to-1024-bits-in-fixed-width-storage.md
+          - adr/0104-spell-common-options-as-flags-and-the-rest-as-c-key-value.md
+          - adr/0105-extend-typy-through-external-typy-name-commands.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.123 |
+| Version | 1.124 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-22 |
+| Last updated | 2026-11-23 |
 
 ## 1. Introduction
 
@@ -159,6 +159,24 @@ or later.
 | CLI-17 | A development build shall compile each module of the standard library TyPy provides once for each release, target and mode, keep it in the user's cache directory, and link it from there in later builds (ADR-0016). | C | 1.0 |
 | CLI-18 | `typy` shall run on Windows on x86-64 and build executables and libraries for `x86_64-pc-windows-msvc` that run on Windows 10 or later. | S | 1.0 |
 | CLI-19 | `typy` shall build programs for WebAssembly with WASI 0.2, `wasm32-wasip2`, on each host it runs on. | C | 1.0 |
+| CLI-20 | `typy build` and `typy run` shall take `-O0`, `-O1`, `-O2`, `-O3`, `-Os` and `-Oz`, each selecting LLVM's pipeline of that level, with `--release` standing for `-O2` and `--release-small` for `-Oz` (ADR-0104). | S | 0.12 |
+| CLI-21 | `--target-cpu NAME` shall build for the processor NAME of the target, `native` for the build host's, and a build without it shall target the baseline processor of its triple (NFR-06). | S | 0.12 |
+| CLI-22 | `--timings` shall write to standard error the time each stage of the command took. | S | 0.12 |
+| CLI-23 | `-v` shall write to standard error each command `typy` runs, such as the C linker driver with its arguments, before it runs it. | S | 0.12 |
+| CLI-24 | `--save-temps` shall keep a build's object files and other intermediate files beside its output. | S | 0.12 |
+| CLI-25 | `typy print WHAT` shall write what `typy` would use: `targets`, `target-cpus` of a target, `host`, `paths` of the runtime archives and the cache, `settings` of a project and its command line, and `version`. | S | 0.12 |
+| CLI-26 | `--color auto`, `always` or `never` shall decide whether diagnostics written as text are coloured, `auto` colouring them only on a terminal. | S | 0.12 |
+| CLI-27 | `-W CODE`, `-A CODE` and `-D CODE` shall make the warning CODE a warning, allowed or an error, `-D warnings` standing for `--deny-warnings`, and the last of them for a code shall decide. | S | 0.12 |
+| CLI-28 | `typy run -c CODE` shall build and run CODE as the main module, and `typy run -m MODULE` the module MODULE of the project, as CPython's `-c` and `-m` run them. | S | 0.12 |
+| CLI-29 | `--emit` shall take several stages separated by commas, each written beside the output, and the stages `llvm-ir-unoptimised`, the IR before the optimisation pipeline, and `llvm-bc`. | S | 0.12 |
+| CLI-30 | `-C KEY=VALUE` shall set a code generation option, `-C help` shall list them, and `opt-level`, `target-cpu` and `llvm-args`, passed to LLVM, shall be among them; a flag and its key shall be one setting. | S | 0.12 |
+| CLI-31 | `-C inline-runtime=yes` shall link the runtime into the program as LLVM bitcode, so the optimiser inlines it, and shall be off by default (ADR-0104). | C | 0.13 |
+| CLI-32 | `typy NAME ARGS`, for a NAME that is not a command of `typy`, shall run the program `typy-NAME` found on `PATH` with ARGS, `TYPY` set to the path of the running `typy`, and report an unknown command with exit status 2 when there is none (ADR-0105). | S | 0.12 |
+| CLI-33 | Every option that changes a build's output shall be part of the key of `typy run`'s cache. | M | 0.12 |
+| CLI-34 | `-g` shall write DWARF debug information whose lines are the program's Python lines, and `-C debuginfo=0`, `1` or `2` its level. | S | 0.13 |
+| CLI-35 | `--sanitize address` shall build the program with the AddressSanitizer runtime, which reports invalid memory use and leaks. | C | 0.13 |
+| CLI-36 | `-C remark=PASS` shall report what the optimisation pass PASS did and did not do, at the program's Python lines. | C | 0.14 |
+| CLI-37 | `-C profile-generate=DIR` and `-C profile-use=FILE` shall build with profile-guided optimisation. | C | 1.0 |
 
 TyPy has no formatter of its own. TyPy source is Python, so a standard
 formatter applies; Ruff's formatter is the project's recommendation.
@@ -603,11 +621,11 @@ cache, unless a row says otherwise.
 | 0.9 | Generators: `yield` and `yield from`, generator functions of `Generator`, `Iterator` and `Iterable` types, generator expressions; classes with `__iter__` and `__next__` as iterators; `*args`, `**kwargs` and unpacking with `*` and `**` | Generator objects of one allocation |
 | 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions of a module with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking written out in full in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass` | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
 | 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable in the calls of built-ins and function values, and of a dict in a call of `print` (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24); arithmetic on `bool` as CPython does it (DAT-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
-| 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27); the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` (LIB-28); `from __future__ import annotations` (LIB-29) | The benchmark suite within 5 times C |
-| 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes` | |
-| 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |
+| 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27); the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` (LIB-28); `from __future__ import annotations` (LIB-29); optimisation levels, a target processor, timings, shown commands, kept files, `typy print`, colour, per-code warning levels, `run -c` and `-m`, more `--emit` stages, `-C` options and external `typy-NAME` commands (CLI-20 to CLI-30, CLI-32, CLI-33) | The benchmark suite within 5 times C |
+| 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes`; debug information, AddressSanitizer builds and runtime inlining (CLI-31, CLI-34, CLI-35) | |
+| 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program; optimisation remarks (CLI-36) | |
 | 0.15 | | The benchmark suite within 3 times C |
-| 1.0 | The remaining requirements of section 3 marked 1.0 | Cycle collection, `weakref`; the object header of biased reference counts (MEM-12); Windows; performance budgets |
+| 1.0 | The remaining requirements of section 3 marked 1.0; profile-guided optimisation (CLI-37) | Cycle collection, `weakref`; the object header of biased reference counts (MEM-12); Windows; performance budgets |
 
 ## 6. Out of scope
 
@@ -711,6 +729,10 @@ resolved issues below. No question is open.
 | OI-42 | Does TyPy accept `from __future__ import annotations`, and in which release? Under it CPython keeps each annotation as a string and lets an annotation name a class defined later; TyPy reads annotations when it compiles, so the import changes no meaning it gives, but it is E0206 today. It is the first error of 127 of the 584 algorithm scripts of the [corpus](../testing/corpus-report.md) and of 2 of its 83 mypyc run tests. | Yes, in 0.12 (LIB-29); until then it is E0201, planned for 0.12. | 2026-11-22 |
 | OI-43 | How does TyPy treat a module whose main program runs `doctest.testmod()`? doctest reads the examples in the module's docstrings and runs them through `exec` when the program runs, which a compiled program cannot do; `doctest` is E0206 today. It is the first error of 165 of the 584 algorithm scripts of the corpus. | `doctest` is planned for a release after 1.0, and is E0201 until then; its modules stay in the corpus, refused. | 2026-11-22 |
 | OI-44 | In which release do the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format`, `id` and `bytearray` come? Each is E0202 today, as a builtin TyPy does not provide (STD-04), and together they are the first error of 24 modules of the corpus. | `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` come in 0.12 (LIB-28), and are E0201, planned for 0.12, until then; `bytearray` gets its design when it is built. `id` stays refused: its values are not CPython's, which STD-03 leaves out of what a program may print. | 2026-11-22 |
+| OI-45 | How does `typy` spell the options the research note "the command lines of compilers" proposes: a flag for each, or `-C KEY=VALUE` as `rustc` does? | Flags for the common options, spelt as `clang` and CPython spell them, and `-C KEY=VALUE` for the rest of code generation (ADR-0104). | 2026-11-23 |
+| OI-46 | Which options come in 0.12, and which later? | The small set in 0.12 (CLI-20 to CLI-30, CLI-32, CLI-33); debug information, AddressSanitizer builds and runtime inlining in 0.13; optimisation remarks in 0.14; profile-guided optimisation in 1.0. | 2026-11-23 |
+| OI-47 | Does `typy` offer `--target-cpu native`, against NFR-06's portability, and runtime inlining, 6 percent faster at twenty times the build time? | Both, opt-in and off by default (CLI-21, CLI-31, ADR-0104). | 2026-11-23 |
+| OI-48 | Does `typy` gain project commands, such as tests, benchmarks, formatting and cleaning the cache, as `cargo` has them? | `typy` stays the compiler; any other command is an external program `typy-NAME` on `PATH`, as `git` and `cargo` find theirs (CLI-32, ADR-0105). | 2026-11-23 |
 
 ## Appendix A. Disposition of the specification pack
 

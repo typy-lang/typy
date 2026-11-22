@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.39 |
+| Version | 1.40 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-22 |
+| Last updated | 2026-11-23 |
 
 ## 1. Purpose
 
@@ -296,6 +296,24 @@ that the specification does not define.
 | CLI-17 | 1.0 | IT | a `typy-driver` test that builds two programs that import `math`, in two projects, and finds that the second build compiles no module of the standard library |
 | CLI-18 | 1.0 | UT, E2E | a Windows CI job that runs every unit, integration and conformance test with `x86_64-pc-windows-msvc`, and a test of the arguments of the MSVC linker |
 | CLI-19 | 1.0 | E2E | the conformance programs that need no file or process, built for `wasm32-wasip2` and run under a WASI runtime, each with CPython's output |
+| CLI-20 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-20 |
+| CLI-21 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-21 |
+| CLI-22 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-22 |
+| CLI-23 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-23 |
+| CLI-24 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-24 |
+| CLI-25 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-25 |
+| CLI-26 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-26 |
+| CLI-27 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-27 |
+| CLI-28 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-28 |
+| CLI-29 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-29 |
+| CLI-30 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-30 |
+| CLI-31 | 0.13 | E2E | a `typy-cli` end-to-end test that builds the benchmark programs with and without it and compares their output with CPython's |
+| CLI-32 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-32 |
+| CLI-33 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-33 |
+| CLI-34 | 0.13 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-34, that read the line table of a built program |
+| CLI-35 | 0.13 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, a test that builds a program with a leak through a C library and reads the report |
+| CLI-36 | 0.14 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-36, that read the line table of a built program |
+| CLI-37 | 1.0 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, a test that builds with a profile and compares the output with CPython's |
 | CLI-09 | 0.5 | UT, E2E | `crates/typy-build/src/request/tests.rs` and `library_kind/tests.rs` for the output's name; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-09: a static library in a C program, its only global symbols, a shared library from CPython through `ctypes`, two libraries in one program with a call from another thread, and a file name that is not a module name |
 | CLI-13 | 0.5 | UT, E2E | `crates/typy-source/src/version/tests.rs` for the release of a version; `crates/typy-source/src/settings_file/tests.rs` for `version`; `crates/typy-check/tests/integration/exports.rs` for `__version__` and E0429; `crates/typy-build/src/library_layout/tests.rs` for each layout; `crates/typy-cli/tests/end_to_end/library.rs`, tests named for CLI-13: a shared library's soname and links, a new release that moves them, a static library's link, `-o`, and two versions that differ |
 | CLI-10 | 0.3 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-10 |
