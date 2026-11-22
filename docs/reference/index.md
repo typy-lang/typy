@@ -1,6 +1,6 @@
 # Language reference
 
-Each page covers one area of the TyPy specification: what TyPy 0.10 accepts,
+Each page covers one area of the TyPy specification: what TyPy 0.11 accepts,
 with the rule ID of each item, what it refuses, and what later releases
 add. The rule IDs are the ones diagnostics name, such as `TYP-03`.
 
