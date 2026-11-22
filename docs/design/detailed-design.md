@@ -723,12 +723,19 @@ parameters left take. Lowering checks the count with `typy_rt_value_arity`,
 which raises CPython's `TypeError` naming the function from the value's
 descriptor, counting a bound method's instance and writing a built-in's count as
 a built-in does, then reads each item with `ListGet` and calls through the
-value. `**` there is E0201, planned for 1.0 (EXP-21). `Argument::passed` says
-how each argument reaches its parameter: `Position`, `Name`, `Keyword` for one
-`**kwargs` takes, `Items` for the items of a tuple of a fixed number of items
-`*` unpacks, each bound as a positional argument, `Tail` for the list of every
-positional value from the first `*iterable` of unknown length on, `Entries` for
-a `**dict`, and `Default` for a default a call makes.
+value. `**` there is E0201, planned for 1.0 (EXP-21). A call of `print` with
+`**` keeps the dicts in `PrintCall::options`; lowering (`print_options.rs`)
+binds the keywords and the dicts against a description of `print` with
+`CallName`, `CallMerge` and `CallCheck`, as for any call, then
+`typy_rt_print_check` raises CPython's error for a `sep` or an `end` of a value
+type that is no `str` and a `file` without `write`, and each keyword no argument
+names takes `typy_rt_print_text`, `typy_rt_print_file` or `typy_rt_print_flush`
+from the merged dict, which lives to the end of the call. `Argument::passed`
+says how each argument reaches its parameter: `Position`, `Name`, `Keyword` for
+one `**kwargs` takes, `Items` for the items of a tuple of a fixed number of
+items `*` unpacks, each bound as a positional argument, `Tail` for the list of
+every positional value from the first `*iterable` of unknown length on,
+`Entries` for a `**dict`, and `Default` for a default a call makes.
 `body/unpacked_arguments.rs` gives the tail one type: that of the parameters it
 may reach when they share one, which each part must hold its values alike to,
 E0404, or else the first value's, which each part must hold alike, E0409, and

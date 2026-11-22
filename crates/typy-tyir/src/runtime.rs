@@ -190,6 +190,15 @@ pub enum RuntimeFunction {
     /// Checks that a call through a function value with `*` gives as many values as its
     /// `Callable` takes, raising CPython's `TypeError` naming the function (EXP-22).
     ValueArity,
+    /// Checks the keywords `print` took from `**` dicts, raising CPython's error for one whose
+    /// value it cannot take (EXP-22).
+    PrintCheck,
+    /// The `sep` or `end` `print` takes from its `**` dicts, or the default given.
+    PrintText,
+    /// The file `print` takes from its `**` dicts, or standard output.
+    PrintFile,
+    /// Whether `print` flushes, from its `**` dicts.
+    PrintFlush,
     /// A new bound method of the descriptor and the instance, which it holds a reference to
     /// (FUN-05).
     MethodNew,
@@ -544,7 +553,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 392] = [
+    pub const ALL: [Self; 396] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -719,6 +728,10 @@ impl RuntimeFunction {
         Self::TypeAliasModule,
         Self::TypeAliasNew,
         Self::ValueArity,
+        Self::PrintCheck,
+        Self::PrintText,
+        Self::PrintFile,
+        Self::PrintFlush,
         Self::MethodNew,
         Self::BuiltinMethodNew,
         Self::MethodOrFunction,
@@ -1174,6 +1187,10 @@ impl RuntimeFunction {
             }
             Self::TypeAliasNew => signature(&[TyirType::TYPE_ALIAS], TyirType::TYPE_ALIAS, false),
             Self::ValueArity => signature(&[Bits, Int, Int], Unit, true),
+            Self::PrintCheck => signature(&[DICT, Int], Unit, true),
+            Self::PrintText => signature(&[DICT, STR, STR], STR, false),
+            Self::PrintFile => signature(&[DICT], TyirType::TEXT_FILE, false),
+            Self::PrintFlush => signature(&[DICT], Bool, false),
             Self::MethodNew | Self::BuiltinMethodNew => {
                 signature(&[Bits, Bits], TyirType::FUNCTION, false)
             }
@@ -1561,6 +1578,10 @@ impl RuntimeFunction {
             Self::TypeAliasModule => "type_alias_module",
             Self::TypeAliasNew => "type_alias_new",
             Self::ValueArity => "value_arity",
+            Self::PrintCheck => "print_check",
+            Self::PrintText => "print_text",
+            Self::PrintFile => "print_file",
+            Self::PrintFlush => "print_flush",
             Self::MethodNew => "method_new",
             Self::BuiltinMethodNew => "builtin_method_new",
             Self::MethodOrFunction => "method_or_function",

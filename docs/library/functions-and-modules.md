@@ -237,7 +237,11 @@ error first. `except Exception` does not catch it, since `SystemExit`
 derives from `BaseException`, as in CPython.
 
 `print(..., file=sys.stderr)` writes to standard error, and
-`flush=True` writes out what standard output holds. `input(prompt)`
+`flush=True` writes out what standard output holds. `print` also takes
+its keywords from a dict of `str` keys, `print(*values, **options)`,
+bound when the call runs, with CPython's errors for a keyword given
+twice or unknown, a `sep` or an `end` that is no `str`, and a `file`
+without `write` (EXP-22). `input(prompt)`
 writes `str(prompt)`, then reads a line of standard input without its
 `\n`, and raises `EOFError` at the end of the input:
 

@@ -586,6 +586,9 @@ pub struct PrintCall {
     pub file: Option<TypedExpr>,
     /// Whether standard output is written out after.
     pub flush: Option<TypedExpr>,
+    /// The dicts `**` gives, of one value type, whose keys bind to the keywords when the
+    /// call runs (EXP-22).
+    pub options: Vec<TypedExpr>,
 }
 
 /// One piece of an f-string or of a format specification after checking.
@@ -1040,6 +1043,7 @@ impl TypedExpr {
                 .chain(&call.end)
                 .chain(&call.file)
                 .chain(&call.flush)
+                .chain(&call.options)
                 .collect(),
         }
     }

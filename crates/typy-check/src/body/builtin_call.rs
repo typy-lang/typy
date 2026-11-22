@@ -443,9 +443,16 @@ impl BodyChecker<'_> {
         let mut end = None;
         let mut file = None;
         let mut flush = None;
+        let mut options: Vec<TypedExpr> = Vec::new();
         for keyword in keywords {
             let value = self.expression(&keyword.value);
             let Some(name) = &keyword.name else {
+                // `**dict` binds its keys to the keywords when the call runs (EXP-22).
+                self.unpacking_calls.push(span);
+                if let Some(error) = self.print_options(&value, options.first()) {
+                    return error;
+                }
+                options.push(value);
                 continue;
             };
             match name.name.as_str() {
@@ -491,10 +498,38 @@ impl BodyChecker<'_> {
                 end,
                 file,
                 flush,
+                options,
             })),
             Type::NoneType,
             span,
         )
+    }
+
+    /// Returns the error for `**value` in a call of `print` that is no `dict[str, V]`, or
+    /// whose `V` is not that of the dict of an earlier `**` (EXP-22).
+    fn print_options(&mut self, value: &TypedExpr, first: Option<&TypedExpr>) -> Option<TypedExpr> {
+        let span = value.span;
+        let message = match (&value.ty, first.map(|first| &first.ty)) {
+            (Type::Error, _) => return Some(value.clone()),
+            (Type::Dict(key, _), None) if **key == Type::Str => return None,
+            (Type::Dict(key, own), Some(Type::Dict(_, earlier)))
+                if **key == Type::Str && own == earlier =>
+            {
+                return None;
+            }
+            (Type::Dict(key, own), Some(Type::Dict(_, earlier))) if **key == Type::Str => format!(
+                "the dicts `**` gives a call of `print` hold values of one type; this holds \
+                 {own}, and the first holds {earlier}"
+            ),
+            (other, _) => format!(
+                "`**` in a call of `print` takes a dict of `str` keys, and this is {}",
+                other.with_article()
+            ),
+        };
+        Some(self.error(
+            Diagnostic::new(DiagnosticCode::error(404), span, message).with_rule(RuleId::EXP_22),
+            span,
+        ))
     }
 
     pub(super) fn arity(

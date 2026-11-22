@@ -531,6 +531,7 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 .chain(&call.end)
                 .chain(&call.file)
                 .chain(&call.flush)
+                .chain(&call.options)
             {
                 expression(value, callees);
             }

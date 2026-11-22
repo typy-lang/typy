@@ -50,6 +50,7 @@ mod optional;
 mod ownership;
 mod packing;
 mod percent;
+mod print_options;
 mod program;
 mod set;
 mod slice;

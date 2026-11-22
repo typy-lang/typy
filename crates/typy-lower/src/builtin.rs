@@ -248,6 +248,7 @@ impl FunctionLowerer<'_> {
                     .into_iter()
                     .flatten(),
             )
+            .chain(&print.options)
             .collect();
         let lowered: Vec<Lowered> = (0..print.values.len())
             .map(|position| self.operand_before(later[position], &later[position + 1..], span))
@@ -260,20 +261,41 @@ impl FunctionLowerer<'_> {
         ]
         .into_iter()
         .filter_map(|(name, value)| Some((name, value?)))
+        .chain(print.options.iter().map(|options| ("**", options)))
         .collect();
         keywords.sort_by_key(|(_, value)| value.span.start());
         let mut separator = None;
         let mut ending = None;
         let mut file = None;
         let mut flush = None;
+        // The keys of `**` dicts bind to the keywords when the call runs (EXP-22).
+        let binding = (!print.options.is_empty()).then(|| self.print_binding(print, span));
         for (name, value) in keywords {
-            let evaluated = Some(self.expression(value));
-            match name {
-                "sep" => separator = evaluated,
-                "end" => ending = evaluated,
-                "file" => file = evaluated,
-                _ => flush = evaluated,
+            let evaluated = self.expression(value);
+            if let Some(binding) = &binding {
+                self.print_keyword(binding, (name, evaluated), span);
             }
+            match name {
+                "sep" => separator = Some(evaluated),
+                "end" => ending = Some(evaluated),
+                "file" => file = Some(evaluated),
+                "flush" => flush = Some(evaluated),
+                _ => self.release(evaluated, span),
+            }
+        }
+        // The keywords the dicts give are borrowed from the merged dict, kept to the end.
+        if let Some(found) = &binding {
+            let given = (
+                separator.is_some(),
+                ending.is_some(),
+                file.is_some(),
+                flush.is_some(),
+            );
+            let (sep, end, to, then) = self.print_options(found, given, span);
+            separator = separator.or(sep);
+            ending = ending.or(end);
+            file = file.or(to);
+            flush = flush.or(then);
         }
         // Without a file, `print` writes to standard output through its buffer.
         let target = file.map(|file| file.value);
@@ -306,6 +328,11 @@ impl FunctionLowerer<'_> {
             .chain(separator)
             .chain(file)
             .chain(flush)
+            .chain(
+                binding
+                    .into_iter()
+                    .flat_map(|found| [found.merged, found.names]),
+            )
             .chain(lowered.into_iter().rev())
         {
             self.release(value, span);
@@ -464,12 +491,12 @@ impl FunctionLowerer<'_> {
             otherwise: after,
         });
         self.builder.switch_to(yes);
-        let file = match file {
-            Some(file) => file,
-            None => {
-                self.call_runtime(RuntimeFunction::SysStdout, Vec::new(), span)
-                    .value
-            }
+        // Standard output is immortal, so the flush borrows it.
+        let file = if let Some(file) = file {
+            file
+        } else {
+            let stdout = self.call_runtime(RuntimeFunction::SysStdout, Vec::new(), span);
+            self.borrowed_result(stdout).value
         };
         self.call_runtime(RuntimeFunction::TextFlush, vec![file], span);
         self.jump_to(after);

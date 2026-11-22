@@ -51,6 +51,9 @@ All notable changes to TyPy are recorded here. The format follows
   `add(*values)`, and checks when it runs that the values are as many as
   the `Callable` takes, raising CPython's `TypeError` that names the
   function (EXP-22). It was E0201. `**` there is planned for 1.0 (EXP-21).
+- `print` takes its keywords from a dict held in a variable,
+  `print(*values, **options)`, bound when the call runs with CPython's
+  errors (EXP-22). It was E0201.
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such

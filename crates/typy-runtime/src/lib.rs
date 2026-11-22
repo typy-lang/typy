@@ -71,6 +71,7 @@ mod module;
 #[cfg(test)]
 mod moved_tests;
 mod not_implemented;
+mod print_keywords;
 mod range;
 mod refcount;
 mod set;

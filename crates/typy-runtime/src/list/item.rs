@@ -424,6 +424,35 @@ impl ItemType {
         }
     }
 
+    /// Returns the name CPython's messages give the class of an item: `int`, `float`, `bool`,
+    /// `NoneType`, `tuple`, or an object's class, `_io.TextIOWrapper` for a text file.
+    ///
+    /// # Safety
+    ///
+    /// `item` is a live item of this type.
+    pub(crate) unsafe fn class_name(self, item: u64) -> &'static str {
+        // SAFETY: the caller passes a live item of this type.
+        let Some((ty, value)) = (unsafe { self.held_value(item) }) else {
+            return "NoneType";
+        };
+        match ty.kind {
+            ItemKind::Int | ItemKind::OptionalInt => "int",
+            ItemKind::Float | ItemKind::OptionalFloat => "float",
+            ItemKind::Bool | ItemKind::OptionalBool => "bool",
+            ItemKind::NoneValue => "NoneType",
+            ItemKind::Tuple | ItemKind::OptionalTuple => "tuple",
+            // SAFETY: a live object, whose header names its type.
+            ItemKind::Object | ItemKind::OptionalObject | ItemKind::Union => unsafe {
+                let object = pointer(value);
+                if (*object).type_id == crate::header::TEXT_FILE_TYPE_ID {
+                    "_io.TextIOWrapper"
+                } else {
+                    crate::type_object::type_of(object).name()
+                }
+            },
+        }
+    }
+
     /// Returns the truth of an item, as `bool(item)` gives it: a number is true when it is not
     /// zero, a `str`, a list or a tuple when it is not empty, and `None` never.
     ///

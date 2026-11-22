@@ -498,7 +498,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Returns 0 as raw bits, for no dict.
-    fn null_bits(&mut self, span: Span) -> ValueId {
+    pub(crate) fn null_bits(&mut self, span: Span) -> ValueId {
         let none = self.constant(Constant::Unit, span);
         self.builder
             .push_value(Operation::ToBits(none), TyirType::Bits, span)

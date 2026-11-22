@@ -102,7 +102,6 @@ fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() 
                    TyPy 0.11 (EXP-22)";
     for call in [
         "print(max(*[1, 2]))\n",
-        "options = {\"sep\": \"-\"}\nprint(**options)\n",
         "for each in zip(*[[1]]):\n    pass\n",
         "class Failure(Exception):\n    pass\n\n\nerror = Failure(*[\"a\"])\n",
     ] {
@@ -144,8 +143,9 @@ fn exp_19_unpacking_written_out_in_full_binds_as_the_values_it_gives() {
          error = ValueError(*(\"bad\", 2))\nwords = [\"a\"]\nwords.append(*(\"b\",))\n"
     );
     assert_eq!(app(&source), Vec::<String>::new());
+    // A display that names a key twice keeps its last value, which binds when the call runs.
     let twice = "print(**{\"sep\": \"-\", \"sep\": \"+\"})\n";
-    assert_eq!(app(twice), ["E0201"]);
+    assert_eq!(app(twice), Vec::<String>::new());
 }
 
 #[test]
@@ -282,6 +282,39 @@ fn exp_22_a_function_value_refuses_what_one_list_cannot_bind() {
                 .iter()
                 .any(|(each, text, _)| each == code && text == message),
             "{source}: {found:?}"
+        );
+    }
+}
+
+#[test]
+fn exp_22_print_takes_star_star_of_a_dict_of_str_keys() {
+    for call in [
+        "options = {\"sep\": \"-\", \"end\": \"!\\n\"}\nprint(1, 2, **options)\n",
+        "flags = {\"flush\": True}\nprint(1, **flags)\n",
+        "maybe: dict[str, str | None] = {\"sep\": None}\nprint(1, sep=\"-\", **maybe)\n",
+        "numbers = {\"sep\": 3}\nprint(1, **numbers)\n",
+    ] {
+        assert_eq!(messages(call), Vec::new(), "{call}");
+    }
+    let found = crate::common::dump("options = {\"sep\": \"-\"}\nprint(1, **options)\n");
+    assert!(found.contains("Print"), "{found}");
+    for (call, message) in [
+        (
+            "items = [1]\nprint(1, **items)\n",
+            "`**` in a call of `print` takes a dict of `str` keys, and this is a list[int]",
+        ),
+        (
+            "texts = {\"sep\": \"-\"}\nflags = {\"flush\": True}\nprint(1, **texts, **flags)\n",
+            "the dicts `**` gives a call of `print` hold values of one type; this holds bool, \
+             and the first holds str",
+        ),
+    ] {
+        let found = messages(call);
+        assert!(
+            found
+                .iter()
+                .any(|(code, text, _)| code == "E0404" && text == message),
+            "{call}: {found:?}"
         );
     }
 }
