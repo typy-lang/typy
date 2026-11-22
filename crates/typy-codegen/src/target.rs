@@ -99,7 +99,7 @@ impl TargetTriple {
     /// Returns the baseline CPU of the triple's architecture, so every machine of the target runs
     /// the output and the bytes do not depend on the machine that builds them (NFR-06).
     #[must_use]
-    pub(crate) const fn cpu(self) -> &'static str {
+    pub const fn cpu(self) -> &'static str {
         match self {
             Self::X86_64LinuxGnu | Self::X86_64LinuxMusl => "x86-64",
             Self::Aarch64LinuxGnu => "generic",

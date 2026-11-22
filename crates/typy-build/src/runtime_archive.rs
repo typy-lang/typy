@@ -33,17 +33,27 @@ impl RuntimeArchive {
         triple: TargetTriple,
         mode: BuildMode,
     ) -> Result<Self, Diagnostics> {
+        Self::open(&Self::path_beside(executable, triple, mode))
+    }
+
+    /// Returns where the archive for `triple` and `mode` is for the compiler at `executable`,
+    /// `<prefix>/lib/typy/<triple>/` or `<prefix>/lib/typy-small/<triple>/`, without opening
+    /// it, for `typy print paths` (CLI-25).
+    #[must_use]
+    pub fn path_beside(
+        executable: &Utf8Path,
+        triple: TargetTriple,
+        mode: BuildMode,
+    ) -> Utf8PathBuf {
         let prefix = executable
             .parent()
             .and_then(Utf8Path::parent)
             .unwrap_or_else(|| Utf8Path::new("."));
-        Self::open(
-            &prefix
-                .join("lib")
-                .join(mode.runtime_directory())
-                .join(triple.as_str())
-                .join(FILE_NAME),
-        )
+        prefix
+            .join("lib")
+            .join(mode.runtime_directory())
+            .join(triple.as_str())
+            .join(FILE_NAME)
     }
 
     /// Returns the archive at `path`, after checking that its version is the compiler's.

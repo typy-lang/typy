@@ -66,7 +66,7 @@ pub(super) fn run(
 }
 
 /// Returns the program's exit status, or 128 plus the signal that ended it, as a shell does.
-fn program_status(status: std::process::ExitStatus) -> u8 {
+pub(super) fn program_status(status: std::process::ExitStatus) -> u8 {
     use std::os::unix::process::ExitStatusExt as _;
     let code = status
         .code()

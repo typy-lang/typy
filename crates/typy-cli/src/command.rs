@@ -3,6 +3,8 @@
 mod build;
 mod check;
 mod explain;
+mod external;
+mod print;
 mod run;
 
 use camino::Utf8PathBuf;
@@ -14,6 +16,12 @@ use crate::output::Reporter;
 
 /// Runs the command and returns the status `typy` exits with.
 pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> ExitStatus {
+    // An external command and the processor list need no pipeline.
+    let command = match command {
+        Command::External(arguments) => return external::external(&arguments),
+        Command::ProcessorHelp { target } => return print::processor_help(target, reporter),
+        other => other,
+    };
     let pipeline = match compiler() {
         Ok(path) => Pipeline::new(path).with_deny_warnings(deny_warnings),
         Err(message) => {
@@ -73,6 +81,22 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
             &arguments,
             reporter,
         ),
+        Command::Print {
+            what,
+            file,
+            settings,
+            library,
+            target,
+        } => print::print(
+            what,
+            file.as_deref(),
+            settings.overrides_for(library),
+            target.triple,
+            reporter,
+        ),
+        Command::External(_) | Command::ProcessorHelp { .. } => {
+            unreachable!("taken before the pipeline is made")
+        }
     }
 }
 

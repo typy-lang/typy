@@ -11,7 +11,7 @@ use crate::output::ErrorFormat;
 
 /// Compiles typed Python programs ahead of time to native executables.
 #[derive(Debug, Parser)]
-#[command(name = "typy", version, about)]
+#[command(name = "typy", version, about, allow_external_subcommands = true)]
 pub(crate) struct Arguments {
     #[command(subcommand)]
     pub(crate) command: Command,
@@ -29,7 +29,7 @@ pub(crate) struct Arguments {
     pub(crate) deny_warnings: bool,
 }
 
-/// The commands of 0.1.
+/// The commands of `typy`; any other runs the program `typy-NAME` from `PATH` (ADR-0105).
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     /// Report every diagnostic without generating code.
@@ -80,6 +80,49 @@ pub(crate) enum Command {
         #[arg(last = true)]
         arguments: Vec<String>,
     },
+    /// Write what typy would use: its targets, a target's processors, the host, its paths, a
+    /// project's settings, or its version.
+    Print {
+        /// What to write.
+        #[arg(value_enum)]
+        what: PrintRequest,
+        /// The main file of the program whose project `settings` reads; the current directory's
+        /// project when absent.
+        file: Option<Utf8PathBuf>,
+        #[command(flatten)]
+        settings: Settings,
+        #[command(flatten)]
+        library: Library,
+        #[command(flatten)]
+        target: TargetFlag,
+    },
+    /// Writes LLVM's list of a target's processors to standard error, which `print
+    /// target-cpus` reads from a child `typy`, as LLVM writes it only there.
+    #[command(name = "llvm-processor-help", hide = true)]
+    ProcessorHelp {
+        #[command(flatten)]
+        target: TargetFlag,
+    },
+    /// Any other command, which runs the program `typy-NAME` found on `PATH` (CLI-32).
+    #[command(external_subcommand)]
+    External(Vec<String>),
+}
+
+/// What `typy print` writes (CLI-25).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+pub(crate) enum PrintRequest {
+    /// Every supported target, and whether this host builds for it.
+    Targets,
+    /// The processors of a target: its baseline, `native`, and those LLVM knows.
+    TargetCpus,
+    /// The target `typy` runs on.
+    Host,
+    /// The compiler, its runtime archives and its cache.
+    Paths,
+    /// The settings a command would use for a project.
+    Settings,
+    /// The versions of `typy`, its runtime, LLVM and the Python floors.
+    Version,
 }
 
 /// The build mode flags; at most one is given (CLI-05).

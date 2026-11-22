@@ -29,6 +29,34 @@ pub(crate) enum Output {
     LlvmIr,
 }
 
+/// Returns the processor of the machine `typy` runs on, as LLVM names it, such as `skylake`.
+pub(crate) fn host_processor() -> String {
+    TargetMachine::get_host_cpu_name().to_string()
+}
+
+/// Writes LLVM's list of the processors and features of `triple` to standard error, as
+/// `llc -mcpu=help` does; LLVM writes it when a machine is made for the processor `help`.
+pub(crate) fn write_processor_help(
+    triple: crate::target::TargetTriple,
+) -> Result<(), CodegenError> {
+    LlvmTarget::initialize_x86(&InitializationConfig::default());
+    LlvmTarget::initialize_aarch64(&InitializationConfig::default());
+    let llvm_triple = LlvmTriple::create(triple.llvm_triple());
+    let llvm_target = LlvmTarget::from_triple(&llvm_triple)
+        .map_err(|error| CodegenError(format!("target {triple}: {error}")))?;
+    llvm_target
+        .create_target_machine(
+            &llvm_triple,
+            "help",
+            "",
+            inkwell::OptimizationLevel::None,
+            RelocMode::PIC,
+            CodeModel::Default,
+        )
+        .map(|_| ())
+        .ok_or_else(|| CodegenError(format!("LLVM cannot generate code for {triple}")))
+}
+
 fn target_machine(
     target: Target,
     optimization: Optimization,

@@ -6,6 +6,17 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `typy print WHAT` writes what `typy` would use, one fact a line in the
+  form of `typy.toml`: the supported `targets`, a target's processors
+  (`target-cpus`), the `host`, the `paths` of the compiler, its runtime
+  archives and its cache, a project's `settings` with the command line
+  applied, and the `version` of `typy`, its runtime and LLVM (CLI-25).
+- `typy NAME ARGS`, for a NAME that is not a command of `typy`, runs the
+  program `typy-NAME` found on `PATH`, as `git` and `cargo` run theirs,
+  with `TYPY` naming the compiler that ran it (CLI-32, ADR-0105).
+
 ### Changed
 
 - `int` arithmetic, comparisons and reference counts on values that fit in

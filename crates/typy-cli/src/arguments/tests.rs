@@ -56,7 +56,8 @@ fn wrong_usage_is_refused_with_status_2() {
         &["build", "app.py", "--emit=exe"],
         &["build", "app.py", "--release", "--release-small"],
         &["check", "app.py", "--python-floor", "3.11"],
-        &["frobnicate"],
+        // An unknown command parses as an external one, refused when it runs (CLI-32).
+        &["print"],
     ] {
         let error = parse(line).unwrap_err();
         assert_eq!(error.exit_code(), 2, "{line:?}");
@@ -69,12 +70,14 @@ fn every_command_takes_a_python_floor() {
         &["check", "app.py", "--python-floor", "3.15"][..],
         &["build", "app.py", "--python-floor=3.15"],
         &["run", "app.py", "--python-floor", "3.15", "--", "x"],
+        &["print", "settings", "app.py", "--python-floor", "3.15"],
     ] {
         let settings = match parse(line).unwrap() {
             Command::Check { settings, .. }
             | Command::Build { settings, .. }
-            | Command::Run { settings, .. } => settings,
-            Command::Explain { .. } => panic!("explain takes no settings"),
+            | Command::Run { settings, .. }
+            | Command::Print { settings, .. } => settings,
+            other => panic!("{other:?} takes no settings"),
         };
         assert_eq!(
             settings.overrides().python_floor,
@@ -116,4 +119,34 @@ fn check_takes_a_file() {
             .map(|error| error.kind()),
         None
     );
+}
+
+#[test]
+fn cli_32_a_command_typy_does_not_have_is_an_external_one_with_its_arguments() {
+    match parse(&["fmt", "--check", "app.py"]).unwrap() {
+        Command::External(arguments) => assert_eq!(arguments, ["fmt", "--check", "app.py"]),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn cli_25_print_takes_what_to_write_and_refuses_anything_else() {
+    match parse(&[
+        "print",
+        "target-cpus",
+        "--target",
+        "aarch64-unknown-linux-gnu",
+    ])
+    .unwrap()
+    {
+        Command::Print { what, target, .. } => {
+            assert_eq!(what, crate::arguments::PrintRequest::TargetCpus);
+            assert_eq!(
+                target.triple,
+                Some(typy_codegen::TargetTriple::Aarch64LinuxGnu)
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(parse(&["print", "everything"]).is_err());
 }

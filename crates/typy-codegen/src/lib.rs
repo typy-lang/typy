@@ -98,6 +98,23 @@ pub fn assembly(
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
+/// Returns the processor of the machine `typy` runs on, as LLVM names it, such as `skylake`,
+/// which `--target-cpu native` builds for (CLI-21).
+#[must_use]
+pub fn host_processor() -> String {
+    emit::host_processor()
+}
+
+/// Writes LLVM's list of the processors and features of `triple` to standard error, as
+/// `llc -mcpu=help` does, for `typy print target-cpus` (CLI-25).
+///
+/// # Errors
+///
+/// An internal error when LLVM cannot make a machine for the triple.
+pub fn write_processor_help(triple: TargetTriple) -> Result<(), Diagnostics> {
+    emit::write_processor_help(triple).map_err(|error| internal(&error))
+}
+
 /// Returns the version of the LLVM library TyPy is linked with, as `(major, minor, patch)`.
 #[must_use]
 pub fn llvm_version() -> (u32, u32, u32) {
