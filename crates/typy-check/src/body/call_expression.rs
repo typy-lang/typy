@@ -54,8 +54,7 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(201),
                 at,
                 "`*` and `**` of a value only the run knows in a call of a builtin other than \
-                 `print`, of a protocol method or of an exception class are planned for TyPy \
-                 0.11 (EXP-22)",
+                 `print` or of an exception class are planned for TyPy 0.11 (EXP-22)",
             )
             .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),
@@ -130,8 +129,8 @@ impl BodyChecker<'_> {
 impl BodyChecker<'_> {
     /// Returns true when the callee binds what a call unpacks when the program runs, with
     /// CPython's errors: a function, a method or a class of the program, or a class held in a
-    /// variable (ADR-0073). A built-in, a function value and a protocol method take only
-    /// unpacking written out in full.
+    /// variable (ADR-0073), or a method through a protocol value (EXP-22). A built-in and a
+    /// function value take only unpacking written out in full.
     fn binds_when_it_runs(&self, function: &Expr) -> bool {
         match function {
             Expr::Name { id, .. } => match self.peek_type(function) {
@@ -147,9 +146,10 @@ impl BodyChecker<'_> {
                 if let Some(module) = self.module_of(value) {
                     return !super::builtin_module::is_builtin_module(&module);
                 }
+                // A method through a protocol value binds as the protocol's method, whose
+                // parameters its dispatcher takes (EXP-22, ADR-0041).
                 match self.peek_type(value) {
-                    Some(Type::Instance(class)) => !self.program.is_protocol(class.id),
-                    Some(Type::TypeObject(_)) | None => true,
+                    Some(Type::Instance(_) | Type::TypeObject(_)) | None => true,
                     Some(_) => false,
                 }
             }

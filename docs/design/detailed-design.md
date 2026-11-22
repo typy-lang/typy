@@ -710,8 +710,8 @@ whose `__iter__` returns an iterator of another kind goes over the call of
 `__iter__` (TYP-20).
 
 A call with `*value` or `**value` goes through `body/call_expression.rs`. For a
-callee that `binds_when_it_runs` does not take, a builtin, a function value, a
-protocol method or an exception class, `written_out` gives the call's arguments
+callee that `binds_when_it_runs` does not take, a builtin, a function value or
+an exception class, `written_out` gives the call's arguments
 with each `*` of a tuple display or of a variable of a fixed tuple as its items,
 `name[0]` on, and each `**` of a dict display with `str` literal keys as keyword
 arguments, checked as written (EXP-19). It keeps a call `bind_to` or `print`

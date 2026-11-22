@@ -98,8 +98,7 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 #[test]
 fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
     let planned = "`*` and `**` of a value only the run knows in a call of a builtin other \
-                   than `print`, of a protocol method or of an exception class are planned for \
-                   TyPy 0.11 (EXP-22)";
+                   than `print` or of an exception class are planned for TyPy 0.11 (EXP-22)";
     for call in [
         "print(max(*[1, 2]))\n",
         "for each in zip(*[[1]]):\n    pass\n",
@@ -317,4 +316,18 @@ fn exp_22_print_takes_star_star_of_a_dict_of_str_keys() {
             "{call}: {found:?}"
         );
     }
+}
+
+#[test]
+fn exp_22_a_method_through_a_protocol_binds_star_and_star_star_when_it_runs() {
+    let source = "from typing import Protocol\n\n\n\
+                  class Shape(Protocol):\n    def scaled(self, by: int, extra: int = 0) -> int: ...\n\n\n\
+                  class Square:\n    def scaled(self, by: int, extra: int = 0) -> int:\n        \
+                  return by + extra\n\n\n\
+                  def run(shape: Shape, values: list[int], options: dict[str, int]) -> int:\n    \
+                  return shape.scaled(*values, **options) + shape.scaled(1, *values)\n\n\n\
+                  print(run(Square(), [1], {}))\n";
+    assert_eq!(app(source), Vec::<String>::new());
+    let found = dump(source);
+    assert!(found.contains("Spread List : list[int]"), "{found}");
 }

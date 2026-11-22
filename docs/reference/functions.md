@@ -167,10 +167,10 @@ A call may also unpack its arguments; see
 
 ## Unpacking in a call
 
-A call of a function, method or class of the program passes each value of
-an iterable written `*iterable` as a positional argument, and each entry
-of a `dict[str, T]` written `**dict` as a keyword argument, as CPython
-does. `print(*values)` writes each value:
+A call of a function, method or class of the program, or of a method through a
+protocol (EXP-22), passes each value of an iterable written `*iterable` as a
+positional argument, and each entry of a `dict[str, T]` written `**dict` as a
+keyword argument, as CPython does. `print(*values)` writes each value:
 
 <!-- typy-expect: accepted -->
 ```python
@@ -209,10 +209,9 @@ the `**` dicts
 have one type too, which must fit each parameter a keyword may still
 fill and the values of `**kwargs`.
 
-A call of a builtin, a function value, a protocol method or an exception
-class takes `*` of a tuple display or of a variable that holds a fixed
-tuple, and `**` of a dict display whose keys are `str` literals, each
-written out as the values it gives (EXP-19):
+A call of a builtin, a function value or an exception class takes `*` of a tuple
+display or of a variable that holds a fixed tuple, and `**` of a dict display
+whose keys are `str` literals, each written out as the values it gives (EXP-19):
 
 <!-- typy-expect: accepted -->
 ```python
@@ -246,8 +245,8 @@ print(add(*values), add(1, *values[1:]))
 `**` in a call of a function value binds by the names of the function it
 holds, which a `Callable` type does not carry, and is planned for 1.0
 (EXP-21). The same unpacking of a list or another iterable, or of a dict
-held in a variable, in a call of a builtin, a protocol method or an
-exception class is planned for 0.11 (EXP-22).
+held in a variable, in a call of a builtin or an exception class is
+planned for 0.11 (EXP-22).
 
 ## Nested functions
 
@@ -657,7 +656,7 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a protocol method or of an exception class, planned for 0.11 | E0201 (EXP-22) |
+| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print` or of an exception class, planned for 0.11 | E0201 (EXP-22) |
 | `**` in a call of `print` of a value that is no `dict[str, V]`, or of dicts of different value types | E0404 (EXP-22) |
 | `**` in a call of a function value, planned for 1.0 | E0201 (EXP-21) |
 | `*` in a call of a function value whose values may reach parameters of more than one type | E0404 (EXP-22) |
