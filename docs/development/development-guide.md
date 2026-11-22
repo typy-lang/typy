@@ -70,7 +70,7 @@ The `macos-15` job of CI does the same on every pull request.
 | `make dev` | Starts the `dev` service, building its image the first time |
 | `make shell` | Opens a shell in the `dev` service |
 | `make build` | Builds the compiler, `<target>/debug/typy`, after `make runtime` |
-| `make runtime` | Builds the runtime archive for `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` with `scripts/build-runtime.sh`, and stages each in `<target>/lib/typy/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds it; `make test` and `make coverage` run it first |
+| `make runtime` | Builds the runtime archives for `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` with `scripts/build-runtime.sh`, one for speed and one for size (ADR-0100), and stages them in `<target>/lib/typy/<triple>/` and `<target>/lib/typy-small/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds them; `make test` and `make coverage` run it first |
 | `make bless` | Rewrites the golden files in `tests/golden/` from the current compiler; review the diff before committing |
 | `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
 | `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
@@ -312,19 +312,19 @@ each release's branch stays on origin and an issue can be traced to it.
 
 `make dist` builds `dist/typy-X.Y.Z-HOST.tar.gz` for the host's triple,
 `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` or
-`aarch64-apple-darwin`: the `typy` executable in `bin/` and a runtime
-archive in `lib/typy/<triple>/` for each target the host builds for, which
-`scripts/host-targets.sh` lists, in the layout of an installation prefix, with
-the licences, the third-party notices, README and changelog. Its
-`licenses/` directory holds the licences of the crates `typy` links, which
-cargo-about lists with `about.toml` and `about.hbs`, of LLVM and of Rust's
-standard library; a crate under a licence `about.toml` does not accept fails
-the build. The tarball is reproducible, so two builds of one commit have the
-same SHA-256; on a Mac, GNU tar's `gtar` writes it. The executable links
-LLVM statically and, on Linux, needs glibc 2.39 or later and `libstdc++`,
-and on macOS 11 or later only `libSystem`, `libc++` and `libiconv`, which
-`scripts/check-executable-needs.sh` checks before the archive is packed,
-and a C toolchain to link programs. LLVM's licence comes from its archive.
+`aarch64-apple-darwin`: the `typy` executable in `bin/` and the runtime archives
+in `lib/typy/<triple>/` and `lib/typy-small/<triple>/` for each target the host
+builds for, which `scripts/host-targets.sh` lists, in the layout of an
+installation prefix, with the licences, the third-party notices, README and
+changelog. Its `licenses/` directory holds the licences of the crates `typy`
+links, which cargo-about lists with `about.toml` and `about.hbs`, of LLVM and of
+Rust's standard library; a crate under a licence `about.toml` does not accept
+fails the build. The tarball is reproducible, so two builds of one commit have
+the same SHA-256; on a Mac, GNU tar's `gtar` writes it. The executable links
+LLVM statically and, on Linux, needs glibc 2.39 or later and `libstdc++`, and on
+macOS 11 or later only `libSystem`, `libc++` and `libiconv`, which
+`scripts/check-executable-needs.sh` checks before the archive is packed, and a C
+toolchain to link programs. LLVM's licence comes from its archive.
 
 `scripts/write-sbom.py` then writes the archive's bill of materials,
 `sbom.cdx.json`, in CycloneDX 1.6: every file of the archive with its

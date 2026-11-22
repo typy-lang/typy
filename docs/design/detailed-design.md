@@ -3461,15 +3461,16 @@ escapes `"`, the backslash and control characters.
 
 Each field has a `with_` method that returns the changed request.
 
-`RuntimeArchive::beside(executable, triple)` opens
+`RuntimeArchive::beside(executable, triple, mode)` opens
 `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for a compiler at
-`<prefix>/bin/typy`, and `RuntimeArchive::open(path)` opens an archive by
-path. Both read the archive and find the runtime's version marker,
-`typy-runtime-version:` and the version, which must equal the compiler's
-package version. A missing archive, a file without the marker and another
-version each give E0703 with the path. The driver opens the archive before
-it compiles a build that links, so a bad installation fails before any work
-and `typy check` never needs it.
+`<prefix>/bin/typy`, or the archive in `lib/typy-small/` that
+`BuildMode::runtime_directory` names for `--release-small` (ADR-0100), and
+`RuntimeArchive::open(path)` opens an archive by path. Both read the archive and
+find the runtime's version marker, `typy-runtime-version:` and the version,
+which must equal the compiler's package version. A missing archive, a file
+without the marker and another version each give E0703 with the path. The driver
+opens the archive before it compiles a build that links, so a bad installation
+fails before any work and `typy check` never needs it.
 
 `Linker::new(triple, archive)` picks the C toolchain program.
 `Linker::link(object, output) -> Result<Artifact, Diagnostics>` writes the
@@ -3599,8 +3600,8 @@ copies nothing.
 | Logging | `--log-level` arrives in 0.3 with UC-10; the 0.1 compiler has no log events |
 
 The pipeline is created with the path of the running executable, so an
-installed `typy` finds `<prefix>/lib/typy/` and a `typy` in
-`<target>/debug/` finds the archive `make runtime` stages.
+installed `typy` finds `<prefix>/lib/typy/` and `<prefix>/lib/typy-small/`,
+and a `typy` in `<target>/debug/` finds the archives `make runtime` stages.
 
 ## 14. typy-runtime
 

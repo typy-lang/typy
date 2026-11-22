@@ -77,7 +77,7 @@ pub(crate) fn compiler_identity(request: &BuildRequest) -> Vec<u8> {
     let executable = std::env::current_exe().ok();
     let archive = executable.as_ref().and_then(|path| {
         let path = camino::Utf8Path::from_path(path)?;
-        typy_build::RuntimeArchive::beside(path, request.target().triple)
+        typy_build::RuntimeArchive::beside(path, request.target().triple, request.mode())
             .ok()
             .map(|archive| archive.path().as_std_path().to_owned())
     });

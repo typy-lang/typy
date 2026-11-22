@@ -52,11 +52,11 @@ On a Mac the archive is `typy-0.10.0-aarch64-apple-darwin.tar.gz`, which
 [Using TyPy on macOS](../using/macos.md) installs, clearing the quarantine
 a browser download carries.
 
-The archive holds the `typy` command in `bin/` and the runtime library of
-each target it builds for in `lib/typy/`: either Linux archive builds for
-x86_64 and AArch64 Linux, and the Mac archive for macOS; see
-[Building for another target][cross]. Keep the two together: `typy` finds
-the runtime beside itself.
+The archive holds the `typy` command in `bin/` and the runtime libraries of each
+target it builds for in `lib/typy/` and `lib/typy-small/`, the second for
+`--release-small`: either Linux archive builds for x86_64 and AArch64 Linux, and
+the Mac archive for macOS; see [Building for another target][cross]. Keep the
+two together: `typy` finds the runtime beside itself.
 
 [cross]: ../using/command-line.md#building-for-another-target
 

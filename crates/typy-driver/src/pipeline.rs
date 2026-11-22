@@ -236,7 +236,7 @@ impl Pipeline {
 
     /// Returns the runtime archive installed beside the compiler for the request's target.
     fn runtime_archive(&self, request: &BuildRequest) -> Result<RuntimeArchive, Failure> {
-        RuntimeArchive::beside(&self.compiler, request.target().triple)
+        RuntimeArchive::beside(&self.compiler, request.target().triple, request.mode())
             .map_err(Failure::without_sources)
     }
 

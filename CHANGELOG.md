@@ -97,6 +97,10 @@ All notable changes to TyPy are recorded here. The format follows
   text, `split`, `join`, `find`, `count`, `replace` and `strip` run two to
   ten times faster, and the strings benchmark runs about three times
   faster (NFR-21).
+- Debug and `--release` builds link a runtime optimised for speed, and
+  `--release-small` builds the runtime optimised for size, installed in
+  `lib/typy-small/` (ADR-0100). Every program of the benchmark suite now
+  runs faster than with CPython 3.15 (NFR-21).
 - A `str` hashes and compares by its stored data, a dict finds a key
   object it holds without comparing it, and every `str` of one character
   up to U+00FF, and the empty one, is shared, as in CPython, so a program

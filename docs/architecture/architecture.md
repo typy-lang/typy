@@ -179,7 +179,7 @@ form a cycle are ever buffered.
 | Item | Location | Notes |
 | --- | --- | --- |
 | `typy` | `<prefix>/bin/typy` | One executable. LLVM 23 is linked in statically, and the standard library sources are embedded. |
-| Runtime archive | `<prefix>/lib/typy/<target>/libtypy_runtime.a` | One per supported target. Before a build that links, `typy` checks that the archive's version is its own (E0703). |
+| Runtime archive | `<prefix>/lib/typy/<target>/libtypy_runtime.a`, and `<prefix>/lib/typy-small/<target>/libtypy_runtime.a` for `--release-small` | Two per supported target, one optimised for speed and one for size (ADR-0100). Before a build that links, `typy` checks that the archive's version is its own (E0703). |
 | Build cache | `$TYPY_HOME/cache`, or the platform's user cache directory when `TYPY_HOME` is not set | Used by `typy run` only. Its location never changes a build's output (CLI-11). |
 | Output | The path given by `-o`, or next to the main file | Written atomically |
 

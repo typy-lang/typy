@@ -4,6 +4,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use typy_codegen::TargetTriple;
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics};
 
+use crate::BuildMode;
+
 const MARKER: &[u8] = b"typy-runtime-version:";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const FILE_NAME: &str = "libtypy_runtime.a";
@@ -23,16 +25,22 @@ fn refused(message: String) -> Diagnostics {
 }
 
 impl RuntimeArchive {
-    /// Returns the archive installed with the compiler at `executable`, for `triple`:
-    /// `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for `<prefix>/bin/typy`.
-    pub fn beside(executable: &Utf8Path, triple: TargetTriple) -> Result<Self, Diagnostics> {
+    /// Returns the archive installed with the compiler at `executable`, for `triple` and a build
+    /// in `mode`: `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for `<prefix>/bin/typy`, or
+    /// `lib/typy-small/` for `--release-small` (ADR-0100).
+    pub fn beside(
+        executable: &Utf8Path,
+        triple: TargetTriple,
+        mode: BuildMode,
+    ) -> Result<Self, Diagnostics> {
         let prefix = executable
             .parent()
             .and_then(Utf8Path::parent)
             .unwrap_or_else(|| Utf8Path::new("."));
         Self::open(
             &prefix
-                .join("lib/typy")
+                .join("lib")
+                .join(mode.runtime_directory())
                 .join(triple.as_str())
                 .join(FILE_NAME),
         )
@@ -74,6 +82,7 @@ impl RuntimeArchive {
 #[cfg(test)]
 mod tests {
     use super::{RuntimeArchive, VERSION};
+    use crate::BuildMode;
     use camino::Utf8PathBuf;
     use typy_codegen::TargetTriple;
 
@@ -100,9 +109,40 @@ mod tests {
             format!("!<arch>\ntypy-runtime-version:{VERSION}\nrest"),
         )
         .unwrap();
-        let found =
-            RuntimeArchive::beside(&root.join("bin/typy"), TargetTriple::X86_64LinuxGnu).unwrap();
+        let found = RuntimeArchive::beside(
+            &root.join("bin/typy"),
+            TargetTriple::X86_64LinuxGnu,
+            BuildMode::Release,
+        )
+        .unwrap();
         assert_eq!(found.path(), archive);
+    }
+
+    #[test]
+    fn a_build_for_size_finds_the_archive_optimised_for_size() {
+        let (_guard, root) = directory();
+        let small = root.join("lib/typy-small/x86_64-unknown-linux-gnu/libtypy_runtime.a");
+        std::fs::create_dir_all(small.parent().unwrap()).unwrap();
+        std::fs::write(
+            &small,
+            format!("!<arch>\ntypy-runtime-version:{VERSION}\nrest"),
+        )
+        .unwrap();
+        let found = RuntimeArchive::beside(
+            &root.join("bin/typy"),
+            TargetTriple::X86_64LinuxGnu,
+            BuildMode::ReleaseSmall,
+        )
+        .unwrap();
+        assert_eq!(found.path(), small);
+        assert!(
+            RuntimeArchive::beside(
+                &root.join("bin/typy"),
+                TargetTriple::X86_64LinuxGnu,
+                BuildMode::Debug
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -122,7 +162,11 @@ mod tests {
             message(RuntimeArchive::open(&path)),
             format!("the runtime archive {path} is from TyPy 9.9.9, not {VERSION}")
         );
-        let missing = RuntimeArchive::beside(&root.join("typy"), TargetTriple::X86_64LinuxMusl);
+        let missing = RuntimeArchive::beside(
+            &root.join("typy"),
+            TargetTriple::X86_64LinuxMusl,
+            BuildMode::Debug,
+        );
         assert!(message(missing).contains("x86_64-unknown-linux-musl"));
     }
 }
