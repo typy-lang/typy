@@ -4,7 +4,7 @@
 //! key gives an order CPython could give.
 
 use crate::int::value::Integer;
-use crate::string::{StrObject, code_point, length};
+use crate::string::{StrObject, length};
 use crate::word::{inline_value, is_inline};
 
 /// The prime `2**61 - 1` hashes of numbers are reduced by, CPython's `_PyHASH_MODULUS`.
@@ -175,11 +175,8 @@ pub(crate) unsafe fn text(text: *const StrObject) -> i64 {
         if count == 0 {
             return 0;
         }
-        let width = (*text).kind as usize;
         let mut state = SipHash::new();
-        for index in 0..count {
-            state.write(&code_point(text, index).to_le_bytes()[..width]);
-        }
+        state.write(crate::string::narrow::stored(text));
         not_minus_one(state.finish().cast_signed())
     }
 }
@@ -228,7 +225,17 @@ impl SipHash {
     }
 
     fn write(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
+        let mut rest = bytes;
+        // Whole words are compressed as they are, when no byte waits for its word.
+        if self.filled == 0 {
+            let (words, remainder) = rest.as_chunks::<8>();
+            for word in words {
+                self.compress(u64::from_le_bytes(*word));
+                self.length += 8;
+            }
+            rest = remainder;
+        }
+        for &byte in rest {
             self.tail |= u64::from(byte) << (8 * self.filled);
             self.filled += 1;
             self.length += 1;

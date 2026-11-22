@@ -112,6 +112,15 @@ pub(crate) unsafe fn substring(text: *const StrObject, start: usize, end: usize)
     // SAFETY: the caller's guarantee.
     if let Some(bytes) = unsafe { super::narrow::latin1(text) } {
         let part = &bytes[start..end];
+        // A `str` of no code point or of one is shared; a `bytes` is not.
+        // SAFETY: the caller passes a live string.
+        if unsafe { !is_bytes(text) } {
+            match part {
+                [] => return super::empty(),
+                [only] => return super::character(u32::from(*only)).unwrap_or_else(super::empty),
+                _ => {}
+            }
+        }
         // SAFETY: the caller passes a live string.
         return unsafe {
             super::narrow::new_like(text, part.len(), |out| out.copy_from_slice(part))

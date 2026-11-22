@@ -183,3 +183,92 @@ fn nfr_21_join_of_bytes_joins_as_the_general_path_does() {
 fn text_of(string: *mut StrObject) -> String {
     text(string)
 }
+
+#[test]
+fn nfr_21_strings_compare_by_their_stored_data_as_by_their_code_points() {
+    let values = [
+        "",
+        "a",
+        "ab",
+        "b",
+        "\u{e9}",
+        "\u{20ac}",
+        "\u{20ac}a",
+        "\u{1f600}",
+    ];
+    for left in values {
+        for right in values {
+            for comparison in 0..6 {
+                let compare = |left: *const StrObject, right: *const StrObject| {
+                    // SAFETY: both strings are live.
+                    unsafe {
+                        crate::string::typy_rt_str_compare(left, right, inline(comparison).unwrap())
+                    }
+                };
+                let expected = match comparison {
+                    0 => left == right,
+                    1 => left != right,
+                    2 => left < right,
+                    3 => left <= right,
+                    4 => left > right,
+                    _ => left >= right,
+                };
+                assert_eq!(
+                    compare(from_str(left), from_str(right)),
+                    expected,
+                    "{left:?} {right:?} {comparison}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn nfr_21_strings_of_one_character_or_none_are_shared_and_bytes_are_not() {
+    let text = from_str("ab\u{e9}\u{20ac}");
+    // SAFETY: every string is live; a shared one is immortal.
+    unsafe {
+        let first = crate::string::typy_rt_str_index(text, inline(0).unwrap()).value;
+        let again = crate::string::typy_rt_chr(inline(97).unwrap()).value;
+        assert!(core::ptr::eq(first, again));
+        assert_eq!((*first).header.reference_count, crate::header::IMMORTAL);
+        let sliced = crate::string::typy_rt_str_slice(
+            text,
+            inline(2).unwrap(),
+            inline(3).unwrap(),
+            inline(1).unwrap(),
+            inline(3).unwrap(),
+        )
+        .value;
+        assert!(core::ptr::eq(
+            sliced,
+            crate::string::character(0xe9).unwrap()
+        ));
+        let euro = crate::string::typy_rt_str_index(text, inline(3).unwrap()).value;
+        assert_eq!(text_of(euro), "\u{20ac}");
+        assert_ne!((*euro).header.reference_count, crate::header::IMMORTAL);
+        let empty = crate::string::typy_rt_str_slice(
+            text,
+            inline(1).unwrap(),
+            inline(1).unwrap(),
+            inline(1).unwrap(),
+            inline(3).unwrap(),
+        )
+        .value;
+        assert!(core::ptr::eq(empty, crate::string::empty()));
+        let bytes = crate::bytes::from_slice(b"xy");
+        let part = crate::bytes::typy_rt_bytes_slice(
+            bytes,
+            inline(0).unwrap(),
+            inline(1).unwrap(),
+            inline(1).unwrap(),
+            inline(3).unwrap(),
+        )
+        .value;
+        assert_eq!((*part).header.type_id, crate::header::BYTES_TYPE_ID);
+        assert!(!core::ptr::eq(
+            part,
+            crate::string::character(u32::from(b'x')).unwrap()
+        ));
+    }
+}

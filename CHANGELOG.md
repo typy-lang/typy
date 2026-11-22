@@ -97,6 +97,10 @@ All notable changes to TyPy are recorded here. The format follows
   text, `split`, `join`, `find`, `count`, `replace` and `strip` run two to
   ten times faster, and the strings benchmark runs about three times
   faster (NFR-21).
+- A `str` hashes and compares by its stored data, a dict finds a key
+  object it holds without comparing it, and every `str` of one character
+  up to U+00FF, and the empty one, is shared, as in CPython, so a program
+  that makes many one-character strings allocates none (NFR-21).
 - The refusals of forms a later release gives now name that release:
   `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
   to TYP-31); `typing.Any` and `TypedDict` with `Required`,

@@ -80,8 +80,11 @@ fn tuples_combine_their_items_as_cpython_does() {
 
 #[test]
 fn texts_hash_as_cpython_does_with_a_zero_seed() {
-    let cases: [(&str, i64); 8] = [
+    let cases: [(&str, i64); 11] = [
         ("\u{ff}\0", 7_217_110_220_190_950_386),
+        ("abcdefghijk", 1_450_545_860_578_130_900),
+        ("\u{20ac}uro and \u{e9}t\u{e9}", 1_000_435_418_511_185_583),
+        ("a\u{1f600}bc", 4_484_291_684_517_517_462),
         ("", 0),
         ("a", 4_644_417_185_603_328_019),
         ("abc", -4_594_863_902_769_663_758),

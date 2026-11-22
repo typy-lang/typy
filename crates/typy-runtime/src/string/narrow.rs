@@ -19,6 +19,26 @@ pub(crate) unsafe fn latin1<'a>(text: *const StrObject) -> Option<&'a [u8]> {
     }
 }
 
+/// Returns the data of a string as it is stored, its code points one, two or four bytes each,
+/// little-endian as every target of TyPy is.
+///
+/// # Safety
+///
+/// `text` points to a live string, which outlives the slice and does not change.
+pub(crate) unsafe fn stored<'a>(text: *const StrObject) -> &'a [u8] {
+    // SAFETY: the caller passes a live string, which holds `length` code points of its kind
+    // after its fixed part.
+    unsafe {
+        core::slice::from_raw_parts(
+            text.cast::<u8>().add(DATA_OFFSET),
+            length(text) * (*text).kind as usize,
+        )
+    }
+}
+
+// The stored data of a code point is its little-endian bytes, which hashing reads.
+const _: () = assert!(cfg!(target_endian = "little"));
+
 /// Returns a new string of the type of `source`, a `str` or a `bytes`, of `length` code points
 /// of one byte each, which `fill` writes.
 ///

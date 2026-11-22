@@ -4,8 +4,10 @@ mod builder;
 mod case;
 mod character;
 mod methods;
-mod narrow;
+pub(crate) mod narrow;
 mod operations;
+#[cfg(test)]
+pub(crate) use operations::typy_rt_str_index;
 mod points;
 mod repr;
 mod split;
@@ -74,6 +76,61 @@ pub struct StrObject {
 }
 
 const DATA_OFFSET: usize = core::mem::size_of::<StrObject>();
+
+/// An immortal `str` of at most one code point of one byte, with the zero unit after it.
+#[repr(C)]
+struct Shared {
+    object: StrObject,
+    data: [u8; 8],
+}
+
+/// Returns the immortal `str` of the code point `point`, or the empty one for `None`.
+const fn shared(point: Option<u8>) -> Shared {
+    let (length, byte) = match point {
+        Some(byte) => (1, byte),
+        None => (0, 0),
+    };
+    Shared {
+        object: StrObject {
+            header: ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: STR_TYPE_ID,
+            },
+            length,
+            kind: StrKind::Latin1,
+            padding: 0,
+        },
+        data: [byte, 0, 0, 0, 0, 0, 0, 0],
+    }
+}
+
+/// The `str` of each code point up to U+00FF, which every string of one such code point is,
+/// as CPython shares them: text of one character is common, and needs no allocation.
+static CHARACTERS: [Shared; 256] = {
+    let mut all = [const { shared(None) }; 256];
+    let mut point: u8 = 0;
+    loop {
+        all[point as usize] = shared(Some(point));
+        if point == u8::MAX {
+            break all;
+        }
+        point += 1;
+    }
+};
+
+/// The empty `str`, which every empty string a method makes is.
+static EMPTY: Shared = shared(None);
+
+/// Returns the shared `str` of `point`, for a code point up to U+00FF.
+pub(crate) fn character(point: u32) -> Option<*mut StrObject> {
+    let index = usize::try_from(point).ok().filter(|index| *index < 256)?;
+    Some(core::ptr::from_ref(&CHARACTERS[index].object).cast_mut())
+}
+
+/// Returns the shared empty `str`.
+pub(crate) fn empty() -> *mut StrObject {
+    core::ptr::from_ref(&EMPTY.object).cast_mut()
+}
 
 /// Returns a new string of `length` code points of `kind`, with its data not yet written and
 /// a zero unit after it. A string never changes its length, so the zero stays there, and a
