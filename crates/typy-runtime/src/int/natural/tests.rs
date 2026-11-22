@@ -130,3 +130,79 @@ fn division_cases_that_correct_the_quotient_estimate_satisfy_the_identity() {
         assert_eq!(rebuilt.as_slice(), dividend, "{dividend:?} / {divisor:?}");
     }
 }
+
+/// Returns the next value of a fixed pseudo-random sequence, so every run checks the same cases.
+fn next(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *state ^ (*state >> 29)
+}
+
+#[test]
+fn a_reciprocal_divides_two_limbs_as_a_128_bit_division_does() {
+    let mut state = 7;
+    let mut divisors = vec![1_u64 << 63, (1 << 63) + 1, u64::MAX, u64::MAX - 1];
+    divisors.extend((0..200).map(|_| next(&mut state) | (1 << 63)));
+    for divisor in divisors {
+        let reciprocal = super::Reciprocal::of(divisor);
+        let mut highs = vec![0, 1, divisor - 1, divisor / 2];
+        highs.extend((0..20).map(|_| next(&mut state) % divisor));
+        for high in highs {
+            for low in [0, 1, u64::MAX, next(&mut state)] {
+                let value = (u128::from(high) << 64) | u128::from(low);
+                let expected = (
+                    u64::try_from(value / u128::from(divisor)).unwrap(),
+                    u64::try_from(value % u128::from(divisor)).unwrap(),
+                );
+                assert_eq!(
+                    reciprocal.divide(high, low),
+                    expected,
+                    "{high} {low} {divisor}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn long_division_gives_a_quotient_and_remainder_that_recompose_the_dividend() {
+    let mut state = 11;
+    for (dividend_length, divisor_length) in [(1, 1), (3, 1), (8, 2), (16, 8), (20, 3), (33, 17)] {
+        for round in 0..40 {
+            let dividend: Vec<u64> = (0..dividend_length).map(|_| next(&mut state)).collect();
+            let mut divisor: Vec<u64> = (0..divisor_length).map(|_| next(&mut state)).collect();
+            // Small top limbs and divisors equal to the top of the dividend reach the rare
+            // corrections.
+            if round % 4 == 0 {
+                divisor[divisor_length - 1] = 1 + round;
+            }
+            if round % 5 == 0 && divisor_length <= dividend_length {
+                divisor[divisor_length - 1] = dividend[dividend_length - 1].max(1);
+            }
+            let (quotient, remainder) = super::divide(&dividend, &divisor);
+            assert_eq!(
+                super::compare(remainder.as_slice(), &divisor),
+                core::cmp::Ordering::Less
+            );
+            let product = super::multiply(quotient.as_slice(), &divisor);
+            let recomposed = super::add(product.as_slice(), remainder.as_slice());
+            let mut trimmed = dividend.clone();
+            while trimmed.last() == Some(&0) {
+                trimmed.pop();
+            }
+            assert_eq!(
+                recomposed.as_slice(),
+                trimmed.as_slice(),
+                "{dividend:?} {divisor:?}"
+            );
+        }
+    }
+    for divisor in [1, 2, 3, 10, u64::MAX, 1 << 63] {
+        let value = [u64::MAX, 12_345, 1 << 40];
+        let (quotient, remainder) = super::divide_small(&value, divisor);
+        let recomposed = super::multiply_add_small(quotient.as_slice(), divisor, remainder);
+        assert_eq!(recomposed.as_slice(), value, "{divisor}");
+        assert!(remainder < divisor);
+    }
+}

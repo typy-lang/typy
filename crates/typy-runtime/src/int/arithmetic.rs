@@ -1,6 +1,6 @@
 //! The `int` arithmetic generated code calls, with Python's results (EXP-02, EXP-03). Inline words that do not overflow take a fast path.
 
-use super::value::Integer;
+use super::value::{Integer, View};
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
 use crate::word::{inline, inline_value, is_inline};
@@ -14,7 +14,7 @@ unsafe fn binary(
     left: i64,
     right: i64,
     fast: impl Fn(i64, i64) -> Option<i64>,
-    slow: impl Fn(&Integer, &Integer) -> Integer,
+    slow: impl Fn(View<'_>, View<'_>) -> Integer,
 ) -> i64 {
     if is_inline(left)
         && is_inline(right)
@@ -22,9 +22,16 @@ unsafe fn binary(
     {
         return word;
     }
-    // SAFETY: the caller passes `int` words whose large integers are live.
-    let (left, right) = unsafe { (Integer::from_word(left), Integer::from_word(right)) };
-    slow(&left, &right).into_word()
+    let (mut left_held, mut right_held) = ([0], [0]);
+    // SAFETY: the caller passes `int` words whose large integers are live; the views read
+    // their limbs in place.
+    let (left, right) = unsafe {
+        (
+            View::of(left, &mut left_held),
+            View::of(right, &mut right_held),
+        )
+    };
+    slow(left, right).into_word()
 }
 
 /// Returns `left + right`.
@@ -32,10 +39,14 @@ unsafe fn binary(
 /// # Safety
 ///
 /// Both arguments are `int` words whose large integers are live.
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the method's path fixes its view's lifetime, and `binary` takes views of any"
+)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_add(left: i64, right: i64) -> i64 {
     // SAFETY: the caller's guarantee is passed on.
-    unsafe { binary(left, right, i64::checked_add, Integer::add) }
+    unsafe { binary(left, right, i64::checked_add, |a, b| a.add(b)) }
 }
 
 /// Returns `left - right`.
@@ -43,10 +54,14 @@ pub unsafe extern "C" fn typy_rt_int_add(left: i64, right: i64) -> i64 {
 /// # Safety
 ///
 /// Both arguments are `int` words whose large integers are live.
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the method's path fixes its view's lifetime, and `binary` takes views of any"
+)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_subtract(left: i64, right: i64) -> i64 {
     // SAFETY: the caller's guarantee is passed on.
-    unsafe { binary(left, right, i64::checked_sub, Integer::subtract) }
+    unsafe { binary(left, right, i64::checked_sub, |a, b| a.subtract(b)) }
 }
 
 /// Returns `left * right`.
@@ -54,10 +69,14 @@ pub unsafe extern "C" fn typy_rt_int_subtract(left: i64, right: i64) -> i64 {
 /// # Safety
 ///
 /// Both arguments are `int` words whose large integers are live.
+#[allow(
+    clippy::redundant_closure_for_method_calls,
+    reason = "the method's path fixes its view's lifetime, and `binary` takes views of any"
+)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_multiply(left: i64, right: i64) -> i64 {
     // SAFETY: the caller's guarantee is passed on.
-    unsafe { binary(left, right, i64::checked_mul, Integer::multiply) }
+    unsafe { binary(left, right, i64::checked_mul, |a, b| a.multiply(b)) }
 }
 
 /// Returns `-value`.
@@ -73,7 +92,7 @@ pub unsafe extern "C" fn typy_rt_int_negate(value: i64) -> i64 {
             value,
             value,
             |a, _| a.checked_neg(),
-            |a, _| Integer::from_i128(0).subtract(a),
+            |a, _| Integer::from_i128(0).view().subtract(a),
         )
     }
 }
@@ -92,11 +111,11 @@ pub unsafe extern "C" fn typy_rt_int_absolute(value: i64) -> i64 {
             value,
             |a, _| a.checked_abs(),
             |a, _| {
-                if a.negative {
-                    Integer::from_i128(0).subtract(a)
-                } else {
-                    a.add(&Integer::from_i128(0))
-                }
+                let positive = View {
+                    negative: false,
+                    magnitude: a.magnitude,
+                };
+                positive.add(Integer::from_i128(0).view())
             },
         )
     }
@@ -112,8 +131,10 @@ pub unsafe extern "C" fn typy_rt_int_compare(left: i64, right: i64, comparison: 
     let ordering = if is_inline(left) && is_inline(right) {
         inline_value(left).cmp(&inline_value(right))
     } else {
-        // SAFETY: the caller passes `int` words whose large integers are live.
-        unsafe { Integer::from_word(left).compare(&Integer::from_word(right)) }
+        let (mut left_held, mut right_held) = ([0], [0]);
+        // SAFETY: the caller passes `int` words whose large integers are live; the views read
+        // their limbs in place.
+        unsafe { View::of(left, &mut left_held).compare(View::of(right, &mut right_held)) }
     };
     crate::compare::holds(ordering, comparison)
 }

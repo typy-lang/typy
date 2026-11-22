@@ -78,17 +78,60 @@ pub(crate) fn multiply_add_small(value: &[u64], factor: u64, addend: u64) -> Lim
     result
 }
 
+/// A limb with its top bit set, and its reciprocal, `floor((2**128 - 1) / divisor) - 2**64`, by
+/// which a two-limb number is divided with two multiplications in place of a 128-bit division,
+/// as Moller and Granlund's division by invariant integers does.
+#[derive(Clone, Copy)]
+pub(crate) struct Reciprocal {
+    divisor: u64,
+    inverse: u64,
+}
+
+impl Reciprocal {
+    /// Returns the reciprocal of `divisor`, whose top bit is set.
+    pub(crate) fn of(divisor: u64) -> Self {
+        Self {
+            divisor,
+            inverse: low(u128::MAX / u128::from(divisor)),
+        }
+    }
+
+    /// Returns `(high * 2**64 + low_limb) / divisor` and the remainder; `high` is below the
+    /// divisor, so the quotient fits a limb.
+    pub(crate) fn divide(self, high: u64, low_limb: u64) -> (u64, u64) {
+        let product = u128::from(self.inverse) * u128::from(high);
+        let estimate = product.wrapping_add((u128::from(high) << 64) | u128::from(low_limb));
+        let mut quotient = low(estimate >> 64).wrapping_add(1);
+        let mut remainder = low_limb.wrapping_sub(quotient.wrapping_mul(self.divisor));
+        if remainder > low(estimate) {
+            quotient = quotient.wrapping_sub(1);
+            remainder = remainder.wrapping_add(self.divisor);
+        }
+        if remainder >= self.divisor {
+            quotient += 1;
+            remainder -= self.divisor;
+        }
+        (quotient, remainder)
+    }
+}
+
 /// Divides by a single limb, returning the quotient and the remainder.
 pub(crate) fn divide_small(value: &[u64], divisor: u64) -> (Limbs, u64) {
-    let mut quotient = Limbs::zeros(value.len());
-    let mut remainder = 0_u128;
-    for index in (0..value.len()).rev() {
-        let current = (remainder << 64) | u128::from(value[index]);
-        quotient.as_mut_slice()[index] = low(current / u128::from(divisor));
-        remainder = current % u128::from(divisor);
+    // Both are shifted until the divisor's top bit is set, which leaves the quotient as it is
+    // and the remainder shifted the same way.
+    let shift = divisor.leading_zeros();
+    let reciprocal = Reciprocal::of(divisor << shift);
+    let shifted = shift_left(value, u64::from(shift));
+    let shifted = shifted.as_slice();
+    let mut quotient = Limbs::zeros(shifted.len());
+    let mut remainder = 0_u64;
+    for index in (0..shifted.len()).rev() {
+        let (digit, rest) = reciprocal.divide(remainder, shifted[index]);
+        quotient.as_mut_slice()[index] = digit;
+        remainder = rest;
     }
     quotient.trim();
-    (quotient, low(remainder))
+    (quotient, remainder >> shift)
 }
 
 /// Returns the quotient and remainder of magnitudes by Knuth's algorithm D; `divisor` is not zero.
@@ -111,19 +154,27 @@ pub(crate) fn divide(dividend: &[u64], divisor: &[u64]) -> (Limbs, Limbs) {
     let mut quotient = Limbs::zeros(m);
     let v = v.as_slice();
     let base = 1_u128 << 64;
+    let reciprocal = Reciprocal::of(v[n - 1]);
     for j in (0..m).rev() {
         let u_slice = u.as_mut_slice();
-        let numerator = (u128::from(u_slice[j + n]) << 64) | u128::from(u_slice[j + n - 1]);
-        let mut estimate = numerator / u128::from(v[n - 1]);
-        let mut rest = numerator % u128::from(v[n - 1]);
-        while estimate >= base
-            || estimate * u128::from(v[n - 2]) > ((rest << 64) | u128::from(u_slice[j + n - 2]))
+        let (high, low_limb) = (u_slice[j + n], u_slice[j + n - 1]);
+        // The top limb of the remainder is never above the divisor's; when it equals it, the
+        // quotient's estimate is one less than the base.
+        let (mut estimate, mut rest) = if high < v[n - 1] {
+            let (digit, rest) = reciprocal.divide(high, low_limb);
+            (u128::from(digit), u128::from(rest))
+        } else {
+            let numerator = (u128::from(high) << 64) | u128::from(low_limb);
+            let estimate = base - 1;
+            (estimate, numerator - estimate * u128::from(v[n - 1]))
+        };
+        // The estimate is at most two too large; once the remainder of the estimate reaches the
+        // base it is at most one too large, which the subtraction below corrects.
+        while rest < base
+            && estimate * u128::from(v[n - 2]) > ((rest << 64) | u128::from(u_slice[j + n - 2]))
         {
             estimate -= 1;
             rest += u128::from(v[n - 1]);
-            if rest >= base {
-                break;
-            }
         }
         let mut borrow = 0_i128;
         let mut carry = 0_u128;
