@@ -234,6 +234,7 @@ nav:
           - adr/0100-build-the-runtime-for-speed-and-for-size-only-for-release-small.md
           - adr/0101-keep-the-hash-of-a-str-in-the-object.md
           - adr/0102-do-arithmetic-on-inline-ints-in-place.md
+          - adr/0103-compute-large-ints-up-to-1024-bits-in-fixed-width-storage.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

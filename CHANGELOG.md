@@ -13,6 +13,10 @@ All notable changes to TyPy are recorded here. The format follows
   only for larger integers. The benchmark suite's geometric mean falls from
   7.6 to 5.3 times C's time: mandelbrot runs 2.6 times faster and
   recursion 2.3 times (NFR-22, ADR-0102).
+- Arithmetic on integers up to 1024 bits outside the inline range works in
+  fixed-width storage rather than arrays from `malloc`, and runs two to
+  three times faster: from 5.0 to 1.7 times CPython 3.15's time at 512
+  bits (ADR-0103).
 
 ## [0.11.0] - 2026-11-22
 

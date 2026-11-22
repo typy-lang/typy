@@ -108,3 +108,4 @@ supersedes it.
 | [ADR-0100](0100-build-the-runtime-for-speed-and-for-size-only-for-release-small.md) | Build the runtime for speed, and for size only for `--release-small` | Accepted | 2026-11-22 |
 | [ADR-0101](0101-keep-the-hash-of-a-str-in-the-object.md) | Keep the hash of a `str` in the object | Accepted | 2026-11-22 |
 | [ADR-0102](0102-do-arithmetic-on-inline-ints-in-place.md) | Do arithmetic on inline ints in place | Accepted | 2026-11-22 |
+| [ADR-0103](0103-compute-large-ints-up-to-1024-bits-in-fixed-width-storage.md) | Compute large ints up to 1024 bits in fixed-width storage | Accepted | 2026-11-22 |
