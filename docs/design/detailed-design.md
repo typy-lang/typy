@@ -2371,6 +2371,19 @@ evaluates the arguments with `unbound_arguments`, makes the exception from
 `Unbound::by_position` in front of a copy of the tail, or from a tuple of them,
 then checks the call and runs `__init__` on it.
 
+A call of a built-in function with `*` of a value only the run knows goes
+through `body/builtin_unpacking.rs` (EXP-22, ADR-0083), which desugars it into
+typed expressions lowering already has. The values before the first `*`, the
+`Spread` list of the rest, of one type (E0409), and the keyword values are
+stored in order in hidden variables with `TypedExprKind::Named`, chained by
+`TypedExprKind::Sequence`. `arity` gives each built-in's numbers of arguments
+and CPython 3.15's messages for any other number, as Argument Clinic or the
+built-in itself writes them. The call is checked once for each number, by name
+on hidden variables that each arm stores from the list; an arm's errors carry a
+label of how many values reached it. An `IfExp` on the list's length picks the
+arm, and the last branch raises `TypeError` with the message, its count written
+by `str` of the length. The arms must give one type, or the call is E0202.
+
 `body/os_error.rs` accepts an `OSError` of arguments of any type, as CPython
 does (EXC-14, EXC-16, ADR-0035), except a number as the third of three to five
 arguments of `OSError` or `BlockingIOError`, which a `BlockingIOError` reads as

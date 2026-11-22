@@ -97,8 +97,9 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 
 #[test]
 fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
-    let planned = "`*` and `**` of a value only the run knows in a call of a builtin other \
-                   than `print` are planned for TyPy 0.11 (EXP-22)";
+    let planned = "`*` of a value only the run knows in a call of `max`, `min`, `zip`, a method \
+                   of a built-in type or a function of a built-in module, and `**` of one in a \
+                   call of a builtin other than `print`, are planned for TyPy 0.11 (EXP-22)";
     for call in [
         "print(max(*[1, 2]))\n",
         "for each in zip(*[[1]]):\n    pass\n",
@@ -518,6 +519,71 @@ fn exp_22_unpacking_reaches_each_kind_of_callee_and_argument() {
         let found = messages(call);
         assert!(
             found.iter().any(|(each, _, at)| each == code && at == rule),
+            "{call}: {found:?}"
+        );
+    }
+}
+
+#[test]
+fn exp_22_a_built_in_function_takes_star_in_each_form_it_has() {
+    for call in [
+        "values = [1, 4]\nprint(list(range(*values)))\n",
+        "texts = [\"abc\"]\nprint(len(*texts), repr(*texts))\n",
+        "words = [[\"b\", \"a\"]]\nprint(sorted(*words, reverse=True))\n",
+        "def first(values: list[float]) -> float:\n    return abs(*values)\n",
+        "numbers = [65]\nprint(chr(*numbers), bool(*numbers))\n",
+    ] {
+        assert_eq!(messages(call), Vec::new(), "{call}");
+    }
+    let found = dump("values = [1, 4]\nprint(list(range(*values)))\n");
+    for line in ["Sequence", "IfExp", "Raise", "Named"] {
+        assert!(found.contains(line), "{line} in {found}");
+    }
+}
+
+#[test]
+fn exp_22_a_built_in_function_refuses_what_a_form_of_it_cannot_take() {
+    for (call, code, message) in [
+        (
+            "from collections.abc import Iterator\n\n\n\
+             def take(sources: list[Iterator[int]]) -> int:\n    return next(*sources)\n",
+            "E0404",
+            "the default of `next` must be an int, and this is an Iterator[int]",
+        ),
+        (
+            "values = [1]\nprint(type(*values))\n",
+            "E0202",
+            "making a class with `type(name, bases, namespace)` cannot be compiled by TyPy with \
+             CPython's meaning",
+        ),
+        (
+            "rows = [[1, 2]]\nprint(tuple(*rows))\n",
+            "E0202",
+            "`tuple` gives tuple[()] or tuple[int, ...] as the number of values `*` gives \
+             decides, so its result has no one type",
+        ),
+        (
+            "texts = [\"a\"]\nprint(len(\"a\", \"b\", *texts))\n",
+            "E0404",
+            "`len` takes at most 1 argument, and more come before `*`",
+        ),
+        (
+            "numbers = [1]\nprint(list(range(*numbers, \"a\")))\n",
+            "E0409",
+            "the positional arguments from the first `*` on have one type; this is a str, \
+             and the first is an int",
+        ),
+        (
+            "numbers = [7]\nprint(str(*numbers))\n",
+            "E0404",
+            "`str` takes 0 to 1 arguments, and 2 are given",
+        ),
+    ] {
+        let found = messages(call);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
             "{call}: {found:?}"
         );
     }

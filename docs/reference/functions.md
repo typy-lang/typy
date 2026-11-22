@@ -246,9 +246,35 @@ print(add(*values), add(1, *values[1:]))
 which a `Callable` type does not carry, and is planned for 1.0 (EXP-21). A call
 of an exception class takes `*` of any iterable and `**` of a dict held in a
 variable; see [The arguments and the exit
-code](../library/exceptions.md#the-arguments-and-the-exit-code). The same
-unpacking in a call of a builtin other than `print` is planned for 0.11
-(EXP-22).
+code](../library/exceptions.md#the-arguments-and-the-exit-code).
+
+A call of a built-in function other than `max`, `min` and `zip` takes `*` of any
+iterable (EXP-22). The values from the first `*` on have one type, the first
+value's (E0409). The call is checked once for each number of arguments the
+built-in takes, and the number of values `*` gives picks that form when the
+program runs; any other number raises CPython 3.15's `TypeError`, such as `range
+expected at most 3 arguments, got 4`. Each form must give one result type, so
+`tuple(*rows)`, which gives `()` for no value, is E0202, and a form TyPy refuses
+for the type `*` gives refuses the call, with a note of how many values reach
+it:
+
+<!-- typy-expect: accepted -->
+```python
+def bounds(values: list[int]) -> list[int]:
+    return list(range(*values))
+
+
+print(bounds([3]), bounds([1, 4]), bounds([0, 9, 3]))
+try:
+    bounds([1, 2, 3, 4])
+except TypeError as error:
+    print(error)
+```
+
+The same unpacking in a call of `max`, `min`, `zip`, a method of a
+built-in type or a function of a built-in module, and `**` of a dict held
+in a variable in a call of a builtin other than `print`, are planned for
+0.11 (EXP-22).
 
 ## Nested functions
 
@@ -658,7 +684,9 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
+| `*` of a list or another iterable in a call of `max`, `min`, `zip`, a method of a built-in type or a function of a built-in module, and `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
+| `*` in a call of a built-in function whose result type depends on the number of values it gives, such as `tuple(*rows)` | E0202 (EXP-22) |
+| `*` in a call of a built-in function given more values before the first `*` than it takes | E0404 (EXP-22) |
 | `*` of a value only the run knows in a call of `OSError` or a class derived from it, whose `errno`, `strerror` and file names are read by position | E0202 (EXP-22) |
 | `*` in a call of an exception class whose positional values have more than one type | E0409 (EXP-22) |
 | `**` in a call of `print` of a value that is no `dict[str, V]`, or of dicts of different value types | E0404 (EXP-22) |

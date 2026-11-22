@@ -32,6 +32,15 @@ impl BodyChecker<'_> {
         {
             return self.call_expression(function, &arguments, &keywords, span);
         }
+        // A built-in function is checked for each number of arguments `*` may give (EXP-22).
+        if let Expr::Name { id, .. } = function
+            && self.peek_type(function).is_none()
+            && let Some(builtin) = Builtin::named(id)
+            && let Some(call) =
+                self.builtin_unpacked((function, builtin), arguments, keywords, span)
+        {
+            return call;
+        }
         // A callee that takes the unpacked arguments binds them and notes the call; any other
         // saw each `*value` as an error it does not report, so its diagnostics give way, but
         // for an error in the callee itself, such as a name that is not defined.
@@ -53,8 +62,9 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 at,
-                "`*` and `**` of a value only the run knows in a call of a builtin other than \
-                 `print` are planned for TyPy 0.11 (EXP-22)",
+                "`*` of a value only the run knows in a call of `max`, `min`, `zip`, a method of \
+                 a built-in type or a function of a built-in module, and `**` of one in a call \
+                 of a builtin other than `print`, are planned for TyPy 0.11 (EXP-22)",
             )
             .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),
@@ -62,7 +72,7 @@ impl BodyChecker<'_> {
         )
     }
 
-    fn call_expression(
+    pub(super) fn call_expression(
         &mut self,
         function: &Expr,
         arguments: &[Expr],

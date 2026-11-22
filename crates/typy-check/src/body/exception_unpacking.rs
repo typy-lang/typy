@@ -34,7 +34,11 @@ impl BodyChecker<'_> {
             .iter()
             .any(|argument| matches!(argument, Expr::Starred { .. }));
         let values = if listed {
-            let (list, item) = self.exception_values(arguments, span);
+            let (list, item) = self.one_type_values(
+                arguments,
+                "the arguments of an exception class called with `*`",
+                span,
+            );
             if class.builtin().is_os_error() {
                 return self.os_error_unpacked(&class, span);
             }
@@ -140,9 +144,15 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns the list of every positional value of a call of an exception class with `*`,
-    /// of the first value's type, which each other value must have (E0409), with that type.
-    fn exception_values(&mut self, arguments: &[Expr], span: Span) -> (TypedExpr, Type) {
+    /// Returns the list of the values `arguments` give, those of each `*iterable` among them,
+    /// of the first value's type, which each other must have (E0409, the values named
+    /// `what`), with that type.
+    pub(super) fn one_type_values(
+        &mut self,
+        arguments: &[Expr],
+        what: &str,
+        span: Span,
+    ) -> (TypedExpr, Type) {
         let mut item: Option<Type> = None;
         let mut parts = Vec::new();
         for argument in arguments {
@@ -165,7 +175,8 @@ impl BodyChecker<'_> {
                 SpreadPart::Each(source) => (SpreadPart::Each(source), held_alike(&ty, &first)),
             };
             if !fits && !ty.has_error() && !first.has_error() {
-                self.unfit_exception_value(&ty, &first, at, matches!(part, SpreadPart::Each(_)));
+                let unpacked = matches!(part, SpreadPart::Each(_));
+                self.unfit_value((&ty, &first), what, at, unpacked);
             }
             parts.push(part);
         }
@@ -181,23 +192,22 @@ impl BodyChecker<'_> {
         (list, item)
     }
 
-    /// Reports a positional value of a call of an exception class with `*` whose type is not
-    /// `first`, the first value's.
-    fn unfit_exception_value(&mut self, ty: &Type, first: &Type, at: Span, unpacked: bool) {
-        let what = if unpacked {
+    /// Reports a value of type `ty` among those named `what` that is not of type `first`, the
+    /// first value's.
+    fn unfit_value(&mut self, (ty, first): (&Type, &Type), what: &str, at: Span, unpacked: bool) {
+        let value = if unpacked {
             format!("this unpacks items of type {ty}")
         } else {
             format!("this is {}", ty.with_article())
         };
         let message = format!(
-            "the arguments of an exception class called with `*` have one type; {what}, and \
-             the first is {}",
+            "{what} have one type; {value}, and the first is {}",
             first.with_article()
         );
         self.diagnostics.push(
             Diagnostic::new(DiagnosticCode::error(409), at, message)
                 .with_rule(RuleId::EXP_22)
-                .with_help("pass values of one type, or give the exception a tuple"),
+                .with_help("pass values of one type, each one by one where they differ"),
         );
     }
 
