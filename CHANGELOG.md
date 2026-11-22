@@ -20,6 +20,11 @@ All notable changes to TyPy are recorded here. The format follows
   each command `typy` runs, such as the C linker with its arguments, and
   `--save-temps` keeps a build's object file beside its output, as `app.o`
   for `app` (CLI-22 to CLI-24).
+- `-O0`, `-O1`, `-O2`, `-O3`, `-Os` and `-Oz` choose a build's
+  optimisation level, `--release` being `-O2` and `--release-small` `-Oz`;
+  `--target-cpu NAME` builds for a processor, `native` for this machine's;
+  and `-C KEY=VALUE` takes `opt-level`, `target-cpu` and `target-feature`,
+  which `typy -C help` lists (CLI-20, CLI-21, CLI-30, ADR-0104, ADR-0106).
 
 ### Changed
 

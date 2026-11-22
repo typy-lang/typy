@@ -35,7 +35,7 @@ fn the_key_changes_with_each_input() {
         ),
         key(&request, &program, b"another build"),
         key(
-            &request.clone().with_mode(BuildMode::Release),
+            &request.clone().with_mode(BuildMode::RELEASE),
             &program,
             b"build",
         ),

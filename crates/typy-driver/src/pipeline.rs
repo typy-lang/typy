@@ -197,7 +197,7 @@ impl Pipeline {
         }
         let module = self.timed("lower", || lower(&program, &project))?;
         let target = request.target();
-        let optimization = request.mode().optimization();
+        let options = request.codegen_options();
         let failed = |diagnostics| with_project(diagnostics, &project);
         let emission = self.timed("generate", || -> Result<Emission, Failure> {
             Ok(match stage {
@@ -205,14 +205,14 @@ impl Pipeline {
                 EmitStage::TypedAst => Emission::Text(typy_check::dump(&program, &project)),
                 EmitStage::Tyir => Emission::Text(typy_tyir::print_without_counting(&module)),
                 EmitStage::TyirMem => Emission::Text(typy_tyir::print(&module)),
-                EmitStage::LlvmIr => Emission::Text(
-                    llvm_ir(&module, target, optimization, &project).map_err(failed)?,
-                ),
-                EmitStage::Asm => Emission::Text(
-                    assembly(&module, target, optimization, &project).map_err(failed)?,
-                ),
+                EmitStage::LlvmIr => {
+                    Emission::Text(llvm_ir(&module, target, &options, &project).map_err(failed)?)
+                }
+                EmitStage::Asm => {
+                    Emission::Text(assembly(&module, target, &options, &project).map_err(failed)?)
+                }
                 EmitStage::Obj => Emission::Bytes(
-                    object(&module, target, optimization, &project)
+                    object(&module, target, &options, &project)
                         .map_err(failed)?
                         .bytes,
                 ),
@@ -241,7 +241,7 @@ impl Pipeline {
                 object(
                     &module,
                     request.target(),
-                    request.mode().optimization(),
+                    &request.codegen_options(),
                     &project,
                 )
             })
@@ -427,7 +427,7 @@ fn linker(
 ) -> Linker {
     // A release build leaves out the debug information, which a debug build keeps for a
     // debugger (CLI-05).
-    let release = request.mode() != typy_build::BuildMode::Debug;
+    let release = !request.mode().is_debug();
     let settings = project.settings();
     let triple = request.target().triple;
     let paths: Vec<Utf8PathBuf> = settings

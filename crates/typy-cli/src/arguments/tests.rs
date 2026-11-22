@@ -12,7 +12,7 @@ fn parse(line: &[&str]) -> Result<Command, clap::Error> {
 
 #[test]
 fn build_takes_a_stage_an_output_and_a_mode() {
-    let (file, emit, output, mode) = match parse(&[
+    let (file, emit, output, generation) = match parse(&[
         "build",
         "app.py",
         "--emit=tyir",
@@ -24,9 +24,9 @@ fn build_takes_a_stage_an_output_and_a_mode() {
             file,
             emit,
             output,
-            mode,
+            generation,
             ..
-        }) => (file, emit, output, mode),
+        }) => (file, emit, output, generation),
         other => panic!("not a build: {other:?}"),
     };
     assert_eq!((file.as_str(), emit), ("app.py", Some(EmitStage::Tyir)));
@@ -34,19 +34,21 @@ fn build_takes_a_stage_an_output_and_a_mode() {
         output.as_deref().map(camino::Utf8Path::as_str),
         Some("out.txt")
     );
-    assert_eq!(mode.build_mode(), BuildMode::ReleaseSmall);
+    assert_eq!(generation.choice().unwrap().mode, BuildMode::RELEASE_SMALL);
 }
 
 #[test]
 fn run_passes_the_arguments_after_two_dashes() {
-    let (arguments, mode) = match parse(&["run", "app.py", "--release", "--", "-x", "two"]) {
+    let (arguments, generation) = match parse(&["run", "app.py", "--release", "--", "-x", "two"]) {
         Ok(Command::Run {
-            arguments, mode, ..
-        }) => (arguments, mode),
+            arguments,
+            generation,
+            ..
+        }) => (arguments, generation),
         other => panic!("not a run: {other:?}"),
     };
     assert_eq!(arguments, ["-x", "two"]);
-    assert_eq!(mode.build_mode(), BuildMode::Release);
+    assert_eq!(generation.choice().unwrap().mode, BuildMode::RELEASE);
 }
 
 #[test]
@@ -149,4 +151,70 @@ fn cli_25_print_takes_what_to_write_and_refuses_anything_else() {
         other => panic!("{other:?}"),
     }
     assert!(parse(&["print", "everything"]).is_err());
+}
+
+/// Returns what the code generation flags of a build choose.
+fn choice(flags: &[&str]) -> Result<crate::arguments::Choice, String> {
+    let line: Vec<&str> = ["build", "app.py"]
+        .into_iter()
+        .chain(flags.iter().copied())
+        .collect();
+    match parse(&line).unwrap() {
+        Command::Build { generation, .. } => generation.choice(),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn cli_20_each_level_is_a_mode_and_the_release_flags_are_two_of_them() {
+    use typy_codegen::Optimization;
+    for (flags, level) in [
+        (&[][..], Optimization::None),
+        (&["-O0"], Optimization::None),
+        (&["-O1"], Optimization::Basic),
+        (&["-O", "2"], Optimization::Speed),
+        (&["--release"], Optimization::Speed),
+        (&["-O3"], Optimization::Aggressive),
+        (&["-Os"], Optimization::Small),
+        (&["-Oz"], Optimization::Size),
+        (&["--release-small"], Optimization::Size),
+        (&["-C", "opt-level=3"], Optimization::Aggressive),
+        (&["-O2", "--release"][..], Optimization::Speed),
+    ] {
+        assert_eq!(
+            choice(flags).map(|choice| choice.mode),
+            Ok(BuildMode::of(level)),
+            "{flags:?}"
+        );
+    }
+    assert!(parse(&["build", "app.py", "-O4"]).is_err());
+    assert_eq!(
+        choice(&["-O2", "--release-small"]).unwrap_err(),
+        "--release-small and -O2 give two optimisation levels; give one"
+    );
+}
+
+#[test]
+fn cli_30_a_flag_and_its_key_are_one_setting_and_two_values_are_refused() {
+    assert_eq!(
+        choice(&["-O3", "-C", "opt-level=1"]).unwrap_err(),
+        "-O3 and -C opt-level=1 give two optimisation levels; give one"
+    );
+    assert_eq!(
+        choice(&["--target-cpu", "skylake", "-C", "target-cpu=znver4"]).unwrap_err(),
+        "--target-cpu skylake and -C target-cpu=znver4 give two processors; give one"
+    );
+    let same = choice(&["--target-cpu", "skylake", "-C", "target-cpu=skylake"]).unwrap();
+    assert_eq!(same.processor.as_deref(), Some("skylake"));
+    let features = choice(&["-C", "target-feature=+avx2", "-C", "target-feature=-sse4a"]).unwrap();
+    assert_eq!(features.features, "+avx2,-sse4a");
+    for wrong in [
+        "opt-level",
+        "opt-level=fast",
+        "target-cpu=",
+        "inline=yes",
+        "llvm-args=-x",
+    ] {
+        assert!(parse(&["build", "app.py", "-C", wrong]).is_err(), "{wrong}");
+    }
 }

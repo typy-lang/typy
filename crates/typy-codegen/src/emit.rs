@@ -18,6 +18,7 @@ use crate::function::{FunctionEmitter, Shared};
 use crate::heap::emit_heap_hooks;
 use crate::library::LibraryEmitter;
 use crate::optimization::Optimization;
+use crate::options::CodegenOptions;
 use crate::statics::Statics;
 use crate::target::Target;
 
@@ -32,6 +33,11 @@ pub(crate) enum Output {
 /// Returns the processor of the machine `typy` runs on, as LLVM names it, such as `skylake`.
 pub(crate) fn host_processor() -> String {
     TargetMachine::get_host_cpu_name().to_string()
+}
+
+/// Returns the features of the machine `typy` runs on, as LLVM writes them.
+pub(crate) fn host_features() -> String {
+    TargetMachine::get_host_cpu_features().to_string()
 }
 
 /// Writes LLVM's list of the processors and features of `triple` to standard error, as
@@ -57,10 +63,7 @@ pub(crate) fn write_processor_help(
         .ok_or_else(|| CodegenError(format!("LLVM cannot generate code for {triple}")))
 }
 
-fn target_machine(
-    target: Target,
-    optimization: Optimization,
-) -> Result<TargetMachine, CodegenError> {
+fn target_machine(target: Target, options: &CodegenOptions) -> Result<TargetMachine, CodegenError> {
     LlvmTarget::initialize_x86(&InitializationConfig::default());
     LlvmTarget::initialize_aarch64(&InitializationConfig::default());
     let triple = LlvmTriple::create(target.triple.llvm_triple());
@@ -69,9 +72,9 @@ fn target_machine(
     llvm_target
         .create_target_machine(
             &triple,
-            target.triple.cpu(),
-            "",
-            optimization.level(),
+            options.processor.as_deref().unwrap_or(target.triple.cpu()),
+            &options.features,
+            options.optimization.level(),
             RelocMode::PIC,
             CodeModel::Default,
         )
@@ -103,11 +106,12 @@ fn declare_globals<'ctx>(
 pub(crate) fn generate(
     module: &TyirModule,
     target: Target,
-    optimization: Optimization,
+    options: &CodegenOptions,
     lookup: &dyn SourceLookup,
     output: Output,
 ) -> Result<Vec<u8>, CodegenError> {
-    let machine = target_machine(target, optimization)?;
+    let optimization = options.optimization;
+    let machine = target_machine(target, options)?;
     let context = Context::create();
     let llvm_module = context.create_module("typy");
     llvm_module.set_triple(&machine.get_triple());
@@ -118,9 +122,7 @@ pub(crate) fn generate(
         .map(|function| function.may_raise || function.id == module.entry)
         .collect();
     let functions = declare_functions(&context, &llvm_module, module, &raising);
-    if optimization.minimise_size() {
-        mark_minimum_size(&context, &functions);
-    }
+    mark_size(&context, &functions, optimization);
     let globals = declare_globals(&context, &llvm_module, module);
     let mut statics = Statics::new(&context);
     let mut shared = Shared {
@@ -179,9 +181,18 @@ pub(crate) fn generate(
     }
 }
 
-/// Marks each function to be optimised for size, as `--release-small` asks.
-fn mark_minimum_size<'ctx>(context: &'ctx Context, functions: &[FunctionValue<'ctx>]) {
-    for name in ["minsize", "optsize"] {
+/// Marks each function `optsize` for `-Os`, and `minsize` too for `-Oz`.
+fn mark_size<'ctx>(
+    context: &'ctx Context,
+    functions: &[FunctionValue<'ctx>],
+    optimization: Optimization,
+) {
+    let names: &[&str] = match (optimization.minimise_size(), optimization.optimise_size()) {
+        (true, _) => &["minsize", "optsize"],
+        (false, true) => &["optsize"],
+        (false, false) => &[],
+    };
+    for name in names {
         let attribute = context.create_enum_attribute(Attribute::get_named_enum_kind_id(name), 0);
         for function in functions {
             function.add_attribute(AttributeLoc::Function, attribute);

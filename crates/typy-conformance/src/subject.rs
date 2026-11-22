@@ -62,7 +62,7 @@ pub(crate) fn judge_accepted(
     let Ok(directory_path) = Utf8PathBuf::from_path_buf(directory.path().to_owned()) else {
         return Verdict::Invalid("the temporary directory's path is not UTF-8".to_owned());
     };
-    for mode in [BuildMode::Debug, BuildMode::Release] {
+    for mode in [BuildMode::DEBUG, BuildMode::RELEASE] {
         let request = match BuildRequest::new(case.path.clone()) {
             Ok(request) => request
                 .with_mode(mode)

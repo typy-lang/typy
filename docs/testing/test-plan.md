@@ -296,8 +296,8 @@ that the specification does not define.
 | CLI-17 | 1.0 | IT | a `typy-driver` test that builds two programs that import `math`, in two projects, and finds that the second build compiles no module of the standard library |
 | CLI-18 | 1.0 | UT, E2E | a Windows CI job that runs every unit, integration and conformance test with `x86_64-pc-windows-msvc`, and a test of the arguments of the MSVC linker |
 | CLI-19 | 1.0 | E2E | the conformance programs that need no file or process, built for `wasm32-wasip2` and run under a WASI runtime, each with CPython's output |
-| CLI-20 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-20 |
-| CLI-21 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-21 |
+| CLI-20 | 0.12 | UT, E2E | `crates/typy-codegen/src/optimization/tests.rs`, `crates/typy-build/src/mode/tests.rs` and `crates/typy-cli/src/arguments/tests.rs` for each level; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-20 |
+| CLI-21 | 0.12 | UT, E2E | `crates/typy-cli/src/command/generation/tests.rs` for `native` and named processors; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-21 |
 | CLI-22 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-22 |
 | CLI-23 | 0.12 | UT, E2E | `crates/typy-build/src/toolchain/tests.rs` for the command as a shell reads it; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-23 |
 | CLI-24 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-24 |
@@ -306,7 +306,7 @@ that the specification does not define.
 | CLI-27 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-27 |
 | CLI-28 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-28 |
 | CLI-29 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-29 |
-| CLI-30 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-30 |
+| CLI-30 | 0.12 | UT, E2E | `crates/typy-cli/src/arguments/tests.rs` for each key and two values of one setting; `crates/typy-cli/src/tests.rs` for `-C help`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-30 |
 | CLI-31 | 0.13 | E2E | a `typy-cli` end-to-end test that builds the benchmark programs with and without it and compares their output with CPython's |
 | CLI-32 | 0.12 | UT, E2E | `crates/typy-cli/src/command/external/tests.rs`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-32 |
 | CLI-33 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-33 |

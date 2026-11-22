@@ -16,6 +16,9 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy build --target TRIPLE FILE` | Builds for another target the host builds for, with that target's C toolchain: on Linux `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-gnu`, and on macOS `aarch64-apple-darwin`; `typy check` takes `--target` too | CLI-08, CLI-14 |
 | `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
 | `--release`, `--release-small` | Optimise for speed or for size, without debug information; the default is a debug build, which keeps it | CLI-05 |
+| `-O0`, `-O1`, `-O2`, `-O3`, `-Os`, `-Oz` | The optimisation level of `build` and `run`; `--release` is `-O2` and `--release-small` is `-Oz`, and `-Os` and `-Oz` link the runtime built for size | CLI-20 |
+| `--target-cpu NAME` | Generates code for the processor NAME, or `native` for this machine; without it a build runs on every machine of its target | CLI-21 |
+| `-C KEY=VALUE` | A code generation option: `opt-level`, `target-cpu` or `target-feature`; `typy -C help` lists them | CLI-30 |
 | `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
 | `--error-format=json` | Writes diagnostics as one JSON object per line | DIA-05 |
 | `--python-floor VERSION` | Sets the Python floor for this command, over `typy.toml` | CLI-07, CLI-12 |
@@ -52,6 +55,32 @@ for debug and `--release` builds and for `--release-small`, and its cache.
 main file, `typy.toml` and the command line together, and refuses a
 `typy.toml` that `typy check` refuses. `version` names the versions of
 `typy`, its runtime and LLVM, and the Python floors.
+
+## Optimising for a level and a processor
+
+A build optimises at the level `-O` gives, from `-O0`, the debug build's,
+to `-O3`, or for small code with `-Os` and the smallest with `-Oz`:
+
+```sh
+typy build app.py -O3
+typy build app.py -Oz
+typy build app.py -O3 --target-cpu native
+typy build app.py -O2 -C target-feature=+avx2
+```
+
+Without `--target-cpu`, a build targets the baseline processor of its
+target, so it runs on every machine of that target and two builds of one
+program are the same bytes. `--target-cpu native` builds for the processor
+of the machine you build on and its features, which may not run on another
+machine; it is refused when you build for another target.
+`--target-cpu NAME` names one of the processors `typy print target-cpus`
+lists, and any other name is refused. `-C target-feature` turns features on
+with `+` or off with `-` beside the processor's own.
+
+A flag and its `-C` key are one setting: `-O3` and `-C opt-level=3` say the
+same, and `-O3` with `-C opt-level=1` is refused, as are two different
+processors. `typy run` keeps one build in its cache for each level,
+processor and set of features.
 
 ## Seeing what a build does
 

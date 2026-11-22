@@ -90,12 +90,6 @@ fn targets(host: TargetTriple) -> String {
 /// Returns the processors of `triple`: its baseline, which builds use by default, `native`
 /// when this host runs the target, and every processor LLVM knows for it.
 fn processors(triple: TargetTriple, host: TargetTriple) -> Result<String, String> {
-    let compiler = super::compiler()?;
-    let output = std::process::Command::new(compiler.as_std_path())
-        .args(["llvm-processor-help", "--target", triple.as_str()])
-        .output()
-        .map_err(|error| format!("cannot run {compiler}: {error}"))?;
-    let listed = String::from_utf8_lossy(&output.stderr);
     let mut text = format!("{} (baseline, the default)\n", triple.cpu());
     if triple == host {
         let _ = writeln!(
@@ -104,10 +98,25 @@ fn processors(triple: TargetTriple, host: TargetTriple) -> Result<String, String
             typy_codegen::host_processor()
         );
     }
-    for name in processor_names(&listed) {
+    for name in known_processors(triple)? {
         let _ = writeln!(text, "{name}");
     }
     Ok(text)
+}
+
+/// Returns the processors LLVM knows for `triple`, which it lists only on standard error, so
+/// a child `typy` lists them and this one reads them.
+pub(super) fn known_processors(triple: TargetTriple) -> Result<Vec<String>, String> {
+    let compiler = super::compiler()?;
+    let output = std::process::Command::new(compiler.as_std_path())
+        .args(["llvm-processor-help", "--target", triple.as_str()])
+        .output()
+        .map_err(|error| format!("cannot run {compiler}: {error}"))?;
+    let listed = String::from_utf8_lossy(&output.stderr);
+    Ok(processor_names(&listed)
+        .into_iter()
+        .map(str::to_owned)
+        .collect())
 }
 
 /// Returns the processor names of LLVM's help text: the first word of each line between
@@ -124,8 +133,8 @@ fn processor_names(listed: &str) -> Vec<&str> {
 
 /// Returns the compiler's path, the runtime archives it links for `triple` and its cache.
 fn paths(compiler: &Utf8Path, triple: TargetTriple) -> String {
-    let speed = RuntimeArchive::path_beside(compiler, triple, BuildMode::Release);
-    let size = RuntimeArchive::path_beside(compiler, triple, BuildMode::ReleaseSmall);
+    let speed = RuntimeArchive::path_beside(compiler, triple, BuildMode::RELEASE);
+    let size = RuntimeArchive::path_beside(compiler, triple, BuildMode::RELEASE_SMALL);
     format!(
         "compiler = {}\nruntime = {}\nruntime-small = {}\ncache = {}\n",
         toml_string(compiler.as_str()),

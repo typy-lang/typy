@@ -8,7 +8,7 @@ use typy_codegen::{Target, TargetTriple};
 fn a_new_request_is_a_debug_build_of_an_executable_for_the_host() {
     let request = BuildRequest::new("src/app.py").unwrap();
     assert_eq!(request.main(), "src/app.py");
-    assert_eq!(request.mode(), BuildMode::Debug);
+    assert_eq!(request.mode(), BuildMode::DEBUG);
     assert_eq!(request.target(), Target::host());
     assert_eq!((request.emit(), request.output()), (None, None));
     assert_eq!(request.output_path(), "src/app");
@@ -21,11 +21,11 @@ fn every_setting_can_be_changed() {
     };
     let request = BuildRequest::new("app.py")
         .unwrap()
-        .with_mode(BuildMode::ReleaseSmall)
+        .with_mode(BuildMode::RELEASE_SMALL)
         .with_target(musl)
         .with_emit(EmitStage::Tyir)
         .with_output("out/app");
-    assert_eq!(request.mode(), BuildMode::ReleaseSmall);
+    assert_eq!(request.mode(), BuildMode::RELEASE_SMALL);
     assert_eq!(request.target(), musl);
     assert_eq!(request.emit(), Some(EmitStage::Tyir));
     assert_eq!(request.output_path(), "out/app");

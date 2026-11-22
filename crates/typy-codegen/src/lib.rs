@@ -27,6 +27,7 @@ mod object;
 mod operation;
 mod optimization;
 mod optional;
+mod options;
 mod runtime;
 mod small_int;
 mod statics;
@@ -46,6 +47,7 @@ pub use layout::{
 };
 pub use object::ObjectFile;
 pub use optimization::Optimization;
+pub use options::CodegenOptions;
 pub use target::{Target, TargetTriple};
 
 use emit::{Output, generate};
@@ -66,10 +68,10 @@ fn internal(error: &CodegenError) -> Diagnostics {
 pub fn object(
     module: &TyirModule,
     target: Target,
-    optimization: Optimization,
+    options: &CodegenOptions,
     lookup: &dyn SourceLookup,
 ) -> Result<ObjectFile, Diagnostics> {
-    let bytes = generate(module, target, optimization, lookup, Output::Object)
+    let bytes = generate(module, target, options, lookup, Output::Object)
         .map_err(|error| internal(&error))?;
     Ok(ObjectFile { target, bytes })
 }
@@ -78,10 +80,10 @@ pub fn object(
 pub fn llvm_ir(
     module: &TyirModule,
     target: Target,
-    optimization: Optimization,
+    options: &CodegenOptions,
     lookup: &dyn SourceLookup,
 ) -> Result<String, Diagnostics> {
-    let bytes = generate(module, target, optimization, lookup, Output::LlvmIr)
+    let bytes = generate(module, target, options, lookup, Output::LlvmIr)
         .map_err(|error| internal(&error))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
@@ -90,10 +92,10 @@ pub fn llvm_ir(
 pub fn assembly(
     module: &TyirModule,
     target: Target,
-    optimization: Optimization,
+    options: &CodegenOptions,
     lookup: &dyn SourceLookup,
 ) -> Result<String, Diagnostics> {
-    let bytes = generate(module, target, optimization, lookup, Output::Assembly)
+    let bytes = generate(module, target, options, lookup, Output::Assembly)
         .map_err(|error| internal(&error))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
@@ -103,6 +105,13 @@ pub fn assembly(
 #[must_use]
 pub fn host_processor() -> String {
     emit::host_processor()
+}
+
+/// Returns the features of the machine `typy` runs on, as LLVM writes them, such as
+/// `+sse2,+avx2,-avx512f`, which `--target-cpu native` builds with (CLI-21).
+#[must_use]
+pub fn host_features() -> String {
+    emit::host_features()
 }
 
 /// Writes LLVM's list of the processors and features of `triple` to standard error, as

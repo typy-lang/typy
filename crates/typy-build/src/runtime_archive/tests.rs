@@ -31,7 +31,7 @@ fn the_archive_beside_the_compiler_is_found() {
     let found = RuntimeArchive::beside(
         &root.join("bin/typy"),
         TargetTriple::X86_64LinuxGnu,
-        BuildMode::Release,
+        BuildMode::RELEASE,
     )
     .unwrap();
     assert_eq!(found.path(), archive);
@@ -50,7 +50,7 @@ fn a_build_for_size_finds_the_archive_optimised_for_size() {
     let found = RuntimeArchive::beside(
         &root.join("bin/typy"),
         TargetTriple::X86_64LinuxGnu,
-        BuildMode::ReleaseSmall,
+        BuildMode::RELEASE_SMALL,
     )
     .unwrap();
     assert_eq!(found.path(), small);
@@ -58,7 +58,7 @@ fn a_build_for_size_finds_the_archive_optimised_for_size() {
         RuntimeArchive::beside(
             &root.join("bin/typy"),
             TargetTriple::X86_64LinuxGnu,
-            BuildMode::Debug
+            BuildMode::DEBUG
         )
         .is_err()
     );
@@ -82,7 +82,7 @@ fn a_missing_or_foreign_archive_is_refused() {
     let missing = RuntimeArchive::beside(
         &root.join("typy"),
         TargetTriple::X86_64LinuxMusl,
-        BuildMode::Debug,
+        BuildMode::DEBUG,
     );
     assert!(message(missing).contains("x86_64-unknown-linux-musl"));
 }

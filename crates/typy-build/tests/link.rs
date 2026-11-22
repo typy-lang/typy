@@ -31,7 +31,8 @@ fn run(source: &str, mode: BuildMode) -> (i32, String, String) {
         .expect("the program parses");
     let program = TypeChecker::check(&project).expect("the program checks");
     let module = typy_lower::lower(&program).expect("the program lowers");
-    let object = object(&module, Target::host(), mode.optimization(), &project).unwrap();
+    let options = typy_codegen::CodegenOptions::new(mode.optimization());
+    let object = object(&module, Target::host(), &options, &project).unwrap();
     let linker = Linker::new(Target::host().triple, archive());
     let artifact = linker
         .link(&object, &root.join("app"))
@@ -52,9 +53,9 @@ fn run(source: &str, mode: BuildMode) -> (i32, String, String) {
 #[test]
 fn print_of_an_addition_runs_in_every_mode() {
     for mode in [
-        BuildMode::Debug,
-        BuildMode::Release,
-        BuildMode::ReleaseSmall,
+        BuildMode::DEBUG,
+        BuildMode::RELEASE,
+        BuildMode::RELEASE_SMALL,
     ] {
         assert_eq!(
             run("print(1 + 2)\n", mode),
@@ -174,7 +175,7 @@ const PROGRAMS: &[(&str, &str, i32, &str)] = &[
 #[test]
 fn programs_print_what_cpython_prints() {
     for (source, stdout, status, last_error_line) in PROGRAMS {
-        let (code, out, error) = run(source, BuildMode::Debug);
+        let (code, out, error) = run(source, BuildMode::DEBUG);
         assert_eq!((code, out.as_str()), (*status, *stdout), "{source}");
         assert_eq!(
             error.lines().last().unwrap_or(""),
@@ -187,7 +188,7 @@ fn programs_print_what_cpython_prints() {
 #[test]
 fn an_uncaught_exception_prints_a_traceback_with_every_frame() {
     let source = "def f(n: int) -> int:\n    return 10 // n\ndef g(n: int) -> int:\n    return f(n) + 1\nprint(g(0))\n";
-    let (code, out, error) = run(source, BuildMode::Release);
+    let (code, out, error) = run(source, BuildMode::RELEASE);
     assert_eq!((code, out.as_str()), (1, ""));
     assert_eq!(
         error,

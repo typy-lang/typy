@@ -284,3 +284,127 @@ fn cli_24_save_temps_keeps_the_object_file_beside_the_executable() {
     };
     assert!(object.starts_with(magic));
 }
+
+/// A program whose float arithmetic shows the processor's instruction encoding.
+const FLOATS: &str = "def scale(values: list[float], factor: float) -> float:\n    total = 0.0\n    \
+                      for value in values:\n        total += value * factor + 1.0\n    return total\n\n\n\
+                      print(scale([1.5, 2.5, 3.5], 2.0))\n";
+
+#[test]
+fn cli_20_every_level_builds_a_program_that_runs_and_marks_its_size() {
+    let project = Project::new();
+    for level in ["-O0", "-O1", "-O2", "-O3", "-Os", "-Oz"] {
+        let output = project.typy(&["run", level, "app.py"], None);
+        assert_eq!(
+            (status(&output), stdout(&output).as_str()),
+            (0, "hello\n"),
+            "{level}: {}",
+            stderr(&output)
+        );
+    }
+    let small = stdout(&project.typy(&["build", "app.py", "-Os", "--emit", "llvm-ir"], None));
+    assert!(
+        small.contains("optsize") && !small.contains("minsize"),
+        "-Os"
+    );
+    let smallest = stdout(&project.typy(&["build", "app.py", "-Oz", "--emit", "llvm-ir"], None));
+    assert!(smallest.contains("minsize"), "-Oz");
+    let wrong = project.typy(&["build", "app.py", "-O3", "--release-small"], None);
+    assert_eq!(
+        (status(&wrong), stderr(&wrong)),
+        (
+            2,
+            "error: --release-small and -O3 give two optimisation levels; give one\n".to_owned()
+        )
+    );
+}
+
+#[test]
+fn cli_21_a_processor_is_checked_and_native_is_only_for_the_host() {
+    let project = Project::new();
+    std::fs::write(project.root.join("app.py"), FLOATS).unwrap();
+    let native = project.typy(&["run", "-O3", "--target-cpu", "native", "app.py"], None);
+    assert_eq!(stdout(&native), "18.0\n", "{}", stderr(&native));
+    let unknown = project.typy(&["build", "app.py", "--target-cpu", "nosuch"], None);
+    assert_eq!(status(&unknown), 2);
+    assert!(
+        stderr(&unknown).starts_with("error: `nosuch` is not a processor of "),
+        "{}",
+        stderr(&unknown)
+    );
+    let host = stdout(&project.typy(&["print", "host"], None));
+    let other = if host.starts_with("x86_64") {
+        "aarch64-unknown-linux-gnu"
+    } else {
+        "x86_64-unknown-linux-gnu"
+    };
+    let elsewhere = project.typy(
+        &[
+            "build",
+            "app.py",
+            "--target-cpu",
+            "native",
+            "--target",
+            other,
+        ],
+        None,
+    );
+    assert_eq!(status(&elsewhere), 2, "{}", stderr(&elsewhere));
+    assert!(
+        stderr(&elsewhere).contains("`native` is the processor of this machine"),
+        "{}",
+        stderr(&elsewhere)
+    );
+}
+
+#[cfg(target_arch = "x86_64")]
+#[test]
+fn cli_21_a_processor_with_avx_encodes_float_arithmetic_with_vex() {
+    let project = Project::new();
+    std::fs::write(project.root.join("app.py"), FLOATS).unwrap();
+    let assembly = |flags: &[&str]| {
+        let mut line = vec!["build", "app.py", "-O2", "--emit", "asm"];
+        line.extend_from_slice(flags);
+        stdout(&project.typy(&line, None))
+    };
+    assert!(!assembly(&[]).contains("vaddsd"));
+    assert!(assembly(&["--target-cpu", "haswell"]).contains("vaddsd"));
+    assert!(assembly(&["-C", "target-feature=+avx"]).contains("vaddsd"));
+}
+
+#[test]
+fn cli_30_codegen_help_lists_the_keys_and_needs_no_file() {
+    let project = Project::new();
+    let output = project.typy(&["-C", "help"], None);
+    assert_eq!(status(&output), 0);
+    let text = stdout(&output);
+    for key in ["opt-level=LEVEL", "target-cpu=NAME", "target-feature=LIST"] {
+        assert!(text.contains(&format!("-C {key}")), "{text}");
+    }
+    let built = project.typy(&["run", "-C", "opt-level=3", "app.py"], None);
+    assert_eq!(stdout(&built), "hello\n", "{}", stderr(&built));
+    let unknown = project.typy(&["build", "app.py", "-C", "llvm-args=-x"], None);
+    assert_eq!(status(&unknown), 2);
+}
+
+#[test]
+fn cli_33_each_level_and_processor_is_a_build_of_its_own_in_the_cache() {
+    let project = Project::new();
+    let cache = project.root.join("home").join("cache");
+    let builds = || std::fs::read_dir(&cache).map_or(0, Iterator::count);
+    for (flags, expected) in [
+        (&[][..], 1),
+        (&[][..], 1),
+        (&["-O3"][..], 2),
+        (&["-O3", "--target-cpu", "native"][..], 3),
+        (&["-O3", "-C", "target-feature=-avx"][..], 4),
+        (&["-O3"][..], 4),
+    ] {
+        let mut line = vec!["run"];
+        line.extend_from_slice(flags);
+        line.push("app.py");
+        let output = project.typy(&line, None);
+        assert_eq!(stdout(&output), "hello\n", "{flags:?}: {}", stderr(&output));
+        assert_eq!(builds(), expected, "{flags:?}");
+    }
+}

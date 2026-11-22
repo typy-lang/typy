@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.124 |
+| Version | 1.125 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -169,7 +169,7 @@ or later.
 | CLI-27 | `-W CODE`, `-A CODE` and `-D CODE` shall make the warning CODE a warning, allowed or an error, `-D warnings` standing for `--deny-warnings`, and the last of them for a code shall decide. | S | 0.12 |
 | CLI-28 | `typy run -c CODE` shall build and run CODE as the main module, and `typy run -m MODULE` the module MODULE of the project, as CPython's `-c` and `-m` run them. | S | 0.12 |
 | CLI-29 | `--emit` shall take several stages separated by commas, each written beside the output, and the stages `llvm-ir-unoptimised`, the IR before the optimisation pipeline, and `llvm-bc`. | S | 0.12 |
-| CLI-30 | `-C KEY=VALUE` shall set a code generation option, `-C help` shall list them, and `opt-level`, `target-cpu` and `llvm-args`, passed to LLVM, shall be among them; a flag and its key shall be one setting. | S | 0.12 |
+| CLI-30 | `-C KEY=VALUE` shall set a code generation option, `-C help` shall list them, and `opt-level`, `target-cpu` and `target-feature` shall be among them; a flag and its key shall be one setting, and two values for it shall be wrong usage (ADR-0106). | S | 0.12 |
 | CLI-31 | `-C inline-runtime=yes` shall link the runtime into the program as LLVM bitcode, so the optimiser inlines it, and shall be off by default (ADR-0104). | C | 0.13 |
 | CLI-32 | `typy NAME ARGS`, for a NAME that is not a command of `typy`, shall run the program `typy-NAME` found on `PATH` with ARGS, `TYPY` set to the path of the running `typy`, and report an unknown command with exit status 2 when there is none (ADR-0105). | S | 0.12 |
 | CLI-33 | Every option that changes a build's output shall be part of the key of `typy run`'s cache. | M | 0.12 |

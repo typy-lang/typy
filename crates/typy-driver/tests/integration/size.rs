@@ -23,7 +23,7 @@ fn a_static_musl_hello_world_is_smaller_than_100_kb() {
     );
     let request = BuildRequest::new(root.join("hello.py"))
         .unwrap()
-        .with_mode(BuildMode::ReleaseSmall)
+        .with_mode(BuildMode::RELEASE_SMALL)
         .with_target(Target {
             triple: TargetTriple::X86_64LinuxMusl,
         });

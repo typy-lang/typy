@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.107 |
+| Version | 2.108 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -3236,15 +3236,24 @@ refuses any other. `is_macos` chooses the Mach-O steps of linking.
 `Target` holds a triple, and `Target::host()` returns the triple `typy` was
 built for.
 
-`Optimization` is `None`, `Speed` or `Size`, for the three build modes.
-LLVM 23 has no `Oz` pipeline, so `Size` runs the `O2` pipeline with every
-function marked `minsize` and `optsize`.
+`Optimization` is `None`, `Basic`, `Speed`, `Aggressive`, `Small` or
+`Size`, the levels `-O0`, `-O1`, `-O2`, `-O3`, `-Os` and `-Oz` (CLI-20);
+`Optimization::parse` reads the letter after `-O`. Each runs LLVM's pipeline
+of its level; LLVM 23 has no `Os` or `Oz` pipeline, so `Small` runs `O2`
+with every function marked `optsize`, and `Size` with every function marked
+`minsize` and `optsize`. `CodegenOptions` holds the level, the processor,
+`None` for the triple's baseline `TargetTriple::cpu`, and the features
+beside it, as LLVM writes them; the target machine of each build takes the
+processor and the features, and nothing reaches LLVM's global command line
+(ADR-0106). `host_processor` and `host_features` give this machine's, for
+`--target-cpu native` (CLI-21), and `write_processor_help` makes LLVM list
+a triple's processors on standard error.
 
 | Function | Returns |
 | --- | --- |
-| `object(module, target, optimization, lookup)` | The `ObjectFile`: its target and its bytes |
-| `llvm_ir(module, target, optimization, lookup)` | The optimised LLVM IR as text, for `--emit=llvm-ir` |
-| `assembly(module, target, optimization, lookup)` | Assembly text, for `--emit=asm` |
+| `object(module, target, options, lookup)` | The `ObjectFile`: its target and its bytes |
+| `llvm_ir(module, target, options, lookup)` | The optimised LLVM IR as text, for `--emit=llvm-ir` |
+| `assembly(module, target, options, lookup)` | Assembly text, for `--emit=asm` |
 
 Each declares every function first, emits each one, verifies the LLVM
 module, runs the pipeline and writes the output. A tuple is an LLVM struct
@@ -3451,8 +3460,12 @@ escapes `"`, the backslash and control characters.
 
 ## 11. typy-build
 
-`BuildMode` is `Debug`, `Release` or `ReleaseSmall`, and
-`BuildMode::optimization()` gives the codegen `Optimization` of CLI-05.
+`BuildMode` holds an `Optimization`: `BuildMode::DEBUG`, `RELEASE` and
+`RELEASE_SMALL` are `-O0`, `-O2` and `-Oz`, the modes of CLI-05, and
+`BuildMode::of` makes the others (CLI-20). `is_debug` holds for `-O0`, which
+keeps debug information, `runtime_directory` names `typy-small` for `-Os`
+and `-Oz`, and `name` gives `debug`, `release`, `release-small`, `O1`, `O3`
+or `Os` for the cache key.
 `EmitStage` is `Ast`, `TypedAst`, `Tyir`, `TyirMem`, `LlvmIr`, `Asm` or
 `Obj`; `EmitStage::parse` accepts the lower-case names of CLI-04.
 
@@ -3461,13 +3474,17 @@ escapes `"`, the backslash and control characters.
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `main` | `Utf8PathBuf` | none | Ends in `.py`, or `BuildRequest::new` returns `RequestError::NotPython`; that the file exists is checked when it is loaded (E0105) |
-| `mode` | `BuildMode` | `Debug` | `--release` and `--release-small` are exclusive |
+| `mode` | `BuildMode` | `DEBUG` | Two flags that give two levels are wrong usage (CLI-30) |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
 | `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
 | `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it; a library's files are named by `LibraryLayout` |
 | `library` | `Option<LibraryKind>` | `None` | `Static` or `Shared` builds a C library instead of an executable (CLI-09) |
+| `processor` | `Option<String>` | `None` | A processor of the target, checked by the command line; `None` for the baseline (CLI-21) |
+| `features` | `String` | empty | Features beside the processor's, as LLVM writes them (CLI-30) |
 
-Each field has a `with_` method that returns the changed request.
+Each field has a `with_` method that returns the changed request;
+`with_processor` sets the processor and the features together, and
+`codegen_options` gives the `CodegenOptions` of the request.
 
 `RuntimeArchive::beside(executable, triple, mode)` opens
 `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for a compiler at
@@ -3605,6 +3622,7 @@ copies nothing.
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
 | Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
 | `typy print WHAT` | `command::print` writes one fact a line, in `typy.toml`'s form (CLI-25): `targets` from `TargetTriple::ALL` with `builds_on` the host; `target-cpus` the triple's baseline `TargetTriple::cpu`, `native` with `typy_codegen::host_processor` for the host, and the processors LLVM lists, which it writes only to standard error, so `print` runs its own `typy` with the hidden command `llvm-processor-help` and reads them from the child; `paths` from `RuntimeArchive::path_beside` and the cache directory; `settings` from `ProjectSettings::read` with the command line's overrides, refused as `typy check` refuses them; and `version` |
+| Code generation flags | `arguments::Generation` holds `--release`, `--release-small`, `-O LEVEL`, `--target-cpu` and each `-C KEY=VALUE` of `build` and `run`; `Generation::choice` gives one level and one processor, and two flags that give two values are wrong usage, while two that give one agree (CLI-20, CLI-30, ADR-0104). `command::generation::resolve` turns `native` into `host_processor` and `host_features`, only when the build is for the host, and checks any other name against `print::known_processors` (CLI-21). `main` answers `-C help` in any of its spellings before the command is parsed, from `CODEGEN_KEYS`, so it needs no file. The `run` cache key adds the processor and the features to the mode's name (CLI-33) |
 | Inspection | `-v` and `--timings` are global options, and `--save-temps` an option of `build` and `run` (ADR-0104). `Pipeline::with_verbose` passes `-v` to `Linker::with_verbose` and `Toolchain::with_verbose`, whose `run` writes `typy_build::command_line` of each tool before running it; `typy run -v` writes the program's command too (CLI-23). `Pipeline::timed` records each stage it runs, `load`, `check`, `lower`, `generate` and `link`, behind a `Mutex` of the pipeline, which the conformance suite shares between threads; `command::write_timings` writes them and their total after the command, also when it fails (CLI-22). `Pipeline::with_save_temps` writes the object a build generated beside its output, named after the output up to its first dot, E0106 when it cannot (CLI-24) |
 | External commands | clap's external subcommand gives `typy NAME ARGS` for any NAME that is not a command; `command::external` accepts a NAME of letters, digits, `-` and `_` only, so it never names a path, finds the first executable `typy-NAME` in `PATH`, and runs it with ARGS, `TYPY` set to `typy`'s own path, its streams and status passed through as `typy run` passes a program's; otherwise exit status 2 (CLI-32, ADR-0105) |
 | `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |

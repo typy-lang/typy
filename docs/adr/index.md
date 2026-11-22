@@ -111,3 +111,4 @@ supersedes it.
 | [ADR-0103](0103-compute-large-ints-up-to-1024-bits-in-fixed-width-storage.md) | Compute large ints up to 1024 bits in fixed-width storage | Accepted | 2026-11-22 |
 | [ADR-0104](0104-spell-common-options-as-flags-and-the-rest-as-c-key-value.md) | Spell common options as flags and the rest as `-C KEY=VALUE` | Accepted | 2026-11-23 |
 | [ADR-0105](0105-extend-typy-through-external-typy-name-commands.md) | Extend `typy` through external `typy-NAME` commands | Accepted | 2026-11-23 |
+| [ADR-0106](0106-pass-nothing-to-llvms-global-command-line.md) | Pass nothing to LLVM's global command line | Accepted | 2026-11-23 |

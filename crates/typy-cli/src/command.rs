@@ -4,6 +4,7 @@ mod build;
 mod check;
 mod explain;
 mod external;
+mod generation;
 mod print;
 mod run;
 
@@ -67,19 +68,24 @@ fn dispatch(
             file,
             emit,
             output,
-            mode,
+            generation,
             temps,
             settings,
             library,
             target,
         } => {
+            let triple = target.triple.unwrap_or(typy_codegen::Target::host().triple);
+            let generation = match resolve(&generation, triple) {
+                Ok(resolved) => resolved,
+                Err(status) => return (status, pipeline),
+            };
             let pipeline = pipeline
                 .with_overrides(settings.overrides_for(library))
                 .with_save_temps(temps.save_temps);
             let flags = build::Flags {
                 emit,
                 output,
-                mode: mode.build_mode(),
+                generation,
                 library: library.kind,
                 target: target.triple,
             };
@@ -87,18 +93,22 @@ fn dispatch(
         }
         Command::Run {
             file,
-            mode,
+            generation,
             temps,
             settings,
             arguments,
         } => {
+            let generation = match resolve(&generation, typy_codegen::Target::host().triple) {
+                Ok(resolved) => resolved,
+                Err(status) => return (status, pipeline),
+            };
             let pipeline = pipeline
                 .with_overrides(settings.overrides())
                 .with_save_temps(temps.save_temps);
             let status = run::run(
                 &pipeline,
                 file,
-                mode.build_mode(),
+                &generation,
                 settings.overrides(),
                 deny_warnings,
                 &arguments,
@@ -126,6 +136,21 @@ fn dispatch(
             unreachable!("taken before the pipeline is made")
         }
     }
+}
+
+/// Returns how a build for `triple` generates code, or wrong usage, said on standard error,
+/// when the flags conflict or name a processor the target does not have.
+fn resolve(
+    flags: &crate::arguments::Generation,
+    triple: typy_codegen::TargetTriple,
+) -> Result<generation::Generation, ExitStatus> {
+    flags
+        .choice()
+        .and_then(|choice| generation::resolve(choice, triple))
+        .map_err(|message| {
+            eprintln!("error: {message}");
+            ExitStatus::Usage
+        })
 }
 
 /// Writes how long each stage took, then the total, to standard error (CLI-22).

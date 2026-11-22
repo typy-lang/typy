@@ -3,7 +3,7 @@
 use std::process::Command;
 
 use camino::Utf8PathBuf;
-use typy_build::{BuildMode, BuildRequest};
+use typy_build::BuildRequest;
 use typy_driver::Pipeline;
 
 use crate::cache;
@@ -15,14 +15,16 @@ use crate::output::Reporter;
 pub(super) fn run(
     pipeline: &Pipeline,
     file: Utf8PathBuf,
-    mode: BuildMode,
+    generation: &super::generation::Generation,
     overrides: typy_source::SettingOverrides,
     deny_warnings: bool,
     arguments: &[String],
     reporter: Reporter,
 ) -> ExitStatus {
     let request = match BuildRequest::new(file) {
-        Ok(request) => request.with_mode(mode),
+        Ok(request) => request
+            .with_mode(generation.mode)
+            .with_processor(generation.processor.clone(), generation.features.clone()),
         Err(error) => return super::usage(&error),
     };
     let Some(files) = pipeline.sources(request.main()) else {

@@ -32,7 +32,7 @@ pub(crate) fn directory() -> Utf8PathBuf {
 
 /// Returns the SHA-256, in hexadecimal, of everything a build's output depends on: the compiler
 /// version and `compiler`, which tells one build of it from another, the mode, the target, the
-/// main file's name, the settings flags and `--deny-warnings`, and the path and text of every file of the program,
+/// processor and its features, the main file's name, the settings flags and `--deny-warnings`, and the path and text of every file of the program,
 /// `typy.toml` included (ADR-0015). Each part is preceded by its length, so no two different
 /// inputs run together into the same bytes.
 pub(crate) fn key(
@@ -44,11 +44,16 @@ pub(crate) fn key(
 ) -> String {
     let name = request.main().file_name().unwrap_or("");
     let floor = overrides.python_floor.map_or("", PythonFloor::as_str);
+    // The processor and its features change the code, so they are part of the key (CLI-33).
+    let options = request.codegen_options();
+    let processor = options.processor.as_deref().unwrap_or("");
     let mut parts: Vec<&[u8]> = vec![
         env!("CARGO_PKG_VERSION").as_bytes(),
         compiler,
         request.mode().name().as_bytes(),
         request.target().triple.as_str().as_bytes(),
+        processor.as_bytes(),
+        options.features.as_bytes(),
         name.as_bytes(),
         floor.as_bytes(),
         if deny_warnings { b"deny" } else { b"" },

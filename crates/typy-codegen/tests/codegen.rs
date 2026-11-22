@@ -2,7 +2,7 @@
 
 use camino::Utf8PathBuf;
 use typy_check::TypeChecker;
-use typy_codegen::{Optimization, Target, TargetTriple, assembly, llvm_ir, object};
+use typy_codegen::{CodegenOptions, Optimization, Target, TargetTriple, assembly, llvm_ir, object};
 use typy_source::{Project, ProjectSettings};
 use typy_tyir::TyirModule;
 
@@ -68,8 +68,9 @@ const PROGRAMS: &[&str] = &[
 fn every_program_generates_valid_llvm_ir_at_every_level() {
     for source in PROGRAMS {
         let (project, module) = compile(source);
-        for optimization in [Optimization::None, Optimization::Speed, Optimization::Size] {
-            let ir = llvm_ir(&module, Target::host(), optimization, &project)
+        for optimization in Optimization::ALL {
+            let options = CodegenOptions::new(optimization);
+            let ir = llvm_ir(&module, Target::host(), &options, &project)
                 .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}\n{source}"));
             assert!(
                 ir.contains("define ") && ir.contains("@__typy_main"),
@@ -82,8 +83,20 @@ fn every_program_generates_valid_llvm_ir_at_every_level() {
 #[test]
 fn object_files_have_the_hosts_format_and_are_deterministic() {
     let (project, module) = compile(PROGRAMS[1]);
-    let first = object(&module, Target::host(), Optimization::Speed, &project).unwrap();
-    let second = object(&module, Target::host(), Optimization::Speed, &project).unwrap();
+    let first = object(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::Speed),
+        &project,
+    )
+    .unwrap();
+    let second = object(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::Speed),
+        &project,
+    )
+    .unwrap();
     let magic: &[u8] = if cfg!(target_os = "macos") {
         b"\xcf\xfa\xed\xfe"
     } else {
@@ -101,9 +114,20 @@ fn every_program_is_a_deterministic_mach_o_object_for_macos() {
     };
     for source in PROGRAMS {
         let (project, module) = compile(source);
-        let first = object(&module, target, Optimization::Speed, &project)
-            .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}\n{source}"));
-        let second = object(&module, target, Optimization::Speed, &project).unwrap();
+        let first = object(
+            &module,
+            target,
+            &CodegenOptions::new(Optimization::Speed),
+            &project,
+        )
+        .unwrap_or_else(|diagnostics| panic!("{diagnostics:?}\n{source}"));
+        let second = object(
+            &module,
+            target,
+            &CodegenOptions::new(Optimization::Speed),
+            &project,
+        )
+        .unwrap();
         // `MH_MAGIC_64`, then `CPU_TYPE_ARM64`, both little-endian.
         assert_eq!(
             &first.bytes[..8],
@@ -113,7 +137,13 @@ fn every_program_is_a_deterministic_mach_o_object_for_macos() {
         assert_eq!(first, second, "{source}");
     }
     let (project, module) = compile(PROGRAMS[1]);
-    let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        target,
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     assert!(
         ir.contains("target triple = \"arm64-apple-macosx11.0.0\""),
         "{ir}"
@@ -154,7 +184,13 @@ fn ffi_13_an_integer_on_apples_stack_takes_its_c_width_and_words_go_in_registers
         (TargetTriple::Aarch64LinuxGnu, ["i64"; 5]),
         (TargetTriple::X86_64LinuxGnu, ["i64"; 5]),
     ] {
-        let ir = llvm_ir(&module, Target { triple }, Optimization::None, &project).unwrap();
+        let ir = llvm_ir(
+            &module,
+            Target { triple },
+            &CodegenOptions::new(Optimization::None),
+            &project,
+        )
+        .unwrap();
         let mut expected = words.to_vec();
         expected.push("double".to_owned());
         expected.extend(stack.map(str::to_owned));
@@ -188,7 +224,13 @@ fn mem_11_an_instance_stores_its_attributes_by_alignment_and_its_descriptor_keep
             triple: TargetTriple::Aarch64AppleDarwin,
         },
     ] {
-        let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+        let ir = llvm_ir(
+            &module,
+            target,
+            &CodegenOptions::new(Optimization::None),
+            &project,
+        )
+        .unwrap();
         assert!(
             ir.contains("{ i64, ptr, { i64, double, i64, ptr, i1, i1 } }"),
             "{ir}"
@@ -213,7 +255,13 @@ fn mem_11_an_instance_stores_its_attributes_by_alignment_and_its_descriptor_keep
 #[test]
 fn nfr_18_an_instance_takes_its_prefix_and_its_attributes_rounded_to_eight_bytes() {
     let (project, module) = compile(MIXED_CLASS);
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     // Eight bytes each for two `int`s, a `float` and an object, one each for two `bool`s.
     let attributes: u64 = 4 * 8 + 2;
     let bound = attributes.next_multiple_of(8);
@@ -254,7 +302,13 @@ print(apply(double, 2), apply(fail, 3))
 #[test]
 fn fun_05_a_function_value_is_an_immortal_object_of_its_descriptor() {
     let (project, module) = compile(FUNCTION_VALUES);
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     // The header is immortal and of the function type ID, then the descriptor: the name, the
     // qualified name, the code, no captures and its own address as the identity it stands
     // for (ADR-0076).
@@ -287,7 +341,13 @@ fn fun_08_the_hidden_functions_of_one_builtin_share_its_identity() {
          count: Callable[[list[int]], int] = len\n\
          print(measure is count)\n",
     );
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     let descriptors: Vec<&str> = ir
         .lines()
         .filter(|line| line.starts_with("@typy.function.descriptor."))
@@ -313,7 +373,13 @@ fn fun_08_the_hidden_functions_of_one_builtin_share_its_identity() {
 #[test]
 fn fun_05_a_thunk_gives_every_function_the_raising_form_a_call_through_a_value_takes() {
     let (project, module) = compile(FUNCTION_VALUES);
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     let thunk = |name: &str| -> String {
         let start = ir.find(&format!("@typy.thunk.{name}(")).unwrap();
         ir[start..].split("\n}").next().unwrap().to_owned()
@@ -375,7 +441,13 @@ print(run(Double())(1))
 #[test]
 fn fun_05_a_bound_method_chooses_its_classs_descriptor_and_its_thunk_reads_the_instance() {
     let (project, module) = compile(BOUND_METHODS);
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     // One descriptor for each method, both named `add`, of their own qualified names.
     for (method, symbol) in [
         ("Counter", "_TY8__main__11Counter.add"),
@@ -424,7 +496,13 @@ print(make_adder(1, \"x\")(2))
 #[test]
 fn fun_04_a_closure_comes_from_the_runtime_with_its_descriptor_and_the_layout_of_its_captures() {
     let (project, module) = compile(CLOSURE);
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     let symbol = "\"_TY8__main__23make_adder.<locals>.add\"";
     // The captures, `label` then `step`, are laid out by the descriptor the runtime releases
     // them through: an object at 0, an `int` at 8.
@@ -465,7 +543,13 @@ fn fun_04_a_cell_comes_from_the_runtime_with_the_layout_of_its_value_and_flag() 
         "def outer() -> int:\n    total = 1\n    def read() -> int:\n        return total\n    \
          total = 2\n    return read()\n\n\nprint(outer())\n",
     );
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     // The layout of an `int` and its flag: the word at 0, the flag a `bool` at 8.
     assert!(
         ir.contains(
@@ -486,7 +570,13 @@ fn fun_04_a_cell_comes_from_the_runtime_with_the_layout_of_its_value_and_flag() 
 #[test]
 fn the_entry_is_the_only_external_function() {
     let (project, module) = compile(PROGRAMS[1]);
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     assert!(ir.contains("define ptr @__typy_main()"), "{ir}");
     assert!(
         ir.contains("define internal { i64, ptr } @_TY8__main__3fib(i64"),
@@ -497,7 +587,13 @@ fn the_entry_is_the_only_external_function() {
 #[test]
 fn raising_calls_add_a_traceback_entry_with_the_line() {
     let (project, module) = compile("def f(n: int) -> int:\n    return 10 // n\nprint(f(0))\n");
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     assert!(ir.contains("call void @typy_rt_traceback_add("), "{ir}");
     assert!(ir.contains("i32 2)"), "the division is on line 2:\n{ir}");
     assert!(ir.contains("c\"app.py\\00\""), "{ir}");
@@ -506,7 +602,13 @@ fn raising_calls_add_a_traceback_entry_with_the_line() {
 #[test]
 fn constants_are_immortal_static_objects() {
     let (project, module) = compile("print(\"hi\", 123456789012345678901234567890)\n");
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     assert!(ir.contains("private unnamed_addr constant { i32, i32, i64, i32, i32, i64, [3 x i8] } { i32 -1, i32 1, i64 2, i32 1, i32 0, i64 -1, [3 x i8] c\"hi\\00\" }"), "{ir}");
     assert!(
         ir.contains("{ i32 -1, i32 3, i32 2, i32 0, [2 x i64]"),
@@ -517,14 +619,26 @@ fn constants_are_immortal_static_objects() {
 #[test]
 fn assembly_is_text_for_the_target() {
     let (project, module) = compile("print(1)\n");
-    let text = assembly(&module, Target::host(), Optimization::Speed, &project).unwrap();
+    let text = assembly(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::Speed),
+        &project,
+    )
+    .unwrap();
     assert!(text.contains("__typy_main"), "{text}");
 }
 
 #[test]
 fn release_small_marks_every_function_minsize() {
     let (project, module) = compile(PROGRAMS[1]);
-    let ir = llvm_ir(&module, Target::host(), Optimization::Size, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::Size),
+        &project,
+    )
+    .unwrap();
     assert!(ir.contains("minsize") && ir.contains("optsize"), "{ir}");
 }
 
@@ -549,7 +663,13 @@ fn reading_an_item_of_a_value_that_is_not_a_tuple_is_an_internal_error() {
             },
             span,
         });
-    let error = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap_err();
+    let error = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap_err();
     let text = format!("{error:?}");
     assert!(text.contains("is not a tuple"), "{text}");
 }
@@ -575,7 +695,13 @@ fn counting_attributes_placeholders_and_descriptors_reach_the_ir() {
         "\n\n",
         "run()\n",
     ));
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     for expected in [
         "call void @typy_rt_increment(",
         "call void @typy_rt_decrement(",
@@ -609,7 +735,13 @@ fn counting_attributes_placeholders_and_descriptors_reach_the_ir() {
 fn an_instance_held_in_the_frame_is_made_in_a_block_released_before_each_return() {
     let source = "class P:\n    def __init__(self, x: int) -> None:\n        self.x = x\n\n\ndef f(n: int) -> int:\n    p = P(n)\n    if n > 0:\n        return p.x\n    return 0\n\n\nprint(f(1))\n";
     let (project, module) = compile(source);
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     let start = ir.find("@_TY8__main__1f(").expect("f is defined");
     let body = &ir[start..start + ir[start..].find("\n}\n").expect("f ends")];
     // The header and the class take two words and the one `int` attribute a third.
@@ -634,7 +766,13 @@ fn an_instance_held_in_the_frame_is_made_in_a_block_released_before_each_return(
 #[test]
 fn every_object_defines_hidden_heap_hooks_over_the_c_library() {
     let (project, module) = compile("print([1] * 3)\n");
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     for (hook, call) in [
         (
             "define hidden ptr @typy_rt_heap_allocate(i64 %0)",
@@ -664,7 +802,13 @@ fn the_heap_hooks_call_the_functions_the_project_names() {
         // leaves a module LLVM accepts.
         free: "__typy_main".to_owned(),
     };
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     assert!(ir.contains("tail call ptr @mi_malloc(i64 %0)"), "{ir}");
     assert!(
         ir.contains("tail call ptr @mi_realloc(ptr %0, i64 %1)"),
@@ -706,7 +850,13 @@ fn library_module() -> (Project, TyirModule) {
 #[test]
 fn a_library_runs_its_module_when_it_loads_and_wraps_each_export() {
     let (project, module) = library_module();
-    let ir = llvm_ir(&module, Target::host(), Optimization::None, &project).unwrap();
+    let ir = llvm_ir(
+        &module,
+        Target::host(),
+        &CodegenOptions::new(Optimization::None),
+        &project,
+    )
+    .unwrap();
     for line in [
         "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.load, ptr null }]",
         "@llvm.global_dtors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @typy.library.unload, ptr null }]",
@@ -746,7 +896,13 @@ fn an_export_takes_and_returns_a_bool_as_clang_lowers_it_on_each_target() {
         ),
     ] {
         let target = Target { triple };
-        let ir = llvm_ir(&module, target, Optimization::None, &project).unwrap();
+        let ir = llvm_ir(
+            &module,
+            target,
+            &CodegenOptions::new(Optimization::None),
+            &project,
+        )
+        .unwrap();
         assert!(
             ir.lines().any(|each| each == signature),
             "{triple}: {signature}\n{ir}"

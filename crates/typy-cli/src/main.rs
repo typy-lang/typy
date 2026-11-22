@@ -16,6 +16,13 @@ use clap::Parser as _;
 const COMPILER_STACK: usize = 512 * 1024 * 1024;
 
 fn main() -> std::process::ExitCode {
+    // `-C help` lists the code generation options and needs no file, as `rustc -C help` does.
+    if asks_for_codegen_help(std::env::args().skip(1)) {
+        for (key, meaning) in arguments::CODEGEN_KEYS {
+            println!("-C {key:<22}{meaning}");
+        }
+        return std::process::ExitCode::SUCCESS;
+    }
     let arguments = arguments::Arguments::parse();
     let reporter = output::Reporter::new(arguments.error_format);
     let global = arguments.global();
@@ -35,3 +42,22 @@ fn main() -> std::process::ExitCode {
     reporter.internal("the compiler's thread could not run");
     exit_status::ExitStatus::Internal.into()
 }
+
+/// Returns true when the command line, before any `--`, asks for `-C help` in any of its
+/// spellings.
+fn asks_for_codegen_help(arguments: impl Iterator<Item = String>) -> bool {
+    let mut previous_is_codegen = false;
+    for argument in arguments.take_while(|argument| argument != "--") {
+        if (previous_is_codegen && argument == "help")
+            || argument == "-Chelp"
+            || argument == "-C=help"
+        {
+            return true;
+        }
+        previous_is_codegen = argument == "-C";
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests;

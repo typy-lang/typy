@@ -4,7 +4,7 @@
 use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use typy_codegen::Target;
+use typy_codegen::{CodegenOptions, Target};
 
 use crate::emit_stage::EmitStage;
 use crate::library_kind::LibraryKind;
@@ -36,6 +36,10 @@ pub struct BuildRequest {
     emit: Option<EmitStage>,
     output: Option<Utf8PathBuf>,
     library: Option<LibraryKind>,
+    /// The processor code is generated for; `None` for the target's baseline (CLI-21).
+    processor: Option<String>,
+    /// The features beside the processor's, as LLVM writes them (CLI-30).
+    features: String,
 }
 
 impl BuildRequest {
@@ -47,11 +51,13 @@ impl BuildRequest {
         }
         Ok(Self {
             main,
-            mode: BuildMode::Debug,
+            mode: BuildMode::DEBUG,
             target: Target::host(),
             emit: None,
             output: None,
             library: None,
+            processor: None,
+            features: String::new(),
         })
     }
 
@@ -88,6 +94,26 @@ impl BuildRequest {
     pub const fn with_library(mut self, kind: LibraryKind) -> Self {
         self.library = Some(kind);
         self
+    }
+
+    /// Generates code for `processor`, or the target's baseline for `None`, with `features`
+    /// turned on or off beside the processor's (CLI-21, CLI-30).
+    #[must_use]
+    pub fn with_processor(mut self, processor: Option<String>, features: String) -> Self {
+        self.processor = processor;
+        self.features = features;
+        self
+    }
+
+    /// Returns what the build asks of code generation: the mode's optimisation, the processor
+    /// and its features.
+    #[must_use]
+    pub fn codegen_options(&self) -> CodegenOptions {
+        CodegenOptions {
+            optimization: self.mode.optimization(),
+            processor: self.processor.clone(),
+            features: self.features.clone(),
+        }
     }
 
     /// Returns the kind of C library the build writes, or `None` for an executable.
