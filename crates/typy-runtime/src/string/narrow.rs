@@ -39,6 +39,22 @@ pub(crate) unsafe fn stored<'a>(text: *const StrObject) -> &'a [u8] {
 // The stored data of a code point is its little-endian bytes, which hashing reads.
 const _: () = assert!(cfg!(target_endian = "little"));
 
+/// Returns whether two strings, or two `bytes`, hold the same code points: a string is held at
+/// the narrowest kind that holds its code points, so two equal ones store the same data.
+///
+/// # Safety
+///
+/// Both point to live strings.
+pub(crate) unsafe fn same_text(left: *const StrObject, right: *const StrObject) -> bool {
+    // SAFETY: the caller passes live strings.
+    unsafe {
+        core::ptr::eq(left, right)
+            || (length(left) == length(right)
+                && (*left).kind == (*right).kind
+                && stored(left) == stored(right))
+    }
+}
+
 /// Returns a new string of the type of `source`, a `str` or a `bytes`, of `length` code points
 /// of one byte each, which `fill` writes.
 ///

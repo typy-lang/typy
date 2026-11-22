@@ -110,6 +110,20 @@ pub unsafe extern "C" fn typy_rt_str_slice(
                 _ => {}
             }
         }
+        // A slice of a string of one byte a code point is one too, and its bytes are copied
+        // as a run when the step is 1 (NFR-21).
+        if let Some(bytes) = super::narrow::latin1(text) {
+            return Raising::ok(super::narrow::new_like(text, selection.count, |out| {
+                if selection.step == 1 {
+                    let start = selection.start_position();
+                    out.copy_from_slice(&bytes[start..start + selection.count]);
+                } else {
+                    for (index, byte) in out.iter_mut().enumerate() {
+                        *byte = bytes[selection.position(index)];
+                    }
+                }
+            }));
+        }
         // A string is as narrow as its widest code point, so the kind is measured on the slice.
         let kind = (0..selection.count)
             .map(|index| StrKind::of(code_point(text, selection.position(index))))

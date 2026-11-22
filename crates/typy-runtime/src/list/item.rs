@@ -587,14 +587,27 @@ unsafe fn object_is_true(object: *mut ObjectHeader) -> bool {
     }
 }
 
+/// Returns whether objects of the type `type_id` are `str` or `bytes`.
+const fn is_text(type_id: u32) -> bool {
+    type_id == crate::header::STR_TYPE_ID || type_id == crate::header::BYTES_TYPE_ID
+}
+
 /// Returns the hash of an object of a hashable type.
 ///
 /// # Safety
 ///
 /// `object` points to a live object.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
+)]
 unsafe fn object_hash(object: *mut ObjectHeader) -> i64 {
     // SAFETY: the caller passes a live object, and its type's function takes it.
     unsafe {
+        // Text is the commonest key, so it is hashed without looking up its type (NFR-21).
+        if is_text((*object).type_id) {
+            return crate::hash::text(object.cast::<StrObject>());
+        }
         match type_of(object).hash {
             Some(hash) => hash(object),
             None => crate::libc::abort_with(
@@ -734,6 +747,12 @@ unsafe fn int_equals_float(word: u64, float: f64) -> bool {
 pub(crate) unsafe fn objects_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the caller passes live objects, and each type's function takes its own.
     unsafe {
+        // Two strings, or two `bytes`, compare by their data without looking up their type,
+        // as text is the commonest key (NFR-21).
+        let type_id = (*left).type_id;
+        if type_id == (*right).type_id && is_text(type_id) {
+            return crate::string::narrow::same_text(left.cast(), right.cast());
+        }
         // An `int`, a `float` and a `bool` compare by their numbers, also with each other, as
         // values of type `object` hold them (TYP-23).
         if crate::boxed::holds_number(left) && crate::boxed::holds_number(right) {

@@ -38,7 +38,7 @@ unsafe extern "C" fn text_hash(object: *mut ObjectHeader) -> i64 {
 )]
 unsafe extern "C" fn text_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the types of the objects say they are both `str` or both `bytes`.
-    unsafe { crate::string::typy_rt_str_compare(left.cast(), right.cast(), equal_code()) }
+    unsafe { crate::string::narrow::same_text(left.cast(), right.cast()) }
 }
 
 #[allow(

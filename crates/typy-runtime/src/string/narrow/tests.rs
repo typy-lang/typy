@@ -272,3 +272,40 @@ fn nfr_21_strings_of_one_character_or_none_are_shared_and_bytes_are_not() {
         ));
     }
 }
+
+#[test]
+fn nfr_21_slices_of_bytes_give_what_slices_of_code_points_give() {
+    let cases = ["abcdefgh", "\u{e9}t\u{e9} caf\u{e9}", "", "a"];
+    // Each slice is a start, a stop, a step and the presence mask of the three.
+    let bounds = [
+        (0, 3, 1, 3),
+        (2, 0, 1, 1),
+        (1, -1, 2, 7),
+        (-1, 0, -1, 7),
+        (0, 0, -3, 4),
+        (5, 100, 1, 3),
+    ];
+    for value in cases {
+        let [narrow_text, wide_text] = both(value);
+        for (start, stop, step, present) in bounds {
+            let sliced = |text| {
+                // SAFETY: the string is live.
+                text_of(unsafe {
+                    crate::string::typy_rt_str_slice(
+                        text,
+                        inline(start).unwrap(),
+                        inline(stop).unwrap(),
+                        inline(step).unwrap(),
+                        inline(present).unwrap(),
+                    )
+                    .value
+                })
+            };
+            assert_eq!(
+                sliced(narrow_text),
+                sliced(wide_text),
+                "{value:?} {start} {stop} {step}"
+            );
+        }
+    }
+}

@@ -105,6 +105,10 @@ All notable changes to TyPy are recorded here. The format follows
   object it holds without comparing it, and every `str` of one character
   up to U+00FF, and the empty one, is shared, as in CPython, so a program
   that makes many one-character strings allocates none (NFR-21).
+- A slice of a `str` or `bytes` of one byte a code point copies its bytes
+  as a run, and a dict or a set hashes and compares `str` and `bytes` keys
+  without looking up their type. The knucleotide benchmark runs in 0.85 of
+  CPython 3.15's time, against 1.01 (NFR-21).
 - The refusals of forms a later release gives now name that release:
   `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
   to TYP-31); `typing.Any` and `TypedDict` with `Required`,
