@@ -84,7 +84,7 @@ impl BodyChecker<'_> {
 
     /// Returns `[each for each in tuple]` of the `tuple[each, ...]` `tuple`, each item
     /// converted to `item`.
-    fn converted_items(
+    pub(super) fn converted_items(
         &mut self,
         tuple: TypedExpr,
         each: &Type,

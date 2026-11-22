@@ -66,5 +66,6 @@ mod type_object;
 mod types;
 mod unpack;
 mod view_set;
+mod zip_many;
 
 pub use program::lower;

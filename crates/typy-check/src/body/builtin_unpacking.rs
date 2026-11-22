@@ -166,6 +166,9 @@ impl BodyChecker<'_> {
         if matches!(builtin, Builtin::Max | Builtin::Min) {
             return Some(self.extreme_unpacked((function, builtin), arguments, keywords, span));
         }
+        if builtin == Builtin::Zip {
+            return Some(self.zip_unpacked(arguments, keywords, span));
+        }
         let arity = arity(builtin)?;
         // The call takes what it unpacks, so its own errors stand (ADR-0073).
         self.unpacking_calls.push(span);
@@ -462,6 +465,53 @@ impl BodyChecker<'_> {
             },
         );
         Self::in_order(prelude, switch)
+    }
+
+    /// Checks `zip(arguments)` with `*` of a value only the run knows (ADR-0083): every
+    /// positional value is an iterable of one type, and each item is a `tuple[T, ...]` of one
+    /// item of each, as long as the list `*` gives. A fixed tuple is first made a
+    /// `tuple[T, ...]`, which the runtime iterates.
+    fn zip_unpacked(&mut self, arguments: &[Expr], keywords: &[Keyword], span: Span) -> TypedExpr {
+        // The call takes what it unpacks, so its own errors stand (ADR-0073).
+        self.unpacking_calls.push(span);
+        let (list, iterable) =
+            self.one_type_values(arguments, "the arguments of `zip` called with `*`", span);
+        let strict = self
+            .only_keyword(Builtin::Zip, "strict", keywords)
+            .map(|strict| {
+                let strict = self.expression(strict);
+                self.expect(&strict, Type::Bool, "`strict`");
+                Box::new(strict)
+            });
+        let Some(item) = iterable.iterable_item() else {
+            let message = format!("`zip` takes iterables, and `*` gives values of type {iterable}");
+            let refused = Diagnostic::new(DiagnosticCode::error(411), list.span, message)
+                .with_rule(RuleId::EXP_22);
+            // A value of a type in error was reported where it arose.
+            return if iterable.has_error() {
+                Self::typed(
+                    TypedExprKind::Constant(TypedConstant::None),
+                    Type::Error,
+                    span,
+                )
+            } else {
+                self.error(refused, span)
+            };
+        };
+        let iterables = if matches!(iterable, Type::Tuple(_)) {
+            let each = Type::TupleOf(Box::new(item.clone()));
+            self.converted_items(list, &iterable, &each, span)
+        } else {
+            list
+        };
+        Self::typed(
+            TypedExprKind::ZipMany {
+                iterables: Box::new(iterables),
+                strict,
+            },
+            Type::Iterator(Box::new(Type::TupleOf(Box::new(item)))),
+            span,
+        )
     }
 
     /// Returns the type `max` or `min` with `*` gives: that of each arm that gives a value,

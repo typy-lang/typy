@@ -248,7 +248,7 @@ of an exception class takes `*` of any iterable and `**` of a dict held in a
 variable; see [The arguments and the exit
 code](../library/exceptions.md#the-arguments-and-the-exit-code).
 
-A call of a built-in function other than `zip` takes `*` of any
+A call of a built-in function takes `*` of any
 iterable (EXP-22). The values from the first `*` on have one type, the first
 value's (E0409). The call is checked once for each number of arguments the
 built-in takes, and the number of values `*` gives picks that form when the
@@ -285,9 +285,20 @@ words = ["pear", "fig"]
 print(max(*words), min(*words, key=len), max(*["fig"]))
 ```
 
-The same unpacking in a call of `zip`, a method of a built-in type or a
-function of a built-in module, and `**` of a dict held in a variable in a
-call of a builtin other than `print`, are planned for 0.11 (EXP-22).
+`zip(*rows)` takes iterables of one type, and gives tuples as long as
+the list `*` gives, of type `tuple[T, ...]`; `strict=True` raises
+CPython's `ValueError` for iterables of different lengths:
+
+<!-- typy-expect: accepted -->
+```python
+rows = [[1, 2, 3], [4, 5, 6]]
+for column in zip(*rows):
+    print(column, sum(column))
+```
+
+The same unpacking in a call of a method of a built-in type or a function
+of a built-in module, and `**` of a dict held in a variable in a call of
+a builtin other than `print`, are planned for 0.11 (EXP-22).
 
 ## Nested functions
 
@@ -697,7 +708,7 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `*` of a list or another iterable in a call of `zip`, a method of a built-in type or a function of a built-in module, and `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
+| `*` of a list or another iterable in a call of a method of a built-in type or a function of a built-in module, and `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
 | `*` in a call of a built-in function whose result type depends on the number of values it gives, such as `tuple(*rows)` or `max(*rows)` of lists | E0202 (EXP-22) |
 | `*` in a call of a built-in function given more values before the first `*` than it takes | E0404 (EXP-22) |
 | `*` of a value only the run knows in a call of `OSError` or a class derived from it, whose `errno`, `strerror` and file names are read by position | E0202 (EXP-22) |

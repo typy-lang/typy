@@ -67,10 +67,11 @@ All notable changes to TyPy are recorded here. The format follows
   (EXP-22). It was E0201. `OSError` and its subclasses without an
   `__init__` of the program's refuse `*` of a value only the run knows
   with E0202.
-- A call of a built-in function other than `zip` takes `*` of any
-  iterable, `range(*bounds)` or `max(*values)`, checked for each number
-  of arguments the built-in takes; any other number raises CPython 3.15's
-  `TypeError` (EXP-22). It was E0201.
+- A call of a built-in function takes `*` of any iterable,
+  `range(*bounds)`, `max(*values)` or `zip(*rows)`, checked for each
+  number of arguments the built-in takes; any other number raises CPython
+  3.15's `TypeError`. `zip(*rows)` gives `tuple[T, ...]` items (EXP-22).
+  It was E0201.
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such

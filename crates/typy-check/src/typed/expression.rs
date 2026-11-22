@@ -242,6 +242,12 @@ pub enum TypedExprKind {
     /// A new exception of a class without an `__init__` of the program's, called with `*` or
     /// `**` (EXP-22, ADR-0083).
     NewExceptionUnpacked(Box<UnpackedException>),
+    /// `zip(*iterables)` of the iterables a list holds, an iterator of `tuple[T, ...]` items,
+    /// whose iterables of different lengths raise `ValueError` when `strict` is true (EXP-22).
+    ZipMany {
+        iterables: Box<TypedExpr>,
+        strict: Option<Box<TypedExpr>>,
+    },
     /// `super().__init__(arguments)` in the `__init__` of an exception class whose bases have
     /// no `__init__` of the program's: the exception's arguments become these (CLS-14).
     SetArguments {
@@ -1073,6 +1079,9 @@ impl TypedExpr {
                 .collect(),
             TypedExprKind::FString(parts) => crate::typed::dump::fstring_values(parts),
             TypedExprKind::NewExceptionUnpacked(call) => call.expressions(),
+            TypedExprKind::ZipMany { iterables, strict } => std::iter::once(iterables.as_ref())
+                .chain(strict.as_deref())
+                .collect(),
             TypedExprKind::Print(call) => call
                 .values
                 .iter()

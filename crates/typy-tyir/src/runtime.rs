@@ -260,6 +260,8 @@ pub enum RuntimeFunction {
     /// the pair of a view of items (LIB-20).
     IteratorReversed,
     IterableIterator,
+    /// Makes `zip(*iterables)` of a list of iterables (EXP-22).
+    ZipMany,
     /// What `next()` steps for a value held as an `Iterator[T]`: the iterator itself, or a
     /// wrapper of an instance of a class with `__next__` (TYP-20).
     IteratorStepper,
@@ -561,7 +563,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 400] = [
+    pub const ALL: [Self; 401] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -777,6 +779,7 @@ impl RuntimeFunction {
         Self::IteratorNew,
         Self::IteratorReversed,
         Self::IterableIterator,
+        Self::ZipMany,
         Self::IteratorStepper,
         Self::Iter,
         Self::IteratorAdvance,
@@ -1248,6 +1251,7 @@ impl RuntimeFunction {
             Self::IterableIterator | Self::Iter => {
                 signature(&[TyirType::ITERABLE, Bits], ITERATOR, true)
             }
+            Self::ZipMany => signature(&[LIST, Int, Bits, Bool], ITERATOR, true),
             Self::IteratorStepper => signature(&[ITERATOR], ITERATOR, false),
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
             Self::GeneratorSend => signature(&[TyirType::GENERATOR, Bits, Bool], Bool, true),
@@ -1635,6 +1639,7 @@ impl RuntimeFunction {
             Self::IteratorNew => "iterator_new",
             Self::IteratorReversed => "iterator_reversed",
             Self::IterableIterator => "iterable_iterator",
+            Self::ZipMany => "zip_many",
             Self::IteratorStepper => "iterator_stepper",
             Self::Iter => "iter",
             Self::IteratorAdvance => "iterator_advance",

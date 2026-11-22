@@ -528,6 +528,12 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(value, callees);
             }
         }
+        TypedExprKind::ZipMany { iterables, strict } => {
+            expression(iterables, callees);
+            if let Some(strict) = strict {
+                expression(strict, callees);
+            }
+        }
         TypedExprKind::Print(call) => {
             for value in call
                 .values
