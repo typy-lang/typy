@@ -139,6 +139,9 @@ All notable changes to TyPy are recorded here. The format follows
   later release gives, and no longer as an annotation written as a
   string.
 - `isinstance(None, Optional[int])` is true, as in CPython; it was false.
+- `type(value)` of a value whose type is `None` or a union, such as
+  `None | int | str`, gives the type of the value it holds; the program
+  stopped with "an object has an unknown type".
 
 ## [0.10.0] - 2026-11-21
 

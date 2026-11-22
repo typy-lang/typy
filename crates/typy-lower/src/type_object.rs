@@ -98,17 +98,15 @@ impl FunctionLowerer<'_> {
                 if matches!(inner.as_ref(), Type::Union(_) | Type::Callable { .. })
                     || matches!(inner.as_ref(), Type::Instance(class) if self.program.has_subclass(class.id)) =>
             {
+                // The value held is read as its own type is, so a union that holds a member
+                // by value is read through its tag rather than as an object.
+                let inner = inner.as_ref().clone();
                 self.optional_branch(
                     lowered,
                     TyirType::TYPE,
                     span,
                     |this| this.type_object(&TypeObjectOf::NoneType, span),
-                    |this, held| {
-                        let object = this.bits(held, span);
-                        let class =
-                            this.call_runtime(RuntimeFunction::ObjectType, vec![object], span);
-                        this.borrowed_result(class)
-                    },
+                    |this, held| this.runtime_type(held, &inner, span),
                 )
             }
             (Type::Optional(inner), None) => {
