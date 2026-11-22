@@ -15,7 +15,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**" "\#site/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage sweep docs docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless bench-peers bench-compare coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
+	build dist bless bench-peers bench-compare corpus corpus-select corpus-check coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 ifneq ($(EXEC),)
@@ -124,6 +124,17 @@ mutants: ## Mutation-test the Rust lines changed since MUTANTS_BASE, by default 
 
 mutants-package: ## Mutation-test every mutant of MUTANTS_PACKAGE; hours for a large crate
 	@scripts/mutants.sh package $(MUTANTS_PACKAGE)
+
+corpus-select: dev ## Choose the corpus of typed Python of NFR-24 with the mypy of make bench-peers, fetching it the first time, about 19 MB, and write tests/corpus/modules.txt; run when a pin changes
+	@$(EXEC) python3.15 scripts/corpus.py --select
+
+corpus: runtime ## Build and run the modules of tests/corpus/modules.txt as CPython runs them (NFR-24), and write the shares into the corpus report
+	@$(EXEC) cargo build --release -p typy-cli --locked
+	@$(EXEC) python3.15 scripts/corpus.py --write
+
+corpus-check: runtime ## Fail when the share of the corpus TyPy builds and runs as CPython does falls below the corpus report's (NFR-24)
+	@$(EXEC) cargo build --release -p typy-cli --locked
+	@$(EXEC) python3.15 scripts/corpus.py --check
 
 bench: runtime ## Time the release-built compiler on generated 10,000-line projects against the budgets of NFR-04, NFR-05 and NFR-14
 	@$(EXEC) cargo build --release -p typy-cli --locked

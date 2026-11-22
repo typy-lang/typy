@@ -235,6 +235,7 @@ nav:
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md
+      - Corpus report: testing/corpus-report.md
       - Development guide: development/development-guide.md
   - About:
       - about/index.md

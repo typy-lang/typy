@@ -23,7 +23,8 @@ TyPy and what each release accepts.
 
 The [benchmark report](testing/benchmark-report.md) measures TyPy's programs
 against CPython, the other compilers of Python, and C, C++, Rust, Go, Java
-and JavaScript.
+and JavaScript. The [corpus report](testing/corpus-report.md) gives the share
+of a fixed corpus of typed Python that TyPy compiles and runs as CPython does.
 
 ## Diagrams
 

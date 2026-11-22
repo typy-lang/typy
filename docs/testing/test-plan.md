@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.36 |
+| Version | 1.37 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -34,6 +34,7 @@ Each test sits at the lowest level that can prove its behaviour.
 | End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/end_to_end/cli.rs` | Every commit |
 | Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | 30 minutes before each release; 60 seconds on demand |
 | Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14, and how TyPy compares with other languages | `tests/bench/` | `make bench` in CI from 0.3 for NFR-04, NFR-05 and NFR-14; the run-time suite of NFR-03 before a release, from 1.0; `make bench-compare`, which writes the [benchmark report](benchmark-report.md), on demand from 0.5 |
+| Corpus | That code written by others, typed for `mypy --strict`, builds unchanged and runs as CPython runs it, and that the share of it which does never falls (NFR-24) | `tests/corpus/modules.txt`, the list of the modules of two corpora pinned by commit, and `scripts/corpus.py` | `make corpus` before each release, which writes the [corpus report](corpus-report.md); `make corpus-check` in the release workflow |
 | Mutation | Tests fail when the code they cover is changed | `make mutants` over the lines a change adds or alters, each mutant against its own crate's tests, in a container limited to 6 GB with no swap, since a mutant can turn a bounded loop into one that allocates until memory runs out. `typy-build`, `typy-driver` and `typy-cli` are left out, since their tests need the runtime archives built beside the compiler; the end-to-end and conformance tests cover them. A whole crate is run with `make mutants-package` when its tests are reviewed | On demand, for a change whose tests deserve a closer look |
 
 ## 3. Test design
@@ -243,6 +244,10 @@ A release ships when all of these hold:
 - Large inputs, such as the 16 MiB source file and the 10,000-line
   project, are generated when the tests start, from a seed committed with
   the test.
+- The corpus is not committed: `scripts/corpus.py` fetches its two
+  sources at their pinned commits into the cache volume, and only the list
+  of the modules chosen from them, `tests/corpus/modules.txt`, is in the
+  repository.
 - The benchmark programs and their C versions are committed as source. The
   build-time projects are written by `tests/bench/build_time.py` when it
   starts: a 10,000-line project in one file and in 200 modules, and 50 and
@@ -614,7 +619,7 @@ that the specification does not define.
 | NFR-21 | 0.11 | Benchmark | `make bench-compare` over `tests/bench/programs`, run weekly: the median of each program against CPython 3.15's |
 | NFR-22 | 0.12 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 5 times |
 | NFR-23 | 0.15 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 3 times |
-| NFR-24 | 0.11 | Corpus | the corpus of `mypy --strict` modules, pinned by commit, checked, built and run against CPython in the release workflow, its share compared with the last release's |
+| NFR-24 | 0.11 | Corpus | the modules of `tests/corpus/modules.txt`, chosen by `make corpus-select` from two corpora pinned by commit for passing `mypy --strict` and running alike under CPython 3.15, built and run against CPython by `make corpus`, which refuses a share below the corpus report's, and by `make corpus-check` in the release workflow |
 | NFR-25 | 0.10 | Release check | `scripts/check-sbom.py`, run by `make dist` on each host: fails when the archive's `sbom.cdx.json` misses a file of the archive or lists it with another SHA-256, misses a crate `cargo tree` gives for the compiler or the runtime, or misses LLVM or the Rust standard library |
 | NFR-26 | 0.10 | Release check | the publish job of `release.yml` attests each archive with `actions/attest-build-provenance` and runs `gh attestation verify` on each before it creates the release, and again on the x86-64 archive it downloads back |
 | NFR-27 | 1.0 | Benchmark | The benchmark suite built with biased and with plain counts, compared on one thread against the 2% budget |

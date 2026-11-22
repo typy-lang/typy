@@ -1,14 +1,15 @@
 # Releases the version a tag `vX.Y.Z` names (development guide section 9).
-# The build job checks the tag against the version and the changelog and
-# builds the release archive for x86-64 hosts, the AArch64 job builds the one
-# for AArch64 Linux hosts, and the macOS job the one for Macs with Apple
-# silicon. None runs the quality gate again: main changes only through pull
-# requests whose latest commit passed it, so the tag's tree has. The publish
-# job waits for a maintainer to approve the `release` environment, creates the
-# GitHub release from the changelog section with the short-lived workflow
-# token, then downloads the archives back and runs a program with the x86-64
-# one. The pages job then publishes the release's documentation through
-# pages.yml (DOC-05).
+# The build job checks the tag against the version and the changelog, checks
+# that the share of the corpus TyPy builds and runs as CPython does has not
+# fallen (NFR-24), and builds the release archive for x86-64 hosts; the
+# AArch64 job builds the one for AArch64 Linux hosts, and the macOS job the
+# one for Macs with Apple silicon. None runs the quality gate again: main
+# changes only through pull requests whose latest commit passed it, so the
+# tag's tree has. The publish job waits for a maintainer to approve the
+# `release` environment, creates the GitHub release from the changelog
+# section with the short-lived workflow token, then downloads the archives
+# back and runs a program with the x86-64 one. The pages job then publishes
+# the release's documentation through pages.yml (DOC-05).
 name: Release
 
 on:
@@ -32,6 +33,8 @@ jobs:
       - uses: ./.github/actions/dev-image
       - name: Start the dev container
         run: make dev
+      - name: Corpus share (NFR-24)
+        run: make corpus-check
       - name: Release archive
         run: make dist
       - uses: actions/upload-artifact@v7

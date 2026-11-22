@@ -85,6 +85,11 @@ All notable changes to TyPy are recorded here. The format follows
   `print` is planned for 1.0 (EXP-24, ADR-0099); it stays E0201.
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
+- A corpus report, `docs/testing/corpus-report.md`, which gives the share
+  of a fixed corpus of typed Python that TyPy builds unchanged and runs as
+  CPython 3.15 runs it: 667 modules of TheAlgorithms/Python and of mypyc's
+  run tests that pass `mypy --strict`, of which TyPy runs 11.0 and 18.1
+  percent. The release workflow fails when a share falls (NFR-24).
 - A function nested in another may have type parameters of its own, such
   as `def tagged[T](value: T) -> tuple[str, T]` inside a function; each
   call runs the copy for its types, with the variables it captures

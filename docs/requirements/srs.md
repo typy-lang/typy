@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.120 |
+| Version | 1.121 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -658,7 +658,13 @@ By design, TyPy adds no names of its own: no fixed-width integer types, no
 ## 7. Open issues
 
 A new question gets the next unused issue number, after the last of the
-resolved issues below. No question is open.
+resolved issues below.
+
+| ID | Question | Raised |
+| --- | --- | --- |
+| OI-42 | Does TyPy accept `from __future__ import annotations`, and in which release? Under it CPython keeps each annotation as a string and lets an annotation name a class defined later; TyPy reads annotations when it compiles, so the import changes no meaning it gives, but it is E0206 today. It is the first error of 127 of the 584 algorithm scripts of the [corpus](../testing/corpus-report.md) and of 2 of its 83 mypyc run tests. | 2026-11-22 |
+| OI-43 | How does TyPy treat a module whose main program runs `doctest.testmod()`? doctest reads the examples in the module's docstrings and runs them through `exec` when the program runs, which a compiled program cannot do; `doctest` is E0206 today. It is the first error of 165 of the 584 algorithm scripts of the corpus. | 2026-11-22 |
+| OI-44 | In which release do the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format`, `id` and `bytearray` come? Each gives CPython's result deterministically, yet each is E0202 today, as a builtin TyPy does not provide (STD-04). Together they are the first error of 24 modules of the corpus. | 2026-11-22 |
 
 ## 8. Resolved issues
 
