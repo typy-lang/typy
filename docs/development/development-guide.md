@@ -164,11 +164,10 @@ to change as it grows:
   `pub(crate)`, then `pub`.
 - Split a source file by responsibility before it passes about 400 lines.
 - Put tests that need only the public API in the crate's `tests/` folder,
-  and the rest next to the module they test. In `typy-runtime`, put them
-  in a `tests.rs` beside the module, declared with `#[cfg(test)] mod
-  tests;`: code scanning leaves test files out, and an inline test module
-  would bring its checks of results it knows to succeed into the scan as
-  null pointers.
+  and the rest in a `tests.rs` beside the module they test, declared with
+  `#[cfg(test)] mod tests;`, never inline: code scanning leaves test files
+  out, and an inline test module would bring its checks of results it
+  knows to succeed into the scan as null pointers.
 
 ## 5. Working on the documents
 

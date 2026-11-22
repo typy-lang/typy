@@ -536,19 +536,7 @@ fn listed(names: &[&str]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn each_name_a_refusal_lists_is_one_the_module_gives() {
-        for module in ["typing", "collections.abc", "dataclasses"] {
-            for name in super::given_names(module) {
-                assert!(
-                    crate::check::annotation_name(module, name).is_some(),
-                    "{module}.{name}"
-                );
-            }
-        }
-    }
-}
+mod tests;
 
 /// Returns the error for a relative import that names no module, with CPython's message.
 fn imports_nothing(span: Span, message: &str) -> Diagnostic {

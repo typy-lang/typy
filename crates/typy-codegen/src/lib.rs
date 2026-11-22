@@ -104,11 +104,4 @@ pub fn llvm_version() -> (u32, u32, u32) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::llvm_version;
-
-    #[test]
-    fn the_linked_llvm_is_major_version_23() {
-        assert_eq!(llvm_version().0, 23);
-    }
-}
+mod tests;

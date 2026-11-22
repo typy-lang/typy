@@ -1,7 +1,7 @@
 # Code scanning configuration. Test files are left out: they are never part of
 # a built program, and their checks of results the tests know to succeed read
-# as null pointers to the path-insensitive data flow of the Rust queries. The
-# runtime's unit tests therefore live in a `tests.rs` beside their module.
+# as null pointers to the path-insensitive data flow of the Rust queries. Unit
+# tests therefore live in a `tests.rs` beside their module, never inline.
 name: TyPy code scanning
 
 paths-ignore:
