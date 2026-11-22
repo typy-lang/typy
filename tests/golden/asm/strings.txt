@@ -796,7 +796,7 @@ typy_rt_heap_free:
 	.local	typy.global.8
 	.comm	typy.global.8,8,8
 	.type	.Ltypy.str.0,@object
-	.section	.rodata.cst32,"aM",@progbits,32
+	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0
 .Ltypy.str.0:
 	.long	4294967295
@@ -804,9 +804,10 @@ typy_rt_heap_free:
 	.quad	0
 	.long	1
 	.long	0
+	.quad	-1
 	.zero	1
 	.zero	7
-	.size	.Ltypy.str.0, 32
+	.size	.Ltypy.str.0, 40
 
 	.type	.Ltypy.str.1,@object
 	.p2align	4, 0x0
@@ -816,9 +817,10 @@ typy_rt_heap_free:
 	.quad	3
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"caf"
 	.zero	4
-	.size	.Ltypy.str.1, 32
+	.size	.Ltypy.str.1, 40
 
 	.type	.Ltypy.cstr.0,@object
 	.section	.rodata.str1.1,"aMS",@progbits,1
@@ -832,7 +834,7 @@ typy_rt_heap_free:
 	.size	.Ltypy.cstr.1, 11
 
 	.type	.Ltypy.str.2,@object
-	.section	.rodata.cst32,"aM",@progbits,32
+	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0
 .Ltypy.str.2:
 	.long	4294967295
@@ -840,9 +842,10 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"!"
 	.zero	6
-	.size	.Ltypy.str.2, 32
+	.size	.Ltypy.str.2, 40
 
 	.type	.Ltypy.str.3,@object
 	.p2align	4, 0x0
@@ -852,9 +855,10 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"?"
 	.zero	6
-	.size	.Ltypy.str.3, 32
+	.size	.Ltypy.str.3, 40
 
 	.type	.Ltypy.str.4,@object
 	.p2align	4, 0x0
@@ -864,9 +868,10 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"\n"
 	.zero	6
-	.size	.Ltypy.str.4, 32
+	.size	.Ltypy.str.4, 40
 
 	.type	.Ltypy.str.5,@object
 	.p2align	4, 0x0
@@ -876,9 +881,10 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	" "
 	.zero	6
-	.size	.Ltypy.str.5, 32
+	.size	.Ltypy.str.5, 40
 
 	.type	.Ltypy.str.6,@object
 	.p2align	4, 0x0
@@ -888,9 +894,10 @@ typy_rt_heap_free:
 	.quad	4
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"True"
 	.zero	3
-	.size	.Ltypy.str.6, 32
+	.size	.Ltypy.str.6, 40
 
 	.type	.Ltypy.str.7,@object
 	.p2align	4, 0x0
@@ -900,8 +907,9 @@ typy_rt_heap_free:
 	.quad	5
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"False"
 	.zero	2
-	.size	.Ltypy.str.7, 32
+	.size	.Ltypy.str.7, 40
 
 	.section	".note.GNU-stack","",@progbits

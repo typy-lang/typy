@@ -243,6 +243,9 @@ impl<'ctx> Statics<'ctx> {
                     .into(),
                 context.i32_type().const_int(kind as u64, false).into(),
                 context.i32_type().const_zero().into(),
+                // Not yet hashed: the runtime hashes a constant each time, as it never writes
+                // to one (ADR-0101).
+                context.i64_type().const_all_ones().into(),
                 unit.const_array(&data).into(),
             ],
             false,

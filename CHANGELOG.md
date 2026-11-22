@@ -109,6 +109,10 @@ All notable changes to TyPy are recorded here. The format follows
   as a run, and a dict or a set hashes and compares `str` and `bytes` keys
   without looking up their type. The knucleotide benchmark runs in 0.85 of
   CPython 3.15's time, against 1.01 (NFR-21).
+- A `str` or `bytes` keeps its hash once it is first hashed, as in
+  CPython, so a key looked up and then stored is hashed once, and each
+  takes 8 more bytes (ADR-0101). The knucleotide benchmark runs in 0.80
+  of CPython 3.15's time.
 - The refusals of forms a later release gives now name that release:
   `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
   to TYP-31); `typing.Any` and `TypedDict` with `Required`,

@@ -3,8 +3,11 @@
 //! SipHash-1-3, CPython's function, under a fixed key; CPython draws its key at random, so any
 //! key gives an order CPython could give.
 
+use core::sync::atomic::Ordering;
+
+use crate::header::IMMORTAL;
 use crate::int::value::Integer;
-use crate::string::{StrObject, length};
+use crate::string::{NOT_HASHED, StrObject, length};
 use crate::word::{inline_value, is_inline};
 
 /// The prime `2**61 - 1` hashes of numbers are reduced by, CPython's `_PyHASH_MODULUS`.
@@ -165,19 +168,31 @@ pub(crate) fn tuple(items: impl Iterator<Item = i64>, length: usize) -> i64 {
 /// as CPython stores them, one, two or four bytes each by the widest, so the hash is the one
 /// CPython gives with `PYTHONHASHSEED=0`. An empty text hashes to 0, as in CPython.
 ///
+/// The first hash of a string is kept in it, so a key looked up and then stored is hashed
+/// once (ADR-0101). An immortal string lives in read-only memory and is hashed each time.
+///
 /// # Safety
 ///
 /// `text` points to a live string.
 pub(crate) unsafe fn text(text: *const StrObject) -> i64 {
     // SAFETY: the caller passes a live string; every index stays inside it.
     unsafe {
+        let kept = (*text).hash.load(Ordering::Relaxed);
+        if kept != NOT_HASHED {
+            return kept;
+        }
         let count = length(text);
         if count == 0 {
             return 0;
         }
         let mut state = SipHash::new();
         state.write(crate::string::narrow::stored(text));
-        not_minus_one(state.finish().cast_signed())
+        let hash = not_minus_one(state.finish().cast_signed());
+        // Two threads that hash one string store the same value, so a relaxed store does.
+        if (*text).header.reference_count != IMMORTAL {
+            (*text).hash.store(hash, Ordering::Relaxed);
+        }
+        hash
     }
 }
 

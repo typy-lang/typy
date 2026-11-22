@@ -14,6 +14,8 @@ mod split;
 mod unicode;
 mod utf8;
 
+use core::sync::atomic::AtomicI64;
+
 use crate::allocator::{allocate, array_size};
 use crate::header::{ObjectHeader, STR_TYPE_ID};
 
@@ -73,7 +75,12 @@ pub struct StrObject {
     /// The width of each code point.
     pub kind: StrKind,
     padding: u32,
+    /// The hash of the string, or `NOT_HASHED` until it is first hashed (ADR-0101).
+    pub(crate) hash: AtomicI64,
 }
+
+/// What `hash` holds until the string is first hashed: -1, which no hash is.
+pub(crate) const NOT_HASHED: i64 = -1;
 
 const DATA_OFFSET: usize = core::mem::size_of::<StrObject>();
 
@@ -99,6 +106,7 @@ const fn shared(point: Option<u8>) -> Shared {
             length,
             kind: StrKind::Latin1,
             padding: 0,
+            hash: AtomicI64::new(NOT_HASHED),
         },
         data: [byte, 0, 0, 0, 0, 0, 0, 0],
     }
@@ -149,6 +157,7 @@ pub(crate) fn new_string(length: usize, kind: StrKind) -> *mut StrObject {
             length: length as u64,
             kind,
             padding: 0,
+            hash: AtomicI64::new(NOT_HASHED),
         });
         core::ptr::write_bytes(
             object
@@ -321,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn the_fixed_part_takes_twenty_four_bytes() {
-        assert_eq!(super::DATA_OFFSET, 24);
+    fn the_fixed_part_takes_thirty_two_bytes() {
+        assert_eq!(super::DATA_OFFSET, 32);
     }
 }
