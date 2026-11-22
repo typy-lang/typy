@@ -233,6 +233,7 @@ nav:
           - adr/0099-plan-star-star-in-calls-of-built-ins-for-1-0.md
           - adr/0100-build-the-runtime-for-speed-and-for-size-only-for-release-small.md
           - adr/0101-keep-the-hash-of-a-str-in-the-object.md
+          - adr/0102-do-arithmetic-on-inline-ints-in-place.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

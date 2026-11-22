@@ -6,6 +6,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `int` arithmetic, comparisons and reference counts on values that fit in
+  63 bits run in place in the generated code, and the runtime is called
+  only for larger integers. The benchmark suite's geometric mean falls from
+  7.6 to 5.3 times C's time: mandelbrot runs 2.6 times faster and
+  recursion 2.3 times (NFR-22, ADR-0102).
+
 ## [0.11.0] - 2026-11-22
 
 ### Added

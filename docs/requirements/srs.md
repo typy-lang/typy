@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.122 |
+| Version | 1.123 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -603,7 +603,7 @@ cache, unless a row says otherwise.
 | 0.9 | Generators: `yield` and `yield from`, generator functions of `Generator`, `Iterator` and `Iterable` types, generator expressions; classes with `__iter__` and `__next__` as iterators; `*args`, `**kwargs` and unpacking with `*` and `**` | Generator objects of one allocation |
 | 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions of a module with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking written out in full in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass` | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
 | 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable in the calls of built-ins and function values, and of a dict in a call of `print` (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24); arithmetic on `bool` as CPython does it (DAT-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
-| 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27) | The benchmark suite within 5 times C |
+| 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27); the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` (LIB-28); `from __future__ import annotations` (LIB-29) | The benchmark suite within 5 times C |
 | 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes` | |
 | 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |
 | 0.15 | | The benchmark suite within 3 times C |

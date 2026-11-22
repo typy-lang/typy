@@ -28,6 +28,7 @@ mod operation;
 mod optimization;
 mod optional;
 mod runtime;
+mod small_int;
 mod statics;
 mod structure_abi;
 mod target;

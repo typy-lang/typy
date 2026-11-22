@@ -1,41 +1,33 @@
-//! Emits `int`, `float` and `bool` arithmetic; every `int` operation calls the runtime in 0.1, and inline fast paths come with the benchmarks of NFR-03.
+//! Emits `int`, `float` and `bool` arithmetic; an `int` operation on inline values runs in
+//! place, and the runtime computes any other (ADR-0102).
 
 use inkwell::values::BasicValueEnum;
 use typy_tyir::{BoolOperator, FloatOperator, IntOperator, IntUnaryOperator, ValueId};
 
 use crate::error::CodegenError;
 use crate::function::FunctionEmitter;
-use crate::runtime::Internal;
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
-    /// Emits an `int` operation: every one calls the runtime in 0.1.
+    /// Emits an `int` operation of two words.
     pub(super) fn int_binary(
         &mut self,
         operator: IntOperator,
         left: ValueId,
         right: ValueId,
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
-        let function = match operator {
-            IntOperator::Add => Internal::IntAdd,
-            IntOperator::Subtract => Internal::IntSubtract,
-            IntOperator::Multiply => Internal::IntMultiply,
-            IntOperator::BitAnd => Internal::IntAnd,
-            IntOperator::BitOr => Internal::IntOr,
-            IntOperator::BitXor => Internal::IntXor,
-        };
-        self.call_internal(function, &[left, right])
+        let left = self.value(left)?.into_int_value();
+        let right = self.value(right)?.into_int_value();
+        Ok(self.int_binary_in_place(operator, left, right)?.into())
     }
 
+    /// Emits `-operand` or `~operand` of an `int` word.
     pub(super) fn int_unary(
         &mut self,
         operator: IntUnaryOperator,
         operand: ValueId,
     ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
-        let function = match operator {
-            IntUnaryOperator::Negate => Internal::IntNegate,
-            IntUnaryOperator::Invert => Internal::IntInvert,
-        };
-        self.call_internal(function, &[operand])
+        let operand = self.value(operand)?.into_int_value();
+        Ok(self.int_unary_in_place(operator, operand)?.into())
     }
 
     pub(super) fn float_binary(
