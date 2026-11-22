@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.37 |
+| Version | 1.38 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -554,6 +554,8 @@ that the specification does not define.
 | LIB-25 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/lib/LIB-25_*.py` |
 | LIB-26 | 0.12 | UT, IT | `typy-check` tests of the floor 3.15; `tests/conformance/lib/LIB-26_*.py` for each function |
 | LIB-27 | 0.12 | UT, IT | The typeshed comparison test of each module's signatures; `tests/conformance/lib/LIB-27_*.py` comparing each module with CPython's |
+| LIB-28 | 0.12 | IT | `tests/conformance/lib/LIB-28_*.py` |
+| LIB-29 | 0.12 | IT | `tests/conformance/lib/LIB-29_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |

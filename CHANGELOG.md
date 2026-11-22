@@ -124,7 +124,10 @@ All notable changes to TyPy are recorded here. The format follows
   `NotRequired` and `ReadOnly` 0.13 (TYP-25, TYP-32); the modules `enum`,
   `abc`, `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`,
   `random`, `copy` and `string` 0.12 (CLS-44, CLS-45, LIB-27), and `os`
-  1.0 (LIB-07). They were E0202, E0206, E0403 or E0425, and are E0201.
+  1.0 (LIB-07); `from __future__ import annotations` and the builtins
+  `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` 0.12
+  (LIB-28, LIB-29); and `doctest` a release after 1.0. They were E0202,
+  E0206, E0403 or E0425, and are E0201.
 - From the Python floor 3.14, template strings are refused as planned for
   0.13 (LEX-12); they were refused as a form TyPy cannot compile. From
   the floor 3.15, `[*row for row in rows]`, `frozendict` and

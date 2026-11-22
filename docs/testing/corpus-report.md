@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy corpus report |
-| Version | 0.1 |
+| Version | 0.2 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -104,12 +104,12 @@ release archive.
 
 | Corpus | Outcome | Modules |
 | --- | --- | --- |
-| TheAlgorithms/Python | refused: E0206 | 338 |
-| TheAlgorithms/Python | refused: E0201 | 44 |
+| TheAlgorithms/Python | refused: E0201 | 357 |
+| TheAlgorithms/Python | refused: E0206 | 46 |
 | TheAlgorithms/Python | refused: E0410 | 32 |
-| TheAlgorithms/Python | refused: E0202 | 31 |
 | TheAlgorithms/Python | refused: E0302 | 16 |
 | TheAlgorithms/Python | refused: E0404 | 16 |
+| TheAlgorithms/Python | refused: E0202 | 10 |
 | TheAlgorithms/Python | refused: E0103 | 9 |
 | TheAlgorithms/Python | refused: E0412 | 8 |
 | TheAlgorithms/Python | refused: E0407 | 5 |
@@ -121,10 +121,10 @@ release archive.
 | TheAlgorithms/Python | refused: E0303 | 2 |
 | TheAlgorithms/Python | refused: E0409 | 2 |
 | TheAlgorithms/Python | refused: E0411 | 2 |
-| mypyc run tests | refused: E0201 | 29 |
-| mypyc run tests | refused: E0202 | 10 |
-| mypyc run tests | refused: E0206 | 6 |
+| mypyc run tests | refused: E0201 | 32 |
+| mypyc run tests | refused: E0202 | 9 |
 | mypyc run tests | refused: E0104 | 4 |
+| mypyc run tests | refused: E0206 | 4 |
 | mypyc run tests | refused: E0404 | 3 |
 | mypyc run tests | refused: E0205 | 2 |
 | mypyc run tests | refused: E0309 | 2 |
@@ -153,15 +153,16 @@ output or exit status than CPython's, or for longer than 20 seconds.
 
 On 2026-11-22, every module of the corpus that TyPy built ran as CPython
 runs it. The first error of the modules it refused, in both corpora,
-comes mostly from a few causes:
+comes mostly from a few causes, each planned as the resolved issues of the
+[specification](../requirements/srs.md) say:
 
 | First error | Modules | Plan |
 | --- | --- | --- |
-| `import doctest`, whose `testmod()` is the module's main program | 165 | Open issue OI-43 |
-| `from __future__ import annotations` | 129 | Open issue OI-42 |
+| `import doctest`, whose `testmod()` is the module's main program | 165 | After 1.0 (OI-43) |
+| `from __future__ import annotations` | 129 | 0.12 (LIB-29, OI-42) |
 | Another module of the standard library TyPy does not provide yet, such as `collections`, `itertools` or `functools` | 50 | The `typy-stdlib` crate, from 0.12 (LIB-27) |
 | An empty `[]`, `{}` or `set()` without an annotation, E0410 | 33 | Inferred from its first use in 0.12 (TYP-27) |
-| A builtin TyPy does not provide, such as `divmod`, `bin` or `hex` | 24 | Open issue OI-44 |
+| A builtin of LIB-28, such as `divmod`, `bin` or `hex` | 22 | 0.12 (LIB-28, OI-44) |
 | A default other than a constant | 23 | 1.0 (EXP-20) |
 | `typing.Any` | 19 | 0.13 (TYP-25) |
 

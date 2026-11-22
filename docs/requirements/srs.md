@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.121 |
+| Version | 1.122 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -477,6 +477,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-25 | `map` and `filter` themselves shall be values, held in a variable, passed, written and given to `isinstance`, and `map` shall take `*` arguments, as CPython's classes are and do. | C | 1.0 |
 | LIB-26 | `math.integer` (PEP 791) shall be available with `comb`, `factorial`, `gcd`, `isqrt`, `lcm` and `perm`, under a Python floor of 3.15 or later. | S | 0.12 |
 | LIB-27 | `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097). | S | 0.12 |
+| LIB-28 | The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` shall be available, as CPython gives them. | S | 0.12 |
+| LIB-29 | `from __future__ import annotations` shall be accepted, and shall change nothing TyPy compiles. | S | 0.12 |
 
 ### 3.15 Memory management (MEM)
 
@@ -654,17 +656,12 @@ By design, TyPy adds no names of its own: no fixed-width integer types, no
 | `enumerate`, `zip` and `reversed` objects held as values | |
 | `from module import *` | |
 | Running the code that defines classes in the compiler, for metaclasses other than those `enum` and `abc` give (OI-34) | |
+| `doctest`, which runs the examples in a module's docstrings through `exec` when the program runs (OI-43) | |
 
 ## 7. Open issues
 
 A new question gets the next unused issue number, after the last of the
-resolved issues below.
-
-| ID | Question | Raised |
-| --- | --- | --- |
-| OI-42 | Does TyPy accept `from __future__ import annotations`, and in which release? Under it CPython keeps each annotation as a string and lets an annotation name a class defined later; TyPy reads annotations when it compiles, so the import changes no meaning it gives, but it is E0206 today. It is the first error of 127 of the 584 algorithm scripts of the [corpus](../testing/corpus-report.md) and of 2 of its 83 mypyc run tests. | 2026-11-22 |
-| OI-43 | How does TyPy treat a module whose main program runs `doctest.testmod()`? doctest reads the examples in the module's docstrings and runs them through `exec` when the program runs, which a compiled program cannot do; `doctest` is E0206 today. It is the first error of 165 of the 584 algorithm scripts of the corpus. | 2026-11-22 |
-| OI-44 | In which release do the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format`, `id` and `bytearray` come? Each gives CPython's result deterministically, yet each is E0202 today, as a builtin TyPy does not provide (STD-04). Together they are the first error of 24 modules of the corpus. | 2026-11-22 |
+resolved issues below. No question is open.
 
 ## 8. Resolved issues
 
@@ -711,6 +708,9 @@ resolved issues below.
 | OI-39 | In which releases do `Literal`, `@overload`, `Self`, `TypeGuard`, `TypeIs` and `TypedDict` come, and does `Self` move from after 1.0? About one definition in seven of the standard library's stubs is an overload. | `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` come in 0.12, `Self` moving from after 1.0, and `TypedDict` in 0.13 (TYP-28 to TYP-32). | 2026-11-21 |
 | OI-40 | In which release do PEP 798's unpacking in comprehensions, `frozendict` (PEP 814) and `math.integer` (PEP 791) come, from the Python floor 3.15? | All three come in 0.12, from the Python floor 3.15 (EXP-23, DAT-18, LIB-26). | 2026-11-21 |
 | OI-41 | In which release does the `typy-stdlib` crate of ADR-0007 start, with which modules first, and are its signatures checked against typeshed? | The crate and `_typy` start in 0.12 with `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string`, their signatures compared with typeshed in a test (LIB-27, ADR-0097). | 2026-11-21 |
+| OI-42 | Does TyPy accept `from __future__ import annotations`, and in which release? Under it CPython keeps each annotation as a string and lets an annotation name a class defined later; TyPy reads annotations when it compiles, so the import changes no meaning it gives, but it is E0206 today. It is the first error of 127 of the 584 algorithm scripts of the [corpus](../testing/corpus-report.md) and of 2 of its 83 mypyc run tests. | Yes, in 0.12 (LIB-29); until then it is E0201, planned for 0.12. | 2026-11-22 |
+| OI-43 | How does TyPy treat a module whose main program runs `doctest.testmod()`? doctest reads the examples in the module's docstrings and runs them through `exec` when the program runs, which a compiled program cannot do; `doctest` is E0206 today. It is the first error of 165 of the 584 algorithm scripts of the corpus. | `doctest` is planned for a release after 1.0, and is E0201 until then; its modules stay in the corpus, refused. | 2026-11-22 |
+| OI-44 | In which release do the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format`, `id` and `bytearray` come? Each is E0202 today, as a builtin TyPy does not provide (STD-04), and together they are the first error of 24 modules of the corpus. | `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` come in 0.12 (LIB-28), and are E0201, planned for 0.12, until then; `bytearray` gets its design when it is built. `id` stays refused: its values are not CPython's, which STD-03 leaves out of what a program may print. | 2026-11-22 |
 
 ## Appendix A. Disposition of the specification pack
 

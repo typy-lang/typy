@@ -369,6 +369,7 @@ impl Program {
             "abc" => Some(("0.12", RuleId::CLS_45)),
             "textwrap" | "base64" | "heapq" | "bisect" | "statistics" | "time" | "random"
             | "copy" | "string" => Some(("0.12", RuleId::LIB_27)),
+            "__future__" => Some(("0.12", RuleId::LIB_29)),
             _ => None,
         };
         Err(Box::new(match planned {
@@ -378,6 +379,13 @@ impl Program {
                 format!("the module `{module}` is planned for TyPy {release} ({rule})"),
             )
             .with_rule(rule),
+            // doctest runs the examples of docstrings through `exec` when the program runs.
+            None if top == "doctest" => Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                "the module `doctest` is planned for a release after TyPy 1.0",
+            )
+            .with_rule(RuleId::LIB_08),
             None => Diagnostic::new(
                 DiagnosticCode::error(206),
                 span,

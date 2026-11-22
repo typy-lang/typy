@@ -59,12 +59,40 @@ fn each_standard_library_module_of_a_later_release_names_it() {
         ("copy", "0.12", "LIB-27"),
         ("string", "0.12", "LIB-27"),
         ("os", "1.0", "LIB-07"),
+        ("__future__", "0.12", "LIB-29"),
     ];
     for (module, release, rule) in cases {
         assert_eq!(
             messages(&format!("import {module}\n")),
             [planned_module(module, release, rule)],
             "{module}"
+        );
+    }
+}
+
+#[test]
+fn future_annotations_is_planned_for_0_12_and_doctest_for_after_1_0() {
+    assert_eq!(
+        messages("from __future__ import annotations\n"),
+        [planned_module("__future__", "0.12", "LIB-29")]
+    );
+    assert_eq!(
+        messages("import doctest\n"),
+        [(
+            "E0201".to_owned(),
+            "the module `doctest` is planned for a release after TyPy 1.0".to_owned(),
+            "LIB-08".to_owned(),
+        )]
+    );
+}
+
+#[test]
+fn each_builtin_of_0_12_names_it() {
+    for name in ["divmod", "bin", "hex", "oct", "pow", "format", "bytearray"] {
+        assert_eq!(
+            messages(&format!("value = {name}\n")),
+            [planned(name, "0.12", "LIB-28")],
+            "{name}"
         );
     }
 }
