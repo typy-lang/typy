@@ -132,12 +132,18 @@ static EMPTY: Shared = shared(None);
 /// Returns the shared `str` of `point`, for a code point up to U+00FF.
 pub(crate) fn character(point: u32) -> Option<*mut StrObject> {
     let index = usize::try_from(point).ok().filter(|index| *index < 256)?;
-    Some(core::ptr::from_ref(&CHARACTERS[index].object).cast_mut())
+    Some(object_of(&CHARACTERS[index]))
 }
 
 /// Returns the shared empty `str`.
 pub(crate) fn empty() -> *mut StrObject {
-    core::ptr::from_ref(&EMPTY.object).cast_mut()
+    object_of(&EMPTY)
+}
+
+/// Returns the `str` a shared string holds. The pointer is made from the whole of it, so
+/// reading the data after the fixed part stays inside what the pointer may reach.
+fn object_of(shared: &'static Shared) -> *mut StrObject {
+    core::ptr::from_ref(shared).cast::<StrObject>().cast_mut()
 }
 
 /// Returns a new string of `length` code points of `kind`, with its data not yet written and
