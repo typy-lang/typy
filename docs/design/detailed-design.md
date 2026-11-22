@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.102 |
+| Version | 2.103 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -107,8 +107,12 @@ The code is organised so that it stays easy to change as it grows:
 - A source file stays under about 400 lines. A longer file is split by
   responsibility before more is added to it.
 - Unit tests sit with their module, in `#[cfg(test)] mod tests`, or in
-  `name/tests.rs` when they are long. Tests that need only the public API
-  are integration tests in the crate's `tests/` folder.
+  `name/tests.rs` when they are long. In `typy-runtime`, whose unsafe code
+  the pointer queries of code scanning read, they are always in
+  `name/tests.rs`: the scan leaves test files out, and an inline test
+  module's checks of results it knows to succeed read to it as null
+  pointers. Tests that need only the public API are integration tests in
+  the crate's `tests/` folder.
 
 ### 3.2 Code rules
 

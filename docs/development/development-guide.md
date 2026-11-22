@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.29 |
+| Version | 0.30 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -164,7 +164,11 @@ to change as it grows:
   `pub(crate)`, then `pub`.
 - Split a source file by responsibility before it passes about 400 lines.
 - Put tests that need only the public API in the crate's `tests/` folder,
-  and the rest next to the module they test.
+  and the rest next to the module they test. In `typy-runtime`, put them
+  in a `tests.rs` beside the module, declared with `#[cfg(test)] mod
+  tests;`: code scanning leaves test files out, and an inline test module
+  would bring its checks of results it knows to succeed into the scan as
+  null pointers.
 
 ## 5. Working on the documents
 
