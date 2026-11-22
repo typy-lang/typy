@@ -459,3 +459,90 @@ fn lib_20_reversed_reads_a_dict_and_its_views_and_raises_when_it_changes_size() 
     release(keys);
     release(dict);
 }
+
+/// Returns a new list of lists of small `int` values, the iterables of a zip.
+fn int_lists(lists: &[&[i64]]) -> *mut ListObject {
+    let outer = typy_rt_list_new(word(ItemKind::Object as i64), word(0), 0);
+    for values in lists {
+        let inner = int_list(values);
+        // SAFETY: the outer list is live and takes its own reference to the inner one.
+        unsafe { typy_rt_list_append(outer, inner.expose_provenance() as u64) };
+        release(inner);
+    }
+    outer
+}
+
+/// Returns a zip of `lists` and the `int` values of each of its tuples, up to its end or the
+/// message of the exception a step raises.
+fn zipped(lists: &[&[i64]], strict: bool) -> (Vec<Vec<i64>>, Option<String>) {
+    let iterables = int_lists(lists);
+    // SAFETY: the list holds live iterables, and the items are ints.
+    let zip = unsafe {
+        super::zip_many::typy_rt_zip_many(iterables, word(ItemKind::Int as i64), 0, strict)
+    };
+    assert!(zip.exception.is_null());
+    let zip = zip.value;
+    let mut items = Vec::new();
+    let error = loop {
+        // SAFETY: the zip is live.
+        let stepped = unsafe { typy_rt_iterator_advance(zip, word(0)) };
+        if !stepped.exception.is_null() {
+            // SAFETY: the exception is owned here.
+            let text = unsafe {
+                crate::exception::classes::BASE_EXCEPTION.repr.unwrap()(stepped.exception.cast())
+            };
+            let shown = text_of(text.value);
+            release(text.value);
+            release(stepped.exception);
+            break Some(shown);
+        }
+        if !stepped.value {
+            break None;
+        }
+        // SAFETY: the zip's item is a live tuple of ints.
+        let tuple = unsafe {
+            &*core::ptr::with_exposed_provenance::<ListObject>(
+                usize::try_from(typy_rt_iterator_item(zip)).unwrap(),
+            )
+        };
+        items.push(
+            (0..tuple.length)
+                // SAFETY: every position is below the tuple's length.
+                .map(|index| inline_value(unsafe { tuple.item(index) }.cast_signed()))
+                .collect(),
+        );
+    };
+    release(zip);
+    release(iterables);
+    (items, error)
+}
+
+#[test]
+fn exp_22_a_zip_of_many_gives_tuples_until_its_shortest_iterable_ends() {
+    assert_eq!(
+        zipped(&[&[1, 2, 3], &[4, 5, 6], &[7, 8, 9]], false),
+        (vec![vec![1, 4, 7], vec![2, 5, 8], vec![3, 6, 9]], None)
+    );
+    assert_eq!(zipped(&[&[1, 2, 3], &[4]], false), (vec![vec![1, 4]], None));
+    assert_eq!(zipped(&[], false), (Vec::new(), None));
+    assert_eq!(
+        zipped(&[&[1, 2], &[3, 4]], true),
+        (vec![vec![1, 3], vec![2, 4]], None)
+    );
+}
+
+#[test]
+fn exp_22_a_strict_zip_of_many_names_the_argument_of_another_length() {
+    let (items, error) = zipped(&[&[1, 2], &[3]], true);
+    assert_eq!(items, vec![vec![1, 3]]);
+    assert_eq!(
+        error.as_deref(),
+        Some("ValueError('zip() argument 2 is shorter than argument 1')")
+    );
+    let (items, error) = zipped(&[&[1], &[2], &[3, 4]], true);
+    assert_eq!(items, vec![vec![1, 2, 3]]);
+    assert_eq!(
+        error.as_deref(),
+        Some("ValueError('zip() argument 3 is longer than arguments 1-2')")
+    );
+}

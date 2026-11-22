@@ -434,3 +434,22 @@ fn reserving_room_in_a_list_without_items_allocates_them() {
         crate::refcount::typy_rt_decrement(list.cast());
     }
 }
+
+#[test]
+fn nfr_21_an_object_item_hashes_and_compares_as_its_type_does() {
+    let object = super::ItemType::of(ItemKind::Object as u32, core::ptr::null());
+    let address = |pointer: *mut crate::header::ObjectHeader| pointer.expose_provenance() as u64;
+    let (first, second) = (from_str("kiwi"), from_str("kiwi"));
+    // SAFETY: every object is live and of a hashable type.
+    unsafe {
+        let boxed = crate::boxed::typy_rt_box_int(word(7));
+        assert_eq!(object.hash(address(boxed)), 7);
+        assert_eq!(
+            object.hash(address(first.cast())),
+            object.hash(address(second.cast()))
+        );
+        assert!(object.equal(address(first.cast()), address(second.cast())));
+        assert!(!object.equal(address(first.cast()), address(from_str("kiwis").cast())));
+        assert!(!object.equal(address(first.cast()), address(boxed)));
+    }
+}

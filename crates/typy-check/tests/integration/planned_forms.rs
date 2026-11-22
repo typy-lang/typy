@@ -142,3 +142,16 @@ fn frozendict_and_math_integer_are_planned_from_the_floor_3_15() {
     assert_eq!(messages("value = frozendict()\n")[0].0, "E0205");
     assert_eq!(messages("import math.integer\n")[0].0, "E0206");
 }
+
+#[test]
+fn a_typing_name_of_a_later_release_is_planned_only_from_typing() {
+    let found =
+        messages("from collections.abc import Literal, overload, Self, TypeIs, Any, TypedDict\n");
+    assert_eq!(found.len(), 6, "{found:?}");
+    assert!(
+        found
+            .iter()
+            .all(|(code, text, _)| code == "E0425" && text.starts_with("TyPy's `collections.abc`")),
+        "{found:?}"
+    );
+}

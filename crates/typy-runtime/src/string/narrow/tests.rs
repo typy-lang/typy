@@ -247,6 +247,17 @@ fn nfr_21_strings_of_one_character_or_none_are_shared_and_bytes_are_not() {
         let euro = crate::string::typy_rt_str_index(text, inline(3).unwrap()).value;
         assert_eq!(text_of(euro), "\u{20ac}");
         assert_ne!((*euro).header.reference_count, crate::header::IMMORTAL);
+        // A slice of one code point past U+00FF is a string of its own.
+        let wide = crate::string::typy_rt_str_slice(
+            text,
+            inline(3).unwrap(),
+            inline(4).unwrap(),
+            inline(1).unwrap(),
+            inline(3).unwrap(),
+        )
+        .value;
+        assert_eq!(text_of(wide), "\u{20ac}");
+        assert_ne!((*wide).header.reference_count, crate::header::IMMORTAL);
         let empty = crate::string::typy_rt_str_slice(
             text,
             inline(1).unwrap(),
