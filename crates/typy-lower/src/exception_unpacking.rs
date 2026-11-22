@@ -64,9 +64,9 @@ impl FunctionLowerer<'_> {
         init: &InitCall,
         span: Span,
     ) -> Lowered {
-        let Some(class_id) = class.class_id() else {
-            unreachable!("an `__init__` of the program's belongs to a class of the program")
-        };
+        let class_id = class
+            .class_id()
+            .expect("an `__init__` of the program's belongs to a class of the program");
         let info = self.program.class(class_id);
         let called = format!("{}.{}", info.module, info.name);
         let unbound =

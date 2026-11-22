@@ -452,3 +452,73 @@ fn exp_22_an_exception_class_with_init_binds_star_and_star_star_when_it_runs() {
         messages(unbound)
     );
 }
+
+#[test]
+fn exp_22_a_value_of_an_unknown_type_in_an_unpacking_call_reports_only_its_own_error() {
+    let pair = "class Pair(Exception):\n    def __init__(self, name: str, *codes: int) -> None:\n        \
+                self.name = name\n\n\n";
+    for call in [
+        "numbers = [1]\nerror = ValueError(undefined, *numbers)\n".to_owned(),
+        "numbers = [1]\nerror = ValueError(*numbers, undefined)\n".to_owned(),
+        format!("{pair}codes = [1]\nerror = Pair(undefined, *codes)\n"),
+        "from collections.abc import Callable\n\n\n\
+         def apply(f: Callable[[int], int]) -> int:\n    return f(*undefined)\n"
+            .to_owned(),
+    ] {
+        let found = messages(&call);
+        assert!(
+            !found.is_empty() && found.iter().all(|(code, ..)| code == "E0205"),
+            "{call}: {found:?}"
+        );
+    }
+}
+
+#[test]
+fn exp_22_unpacking_reaches_each_kind_of_callee_and_argument() {
+    let accepted = [
+        "class Box:\n    def cast(self, value: int) -> int:\n        return value\n\n\n\
+         print(Box().cast(*[1]))\n",
+        "key = \"sep\"\nprint(1, 2, **{key: \"-\"})\n",
+        "from collections.abc import Callable\n\n\n\
+         def apply(f: Callable[[int, int], int], values: list[int]) -> int:\n    \
+         return f(1, 2, *values, 3)\n",
+        "class Coded(Exception):\n    def __init__(self, code: int, *more: int) -> None:\n        \
+         self.code = code\n\n\ncodes = [1]\nerror = Coded(*(1,), *codes)\n",
+    ];
+    for call in accepted {
+        assert_eq!(messages(call), Vec::new(), "{call}");
+    }
+    let planned = [
+        "import math\nprint(math.floor(*[1.5]))\n",
+        "print(max(*(1, *[2])))\n",
+    ];
+    for call in planned {
+        let found = messages(call);
+        assert!(
+            found
+                .iter()
+                .any(|(code, _, rule)| code == "E0201" && rule == "EXP-22"),
+            "{call}: {found:?}"
+        );
+    }
+    for (call, code, rule) in [
+        (
+            "options = {\"a\": 1}\nerror = OSError(1, \"x\", 3, **options)\n",
+            "E0201",
+            "EXC-18",
+        ),
+        (
+            "from collections.abc import Callable\n\n\n\
+             def apply(f: Callable[[int], int], values: list[int]) -> int:\n    \
+             return f(1, 2, *values)\n",
+            "E0404",
+            "FUN-05",
+        ),
+    ] {
+        let found = messages(call);
+        assert!(
+            found.iter().any(|(each, _, at)| each == code && at == rule),
+            "{call}: {found:?}"
+        );
+    }
+}

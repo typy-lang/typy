@@ -139,3 +139,36 @@ fn a_value_that_already_failed_gives_no_second_error() {
         assert_eq!(app(source), [code], "{source}");
     }
 }
+
+#[test]
+fn a_loop_over_values_whose_items_one_type_cannot_hold_is_refused() {
+    let cases = [
+        (
+            "from collections.abc import Collection\n\n\n\
+             def last(values: Collection[int]) -> None:\n    \
+             for value in reversed(values):\n        print(value)\n",
+            "E0411",
+        ),
+        (
+            "def each(values: list[int] | list[str]) -> None:\n    \
+             for value in values:\n        print(value)\n",
+            "E0411",
+        ),
+        (
+            "def both(values: tuple[int, int] | list[int]) -> None:\n    \
+             for value in values:\n        print(value)\n",
+            "E0411",
+        ),
+        (
+            "print(sorted([3, 1], reverse=True, **{\"reverse\": False}))\n",
+            "E0404",
+        ),
+    ];
+    for (source, code) in cases {
+        let found = messages(source);
+        assert!(
+            found.iter().any(|(each, ..)| each == code),
+            "{source}: {found:?}"
+        );
+    }
+}

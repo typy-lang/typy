@@ -34,14 +34,23 @@ impl BodyChecker<'_> {
             .iter()
             .any(|argument| matches!(argument, Expr::Starred { .. }));
         let values = if listed {
-            ExceptionValues::Listed(self.exception_values(arguments, span))
+            let (list, item) = self.exception_values(arguments, span);
+            if class.builtin().is_os_error() {
+                return self.os_error_unpacked(&class, span);
+            }
+            self.program.record_variadic_creation(&class, &item);
+            ExceptionValues::Listed(list)
         } else {
-            ExceptionValues::Each(
-                arguments
-                    .iter()
-                    .map(|argument| self.expression(argument))
-                    .collect(),
-            )
+            let values: Vec<TypedExpr> = arguments
+                .iter()
+                .map(|argument| self.expression(argument))
+                .collect();
+            if let Some(error) = self.os_error_arguments(&class, &values, span) {
+                return error;
+            }
+            let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
+            self.program.record_creation(&class, &types);
+            ExceptionValues::Each(values)
         };
         let mut options = Vec::new();
         let mut entries = None;
@@ -59,23 +68,6 @@ impl BodyChecker<'_> {
             }
             if let Some(argument) = self.bind_entries(&keyword.value, &mut entries) {
                 options.push(argument.value);
-            }
-        }
-        match &values {
-            ExceptionValues::Listed(list) => {
-                if class.builtin().is_os_error() {
-                    return self.os_error_unpacked(&class, span);
-                }
-                if let Type::List(item) = &list.ty {
-                    self.program.record_variadic_creation(&class, item);
-                }
-            }
-            ExceptionValues::Each(values) => {
-                if let Some(error) = self.os_error_arguments(&class, values, span) {
-                    return error;
-                }
-                let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
-                self.program.record_creation(&class, &types);
             }
         }
         let ty = Type::Exception(class.clone());
@@ -149,8 +141,8 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the list of every positional value of a call of an exception class with `*`,
-    /// of the first value's type, which each other value must have (E0409).
-    fn exception_values(&mut self, arguments: &[Expr], span: Span) -> TypedExpr {
+    /// of the first value's type, which each other value must have (E0409), with that type.
+    fn exception_values(&mut self, arguments: &[Expr], span: Span) -> (TypedExpr, Type) {
         let mut item: Option<Type> = None;
         let mut parts = Vec::new();
         for argument in arguments {
@@ -177,14 +169,16 @@ impl BodyChecker<'_> {
             }
             parts.push(part);
         }
-        Self::typed(
+        let item = item.unwrap_or(Type::Error);
+        let list = Self::typed(
             TypedExprKind::Spread {
                 kind: SpreadKind::List,
                 parts,
             },
-            Type::List(Box::new(item.unwrap_or(Type::Error))),
+            Type::List(Box::new(item.clone())),
             span,
-        )
+        );
+        (list, item)
     }
 
     /// Reports a positional value of a call of an exception class with `*` whose type is not

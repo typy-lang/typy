@@ -109,3 +109,21 @@ fn exp_22_print_takes_each_keyword_its_values_fit_and_raises_for_any_other() {
         }
     }
 }
+
+#[test]
+fn exp_22_print_names_the_class_of_each_value_it_refuses() {
+    let stdout = crate::text_file::typy_rt_sys_stdout().expose_provenance() as u64;
+    let files = dict_of(ItemKind::Object, &[("sep", stdout)]);
+    // SAFETY: the dict is live for the whole test, and 0 is `None` of an optional object.
+    unsafe {
+        assert_eq!(
+            shown(super::typy_rt_print_check(files)),
+            "sep must be None or a string, not _io.TextIOWrapper"
+        );
+        assert_eq!(
+            crate::list::ItemType::from(ItemKind::OptionalObject).class_name(0),
+            "NoneType"
+        );
+        crate::refcount::typy_rt_decrement(files.cast());
+    }
+}

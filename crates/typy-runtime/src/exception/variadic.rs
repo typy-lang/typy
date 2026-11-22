@@ -50,9 +50,9 @@ pub unsafe extern "C" fn typy_rt_exception_from_list(
     let item = values.words() * 8;
     let size = values.length * item;
     // A field's offset is 32 bits, as the compiler lays out every tuple.
-    if u32::try_from(size).is_err() {
-        crate::libc::abort_with(b"typy runtime: the arguments of an exception exceed 4 GiB\n");
-    }
+    let limit = u32::try_from(size).unwrap_or_else(|_| {
+        crate::libc::abort_with(b"typy runtime: the arguments of an exception exceed 4 GiB\n")
+    });
     let block = allocate(
         size + core::mem::size_of::<TupleType>() + values.length * core::mem::size_of::<Field>(),
     );
@@ -65,7 +65,7 @@ pub unsafe extern "C" fn typy_rt_exception_from_list(
         for index in 0..values.length {
             fields.add(index).write(Field {
                 kind: values.kind,
-                offset: u32::try_from(index * item).unwrap_or(u32::MAX),
+                offset: u32::try_from(index * item).unwrap_or(limit),
                 tuple: values.tuple,
             });
         }
@@ -176,17 +176,16 @@ fn item_type(kind: i64, tuple: u64) -> ItemType {
 }
 
 /// Returns true when items of `held` are stored as items of `wanted` are: one kind, and for
-/// tuples one layout.
+/// tuples one layout. Items of one kind both have a descriptor, or neither has.
 ///
 /// # Safety
 ///
 /// The descriptors of both are live.
 unsafe fn held_alike(held: ItemType, wanted: ItemType) -> bool {
     let (left, right) = (held.descriptor(), wanted.descriptor());
+    // SAFETY: the caller's guarantee.
     held.kind() == wanted.kind()
-        && (left.is_null() && right.is_null()
-            // SAFETY: the caller's guarantee.
-            || !left.is_null() && !right.is_null() && unsafe { crate::tuple::same_layout(left, right) })
+        && (left.is_null() || unsafe { crate::tuple::same_layout(left, right) })
 }
 
 #[cfg(test)]
