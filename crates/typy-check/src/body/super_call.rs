@@ -7,7 +7,7 @@ use typy_source::syntax::{Expr, Identifier, Keyword};
 use super::BodyChecker;
 use super::class::Initializing;
 use super::flow::Fact;
-use crate::typed::{Argument, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{Argument, FunctionId, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -126,6 +126,16 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         let base = self.program.classes[start.0 as usize].base;
+        if let Some(origin) = base.and_then(|base| self.inherited_class_method(base, &name.name)) {
+            return self.super_class_method(
+                method,
+                start,
+                origin,
+                name,
+                (arguments, keywords),
+                span,
+            );
+        }
         let Some((function, base)) =
             base.and_then(|base| Some((self.program.method(base, &name.name)?, base)))
         else {
@@ -178,6 +188,82 @@ impl BodyChecker<'_> {
             signature.returns,
             span,
         )
+    }
+
+    /// Returns the copy the class method `name` that `class` or its nearest base with a method
+    /// `name` has is made from; `None` when that method is not a class method.
+    fn inherited_class_method(
+        &self,
+        class: crate::typed::ClassId,
+        name: &str,
+    ) -> Option<FunctionId> {
+        let mut current = Some(class);
+        while let Some(class) = current {
+            if let Some(origin) = self.class_method_origin(class, name) {
+                return Some(origin);
+            }
+            let info = &self.program.classes[class.0 as usize];
+            if info.method(name).is_some() {
+                return None;
+            }
+            current = info.base;
+        }
+        None
+    }
+
+    /// Returns the copy the class method `name` of `class` is made from; `None` when `class`
+    /// has no copy of a class method `name`.
+    fn class_method_origin(&self, class: crate::typed::ClassId, name: &str) -> Option<FunctionId> {
+        self.program.classes[class.0 as usize]
+            .class_method_origins
+            .iter()
+            .find(|(each, _)| each == name)
+            .map(|(_, origin)| *origin)
+    }
+
+    /// Checks `super().name(arguments)` for a class method of a base: CPython binds `super()`
+    /// to the instance before it evaluates the arguments, and passes the instance's class as
+    /// `cls`. When `start` and every class derived from it run the base's class method, the
+    /// copy of the instance's class is that call, which a call through the instance reaches
+    /// (CLS-25). A class among them that defines the class method again has no copy of the
+    /// base's, so that call is planned (CLS-46).
+    fn super_class_method(
+        &mut self,
+        method: Initializing,
+        start: crate::typed::ClassId,
+        origin: FunctionId,
+        name: &Identifier,
+        (arguments, keywords): (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> TypedExpr {
+        let derived = |class: crate::typed::ClassId| {
+            std::iter::successors(Some(class), |each| {
+                self.program.classes[each.0 as usize].base
+            })
+            .any(|each| each == start)
+        };
+        let shared = self
+            .program
+            .classes
+            .iter()
+            .filter(|info| derived(info.id))
+            .all(|info| self.class_method_origin(info.id, &name.name) == Some(origin));
+        if !shared {
+            let class = self.program.classes[start.0 as usize].name.clone();
+            let diagnostic = Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                format!(
+                    "calling the class method `{}` through `super()` where `{class}` or a class \
+                     derived from it defines it again is planned for TyPy 0.14 (CLS-46)",
+                    name.name
+                ),
+            )
+            .with_rule(RuleId::CLS_46);
+            return self.refused_super(diagnostic, arguments, span);
+        }
+        let instance = self.enclosing_instance(method, span);
+        self.instance_method_call(instance, method.class, name, arguments, keywords, span)
     }
 
     /// Checks `super().__init__(arguments)` in `__init__`. With a base of the program that has

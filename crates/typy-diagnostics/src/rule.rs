@@ -99,6 +99,8 @@ impl RuleId {
     pub const CLS_44: Self = Self("CLS-44");
     /// A class derived from `abc.ABC` shall accept `@abstractmethod`, and making an instance of a class that leaves an abstract method without an override shall be rejected where the class is named and raise CPython's `TypeError` otherwise (ADR-0093).
     pub const CLS_45: Self = Self("CLS-45");
+    /// A class method called through `super()` shall run with the class of the instance as `cls` also when a class derived from the class of the enclosing method defines the class method again.
+    pub const CLS_46: Self = Self("CLS-46");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -521,6 +523,7 @@ impl RuleId {
         Self::CLS_43,
         Self::CLS_44,
         Self::CLS_45,
+        Self::CLS_46,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

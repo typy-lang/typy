@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.101 |
+| Version | 2.102 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -1938,7 +1938,11 @@ method's instance, in any method (CLS-14, CLS-26): a `Call` of the method of
 the nearest base of that class on the instance with `dispatch` clear, E0414
 when no base of the program's has the method or outside a method, E0404 for
 a class outside the chain, and E0201, planned for 0.14, for another instance
-(CLS-29). In `__init__`,
+(CLS-29). For a class method of a base, it is the call through the instance,
+which dispatches on the instance's class to that class's copy, when the
+enclosing class and every class derived from it hold a copy made from the
+same class method, which `ClassInfo::class_method_origins` records; otherwise
+E0201, planned for 0.14 (CLS-25, CLS-46). In `__init__`,
 `super().__init__(...)` calls the nearest base's `__init__`; with none, an
 exception class gets `TypedExprKind::SetArguments` and any other class nothing,
 as `object.__init__()` does, E0404 with arguments. After it the inherited

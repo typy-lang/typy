@@ -154,6 +154,11 @@ All notable changes to TyPy are recorded here. The format follows
   `pairs = enumerate(items, start=1)`, are refused as planned for after
   1.0, as they are without one; they were refused with CPython's
   `TypeError` for a keyword the function takes.
+- `super().name(...)` of a class method passes the class of the instance
+  as `cls`, as CPython does; it passed the base that defines the class
+  method. Where the enclosing class or a class derived from it defines
+  the class method again, the call is refused as planned for 0.14
+  (CLS-46).
 
 ## [0.10.0] - 2026-11-21
 

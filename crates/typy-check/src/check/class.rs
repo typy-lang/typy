@@ -46,6 +46,9 @@ pub(crate) struct ClassInfo {
     pub(crate) class_variables: Vec<String>,
     /// The copies of the class methods the class has, each by its name (ADR-0025).
     pub(crate) class_methods: Vec<(String, FunctionId)>,
+    /// The copy each class method of the class is made from, by its name: the one of the
+    /// class that defines it, so two classes run one body when they name the same.
+    pub(crate) class_method_origins: Vec<(String, FunctionId)>,
     /// The static methods the class defines (CLS-06).
     pub(crate) static_methods: Vec<String>,
     /// The methods with type parameters the class defines, each called through its copies
@@ -664,6 +667,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         init: None,
         class_variables: Vec::new(),
         class_methods: Vec::new(),
+        class_method_origins: Vec::new(),
         static_methods: Vec::new(),
         generic_methods: Vec::new(),
         properties: Vec::new(),
@@ -867,6 +871,8 @@ impl<'tree> ClassMethodCopies<'tree> {
             method.qualified_name = format!("{}.{}", info.name, parts.name.name);
             method.copy_of = origin;
             info.class_methods.push((parts.name.name.clone(), id));
+            info.class_method_origins
+                .push((parts.name.name.clone(), origin.unwrap_or(id)));
             made.push((statement, origin.unwrap_or(id), module));
             collected.methods.push(method);
         }

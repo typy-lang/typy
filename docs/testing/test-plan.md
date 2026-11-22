@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.35 |
+| Version | 1.36 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-22 |
@@ -470,6 +470,7 @@ that the specification does not define.
 | CLS-43 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-43_*.py` |
 | CLS-44 | 0.12 | UT, IT | `typy-check` tests of the expansion of each enum kind and of `auto()`; `tests/conformance/cls/CLS-44_*.py` for members, iteration, lookup, comparison, hashing, `match` and the `Flag` operators, with CPython's errors |
 | CLS-45 | 0.12 | UT, IT | `typy-check` tests of an abstract class named in a call, and of a subclass that overrides every abstract method; `tests/conformance/cls/CLS-45_*.py` for the `TypeError` through a `type[C]` value |
+| CLS-46 | 0.14 | IT | `tests/conformance/cls/CLS-46_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
