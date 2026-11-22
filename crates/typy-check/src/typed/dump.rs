@@ -629,6 +629,9 @@ impl Dump<'_> {
             TypedExprKind::FString(_) => "FString".to_owned(),
             TypedExprKind::TypeObject(of) => format!("TypeObject {}", of.name()),
             TypedExprKind::TypeName(_) => "TypeName".to_owned(),
+            TypedExprKind::NewExceptionUnpacked(call) => {
+                format!("NewExceptionUnpacked {}", call.class)
+            }
             TypedExprKind::Print(call) => {
                 format!(
                     "Print sep={} end={}",

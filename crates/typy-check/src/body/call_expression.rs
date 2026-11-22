@@ -54,7 +54,8 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(201),
                 at,
                 "`*` and `**` of a value only the run knows in a call of a builtin other than \
-                 `print` or of an exception class are planned for TyPy 0.11 (EXP-22)",
+                 `print`, or of an exception class with an `__init__` of the program's, are \
+                 planned for TyPy 0.11 (EXP-22)",
             )
             .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),
@@ -129,10 +130,20 @@ impl BodyChecker<'_> {
 impl BodyChecker<'_> {
     /// Returns true when the callee binds what a call unpacks when the program runs, with
     /// CPython's errors: a function, a method or a class of the program, or a class held in a
-    /// variable (ADR-0073), or a method through a protocol value (EXP-22). A built-in and a
-    /// function value take only unpacking written out in full.
+    /// variable (ADR-0073), or a method through a protocol value (EXP-22). A built-in, a
+    /// function value and an exception class first take unpacking written out in full.
     fn binds_when_it_runs(&self, function: &Expr) -> bool {
         match function {
+            // An exception class without an `__init__` of the program's takes unpacking
+            // written out as fixed arguments, which `args` shows as they are.
+            Expr::Name { id, .. }
+                if self.program.class_ids.get(id).is_some_and(|class| {
+                    matches!(self.program.instance_type(*class), Type::Exception(_))
+                        && self.program.method(*class, "__init__").is_none()
+                }) =>
+            {
+                false
+            }
             Expr::Name { id, .. } => match self.peek_type(function) {
                 Some(Type::Callable { .. }) => false,
                 Some(_) => true,

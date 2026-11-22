@@ -523,6 +523,11 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
                 expression(value, callees);
             }
         }
+        TypedExprKind::NewExceptionUnpacked(call) => {
+            for value in call.expressions() {
+                expression(value, callees);
+            }
+        }
         TypedExprKind::Print(call) => {
             for value in call
                 .values

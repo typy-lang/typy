@@ -38,6 +38,7 @@ impl FunctionLowerer<'_> {
                 arguments,
                 init,
             } => self.new_exception(class, arguments, init.as_deref(), span),
+            TypedExprKind::NewExceptionUnpacked(call) => self.new_exception_unpacked(call, span),
             TypedExprKind::SetArguments {
                 exception,
                 arguments,

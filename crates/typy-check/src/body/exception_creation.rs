@@ -34,6 +34,12 @@ impl Program {
         self.creations.make(class, arguments);
     }
 
+    /// Records a call of `class` with `*`, whose arguments are any number of values of type
+    /// `item` (EXP-22).
+    pub(super) fn record_variadic_creation(&mut self, class: &ExceptionClass, item: &Type) {
+        self.creations.make_variadic(class, item);
+    }
+
     /// Records `super().__init__(arguments)` in the `__init__` of `class`.
     pub(super) fn record_initialization(&mut self, class: &ExceptionClass, arguments: &[Type]) {
         self.creations.initialize(class, arguments);

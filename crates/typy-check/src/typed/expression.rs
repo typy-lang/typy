@@ -239,6 +239,9 @@ pub enum TypedExprKind {
         /// `arguments`.
         init: Option<Box<InitCall>>,
     },
+    /// A new exception of a class without an `__init__` of the program's, called with `*` or
+    /// `**` (EXP-22, ADR-0083).
+    NewExceptionUnpacked(Box<UnpackedException>),
     /// `super().__init__(arguments)` in the `__init__` of an exception class whose bases have
     /// no `__init__` of the program's: the exception's arguments become these (CLS-14).
     SetArguments {
@@ -567,6 +570,39 @@ pub enum DictPart {
     Entry(TypedExpr, TypedExpr),
     /// `**dict`: each entry of the dict.
     Merge(TypedExpr),
+}
+
+/// A call of an exception class with `*` or `**` (EXP-22, ADR-0083).
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnpackedException {
+    /// The class called.
+    pub class: crate::exception::ExceptionClass,
+    /// The positional values, which become the exception's arguments.
+    pub values: ExceptionValues,
+    /// The dicts `**` unpacks, which must hold no entry when the call runs, since an exception
+    /// class takes no keywords.
+    pub options: Vec<TypedExpr>,
+}
+
+/// The positional values of a call of an exception class with `*` or `**`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExceptionValues {
+    /// Each value, laid out as the arguments of a call without unpacking.
+    Each(Vec<TypedExpr>),
+    /// One list of every value, whose number only the run knows.
+    Listed(TypedExpr),
+}
+
+impl UnpackedException {
+    /// Returns the values the call evaluates, in order: the positional ones, then the dicts.
+    #[must_use]
+    pub fn expressions(&self) -> Vec<&TypedExpr> {
+        let values: Vec<&TypedExpr> = match &self.values {
+            ExceptionValues::Each(values) => values.iter().collect(),
+            ExceptionValues::Listed(list) => vec![list],
+        };
+        values.into_iter().chain(&self.options).collect()
+    }
 }
 
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
@@ -1036,6 +1072,7 @@ impl TypedExpr {
                 .chain(arguments)
                 .collect(),
             TypedExprKind::FString(parts) => crate::typed::dump::fstring_values(parts),
+            TypedExprKind::NewExceptionUnpacked(call) => call.expressions(),
             TypedExprKind::Print(call) => call
                 .values
                 .iter()

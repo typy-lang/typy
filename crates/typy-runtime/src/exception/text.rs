@@ -156,7 +156,7 @@ impl Arguments {
         if exception.arguments.is_null() {
             return None;
         }
-        // SAFETY: the descriptor lives as long as the program.
+        // SAFETY: the descriptor lives as long as the arguments it lays out.
         let own = unsafe { &*exception.arguments_type };
         Some(Self {
             shown: TupleType {
@@ -173,7 +173,7 @@ impl Arguments {
         if exception.arguments.is_null() {
             return None;
         }
-        // SAFETY: the descriptor lives as long as the program.
+        // SAFETY: the descriptor lives as long as the arguments it lays out.
         let own = unsafe { &*exception.arguments_type };
         let address = exception.arguments.expose_provenance() as u64;
         // CPython keeps the file names out of `args` when `filename` is not `None`.

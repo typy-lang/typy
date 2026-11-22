@@ -19,6 +19,7 @@ mod each_member;
 mod exception;
 mod exception_arguments;
 mod exception_part;
+mod exception_unpacking;
 mod expression;
 mod finish;
 mod foreign_call;

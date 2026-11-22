@@ -5,7 +5,7 @@
 
 use typy_check::{Type, TypedExpr};
 use typy_diagnostics::Span;
-use typy_tyir::{Constant, Operation, RuntimeFunction, Terminator, TyirType};
+use typy_tyir::{Constant, Operation, RuntimeFunction, Terminator, TyirType, ValueId};
 
 use crate::function::FunctionLowerer;
 use crate::ownership::Lowered;
@@ -49,19 +49,7 @@ impl FunctionLowerer<'_> {
         let last = members.len() - 1;
         for (position, member) in members.iter().enumerate() {
             let next = (position < last).then(|| {
-                let Type::Tuple(items) = member else {
-                    unreachable!("`args` is a union of tuples")
-                };
-                let id = self.tuple_type_id(items);
-                let layout = self.constant(Constant::TupleDescriptor(id), span);
-                let raw = self.constant(Constant::Int(u8::from(raw).to_string()), span);
-                let matches = self
-                    .call_runtime(
-                        RuntimeFunction::ExceptionArgumentsMatch,
-                        vec![exception.value, layout, raw],
-                        span,
-                    )
-                    .value;
+                let matches = self.arguments_have(exception, raw, member, span);
                 let this = self.builder.create_block();
                 let next = self.builder.create_block();
                 self.builder.terminate(Terminator::Branch {
@@ -82,9 +70,53 @@ impl FunctionLowerer<'_> {
         self.joined(join, Some(result), ty, span)
     }
 
+    /// Returns whether the arguments of `exception`, as it holds them when `raw`, have the
+    /// layout of `member`: a tuple of fixed items, or a `tuple[T, ...]` whose items they all
+    /// hold as `T` is held (EXP-22).
+    fn arguments_have(
+        &mut self,
+        exception: Lowered,
+        raw: bool,
+        member: &Type,
+        span: Span,
+    ) -> ValueId {
+        let matches = match member {
+            Type::Tuple(items) => {
+                let id = self.tuple_type_id(items);
+                let layout = self.constant(Constant::TupleDescriptor(id), span);
+                let raw = self.constant(Constant::Int(u8::from(raw).to_string()), span);
+                self.call_runtime(
+                    RuntimeFunction::ExceptionArgumentsMatch,
+                    vec![exception.value, layout, raw],
+                    span,
+                )
+            }
+            Type::TupleOf(item) => {
+                let item = self.lowered_type(item);
+                let (kind, descriptor) = self.item_layout(item, span);
+                self.call_runtime(
+                    RuntimeFunction::ExceptionArgumentsAll,
+                    vec![exception.value, kind, descriptor],
+                    span,
+                )
+            }
+            _ => unreachable!("`args` is a union of tuples"),
+        };
+        matches.value
+    }
+
     /// Returns the arguments of `exception` as the tuple `member`, with a reference of their
     /// own, so they outlive the exception.
     fn arguments_as(&mut self, exception: Lowered, member: &Type, span: Span) -> Lowered {
+        if let Type::TupleOf(item) = member {
+            let item = self.lowered_type(item);
+            let (kind, descriptor) = self.item_layout(item, span);
+            return self.call_runtime(
+                RuntimeFunction::ExceptionArgumentsTuple,
+                vec![exception.value, kind, descriptor],
+                span,
+            );
+        }
         let ty = self.lowered_type(member);
         if matches!(member, Type::Tuple(items) if items.is_empty()) {
             let empty = self.zero_value(ty, span);

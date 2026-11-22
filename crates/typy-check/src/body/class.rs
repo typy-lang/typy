@@ -525,13 +525,14 @@ impl BodyChecker<'_> {
         let init = self.program.method(class, "__init__");
         let ty = self.program.instance_type(class);
         if let Type::Exception(exception) = &ty {
-            // An exception keeps the arguments given by position, which unpacking would make
-            // a number only the run knows; the call refuses it (EXP-19).
-            if super::call_expression::unpacking(arguments, keywords).is_some() {
-                return Self::invalid_call(span);
-            }
             let exception = exception.clone();
             return match init {
+                // An `__init__` of the program's takes the arguments, and the exception keeps
+                // those given by position, which unpacking would make a number only the run
+                // knows; the call refuses it (EXP-19).
+                Some(_) if super::call_expression::unpacking(arguments, keywords).is_some() => {
+                    Self::invalid_call(span)
+                }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
                         Ok(bound) => {

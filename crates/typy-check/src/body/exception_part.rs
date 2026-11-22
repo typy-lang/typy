@@ -199,6 +199,11 @@ impl BodyChecker<'_> {
                     items[0].clone(),
                     span,
                 ),
+                Type::TupleOf(item) => {
+                    let parts = [read(this, member.clone()), read(this, member.clone())];
+                    let tuple = read(this, member.clone());
+                    return this.variadic_code(parts, tuple, item, (&ty, span));
+                }
                 _ => read(this, member.clone()),
             };
             Self::converted(code, Some(&ty))
@@ -219,6 +224,74 @@ impl BodyChecker<'_> {
         Self::typed(
             TypedExprKind::EachMember(Box::new(EachMember { value, arms })),
             ty,
+            span,
+        )
+    }
+
+    /// Returns `code` of a `SystemExit` whose `args` is a `tuple[item, ...]`, of type `ty`:
+    /// `None` for no arguments, the argument for one, and the tuple for more, as the run
+    /// decides (EXP-22). `[counted, indexed]` and `tuple` each read `args`.
+    fn variadic_code(
+        &mut self,
+        [counted, indexed]: [TypedExpr; 2],
+        tuple: TypedExpr,
+        item: &Type,
+        (ty, span): (&Type, Span),
+    ) -> TypedExpr {
+        let number = |value: usize| {
+            Self::typed(
+                TypedExprKind::Constant(TypedConstant::Int(value.to_string())),
+                Type::Int,
+                span,
+            )
+        };
+        let length = Self::typed(
+            TypedExprKind::Builtin {
+                builtin: Builtin::Len,
+                arguments: vec![counted],
+            },
+            Type::Int,
+            span,
+        );
+        let at_most_one = Self::typed(
+            TypedExprKind::Compare {
+                left: Box::new(length),
+                operators: vec![CompareOperator::LtE],
+                comparators: vec![number(1)],
+            },
+            Type::Bool,
+            span,
+        );
+        let none = Self::typed(
+            TypedExprKind::Constant(TypedConstant::None),
+            Type::NoneType,
+            span,
+        );
+        // `args[0]` is read only when there is an argument.
+        let first = self.list_item_of(indexed, item.clone(), number(0), span);
+        let single = Self::typed(
+            TypedExprKind::IfExp {
+                test: Box::new(Self::typed(
+                    TypedExprKind::Builtin {
+                        builtin: Builtin::Bool,
+                        arguments: vec![tuple.clone()],
+                    },
+                    Type::Bool,
+                    span,
+                )),
+                body: Box::new(Self::converted(first, Some(ty))),
+                orelse: Box::new(Self::converted(none, Some(ty))),
+            },
+            ty.clone(),
+            span,
+        );
+        Self::typed(
+            TypedExprKind::IfExp {
+                test: Box::new(at_most_one),
+                body: Box::new(single),
+                orelse: Box::new(Self::converted(tuple, Some(ty))),
+            },
+            ty.clone(),
             span,
         )
     }
@@ -300,6 +373,11 @@ fn code_of(arguments: &Type) -> Type {
     match arguments {
         Type::Tuple(items) if items.is_empty() => Type::NoneType,
         Type::Tuple(items) if items.len() == 1 => items[0].clone(),
+        Type::TupleOf(item) => Type::union(vec![
+            Type::NoneType,
+            item.as_ref().clone(),
+            arguments.clone(),
+        ]),
         other => other.clone(),
     }
 }

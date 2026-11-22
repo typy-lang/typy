@@ -44,6 +44,7 @@ pub use truth_bridge::TRUTH_BRIDGE;
 mod exception;
 mod exception_creation;
 mod exception_part;
+mod exception_unpacking;
 mod expression;
 mod flow;
 mod fstring;

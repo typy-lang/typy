@@ -17,6 +17,17 @@ use typy_tyir::{
 use crate::function::{Cleanup, FunctionLowerer, Handled};
 use crate::ownership::Lowered;
 
+/// The arguments of an exception evaluated into a tuple.
+#[derive(Clone, Copy)]
+pub(crate) struct ExceptionTuple {
+    /// The layout of the tuple.
+    id: typy_tyir::TupleTypeId,
+    /// The number of arguments.
+    count: usize,
+    /// The tuple, or none for no arguments.
+    tuple: Option<Lowered>,
+}
+
 /// Returns the type object of an exception class.
 pub(crate) fn exception_class(class: &ExceptionClass) -> TypeObjectRef {
     match class {
@@ -38,37 +49,55 @@ impl FunctionLowerer<'_> {
         if let Some(init) = init {
             return self.new_exception_with_init(class, init, span);
         }
-        let built_in = class.builtin();
-        let program_class = class.class_id();
-        let class = self.constant(Constant::TypeObject(exception_class(class)), span);
+        let tuple = self.exception_tuple(arguments, span);
+        self.exception_of_tuple(class, tuple, span)
+    }
+
+    /// Evaluates the arguments of an exception in order into a tuple, none for no arguments.
+    pub(crate) fn exception_tuple(
+        &mut self,
+        arguments: &[TypedExpr],
+        span: Span,
+    ) -> ExceptionTuple {
         let types: Vec<Type> = arguments.iter().map(|value| value.ty.clone()).collect();
         let id = self.tuple_type_id(&types);
-        let layout = TyirType::Tuple(id);
-        let descriptor = self.constant(Constant::TupleDescriptor(id), span);
-        if arguments.is_empty() {
-            let unit = self.constant(Constant::Unit, span);
-            let nothing = self.bits(Self::borrowed(unit, TyirType::Unit), span);
-            let exception = self.call_runtime(
-                RuntimeFunction::ExceptionNew,
-                vec![class, descriptor, nothing],
-                span,
-            );
-            if let Some(program_class) = program_class {
-                self.store_defaults(exception, program_class, span);
-            }
-            return exception;
+        let tuple = (!arguments.is_empty())
+            .then(|| self.tuple_display(arguments, TyirType::Tuple(id), span));
+        ExceptionTuple {
+            id,
+            count: arguments.len(),
+            tuple,
         }
-        let tuple = self.tuple_display(arguments, layout, span);
-        let address = self.bits(Self::borrowed(tuple.value, tuple.ty), span);
+    }
+
+    /// Returns a new exception of `class` that copies the arguments `tuple`, which is
+    /// released.
+    pub(crate) fn exception_of_tuple(
+        &mut self,
+        class: &ExceptionClass,
+        tuple: ExceptionTuple,
+        span: Span,
+    ) -> Lowered {
         // An `OSError` of two to five arguments reads them as `errno` and the rest, and one of
         // more reads none (EXC-14, EXC-16).
-        let constructor = if built_in.is_os_error() && (2..=5).contains(&arguments.len()) {
+        let constructor = if class.builtin().is_os_error() && (2..=5).contains(&tuple.count) {
             RuntimeFunction::OsErrorNew
         } else {
             RuntimeFunction::ExceptionNew
         };
+        let program_class = class.class_id();
+        let class = self.constant(Constant::TypeObject(exception_class(class)), span);
+        let descriptor = self.constant(Constant::TupleDescriptor(tuple.id), span);
+        let address = if let Some(tuple) = tuple.tuple {
+            self.bits(Self::borrowed(tuple.value, tuple.ty), span)
+        } else {
+            let unit = self.constant(Constant::Unit, span);
+            self.bits(Self::borrowed(unit, TyirType::Unit), span)
+        };
         let exception = self.call_runtime(constructor, vec![class, descriptor, address], span);
-        self.release(tuple, span);
+        if let Some(tuple) = tuple.tuple {
+            self.release(tuple, span);
+        }
         if let Some(program_class) = program_class {
             self.store_defaults(exception, program_class, span);
         }

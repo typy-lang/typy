@@ -45,7 +45,7 @@ impl BodyChecker<'_> {
     }
 
     /// Checks a call of an exception class without `__init__` of the program's: positional
-    /// arguments of any type, which the exception keeps.
+    /// arguments of any type, which the exception keeps, unpacked or not (EXP-22).
     pub(super) fn exception_with_arguments(
         &mut self,
         class: ExceptionClass,
@@ -53,6 +53,9 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        if super::call_expression::unpacking(arguments, keywords).is_some() {
+            return self.exception_unpacked(class, arguments, keywords, span);
+        }
         let values: Vec<TypedExpr> = arguments
             .iter()
             .map(|value| self.expression(value))

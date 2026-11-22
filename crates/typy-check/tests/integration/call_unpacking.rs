@@ -98,11 +98,13 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 #[test]
 fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
     let planned = "`*` and `**` of a value only the run knows in a call of a builtin other \
-                   than `print` or of an exception class are planned for TyPy 0.11 (EXP-22)";
+                   than `print`, or of an exception class with an `__init__` of the program's, \
+                   are planned for TyPy 0.11 (EXP-22)";
     for call in [
         "print(max(*[1, 2]))\n",
         "for each in zip(*[[1]]):\n    pass\n",
-        "class Failure(Exception):\n    pass\n\n\nerror = Failure(*[\"a\"])\n",
+        "class Failure(Exception):\n    def __init__(self, code: int) -> None:\n        \
+         self.code = code\n\n\nerror = Failure(*[1])\n",
     ] {
         let source = format!("{PAIR}{call}");
         let found = messages(&source);
@@ -330,4 +332,88 @@ fn exp_22_a_method_through_a_protocol_binds_star_and_star_star_when_it_runs() {
     assert_eq!(app(source), Vec::<String>::new());
     let found = dump(source);
     assert!(found.contains("Spread List : list[int]"), "{found}");
+}
+
+#[test]
+fn exp_22_an_exception_class_takes_star_and_star_star() {
+    let failure = "class Failure(Exception):\n    pass\n\n\n";
+    for call in [
+        "names = [\"a\"]\nerror = ValueError(*names)\n",
+        "names = [\"a\"]\noptions = {\"code\": 1}\nerror = Failure(\"b\", *names, **options)\n",
+        "options = {\"code\": 1}\nerror = KeyError(\"k\", 2, **options)\n",
+        "error = Failure(*(1, \"a\"))\n",
+        "codes = [1]\nerror = SystemExit(*codes)\n",
+    ] {
+        let source = format!("{failure}{call}");
+        assert_eq!(app(&source), Vec::<String>::new(), "{source}");
+    }
+    let found = dump(&format!(
+        "{failure}names = [\"a\"]\nerror = Failure(*names)\n"
+    ));
+    assert!(found.contains("NewExceptionUnpacked Failure"), "{found}");
+    assert!(found.contains("Spread List : list[str]"), "{found}");
+}
+
+#[test]
+fn exp_22_an_exception_class_refuses_what_its_arguments_cannot_hold() {
+    for (call, code, message) in [
+        (
+            "names = [\"a\"]\nerror = OSError(*names)\n",
+            "E0202",
+            "`OSError` reads `errno`, `strerror` and the file names from its arguments by \
+             their position, so `*` of a value only the run knows cannot give them",
+        ),
+        (
+            "numbers = [1]\nerror = ValueError(\"x\", *numbers)\n",
+            "E0409",
+            "the arguments of an exception class called with `*` have one type; this unpacks \
+             items of type int, and the first is a str",
+        ),
+        (
+            "numbers = [1]\nerror = ValueError(*numbers, 2.5)\n",
+            "E0409",
+            "the arguments of an exception class called with `*` have one type; this is a \
+             float, and the first is an int",
+        ),
+        (
+            "numbers = [1]\nerror = ValueError(*numbers, code=1)\n",
+            "E0404",
+            "`ValueError` takes positional arguments only",
+        ),
+        (
+            "numbers = [1]\nerror = ValueError(*numbers, **numbers)\n",
+            "E0404",
+            "`**` in a call takes a dict of `str` keys, and this is a list[int]",
+        ),
+    ] {
+        let found = messages(call);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
+            "{call}: {found:?}"
+        );
+    }
+}
+
+#[test]
+fn exp_22_args_of_an_exception_made_with_star_is_a_tuple_of_any_length() {
+    let source = "def check(values: list[int]) -> None:\n    \
+                  try:\n        raise ValueError(*values)\n    \
+                  except ValueError as error:\n        \
+                  for item in error.args:\n            print(item)\n        \
+                  first = error.args[0]\n        print(first)\n\n\n\
+                  def stop(values: list[int]) -> None:\n    \
+                  try:\n        raise SystemExit(*values)\n    \
+                  except SystemExit as error:\n        code = error.code\n        \
+                  print(code)\n\n\ncheck([1])\nstop([2])\n";
+    assert_eq!(app(source), Vec::<String>::new());
+    let found = dump(source);
+    for line in [
+        "ExceptionArguments : tuple[str] | tuple[int, ...]",
+        "Comprehension : list[int | str]",
+        "IfExp : int | tuple[int, ...] | None",
+    ] {
+        assert!(found.contains(line), "{line} in {found}");
+    }
 }

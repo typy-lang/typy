@@ -232,6 +232,14 @@ pub enum RuntimeFunction {
     ExceptionPartEqual,
     ExceptionArgumentsMatch,
     ExceptionArgumentsAddress,
+    /// Makes an exception of a class from a list of the values `*` gave (EXP-22).
+    ExceptionFromList,
+    /// Raises `TypeError` for keywords `**` gave a call of an exception class (EXP-22).
+    ExceptionKeywords,
+    /// Tests that every item of `args` is held as a list of one item type holds it (EXP-22).
+    ExceptionArgumentsAll,
+    /// Reads `args` as a `tuple[T, ...]` (EXP-22).
+    ExceptionArgumentsTuple,
     OsErrorNew,
     PercentDynamic,
     ExceptionSetCause,
@@ -553,7 +561,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 396] = [
+    pub const ALL: [Self; 400] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -750,6 +758,10 @@ impl RuntimeFunction {
         Self::ExceptionPartEqual,
         Self::ExceptionArgumentsMatch,
         Self::ExceptionArgumentsAddress,
+        Self::ExceptionFromList,
+        Self::ExceptionKeywords,
+        Self::ExceptionArgumentsAll,
+        Self::ExceptionArgumentsTuple,
         Self::OsErrorNew,
         Self::PercentDynamic,
         Self::ExceptionSetCause,
@@ -1211,6 +1223,10 @@ impl RuntimeFunction {
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
             Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
             Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits, Int], Bool, false),
+            Self::ExceptionFromList => signature(&[TYPE, LIST], EXCEPTION, false),
+            Self::ExceptionKeywords => signature(&[TYPE, DICT], Unit, true),
+            Self::ExceptionArgumentsAll => signature(&[EXCEPTION, Int, Bits], Bool, false),
+            Self::ExceptionArgumentsTuple => signature(&[EXCEPTION, Int, Bits], LIST, false),
             Self::ExceptionSetCause | Self::ExceptionKeep => {
                 signature(&[EXCEPTION, Bits], Unit, false)
             }
@@ -1600,6 +1616,10 @@ impl RuntimeFunction {
             Self::ExceptionPartEqual => "exception_part_equal",
             Self::ExceptionArgumentsMatch => "exception_arguments_match",
             Self::ExceptionArgumentsAddress => "exception_arguments_address",
+            Self::ExceptionFromList => "exception_from_list",
+            Self::ExceptionKeywords => "exception_keywords",
+            Self::ExceptionArgumentsAll => "exception_arguments_all",
+            Self::ExceptionArgumentsTuple => "exception_arguments_tuple",
             Self::OsErrorNew => "os_error_new",
             Self::PercentDynamic => "percent_dynamic",
             Self::ExceptionSetCause => "exception_set_cause",

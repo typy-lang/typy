@@ -1,0 +1,165 @@
+//! Calls of an exception class with `*` and `**` (EXP-22, ADR-0083). The values `*` gives go
+//! with the others into one list of one type, which becomes the exception's arguments when the
+//! call runs, so `args` has the member `tuple[T, ...]`; the dicts `**` gives must be empty when
+//! the call runs, since an exception class takes no keywords. The `OSError` family reads its
+//! `errno`, `strerror` and file names from arguments whose number the program shows, so it
+//! takes no `*` of a value only the run knows (ADR-0035).
+
+use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
+use typy_source::syntax::{Expr, Keyword};
+
+use super::BodyChecker;
+use super::spread::held_alike;
+use crate::exception::ExceptionClass;
+use crate::typed::{
+    ExceptionValues, SpreadKind, SpreadPart, TypedExpr, TypedExprKind, UnpackedException,
+};
+use crate::types::Type;
+
+impl BodyChecker<'_> {
+    /// Checks a call of the exception class `class`, without an `__init__` of the program's,
+    /// whose arguments unpack with `*` or `**`.
+    pub(super) fn exception_unpacked(
+        &mut self,
+        class: ExceptionClass,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        // The call takes what it unpacks, so its own errors stand (ADR-0073).
+        self.unpacking_calls.push(span);
+        let listed = arguments
+            .iter()
+            .any(|argument| matches!(argument, Expr::Starred { .. }));
+        let values = if listed {
+            ExceptionValues::Listed(self.exception_values(arguments, span))
+        } else {
+            ExceptionValues::Each(
+                arguments
+                    .iter()
+                    .map(|argument| self.expression(argument))
+                    .collect(),
+            )
+        };
+        let mut options = Vec::new();
+        let mut entries = None;
+        for keyword in keywords {
+            if keyword.name.is_some() {
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(404),
+                        keyword.span,
+                        format!("`{}` takes positional arguments only", class.name()),
+                    )
+                    .with_rule(RuleId::EXC_01),
+                    span,
+                );
+            }
+            if let Some(argument) = self.bind_entries(&keyword.value, &mut entries) {
+                options.push(argument.value);
+            }
+        }
+        match &values {
+            ExceptionValues::Listed(list) => {
+                if class.builtin().is_os_error() {
+                    return self.os_error_unpacked(&class, span);
+                }
+                if let Type::List(item) = &list.ty {
+                    self.program.record_variadic_creation(&class, item);
+                }
+            }
+            ExceptionValues::Each(values) => {
+                if let Some(error) = self.os_error_arguments(&class, values, span) {
+                    return error;
+                }
+                let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
+                self.program.record_creation(&class, &types);
+            }
+        }
+        let ty = Type::Exception(class.clone());
+        Self::typed(
+            TypedExprKind::NewExceptionUnpacked(Box::new(UnpackedException {
+                class,
+                values,
+                options,
+            })),
+            ty,
+            span,
+        )
+    }
+
+    /// Returns the list of every positional value of a call of an exception class with `*`,
+    /// of the first value's type, which each other value must have (E0409).
+    fn exception_values(&mut self, arguments: &[Expr], span: Span) -> TypedExpr {
+        let mut item: Option<Type> = None;
+        let mut parts = Vec::new();
+        for argument in arguments {
+            let (part, ty, at) = if let Expr::Starred { value, .. } = argument {
+                let value = self.tuple_expression(value);
+                let at = value.span;
+                let (source, given) = self.sequence_source(Self::sequence_of(value), "`*`");
+                (SpreadPart::Each(Box::new(source)), given, at)
+            } else {
+                let value = self.expression_expecting(argument, item.as_ref());
+                let ty = value.ty.clone();
+                (SpreadPart::Item(value), ty, argument.span())
+            };
+            let first = item.get_or_insert_with(|| ty.clone()).clone();
+            let (part, fits) = match part {
+                SpreadPart::Item(value) => {
+                    let fits = value.ty.is_assignable_to(&first);
+                    (SpreadPart::Item(Self::converted(value, Some(&first))), fits)
+                }
+                SpreadPart::Each(source) => (SpreadPart::Each(source), held_alike(&ty, &first)),
+            };
+            if !fits && !ty.has_error() && !first.has_error() {
+                self.unfit_exception_value(&ty, &first, at, matches!(part, SpreadPart::Each(_)));
+            }
+            parts.push(part);
+        }
+        Self::typed(
+            TypedExprKind::Spread {
+                kind: SpreadKind::List,
+                parts,
+            },
+            Type::List(Box::new(item.unwrap_or(Type::Error))),
+            span,
+        )
+    }
+
+    /// Reports a positional value of a call of an exception class with `*` whose type is not
+    /// `first`, the first value's.
+    fn unfit_exception_value(&mut self, ty: &Type, first: &Type, at: Span, unpacked: bool) {
+        let what = if unpacked {
+            format!("this unpacks items of type {ty}")
+        } else {
+            format!("this is {}", ty.with_article())
+        };
+        let message = format!(
+            "the arguments of an exception class called with `*` have one type; {what}, and \
+             the first is {}",
+            first.with_article()
+        );
+        self.diagnostics.push(
+            Diagnostic::new(DiagnosticCode::error(409), at, message)
+                .with_rule(RuleId::EXP_22)
+                .with_help("pass values of one type, or give the exception a tuple"),
+        );
+    }
+
+    /// Returns E0202 for `*` of a value only the run knows in a call of `class`, of the
+    /// `OSError` family.
+    fn os_error_unpacked(&mut self, class: &ExceptionClass, span: Span) -> TypedExpr {
+        let message = format!(
+            "`{}` reads `errno`, `strerror` and the file names from its arguments by their \
+             position, so `*` of a value only the run knows cannot give them",
+            class.name()
+        );
+        self.error(
+            Diagnostic::new(DiagnosticCode::error(202), span, message)
+                .with_rule(RuleId::EXP_22)
+                .with_help("pass the arguments one by one"),
+            span,
+        )
+    }
+}
