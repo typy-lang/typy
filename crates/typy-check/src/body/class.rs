@@ -527,11 +527,16 @@ impl BodyChecker<'_> {
         if let Type::Exception(exception) = &ty {
             let exception = exception.clone();
             return match init {
-                // An `__init__` of the program's takes the arguments, and the exception keeps
-                // those given by position, which unpacking would make a number only the run
-                // knows; the call refuses it (EXP-19).
-                Some(_) if super::call_expression::unpacking(arguments, keywords).is_some() => {
-                    Self::invalid_call(span)
+                Some(function)
+                    if super::call_expression::unpacking(arguments, keywords).is_some() =>
+                {
+                    self.exception_init_unpacked(
+                        exception,
+                        function,
+                        &name,
+                        (arguments, keywords),
+                        span,
+                    )
                 }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {

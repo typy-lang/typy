@@ -98,13 +98,10 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 #[test]
 fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
     let planned = "`*` and `**` of a value only the run knows in a call of a builtin other \
-                   than `print`, or of an exception class with an `__init__` of the program's, \
-                   are planned for TyPy 0.11 (EXP-22)";
+                   than `print` are planned for TyPy 0.11 (EXP-22)";
     for call in [
         "print(max(*[1, 2]))\n",
         "for each in zip(*[[1]]):\n    pass\n",
-        "class Failure(Exception):\n    def __init__(self, code: int) -> None:\n        \
-         self.code = code\n\n\nerror = Failure(*[1])\n",
     ] {
         let source = format!("{PAIR}{call}");
         let found = messages(&source);
@@ -416,4 +413,42 @@ fn exp_22_args_of_an_exception_made_with_star_is_a_tuple_of_any_length() {
     ] {
         assert!(found.contains(line), "{line} in {found}");
     }
+}
+
+#[test]
+fn exp_22_an_exception_class_with_init_binds_star_and_star_star_when_it_runs() {
+    let classes = "class Coded(Exception):\n    def __init__(self, code: int, *more: int) -> None:\n        \
+                   self.code = code\n\n\n\
+                   class Missing(OSError):\n    def __init__(self, name: str) -> None:\n        \
+                   super().__init__(2, \"missing\", name)\n\n\n";
+    for call in [
+        "codes = [1]\nerror = Coded(*codes)\n",
+        "codes = [1]\nerror = Coded(1, *(2, 3), *codes)\n",
+        "options = {\"code\": 1}\nerror = Coded(**options)\n",
+        "names = [\"a\"]\nerror = Missing(*names)\n",
+    ] {
+        let source = format!("{classes}{call}");
+        assert_eq!(app(&source), Vec::<String>::new(), "{source}");
+    }
+    let found = dump(&format!("{classes}codes = [1]\nerror = Coded(*codes)\n"));
+    assert!(found.contains("NewException Coded"), "{found}");
+    assert!(found.contains("Spread List : list[int]"), "{found}");
+    let refused = "class Pair(Exception):\n    def __init__(self, name: str, *codes: int) -> None:\n        \
+                   self.name = name\n\n\ncodes = [1]\npair = Pair(\"x\", *codes)\n";
+    let message = "the arguments of an exception class called with `*` have one type, as `args` \
+                   keeps them; these are str and int";
+    let found = messages(refused);
+    assert!(
+        found
+            .iter()
+            .any(|(code, text, _)| code == "E0409" && text == message),
+        "{found:?}"
+    );
+    let unbound = "class Pair(Exception):\n    def __init__(self, name: str) -> None:\n        \
+                   self.name = name\n\n\ncodes = [1]\npair = Pair(*codes)\n";
+    assert!(
+        messages(unbound).iter().any(|(code, ..)| code == "E0404"),
+        "{:?}",
+        messages(unbound)
+    );
 }

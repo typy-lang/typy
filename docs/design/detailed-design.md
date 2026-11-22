@@ -2359,7 +2359,14 @@ their attributes read the arguments by position (ADR-0035). Lowering
 `typy_rt_exception_keywords` when the merged dict holds an entry, then makes
 the exception with `typy_rt_exception_from_list`. It reads a `tuple[T, ...]`
 member with `typy_rt_exception_arguments_all` and
-`typy_rt_exception_arguments_tuple`.
+`typy_rt_exception_arguments_tuple`. A call of an exception class with an
+`__init__` of the program's binds as a call of any class does (ADR-0073):
+`exception_init_unpacked` records the types of the values given by position,
+a `tuple[T, ...]` when a tail gives any, which they must all have (E0409), or
+none for the `OSError` family. Lowering (`new_exception_bound_when_run`)
+evaluates the arguments with `unbound_arguments`, makes the exception from
+`Unbound::by_position` in front of a copy of the tail, or from a tuple of them,
+then checks the call and runs `__init__` on it.
 
 `body/os_error.rs` accepts an `OSError` of arguments of any type, as CPython
 does (EXC-14, EXC-16, ADR-0035), except a number as the third of three to five

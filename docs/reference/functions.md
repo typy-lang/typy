@@ -244,11 +244,11 @@ print(add(*values), add(1, *values[1:]))
 
 `**` in a call of a function value binds by the names of the function it holds,
 which a `Callable` type does not carry, and is planned for 1.0 (EXP-21). A call
-of an exception class without an `__init__` of the program's takes `*` of any
-iterable and `**` of a dict held in a variable; see [The arguments and the exit
+of an exception class takes `*` of any iterable and `**` of a dict held in a
+variable; see [The arguments and the exit
 code](../library/exceptions.md#the-arguments-and-the-exit-code). The same
-unpacking in a call of a builtin other than `print`, or of an exception class
-with an `__init__` of the program's, is planned for 0.11 (EXP-22).
+unpacking in a call of a builtin other than `print` is planned for 0.11
+(EXP-22).
 
 ## Nested functions
 
@@ -658,7 +658,7 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, or of an exception class with an `__init__` of the program's, planned for 0.11 | E0201 (EXP-22) |
+| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
 | `*` of a value only the run knows in a call of `OSError` or a class derived from it, whose `errno`, `strerror` and file names are read by position | E0202 (EXP-22) |
 | `*` in a call of an exception class whose positional values have more than one type | E0409 (EXP-22) |
 | `**` in a call of `print` of a value that is no `dict[str, V]`, or of dicts of different value types | E0404 (EXP-22) |

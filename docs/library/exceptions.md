@@ -232,16 +232,18 @@ for text in ["", "x"]:
             print(item)
 ```
 
-A call of an exception class without an `__init__` of the program's
-takes `*` of any iterable, and `**` of a dict held in a variable
-(EXP-22). The values `*` gives join the other positional values in one
-tuple of the first value's type, so `ValueError(*codes)` with a
-`list[int]` gives `args` the member `tuple[int, ...]`, and a value of
-another type is E0409. An exception class takes no keywords, so a dict
-`**` gives raises CPython's `TypeError` when it holds an entry, such as
-`ValueError() takes no keyword arguments`. `OSError` and its subclasses
-read `errno`, `strerror` and the file names by position, so `*` of a
-value only the run knows is E0202 there:
+A call of an exception class takes `*` of any iterable, and `**` of a
+dict held in a variable (EXP-22). The values `*` gives join the other
+positional values in one tuple of the first value's type, so
+`ValueError(*codes)` with a `list[int]` gives `args` the member
+`tuple[int, ...]`, and a value of another type is E0409. A class without
+an `__init__` of its own takes no keywords, so a dict `**` gives raises
+CPython's `TypeError` when it holds an entry, such as `ValueError() takes
+no keyword arguments`. A class with an `__init__` binds the values to it
+when the call runs, as any class does, and keeps those given by position
+as `args`. `OSError` and its subclasses read `errno`, `strerror` and the
+file names by position, so `*` of a value only the run knows is E0202 in
+a call of one without an `__init__` of the program's:
 
 <!-- typy-expect: accepted -->
 ```python

@@ -54,8 +54,7 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(201),
                 at,
                 "`*` and `**` of a value only the run knows in a call of a builtin other than \
-                 `print`, or of an exception class with an `__init__` of the program's, are \
-                 planned for TyPy 0.11 (EXP-22)",
+                 `print` are planned for TyPy 0.11 (EXP-22)",
             )
             .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),

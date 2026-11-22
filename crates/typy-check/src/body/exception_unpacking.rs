@@ -3,16 +3,18 @@
 //! call runs, so `args` has the member `tuple[T, ...]`; the dicts `**` gives must be empty when
 //! the call runs, since an exception class takes no keywords. The `OSError` family reads its
 //! `errno`, `strerror` and file names from arguments whose number the program shows, so it
-//! takes no `*` of a value only the run knows (ADR-0035).
+//! takes no `*` of a value only the run knows (ADR-0035). A class with an `__init__` of the
+//! program's binds the values to it when the call runs, as any class does (ADR-0073).
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
-use typy_source::syntax::{Expr, Keyword};
+use typy_source::syntax::{Expr, Keyword, ParameterKind};
 
 use super::BodyChecker;
 use super::spread::held_alike;
 use crate::exception::ExceptionClass;
 use crate::typed::{
-    ExceptionValues, SpreadKind, SpreadPart, TypedExpr, TypedExprKind, UnpackedException,
+    Argument, ExceptionValues, FunctionId, InitCall, Passed, SignatureParameter, SpreadKind,
+    SpreadPart, TypedExpr, TypedExprKind, UnpackedException,
 };
 use crate::types::Type;
 
@@ -83,6 +85,64 @@ impl BodyChecker<'_> {
                 values,
                 options,
             })),
+            ty,
+            span,
+        )
+    }
+
+    /// Checks a call of the exception class `class` whose `__init__` of the program's, `init`,
+    /// binds what the call unpacks when it runs (ADR-0073). The exception keeps the values
+    /// given by position as `args`, as `BaseException.__new__` does: of one type when a `*`
+    /// gives any whose number only the run knows (E0409), and none for the `OSError` family,
+    /// whose `__init__` gives them.
+    pub(super) fn exception_init_unpacked(
+        &mut self,
+        class: ExceptionClass,
+        init: FunctionId,
+        name: &str,
+        (arguments, keywords): (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> TypedExpr {
+        let bound = match self.bind_arguments(init, 1, name, arguments, keywords, span) {
+            Ok(bound) => bound,
+            Err(error) => return error,
+        };
+        if class.builtin().is_os_error() {
+            self.program.record_creation(&class, &[]);
+        } else {
+            let parameters = self.program.signatures[init.0 as usize].parameters.clone();
+            let (fixed, tail) = kept_types(&bound, &parameters);
+            match tail {
+                None => self.program.record_creation(&class, &fixed),
+                Some(item) => match fixed.iter().find(|ty| **ty != item) {
+                    Some(other) if !other.has_error() && !item.has_error() => {
+                        let message = format!(
+                            "the arguments of an exception class called with `*` have one \
+                             type, as `args` keeps them; these are {other} and {item}"
+                        );
+                        self.diagnostics.push(
+                            Diagnostic::new(DiagnosticCode::error(409), span, message)
+                                .with_rule(RuleId::EXP_22)
+                                .with_help(
+                                    "pass values of one type, or give the exception a tuple",
+                                ),
+                        );
+                    }
+                    _ => self.program.record_variadic_creation(&class, &item),
+                },
+            }
+        }
+        let ty = Type::Exception(class.clone());
+        Self::typed(
+            TypedExprKind::NewException {
+                class,
+                arguments: Vec::new(),
+                init: Some(Box::new(InitCall {
+                    function: init,
+                    arguments: bound,
+                    positional: 0,
+                })),
+            },
             ty,
             span,
         )
@@ -162,4 +222,30 @@ impl BodyChecker<'_> {
             span,
         )
     }
+}
+
+/// Returns the types of the values a call binds by position before its tail, as the callee
+/// holds them, and the item type of the tail, the list of the values from the first
+/// `*iterable` of unknown length on.
+fn kept_types(bound: &[Argument], parameters: &[SignatureParameter]) -> (Vec<Type>, Option<Type>) {
+    let mut fixed = Vec::new();
+    let mut tail = None;
+    for argument in bound {
+        match (&argument.passed, &argument.value.ty) {
+            (Passed::Position, ty) => fixed.push(ty.clone()),
+            (Passed::Items(targets), Type::Tuple(items)) => {
+                for (item, target) in items.iter().zip(targets) {
+                    let parameter = &parameters[*target];
+                    fixed.push(if parameter.kind == ParameterKind::VarPositional {
+                        item.clone()
+                    } else {
+                        parameter.ty.clone()
+                    });
+                }
+            }
+            (Passed::Tail, Type::List(item)) => tail = Some(item.as_ref().clone()),
+            _ => {}
+        }
+    }
+    (fixed, tail)
 }

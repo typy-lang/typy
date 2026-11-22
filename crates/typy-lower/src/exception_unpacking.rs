@@ -4,7 +4,7 @@
 //! `TypeError` when the merged dict holds a keyword, since an exception class takes none. The
 //! new exception then takes the values.
 
-use typy_check::{ExceptionClass, ExceptionValues, TypedExpr, UnpackedException};
+use typy_check::{ExceptionClass, ExceptionValues, InitCall, TypedExpr, UnpackedException};
 use typy_diagnostics::Span;
 use typy_tyir::{Constant, RuntimeFunction, TyirType};
 
@@ -50,6 +50,64 @@ impl FunctionLowerer<'_> {
         if let Some(program_class) = call.class.class_id() {
             self.store_defaults(exception, program_class, span);
         }
+        exception
+    }
+
+    /// Lowers a call of the exception class `class` whose `__init__` of the program's binds
+    /// what the call unpacks when it runs (ADR-0073): the arguments are evaluated, the
+    /// exception keeps those given by position, or none for an `OSError`, as
+    /// `BaseException.__new__` and `OSError.__new__` do, then the call is checked and
+    /// `__init__` runs on the exception.
+    pub(crate) fn new_exception_bound_when_run(
+        &mut self,
+        class: &ExceptionClass,
+        init: &InitCall,
+        span: Span,
+    ) -> Lowered {
+        let Some(class_id) = class.class_id() else {
+            unreachable!("an `__init__` of the program's belongs to a class of the program")
+        };
+        let info = self.program.class(class_id);
+        let called = format!("{}.{}", info.module, info.name);
+        let unbound =
+            self.unbound_arguments(init.function, &init.arguments, (1, Some(&called)), span);
+        let tail = unbound.tail().filter(|_| !class.builtin().is_os_error());
+        let exception = if let Some(tail) = tail {
+            // The values before the tail go in front of a copy of it, which holds the one type
+            // they all have.
+            let list = self.call_runtime(RuntimeFunction::ListCopy, vec![tail.value], span);
+            for (index, value) in unbound.by_position().iter().enumerate() {
+                let index = self.constant(Constant::Int(index.to_string()), span);
+                let bits = self.bits(*value, span);
+                self.call_runtime(
+                    RuntimeFunction::ListInsert,
+                    vec![list.value, index, bits],
+                    span,
+                );
+            }
+            let class = self.constant(Constant::TypeObject(exception_class(class)), span);
+            let exception = self.call_runtime(
+                RuntimeFunction::ExceptionFromList,
+                vec![class, list.value],
+                span,
+            );
+            self.release(list, span);
+            self.store_defaults(exception, class_id, span);
+            exception
+        } else {
+            let kept: &[Lowered] = if class.builtin().is_os_error() {
+                &[]
+            } else {
+                unbound.by_position()
+            };
+            let kept = kept.to_vec();
+            let tuple = self.exception_tuple_of(&kept, span);
+            self.exception_of_tuple(class, tuple, span)
+        };
+        let receiver = Self::borrowed(exception.value, TyirType::EXCEPTION);
+        let values = self.bind_when_run(init.function, unbound, (Some(receiver), false), span);
+        let done = self.call_function(init.function, values, TyirType::Unit, span);
+        self.release(done, span);
         exception
     }
 

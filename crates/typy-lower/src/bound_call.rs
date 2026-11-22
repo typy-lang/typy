@@ -21,6 +21,9 @@ pub(crate) struct Unbound<'call> {
     bound: Vec<(usize, Lowered)>,
     /// The positional values `*args` takes before the tail.
     extras: Vec<Lowered>,
+    /// Every positional value before the tail, in order, which an exception keeps as its
+    /// arguments (EXP-22).
+    by_position: Vec<Lowered>,
     /// How many positional values come before the tail, the instance of a new object among
     /// them.
     positional: usize,
@@ -36,6 +39,18 @@ pub(crate) struct Unbound<'call> {
     defaults: Vec<(usize, &'call TypedExpr)>,
     /// The description of the callee the runtime reads.
     description: ValueId,
+}
+
+impl Unbound<'_> {
+    /// Returns every positional value before the tail, in order.
+    pub(crate) fn by_position(&self) -> &[Lowered] {
+        &self.by_position
+    }
+
+    /// Returns the list of the positional values from the first `*iterable` on, if any.
+    pub(crate) fn tail(&self) -> Option<Lowered> {
+        self.tail.map(|(_, list)| list)
+    }
 }
 
 impl FunctionLowerer<'_> {
@@ -65,6 +80,7 @@ impl FunctionLowerer<'_> {
         let mut unbound = Unbound {
             bound: Vec::new(),
             extras: Vec::new(),
+            by_position: Vec::new(),
             positional: receivers,
             tail: None,
             names: None,
@@ -79,6 +95,7 @@ impl FunctionLowerer<'_> {
                     let value = self.expression(&argument.value);
                     let value = self.kept_for_call(&argument.value, value, span);
                     unbound.positional += 1;
+                    unbound.by_position.push(value);
                     if Some(argument.parameter) == star {
                         unbound.extras.push(value);
                     } else {
@@ -88,6 +105,7 @@ impl FunctionLowerer<'_> {
                 Passed::Items(targets) => {
                     for (target, item) in self.tuple_items(function, argument, targets, span) {
                         unbound.positional += 1;
+                        unbound.by_position.push(item);
                         if Some(target) == star {
                             unbound.extras.push(item);
                         } else {
