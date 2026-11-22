@@ -384,3 +384,37 @@ fn is_methods_give_cpython_s_answers() {
         assert_eq!(answer, *expected, "{whole:?} test {test}");
     }
 }
+
+/// Returns a two-byte string of the ASCII text `ascii`, which the case methods read code point
+/// by code point, as they read a string that is not ASCII.
+fn wide(ascii: &str) -> *mut StrObject {
+    let string = crate::string::new_string(ascii.len(), crate::string::StrKind::Ucs2);
+    for (index, byte) in ascii.bytes().enumerate() {
+        // SAFETY: the string is new, with room for every code point.
+        unsafe { crate::string::set_code_point(string, index, u32::from(byte)) };
+    }
+    string
+}
+
+#[test]
+fn nfr_21_ascii_text_takes_the_case_the_tables_give_it() {
+    for ascii in [
+        "hello World",
+        "aBc dEF_1x",
+        "'tis o'neil",
+        "x.y:z^w`v",
+        "123abc a1b2 c3D",
+        "MIXED case\tTabs",
+    ] {
+        for mode in 0..6 {
+            // SAFETY: both strings are live.
+            let (fast, slow) = unsafe {
+                (
+                    typy_rt_str_case(from_str(ascii), inline(mode).unwrap()),
+                    typy_rt_str_case(wide(ascii), inline(mode).unwrap()),
+                )
+            };
+            assert_eq!(text(fast), text(slow), "{ascii:?} mode {mode}");
+        }
+    }
+}

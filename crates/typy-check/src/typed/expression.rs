@@ -75,6 +75,11 @@ pub enum TypedExprKind {
     Submodule(String),
     /// The type alias object at this index of `TypedProgram::type_aliases` (SMT-12).
     TypeAliasObject(u32),
+    /// The typing value at this index of `TypedProgram::typing_values` (TYP-18).
+    TypingValue(u32),
+    /// A new copy of the alias at this index of `TypedProgram::type_aliases`, which a
+    /// function's `type` statement makes each time it runs (TYP-18).
+    NewTypeAlias(u32),
     /// A read of `sys.version_info` held as a value: `value` is evaluated, then `result`,
     /// a constant: the tuple of its items, which a tuple's operations read, or a comparison
     /// of them already made (LIB-16).
@@ -204,6 +209,14 @@ pub enum TypedExprKind {
         protocol: super::class::ClassId,
         name: String,
     },
+    /// A call through a function value with `*` (EXP-22): `callee` is evaluated, then the
+    /// values before the first `*`, then the list `rest` of every value from it on, whose
+    /// length is checked against the `Callable`'s parameters left when the program runs.
+    CallValueUnpacked {
+        callee: Box<TypedExpr>,
+        fixed: Vec<TypedExpr>,
+        rest: Box<TypedExpr>,
+    },
     /// A call through a function value: `callee` is evaluated, then the arguments, one for
     /// each parameter of its `Callable` type, in order (FUN-05).
     CallValue {
@@ -225,6 +238,21 @@ pub enum TypedExprKind {
         /// The `__init__` of a class of the program, which takes the arguments in place of
         /// `arguments`.
         init: Option<Box<InitCall>>,
+    },
+    /// A new exception of a class without an `__init__` of the program's, called with `*` or
+    /// `**` (EXP-22, ADR-0083).
+    NewExceptionUnpacked(Box<UnpackedException>),
+    /// `math.gcd`, `math.lcm` or `math.hypot` of the items of a list, which `*` gave a call
+    /// (EXP-22).
+    MathOfList {
+        function: crate::math::MathFunction,
+        values: Box<TypedExpr>,
+    },
+    /// `zip(*iterables)` of the iterables a list holds, an iterator of `tuple[T, ...]` items,
+    /// whose iterables of different lengths raise `ValueError` when `strict` is true (EXP-22).
+    ZipMany {
+        iterables: Box<TypedExpr>,
+        strict: Option<Box<TypedExpr>>,
     },
     /// `super().__init__(arguments)` in the `__init__` of an exception class whose bases have
     /// no `__init__` of the program's: the exception's arguments become these (CLS-14).
@@ -255,6 +283,10 @@ pub enum TypedExprKind {
     TypeOf(Box<TypedExpr>),
     /// The type object a class name or a built-in type name gives as a value.
     TypeObject(Box<crate::types::TypeObjectOf>),
+    /// `typing.cast(T, value)` of a value the checker cannot prove is a `T`: the value is
+    /// tested as `isinstance` tests it and given as a `T`, or `TypeError` is raised (TYP-24,
+    /// ADR-0091).
+    Cast(Box<CastCheck>),
     /// `__name__` of a type object.
     TypeName(Box<TypedExpr>),
     /// An f-string: its literal text and formatted fields, joined in order (LEX-07).
@@ -552,6 +584,39 @@ pub enum DictPart {
     Merge(TypedExpr),
 }
 
+/// A call of an exception class with `*` or `**` (EXP-22, ADR-0083).
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnpackedException {
+    /// The class called.
+    pub class: crate::exception::ExceptionClass,
+    /// The positional values, which become the exception's arguments.
+    pub values: ExceptionValues,
+    /// The dicts `**` unpacks, which must hold no entry when the call runs, since an exception
+    /// class takes no keywords.
+    pub options: Vec<TypedExpr>,
+}
+
+/// The positional values of a call of an exception class with `*` or `**`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExceptionValues {
+    /// Each value, laid out as the arguments of a call without unpacking.
+    Each(Vec<TypedExpr>),
+    /// One list of every value, whose number only the run knows.
+    Listed(TypedExpr),
+}
+
+impl UnpackedException {
+    /// Returns the values the call evaluates, in order: the positional ones, then the dicts.
+    #[must_use]
+    pub fn expressions(&self) -> Vec<&TypedExpr> {
+        let values: Vec<&TypedExpr> = match &self.values {
+            ExceptionValues::Each(values) => values.iter().collect(),
+            ExceptionValues::Listed(list) => vec![list],
+        };
+        values.into_iter().chain(&self.options).collect()
+    }
+}
+
 /// `print(values, sep=sep, end=end, file=file, flush=flush)`; each keyword is present only
 /// when written, and `file` only when it is not `None` (LIB-04).
 #[derive(Clone, Debug, PartialEq)]
@@ -569,6 +634,9 @@ pub struct PrintCall {
     pub file: Option<TypedExpr>,
     /// Whether standard output is written out after.
     pub flush: Option<TypedExpr>,
+    /// The dicts `**` gives, of one value type, whose keys bind to the keywords when the
+    /// call runs (EXP-22).
+    pub options: Vec<TypedExpr>,
 }
 
 /// One piece of an f-string or of a format specification after checking.
@@ -693,6 +761,16 @@ pub struct IsInstanceTest {
     pub held: Vec<TypedExpr>,
 }
 
+/// The test of a checked `cast` (TYP-24): the value with the classes that find it a `T`, and
+/// `T` as TyPy writes it, which the `TypeError` names.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CastCheck {
+    /// The value and its test.
+    pub test: IsInstanceTest,
+    /// The cast's type, written as messages write types.
+    pub target: String,
+}
+
 /// What a call with a `key` does with the items of its list (FUN-05).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyedOperation {
@@ -722,6 +800,8 @@ pub struct EachMember {
 pub enum MemberTest {
     /// The object is an instance of this class.
     Class(crate::types::TypeObjectOf),
+    /// The object's class is this class itself, as `type(x) is C` tests (TYP-23).
+    Exact(crate::types::TypeObjectOf),
     /// The object's header says it is of this kind of the runtime's own objects, which have
     /// no type object to test against.
     Kind(RuntimeKind),
@@ -762,6 +842,8 @@ impl TypedExpr {
             | TypedExprKind::ModuleName
             | TypedExprKind::TypeObject(_)
             | TypedExprKind::TypeAliasObject(_)
+            | TypedExprKind::TypingValue(_)
+            | TypedExprKind::NewTypeAlias(_)
             | TypedExprKind::FunctionValue(_)
             | TypedExprKind::Capture(_)
             | TypedExprKind::RunningFunction
@@ -802,6 +884,14 @@ impl TypedExpr {
             TypedExprKind::CallValue { callee, arguments } => {
                 std::iter::once(callee.as_ref()).chain(arguments).collect()
             }
+            TypedExprKind::CallValueUnpacked {
+                callee,
+                fixed,
+                rest,
+            } => std::iter::once(callee.as_ref())
+                .chain(fixed)
+                .chain(std::iter::once(rest.as_ref()))
+                .collect(),
             TypedExprKind::CaptureOf { closure, .. } => vec![closure],
             TypedExprKind::Lambda { captures, .. } => captures.iter().collect(),
             TypedExprKind::CallNested {
@@ -862,6 +952,7 @@ impl TypedExpr {
             TypedExprKind::IsInstance(test) => {
                 std::iter::once(&test.value).chain(&test.held).collect()
             }
+            TypedExprKind::Cast(cast) => vec![&cast.test.value],
             TypedExprKind::IsSubclass { class, bases } => {
                 std::iter::once(class.as_ref()).chain(bases).collect()
             }
@@ -890,7 +981,8 @@ impl TypedExpr {
             | TypedExprKind::ProtocolMethod { object: inner, .. }
             | TypedExprKind::ChosenFunction { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],
-            TypedExprKind::PercentFormat { values, .. } => vec![values],
+            TypedExprKind::PercentFormat { values, .. }
+            | TypedExprKind::MathOfList { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
             TypedExprKind::Open { path, options, .. } => [
                 Some(path),
@@ -993,6 +1085,10 @@ impl TypedExpr {
                 .chain(arguments)
                 .collect(),
             TypedExprKind::FString(parts) => crate::typed::dump::fstring_values(parts),
+            TypedExprKind::NewExceptionUnpacked(call) => call.expressions(),
+            TypedExprKind::ZipMany { iterables, strict } => std::iter::once(iterables.as_ref())
+                .chain(strict.as_deref())
+                .collect(),
             TypedExprKind::Print(call) => call
                 .values
                 .iter()
@@ -1000,6 +1096,7 @@ impl TypedExpr {
                 .chain(&call.end)
                 .chain(&call.file)
                 .chain(&call.flush)
+                .chain(&call.options)
                 .collect(),
         }
     }

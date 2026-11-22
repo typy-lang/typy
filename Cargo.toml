@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.10.0"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
@@ -64,9 +64,15 @@ missing_errors_doc = "allow"
 
 # The runtime archive is linked into every TyPy program; it aborts on panic and
 # is optimised for size (ADR-0006, NFR-02).
+# The runtime debug and `--release` builds link, optimised for speed (NFR-21, ADR-0100).
 [profile.runtime]
 inherits = "release"
 panic = "abort"
-opt-level = "z"
+opt-level = 3
 lto = true
 codegen-units = 1
+
+# The runtime `--release-small` builds link, optimised for size (NFR-02, ADR-0100).
+[profile.runtime-small]
+inherits = "runtime"
+opt-level = "z"

@@ -67,8 +67,9 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::FunctionValue(function), ty, span)
     }
 
-    /// Returns E0201 when `function`, named `name`, has a `*args` or `**kwargs` parameter,
-    /// which a `Callable` does not yet reach, planned for 0.11 (FUN-19).
+    /// Returns E0203 when `function`, named `name`, has a `*args` or `**kwargs` parameter and
+    /// is read where no `Callable` is expected: its own type has no `Callable` spelling, so it
+    /// takes the one its context expects (FUN-19, ADR-0080).
     pub(super) fn refused_variadic_value(
         &mut self,
         function: FunctionId,
@@ -85,13 +86,16 @@ impl BodyChecker<'_> {
             "**"
         };
         let message = format!(
-            "`{name}` takes `{stars}{}`, and a function with `*args` or `**kwargs` as a value is \
-             planned for TyPy 0.11 (FUN-19)",
+            "`{name}` takes `{stars}{}`, so as a value it needs the `Callable` type its context \
+             expects",
             parameter.name
         );
-        let diagnostic = Diagnostic::new(DiagnosticCode::error(201), span, message)
+        let diagnostic = Diagnostic::new(DiagnosticCode::error(203), span, message)
             .with_rule(RuleId::FUN_19)
-            .with_help("pass a `lambda` that calls it with the arguments the `Callable` passes");
+            .with_help(
+                "annotate the variable with the types you call it with, such as \
+                 `Callable[[int, int], int]`",
+            );
         Some(self.error(diagnostic, span))
     }
 
@@ -171,6 +175,22 @@ impl BodyChecker<'_> {
             {
                 self.expression(argument);
             }
+            // `**` binds by the names of the function the value holds, which its `Callable`
+            // type does not carry (ADR-0083).
+            if keyword.name.is_none() {
+                self.unpacking_calls.push(span);
+                return self.error(
+                    Diagnostic::new(
+                        DiagnosticCode::error(201),
+                        keyword.span,
+                        "`**` in a call of a function value, which binds by the names of the \
+                         function it holds, is planned for TyPy 1.0 (EXP-21)",
+                    )
+                    .with_rule(RuleId::EXP_21)
+                    .with_help("pass the values by position"),
+                    span,
+                );
+            }
             let written = keyword
                 .name
                 .as_ref()
@@ -189,6 +209,13 @@ impl BodyChecker<'_> {
                 .with_help("pass the argument by position"),
                 span,
             );
+        }
+        // `*` binds when the program runs, against the `Callable`'s parameters (EXP-22).
+        if arguments
+            .iter()
+            .any(|argument| matches!(argument, typy_source::syntax::Expr::Starred { .. }))
+        {
+            return self.call_value_unpacked(callee, (parameters, returns), arguments, span);
         }
         if arguments.len() != parameters.len() {
             for argument in arguments {

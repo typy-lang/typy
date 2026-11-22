@@ -236,6 +236,51 @@ pub unsafe extern "C" fn typy_rt_math_lcm(a: i64, b: i64) -> i64 {
     .into_word()
 }
 
+/// `math.gcd(*values)` of the `int` items of `values`: 0 for none, as `gcd()` is (EXP-22).
+///
+/// # Safety
+///
+/// `values` points to a live list of `int` items.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_math_gcd_list(values: *const crate::list::ListObject) -> i64 {
+    // SAFETY: the caller's guarantee.
+    unsafe { folded(values, 0, typy_rt_math_gcd) }
+}
+
+/// `math.lcm(*values)` of the `int` items of `values`: 1 for none, as `lcm()` is (EXP-22).
+///
+/// # Safety
+///
+/// `values` points to a live list of `int` items.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_math_lcm_list(values: *const crate::list::ListObject) -> i64 {
+    // SAFETY: the caller's guarantee.
+    unsafe { folded(values, 1, typy_rt_math_lcm) }
+}
+
+/// Returns `step` folded over the `int` items of `values` from the `int` `start`, each
+/// result before the last released.
+///
+/// # Safety
+///
+/// `values` points to a live list of `int` items.
+unsafe fn folded(
+    values: *const crate::list::ListObject,
+    start: i64,
+    step: unsafe extern "C" fn(i64, i64) -> i64,
+) -> i64 {
+    let mut total = small(i128::from(start)).into_word();
+    // SAFETY: the caller's guarantee; each item is a live `int` word.
+    unsafe {
+        for index in 0..(*values).length {
+            let next = step(total, (*values).item(index).cast_signed());
+            crate::refcount::typy_rt_int_decrement(total);
+            total = next;
+        }
+    }
+    total
+}
+
 /// `math.perm(n)`: `n!`, with `factorial`'s errors.
 ///
 /// # Safety

@@ -96,6 +96,34 @@ pub unsafe extern "C" fn typy_rt_str_slice(
             Ok(selection) => selection,
             Err(error) => return Raising::error(core::ptr::null_mut(), error),
         };
+        // A `str` of no code point or of one is shared; a `bytes`, which slices through this
+        // function and is then retyped, is not.
+        if (*text).header.type_id == crate::header::STR_TYPE_ID {
+            match selection.count {
+                0 => return Raising::ok(super::empty()),
+                1 => {
+                    if let Some(shared) = super::character(code_point(text, selection.position(0)))
+                    {
+                        return Raising::ok(shared);
+                    }
+                }
+                _ => {}
+            }
+        }
+        // A slice of a string of one byte a code point is one too, and its bytes are copied
+        // as a run when the step is 1 (NFR-21).
+        if let Some(bytes) = super::narrow::latin1(text) {
+            return Raising::ok(super::narrow::new_like(text, selection.count, |out| {
+                if selection.step == 1 {
+                    let start = selection.start_position();
+                    out.copy_from_slice(&bytes[start..start + selection.count]);
+                } else {
+                    for (index, byte) in out.iter_mut().enumerate() {
+                        *byte = bytes[selection.position(index)];
+                    }
+                }
+            }));
+        }
         // A string is as narrow as its widest code point, so the kind is measured on the slice.
         let kind = (0..selection.count)
             .map(|index| StrKind::of(code_point(text, selection.position(index))))
@@ -145,6 +173,9 @@ pub unsafe extern "C" fn typy_rt_str_index(
     // SAFETY: the position is in bounds, and the new string holds exactly that code point.
     unsafe {
         let point = code_point(text, position);
+        if let Some(shared) = super::character(point) {
+            return Raising::ok(shared);
+        }
         let result = new_string(1, StrKind::of(point));
         set_code_point(result, 0, point);
         Raising::ok(result)
@@ -175,6 +206,9 @@ pub unsafe extern "C" fn typy_rt_str_compare(
 ) -> bool {
     // SAFETY: the caller passes live strings, and every index stays below both lengths.
     let ordering = unsafe {
+        if let Some(ordering) = stored_ordering(left, right, inline_value(comparison) <= 1) {
+            return crate::compare::holds(ordering, comparison);
+        }
         let (left_length, right_length) = (length(left), length(right));
         let mut ordering = left_length.cmp(&right_length);
         for index in 0..left_length.min(right_length) {
@@ -187,6 +221,35 @@ pub unsafe extern "C" fn typy_rt_str_compare(
         ordering
     };
     crate::compare::holds(ordering, comparison)
+}
+
+/// Returns how two strings compare by their stored data, without reading code points: two
+/// strings of one byte a code point order as their bytes do, and, for `==` and `!=`, when
+/// `equality`, strings of two kinds differ, since a string is held at the narrowest kind that
+/// holds its code points; `None` when the code points must be read (NFR-21).
+///
+/// # Safety
+///
+/// Both point to live strings.
+unsafe fn stored_ordering(
+    left: *const StrObject,
+    right: *const StrObject,
+    equality: bool,
+) -> Option<core::cmp::Ordering> {
+    use super::narrow::{latin1, stored};
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        if let (Some(left), Some(right)) = (latin1(left), latin1(right)) {
+            return Some(left.cmp(right));
+        }
+        equality.then(|| {
+            if (*left).kind == (*right).kind && stored(left) == stored(right) {
+                core::cmp::Ordering::Equal
+            } else {
+                core::cmp::Ordering::Less
+            }
+        })
+    }
 }
 
 /// Returns `needle in haystack`: whether the code points of `needle` appear together in

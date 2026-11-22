@@ -319,6 +319,16 @@ impl FunctionLowerer<'_> {
         up: bool,
         span: Span,
     ) -> Lowered {
+        // A value becomes an `object`, and an `object` a test narrowed becomes the value again
+        // (TYP-23, ADR-0090).
+        if up && *target == Type::Object {
+            let value = self.expression(inner);
+            return self.boxed(value, &inner.ty, span);
+        }
+        if !up && inner.ty == Type::Object {
+            let value = self.expression(inner);
+            return self.unboxed(value, target, ty, span);
+        }
         let source = self.lowered_type(&inner.ty);
         if !self.involves_tag(source) && !self.involves_tag(ty) {
             return if up {

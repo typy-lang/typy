@@ -47,10 +47,12 @@ whose subclass defines it again as a static method, or overrides it with a
 parameter or a result held otherwise, such as `int | None` for `int`: the
 value has the type of the method read, and calls the object's own method.
 
-A nested function or a method with `*args` or `**kwargs` as a value is
-planned for 0.11 (FUN-19), and so is a nested function with type parameters of its
-own (FUN-18). A class of the program as a `Callable` is planned for 0.14
-(FUN-16).
+A nested function, a method or a `lambda` with defaults, `*args` or
+`**kwargs` is a value where a `Callable` is expected that its parameters
+take; see [Variable numbers of arguments](#variable-numbers-of-arguments)
+(FUN-19). A nested function may have type parameters of its own; see
+[Nested generic functions](generics.md#nested-generic-functions) (FUN-18).
+A class of the program as a `Callable` is planned for 0.14 (FUN-16).
 
 ## Decorators
 
@@ -125,17 +127,50 @@ module with defaults, `*args` or `**kwargs` is a value where a `Callable`
 is expected that its parameters take, such as `apply(total, 2, 3)` or
 `twice: Callable[[int], int] = scale` with `by: int = 2`; it is called
 with the `Callable`'s arguments by position, and stays the same function
-to `is` and `==` (FUN-13). Read where nothing is expected, it is E0203. A
-nested function or a method with them as a value, and `*args` or
-`**kwargs` in a `lambda`, are planned for 0.11 (FUN-19). A call may also
-unpack its arguments; see [Unpacking in a call](#unpacking-in-a-call).
+to `is` and `==` (FUN-13). Read where nothing is expected, it is E0203.
+
+So is a nested function, a method read through an instance, a class or a
+protocol value, and a `lambda` (FUN-19). A keyword-only parameter with a
+default takes its default. The value is the function itself to `is`,
+`==`, `hash` and `repr`: `obj.scale` is still a bound method of the
+object's own class. In a `lambda`, `*args` holds the arguments past the
+other parameters, which have one type, and a parameter past them takes
+its default:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable
+
+
+def apply(function: Callable[[int], int], value: int) -> int:
+    return function(value)
+
+
+class Meter:
+    def scale(self, value: int, extra: int = 0) -> int:
+        return value * 2 + extra
+
+
+def outer(base: int) -> int:
+    def add(value: int, *more: int) -> int:
+        return value + base + sum(more)
+
+    by_three = apply(lambda value, by=3: value * by, 4)
+    return apply(add, 1) + apply(Meter().scale, 2) + by_three
+
+
+print(outer(10))
+```
+
+A call may also unpack its arguments; see
+[Unpacking in a call](#unpacking-in-a-call).
 
 ## Unpacking in a call
 
-A call of a function, method or class of the program passes each value of
-an iterable written `*iterable` as a positional argument, and each entry
-of a `dict[str, T]` written `**dict` as a keyword argument, as CPython
-does. `print(*values)` writes each value:
+A call of a function, method or class of the program, or of a method through a
+protocol (EXP-22), passes each value of an iterable written `*iterable` as a
+positional argument, and each entry of a `dict[str, T]` written `**dict` as a
+keyword argument, as CPython does. `print(*values)` writes each value:
 
 <!-- typy-expect: accepted -->
 ```python
@@ -174,10 +209,9 @@ the `**` dicts
 have one type too, which must fit each parameter a keyword may still
 fill and the values of `**kwargs`.
 
-A call of a builtin, a function value, a protocol method or an exception
-class takes `*` of a tuple display or of a variable that holds a fixed
-tuple, and `**` of a dict display whose keys are `str` literals, each
-written out as the values it gives (EXP-19):
+A call of a builtin, a function value or an exception class takes `*` of a tuple
+display or of a variable that holds a fixed tuple, and `**` of a dict display
+whose keys are `str` literals, each written out as the values it gives (EXP-19):
 
 <!-- typy-expect: accepted -->
 ```python
@@ -185,8 +219,114 @@ point = (7, 3)
 print(max(*point), min(*(4, 9, 2)), *point, **{"sep": "-"})
 ```
 
-The same unpacking of a list or another iterable, or of a dict held in a
-variable, in such a call is planned for 0.11 (EXP-22).
+A call of a function value takes `*` of any iterable (EXP-22). The
+values before the first `*` bind to the first parameters, and the values
+from it on fill the rest, which must take one type. When the program
+runs, the call checks that they are as many as the `Callable` takes, and
+raises CPython's `TypeError` otherwise, naming the function the value
+holds, such as `total() takes 2 positional arguments but 3 were given`;
+for too few values the message does not name the missing parameters,
+which a `Callable` type does not carry:
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable
+
+
+def total(first: int, second: int) -> int:
+    return first + second
+
+
+add: Callable[[int, int], int] = total
+values = [1, 2]
+print(add(*values), add(1, *values[1:]))
+```
+
+`**` in a call of a function value binds by the names of the function it holds,
+which a `Callable` type does not carry, and is planned for 1.0 (EXP-21). A call
+of an exception class takes `*` of any iterable and `**` of a dict held in a
+variable; see [The arguments and the exit
+code](../library/exceptions.md#the-arguments-and-the-exit-code).
+
+A call of a built-in function takes `*` of any
+iterable (EXP-22). The values from the first `*` on have one type, the first
+value's (E0409). The call is checked once for each number of arguments the
+built-in takes, and the number of values `*` gives picks that form when the
+program runs; any other number raises CPython 3.15's `TypeError`, such as `range
+expected at most 3 arguments, got 4`. Each form must give one result type, so
+`tuple(*rows)`, which gives `()` for no value, is E0202, and a form TyPy refuses
+for the type `*` gives refuses the call, with a note of how many values reach
+it:
+
+<!-- typy-expect: accepted -->
+```python
+def bounds(values: list[int]) -> list[int]:
+    return list(range(*values))
+
+
+print(bounds([3]), bounds([1, 4]), bounds([0, 9, 3]))
+try:
+    bounds([1, 2, 3, 4])
+except TypeError as error:
+    print(error)
+```
+
+`max(*values)` and `min(*values)` put every positional value in one
+list: none raises `TypeError`, one is iterated, as CPython iterates a
+single argument, and more are compared. One value gives the list's type
+only for a `str`, whose items are `str`; for any other iterable the
+result's type depends on the number of values, which is E0202, and a
+value that cannot be iterated raises CPython's `TypeError`, such as
+`'int' object is not iterable`:
+
+<!-- typy-expect: accepted -->
+```python
+words = ["pear", "fig"]
+print(max(*words), min(*words, key=len), max(*["fig"]))
+```
+
+`zip(*rows)` takes iterables of one type, and gives tuples as long as
+the list `*` gives, of type `tuple[T, ...]`; `strict=True` raises
+CPython's `ValueError` for iterables of different lengths:
+
+<!-- typy-expect: accepted -->
+```python
+rows = [[1, 2, 3], [4, 5, 6]]
+for column in zip(*rows):
+    print(column, sum(column))
+```
+
+A method of a built-in type takes `*` as a built-in function does, the
+receiver evaluated first, with the messages of the method, such as
+`list.append() takes exactly one argument (2 given)`. The methods of a
+set that take any number of iterables, `union`, `intersection`,
+`difference`, `update`, `intersection_update` and `difference_update`,
+take `*` of a list of them:
+
+<!-- typy-expect: accepted -->
+```python
+seen = {1, 2}
+others = [[2, 3], [4]]
+print(sorted(seen.union(*others)), "-".join(*[["a", "b"]]))
+```
+
+A function of `math` or `sys` takes `*` as a built-in function does,
+with its own messages, such as `math.floor() takes exactly one argument
+(2 given)`. `math.gcd`, `math.lcm` and `math.hypot` take any number of
+values, so they take `*` of a list of `int`s, or of numbers for
+`hypot`. A function of `ctypes` lays out C data from the arguments the
+program writes, so `*` there is E0202:
+
+<!-- typy-expect: accepted -->
+```python
+import math
+
+numbers = [12, 18, 30]
+print(math.gcd(*numbers), math.hypot(*[3.0, 4.0]), math.pow(*[2.0, 3.0]))
+```
+
+`**` of a dict held in a variable in a call of a builtin other than
+`print` is planned for 1.0 (EXP-24, ADR-0099).
 
 ## Nested functions
 
@@ -589,11 +729,22 @@ These forms are refused:
 | `Callable[..., R]`, which takes any arguments, and `Callable` without its types | E0408 |
 | A keyword argument through a function value, such as `f(value=1)`, since a `Callable` names no parameters | E0404 |
 | A generic function as a value, which has one copy for each set of types | E0202 |
-| A function with a keyword-only parameter as a value, since a `Callable` passes every argument by position | E0202 |
-| A method with type parameters of its own, or with a keyword-only parameter, as a value | E0202 |
-| A nested function or a method with `*args` or `**kwargs` as a value, or a `lambda` with them, planned for 0.11 | E0201 (FUN-19) |
+| A function or a method with a keyword-only parameter read where no `Callable` is expected, since a `Callable` passes every argument by position | E0202 |
+| A function or a method whose keyword-only parameter has no default, where a `Callable` is expected | E0404 |
+| A method with type parameters of its own as a value | E0202 |
 | A function of the module with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-13) |
-| `*` of a list or another iterable, or `**` of a dict held in a variable, in a call of a builtin other than `print`, of a function value, of a protocol method or of an exception class, and such `**` in a call of `print`, planned for 0.11 | E0201 (EXP-22) |
+| A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
+| A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
+| `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
+| `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 1.0 | E0201 (EXP-24) |
+| `*` of a value only the run knows in a call of a function of `ctypes` | E0202 (EXP-22) |
+| `*` in a call of a built-in function whose result type depends on the number of values it gives, such as `tuple(*rows)` or `max(*rows)` of lists | E0202 (EXP-22) |
+| `*` in a call of a built-in function given more values before the first `*` than it takes | E0404 (EXP-22) |
+| `*` of a value only the run knows in a call of `OSError` or a class derived from it, whose `errno`, `strerror` and file names are read by position | E0202 (EXP-22) |
+| `*` in a call of an exception class whose positional values have more than one type | E0409 (EXP-22) |
+| `**` in a call of `print` of a value that is no `dict[str, V]`, or of dicts of different value types | E0404 (EXP-22) |
+| `**` in a call of a function value, planned for 1.0 | E0201 (EXP-21) |
+| `*` in a call of a function value whose values may reach parameters of more than one type | E0404 (EXP-22) |
 | An assignment to a method of an instance, such as `box.close = other`, since TyPy does not replace a class's attributes when the program runs | E0414 |
 | A property read through its class as a value, such as `Box.v`, which is a `property` object, planned for 1.0 | E0201 (FUN-17) |
 | A call of a value that is not a function, such as an `int` | E0401 |

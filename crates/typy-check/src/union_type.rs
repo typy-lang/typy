@@ -119,12 +119,13 @@ impl Type {
                 | Self::Range
                 | Self::Slice
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
                 | Self::VersionInfo
                 | Self::NotImplemented
                 | Self::CData(_)
                 | Self::TypeObject(_)
                 | Self::Union(_)
+                | Self::Object
         )
     }
 

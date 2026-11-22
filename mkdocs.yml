@@ -2,7 +2,7 @@
 # the Markdown under docs/ (DOC-05, ADR-0050). Every setting here is one that
 # Material for MkDocs 9.8 also reads, so either tool builds the site from
 # this file. scripts/build-docs.sh builds it in strict mode into site/.
-site_name: TyPy 0.10 documentation
+site_name: TyPy 0.11 documentation
 site_url: https://typy-lang.org/
 site_description: >-
   TyPy compiles a strict, typed subset of standard Python ahead of time to
@@ -85,6 +85,7 @@ nav:
   - Home: index.md
   - What's new:
       - whatsnew/index.md
+      - What's new in TyPy 0.11: whatsnew/0.11.md
       - What's new in TyPy 0.10: whatsnew/0.10.md
       - What's new in TyPy 0.9: whatsnew/0.9.md
       - What's new in TyPy 0.8: whatsnew/0.8.md
@@ -122,6 +123,9 @@ nav:
   - Engineering documents:
       - Overview: engineering.md
       - Research: research/research.md
+      - "Research: values whose type is known late": research/static-and-dynamic-values.md
+      - "Research: threads and data races": research/threads-and-data-races.md
+      - "Research: newer Python and a typed standard library": research/newer-python-and-a-typed-standard-library.md
       - Requirements specification: requirements/srs.md
       - Use case model: modeling/use-case-model.md
       - Domain model: modeling/domain-model.md
@@ -217,9 +221,22 @@ nav:
           - adr/0087-make-typing-values-constants-written-only-where-the-oracles-agree.md
           - adr/0088-give-a-named-tuple-methods-over-the-tuple-of-its-fields.md
           - adr/0089-write-map-and-filter-as-generic-iterator-classes-of-the-module.md
+          - adr/0090-hold-a-value-of-type-object-as-an-object-narrowed-by-its-type-id.md
+          - adr/0091-check-a-typing-cast-when-the-program-runs.md
+          - adr/0092-infer-a-functions-result-and-an-empty-collections-items.md
+          - adr/0093-expand-enum-and-abc-classes-in-the-checker.md
+          - adr/0094-bind-the-operations-of-an-any-value-when-the-program-runs.md
+          - adr/0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md
+          - adr/0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md
+          - adr/0097-check-the-standard-librarys-signatures-against-typeshed.md
+          - adr/0098-do-arithmetic-on-bool-as-cpython-does.md
+          - adr/0099-plan-star-star-in-calls-of-built-ins-for-1-0.md
+          - adr/0100-build-the-runtime-for-speed-and-for-size-only-for-release-small.md
+          - adr/0101-keep-the-hash-of-a-str-in-the-object.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md
+      - Corpus report: testing/corpus-report.md
       - Development guide: development/development-guide.md
   - About:
       - about/index.md

@@ -5,6 +5,7 @@ mod instance;
 mod reversed;
 #[cfg(test)]
 mod tests;
+mod zip_many;
 
 use crate::Raising;
 use crate::dict::DictObject;
@@ -65,6 +66,9 @@ pub(crate) enum IteratorKind {
     ReversedDictValues = 19,
     /// `reversed()` of a view of a dict's items.
     ReversedDictItems = 20,
+    /// `zip(*iterables)` of as many iterables as a list holds (EXP-22); only the runtime
+    /// makes it.
+    ZipMany = 21,
 }
 
 impl IteratorKind {
@@ -111,6 +115,9 @@ pub(crate) struct IteratorObject {
     /// The layout of a dict's items, and room for the current one.
     pair_type: *const TupleType,
     pair: *mut u8,
+    /// The current item of a zip of a list of iterables, a tuple the iterator owns; null
+    /// otherwise.
+    owned: *mut ObjectHeader,
 }
 
 /// Returns a type of iterator with CPython's name: hashed by identity and written as
@@ -124,6 +131,7 @@ const fn iterator_type(name: &'static str) -> TypeObject {
 }
 
 static LIST_ITERATOR: TypeObject = iterator_type("list_iterator");
+static ZIP: TypeObject = iterator_type("zip");
 static TUPLE_ITERATOR: TypeObject = iterator_type("tuple_iterator");
 static STR_ITERATOR: TypeObject = iterator_type("str_iterator");
 static STR_ASCII_ITERATOR: TypeObject = iterator_type("str_ascii_iterator");
@@ -158,6 +166,7 @@ pub(crate) unsafe fn type_of(iterator: *const IteratorObject) -> &'static TypeOb
     // SAFETY: the caller's guarantee.
     match unsafe { (*iterator).kind } {
         IteratorKind::List => &LIST_ITERATOR,
+        IteratorKind::ZipMany => &ZIP,
         IteratorKind::Tuple => &TUPLE_ITERATOR,
         IteratorKind::Str => &STR_ITERATOR,
         IteratorKind::StrAscii => &STR_ASCII_ITERATOR,
@@ -287,6 +296,7 @@ unsafe fn made(
             number: 0,
             pair_type,
             pair,
+            owned: core::ptr::null_mut(),
         });
     }
     iterator
@@ -515,6 +525,7 @@ unsafe fn step(iterator: &mut IteratorObject) -> Result<bool, *mut crate::Except
             IteratorKind::Instance => {
                 crate::libc::abort_with(b"typy runtime: an instance is stepped as a collection\n")
             }
+            IteratorKind::ZipMany => return zip_many::step(iterator),
             IteratorKind::List | IteratorKind::Tuple => {
                 let list = &*source.cast::<ListObject>();
                 if position >= list.length {
@@ -683,6 +694,9 @@ pub(crate) unsafe fn destroy(iterator: *mut IteratorObject) {
         crate::refcount::typy_rt_int_decrement(object.number);
         if !object.pair.is_null() {
             crate::allocator::free(object.pair);
+        }
+        if !object.owned.is_null() {
+            typy_rt_decrement(object.owned);
         }
     }
     crate::allocator::free(iterator.cast());

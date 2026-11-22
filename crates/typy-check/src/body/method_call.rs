@@ -422,6 +422,9 @@ impl BodyChecker<'_> {
             ),
         )
         .with_rule(RuleId::LIB_03);
+        if *receiver == Type::Object {
+            diagnostic = diagnostic.with_help(super::operator::OBJECT_HELP);
+        }
         if matches!(receiver, Type::Iterator(_) | Type::Iterable(_))
             && matches!(name.name.as_str(), "send" | "throw" | "close")
         {

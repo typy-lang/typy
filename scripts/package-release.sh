@@ -28,9 +28,11 @@ mkdir -p "${stage}/bin"
 install -m 755 "${target}/release/typy" "${stage}/bin/typy"
 scripts/check-executable-needs.sh "${stage}/bin/typy"
 for triple in $(scripts/host-targets.sh); do
-    mkdir -p "${stage}/lib/typy/${triple}"
-    install -m 644 "${target}/lib/typy/${triple}/libtypy_runtime.a" \
-        "${stage}/lib/typy/${triple}/libtypy_runtime.a"
+    for flavour in typy typy-small; do
+        mkdir -p "${stage}/lib/${flavour}/${triple}"
+        install -m 644 "${target}/lib/${flavour}/${triple}/libtypy_runtime.a" \
+            "${stage}/lib/${flavour}/${triple}/libtypy_runtime.a"
+    done
 done
 install -m 644 LICENSE-APACHE LICENSE-MIT THIRD-PARTY-NOTICES.md README.md CHANGELOG.md \
     "${stage}/"

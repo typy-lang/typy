@@ -187,6 +187,9 @@ impl DictObject {
         let mut perturb = hash.cast_unsigned() as usize;
         let mut slot = perturb & mask;
         let key_type = self.key_type();
+        // A key that is the object an entry holds is that entry's, as CPython's lookup tests
+        // identity before equality.
+        let objects = key_type.kind() == crate::list::ItemKind::Object;
         // SAFETY: the caller's guarantee; every slot is masked into the table.
         unsafe {
             loop {
@@ -196,7 +199,8 @@ impl DictObject {
                 }
                 if let Ok(position) = usize::try_from(index)
                     && self.hash(position) == hash
-                    && key_type.equal(self.key(position), key)
+                    && (objects && self.key(position) == key
+                        || key_type.equal(self.key(position), key))
                 {
                     return (slot, Some(position));
                 }

@@ -1,12 +1,17 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
 mod accessor;
+mod alias_value;
+mod arity_table;
 mod binding;
 mod builtin_call;
 mod builtin_module;
+mod builtin_unpacking;
 mod builtin_value;
 mod call;
 mod call_expression;
+mod callable_adapter;
+mod cast_call;
 mod cdata;
 mod class;
 mod class_bridge;
@@ -41,6 +46,7 @@ pub use truth_bridge::TRUTH_BRIDGE;
 mod exception;
 mod exception_creation;
 mod exception_part;
+mod exception_unpacking;
 mod expression;
 mod flow;
 mod fstring;
@@ -61,12 +67,15 @@ mod matching;
 mod math_call;
 mod math_iterable;
 mod method_call;
+mod method_unpacking;
 mod method_value;
 mod module_context;
+mod module_unpacking;
 mod name;
 mod named;
 mod named_tuple;
 mod nested_function;
+mod nested_generic;
 mod open_call;
 mod open_options;
 mod operator;
@@ -92,10 +101,12 @@ mod sys_call;
 mod type_alias_value;
 mod type_object;
 mod typing_class;
+mod typing_value;
 mod union;
 mod union_loop;
 mod unpacked_arguments;
 mod unpacking;
+mod value_unpacking;
 mod version_info;
 mod view_operator;
 mod yield_from;
@@ -176,7 +187,9 @@ pub(crate) struct BodyChecker<'program> {
     nonlocal_names: BTreeMap<String, SymbolId>,
     /// The type aliases the body's `type` statements define, which annotations read
     /// (SMT-12).
-    local_aliases: BTreeSet<String>,
+    /// The alias whose value is being written, whose names are its module's and its own
+    /// type parameters (TYP-18).
+    alias_rendering: Option<typing_value::AliasRendering>,
     /// Whether the next expression checked may be a `ctypes` class, as the value of an
     /// assignment to a name is; checking it clears this (FFI-03).
     class_allowed: bool,
@@ -233,7 +246,7 @@ impl<'program> BodyChecker<'program> {
             nonlocal_names: BTreeMap::new(),
             generator: None,
             received: None,
-            local_aliases: BTreeSet::new(),
+            alias_rendering: None,
             class_allowed: false,
             qualified_name: String::new(),
             closure_scope: closure_scope::ClosureScope::default(),

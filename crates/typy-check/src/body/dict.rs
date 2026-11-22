@@ -50,7 +50,10 @@ impl BodyChecker<'_> {
                     "an empty dict needs an annotation that names its key and value types",
                 )
                 .with_rule(RuleId::TYP_05)
-                .with_help("annotate the variable, such as `counts: dict[str, int] = {}`"),
+                .with_help(
+                    "annotate the variable, such as `counts: dict[str, int] = {}`; the types \
+                     inferred from its first use are planned for TyPy 0.12 (TYP-27)",
+                ),
                 span,
             );
         };

@@ -44,6 +44,15 @@ impl Creations {
         push(made, (class.clone(), Type::Tuple(arguments.to_vec())));
     }
 
+    /// Records a call of `class` with `*`, whose arguments are any number of values of type
+    /// `item` (EXP-22).
+    pub(crate) fn make_variadic(&mut self, class: &ExceptionClass, item: &Type) {
+        push(
+            &mut self.made,
+            (class.clone(), Type::TupleOf(Box::new(item.clone()))),
+        );
+    }
+
     /// Records that the runtime may raise an `OSError` about a file opened from a
     /// descriptor, which holds the descriptor as its third argument.
     pub(crate) fn descriptors(&mut self) {
@@ -212,14 +221,28 @@ fn shown(class: &ExceptionClass, arguments: &Type) -> Vec<Type> {
 }
 
 /// Returns `tuples` as one type: a tuple, or a union whose members have distinct layouts,
-/// those of one layout joined item by item.
+/// those of one layout joined item by item. A `tuple[T, ...]` takes in each fixed tuple whose
+/// items are all held as `T` is, so the runtime tells the members apart by their layout alone
+/// (EXP-22).
 fn union_of(tuples: Vec<Type>) -> Type {
+    let mut variadic: Vec<Type> = Vec::new();
+    let mut fixed: Vec<Vec<Type>> = Vec::new();
+    for tuple in tuples {
+        match tuple {
+            Type::TupleOf(item) => join_variadic(&mut variadic, &[*item]),
+            Type::Tuple(items) => fixed.push(items),
+            _ => {}
+        }
+    }
     let mut members: Vec<Vec<Type>> = Vec::new();
-    let tuples = tuples.into_iter().filter_map(|tuple| match tuple {
-        Type::Tuple(items) => Some(items),
-        _ => None,
-    });
-    for items in tuples {
+    for items in fixed {
+        if variadic
+            .iter()
+            .any(|item| items.iter().all(|each| same_item_layout(item, each)))
+        {
+            join_variadic(&mut variadic, &items);
+            continue;
+        }
         match members
             .iter_mut()
             .find(|member| same_layout(member, &items))
@@ -234,7 +257,15 @@ fn union_of(tuples: Vec<Type>) -> Type {
             None => members.push(items),
         }
     }
-    let mut members: Vec<Type> = members.into_iter().map(Type::Tuple).collect();
+    let mut members: Vec<Type> = members
+        .into_iter()
+        .map(Type::Tuple)
+        .chain(
+            variadic
+                .into_iter()
+                .map(|item| Type::TupleOf(Box::new(item))),
+        )
+        .collect();
     // A union's members stand in one order, as `Type::union` puts them; it is not used,
     // since it drops a tuple another accepts, such as `tuple[int]` for `tuple[float]`, whose
     // layout differs.
@@ -243,6 +274,27 @@ fn union_of(tuples: Vec<Type>) -> Type {
         0 => Type::Tuple(Vec::new()),
         1 => members.remove(0),
         _ => Type::Union(members),
+    }
+}
+
+/// Joins `items` into the item type of the `tuple[T, ...]` of `variadic` that holds them
+/// alike, or adds one for the first of them; `items` all share one layout.
+fn join_variadic(variadic: &mut Vec<Type>, items: &[Type]) {
+    let Some(first) = items.first() else {
+        return;
+    };
+    let index = variadic
+        .iter()
+        .position(|item| same_item_layout(item, first))
+        .unwrap_or_else(|| {
+            variadic.push(first.clone());
+            variadic.len() - 1
+        });
+    for item in items {
+        let held = &mut variadic[index];
+        if held != item {
+            *held = Type::union(vec![held.clone(), item.clone()]);
+        }
     }
 }
 
@@ -255,13 +307,19 @@ fn push(creations: &mut Vec<(ExceptionClass, Type)>, creation: (ExceptionClass, 
 }
 
 /// Returns true when two tuples are laid out alike: as many items, and at each position
-/// one type, or two types held as objects.
+/// items held alike.
 fn same_layout(left: &[Type], right: &[Type]) -> bool {
     left.len() == right.len()
         && left
             .iter()
             .zip(right)
-            .all(|(left, right)| left == right || (held_as_object(left) && held_as_object(right)))
+            .all(|(left, right)| same_item_layout(left, right))
+}
+
+/// Returns true when items of two types are held alike: one type, or two types held as
+/// objects.
+fn same_item_layout(left: &Type, right: &Type) -> bool {
+    left == right || (held_as_object(left) && held_as_object(right))
 }
 
 /// Returns true when a value of the type is the address of an object: a union only when
@@ -473,6 +531,52 @@ mod tests {
         assert_eq!(
             creations.arguments_of(&builtin(BuiltinException::KeyError)),
             tuple(&[Type::Str])
+        );
+    }
+
+    #[test]
+    fn exp_22_a_variadic_tuple_takes_in_the_fixed_tuples_held_as_its_items() {
+        let mut creations = Creations::default();
+        let class = builtin(BuiltinException::ValueError);
+        let numbers = Type::List(Box::new(Type::Int));
+        creations.make_variadic(&class, &numbers);
+        creations.make(&class, &[Type::Str, numbers.clone()]);
+        creations.make(&class, &[]);
+        assert_eq!(
+            creations.arguments_of(&class),
+            Type::TupleOf(Box::new(Type::union(vec![numbers, Type::Str])))
+        );
+    }
+
+    #[test]
+    fn exp_22_a_variadic_tuple_leaves_apart_the_tuples_of_other_layouts() {
+        let mut creations = Creations::default();
+        let class = builtin(BuiltinException::ValueError);
+        creations.make_variadic(&class, &Type::Int);
+        creations.make_variadic(&class, &Type::Int);
+        creations.make(&class, &[Type::Int, Type::Float]);
+        let members = members(creations.arguments_of(&class));
+        assert_eq!(members.len(), 3, "{members:?}");
+        assert!(members.contains(&Type::TupleOf(Box::new(Type::Int))));
+        assert!(members.contains(&tuple(&[Type::Int, Type::Float])));
+        assert!(members.contains(&tuple(&[Type::Str])));
+    }
+
+    #[test]
+    fn exp_22_variadic_tuples_of_objects_join_and_others_stay_apart() {
+        let mut creations = Creations::default();
+        let class = builtin(BuiltinException::RuntimeError);
+        let names = Type::List(Box::new(Type::Str));
+        creations.make_variadic(&class, &Type::Bool);
+        creations.make_variadic(&class, &names);
+        creations.make_variadic(&class, &Type::Str);
+        let members = members(creations.arguments_of(&class));
+        assert_eq!(
+            members,
+            [
+                Type::TupleOf(Box::new(Type::Bool)),
+                Type::TupleOf(Box::new(Type::union(vec![names, Type::Str]))),
+            ]
         );
     }
 

@@ -11,20 +11,16 @@ use crate::types::Type;
 
 impl BodyChecker<'_> {
     /// Returns the value of `id` when it names a type alias: the object of an alias of the
-    /// module or one it imports, or the error for an alias a function or a class defines.
+    /// module or one it imports, or of one a class defines, whose class value reads it by a
+    /// hidden name (TYP-18).
     pub(super) fn type_alias_value(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
-        if self.local_aliases.contains(id) {
-            return Some(self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    format!(
-                        "reading the type alias `{id}`, which a function or a class defines, as \
-                         a value is planned for TyPy 0.11 (TYP-18)"
-                    ),
-                )
-                .with_rule(RuleId::TYP_18)
-                .with_help("define the alias at the top of the module"),
+        if let Some(qualified) = crate::check::class_alias_name(id) {
+            let name = qualified.rsplit('.').next().unwrap_or(qualified).to_owned();
+            let module = self.program.module.clone();
+            let index = self.program.type_alias_object(&module, (&name, qualified));
+            return Some(Self::typed(
+                TypedExprKind::TypeAliasObject(index),
+                Type::TypeAlias(self.local_alias_floor()),
                 span,
             ));
         }
@@ -38,10 +34,70 @@ impl BodyChecker<'_> {
         Some(self.type_alias_object(&module, &name, span))
     }
 
+    /// Returns the floor from which every oracle from the program's floor writes an alias a
+    /// function or a class defines alike: its qualified name only from 3.15.
+    pub(super) const fn local_alias_floor(&self) -> u8 {
+        if self.program.floor >= 15 {
+            Type::TYPING_ALIKE
+        } else {
+            15
+        }
+    }
+
+    /// Checks a function's `type` statement (TYP-18): its variable takes a new alias, a copy
+    /// of the alias's description, each time the statement runs.
+    pub(super) fn local_type_alias(
+        &mut self,
+        (name, parameters, value): (
+            &Identifier,
+            &[typy_source::syntax::TypeParameter],
+            &typy_source::syntax::Expr,
+        ),
+        span: Span,
+    ) -> Option<crate::typed::TypedStmt> {
+        let qualified = format!(
+            "{}.<locals>.{}",
+            super::typing_value::without_type_arguments(&self.qualified_name),
+            name.name
+        );
+        let module = self.program.module.clone();
+        self.program.alias_sources.insert(
+            (module.clone(), qualified.clone()),
+            super::program::AliasSource::of(parameters, value),
+        );
+        let index = self
+            .program
+            .type_alias_object(&module, (&name.name, &qualified));
+        let symbol = *self.locals.get(&name.name)?;
+        self.program.alias_symbols.insert(symbol, index);
+        let made = Self::typed(
+            TypedExprKind::NewTypeAlias(index),
+            Type::TypeAlias(self.local_alias_floor()),
+            span,
+        );
+        let target = typy_source::syntax::Expr::Name {
+            id: name.name.clone(),
+            span: name.span,
+        };
+        let targets = self
+            .assign_target(&target, made.ty.clone(), &made)
+            .into_iter()
+            .collect();
+        Some(crate::typed::TypedStmt::Assign {
+            targets,
+            value: made,
+            span,
+        })
+    }
+
     /// Returns the object of the type alias `name` of `module`.
     pub(super) fn type_alias_object(&mut self, module: &str, name: &str, span: Span) -> TypedExpr {
-        let index = self.program.type_alias_object(module, name);
-        Self::typed(TypedExprKind::TypeAliasObject(index), Type::TypeAlias, span)
+        let index = self.program.type_alias_object(module, (name, name));
+        Self::typed(
+            TypedExprKind::TypeAliasObject(index),
+            Type::TypeAlias(Type::TYPING_ALIKE),
+            span,
+        )
     }
 
     /// Checks `alias.attribute` of a type alias: `__name__` and `__module__`.
@@ -55,18 +111,7 @@ impl BodyChecker<'_> {
             "__name__" => false,
             "__module__" => true,
             "__value__" | "__type_params__" => {
-                return self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        attribute.span,
-                        format!(
-                            "`{}` of a type alias is planned for TyPy 0.11 (TYP-18)",
-                            attribute.name
-                        ),
-                    )
-                    .with_rule(RuleId::TYP_18),
-                    span,
-                );
+                return self.alias_source_part(&alias, (&attribute.name, attribute.span), span);
             }
             other => {
                 return self.error(

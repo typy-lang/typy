@@ -495,11 +495,14 @@ impl Dump<'_> {
             }
             TypedExprKind::Submodule(module) => format!("Submodule {module}"),
             TypedExprKind::TypeAliasObject(index) => format!("TypeAliasObject {index}"),
+            TypedExprKind::TypingValue(index) => format!("TypingValue {index}"),
+            TypedExprKind::NewTypeAlias(index) => format!("NewTypeAlias {index}"),
             TypedExprKind::FunctionValue(function) => format!(
                 "FunctionValue {}",
                 self.program.function(*function).qualified_name
             ),
             TypedExprKind::CallValue { .. } => "CallValue".to_owned(),
+            TypedExprKind::CallValueUnpacked { .. } => "CallValueUnpacked".to_owned(),
             TypedExprKind::Capture(index) => format!("Capture {index}"),
             TypedExprKind::RunningFunction => "RunningFunction".to_owned(),
             TypedExprKind::Received => "Received".to_owned(),
@@ -626,6 +629,11 @@ impl Dump<'_> {
             TypedExprKind::FString(_) => "FString".to_owned(),
             TypedExprKind::TypeObject(of) => format!("TypeObject {}", of.name()),
             TypedExprKind::TypeName(_) => "TypeName".to_owned(),
+            TypedExprKind::ZipMany { .. } => "ZipMany".to_owned(),
+            TypedExprKind::MathOfList { function, .. } => format!("MathOfList {function:?}"),
+            TypedExprKind::NewExceptionUnpacked(call) => {
+                format!("NewExceptionUnpacked {}", call.class)
+            }
             TypedExprKind::Print(call) => {
                 format!(
                     "Print sep={} end={}",
@@ -653,6 +661,7 @@ impl Dump<'_> {
             TypedExprKind::Upcast(_) => "Upcast".to_owned(),
             TypedExprKind::Downcast(_) => "Downcast".to_owned(),
             TypedExprKind::IsInstance(_) => "IsInstance".to_owned(),
+            TypedExprKind::Cast(cast) => format!("Cast {}", cast.target),
             TypedExprKind::IsSubclass { .. } => "IsSubclass".to_owned(),
             TypedExprKind::EachMember(_) => "EachMember".to_owned(),
             TypedExprKind::CheckedLength(_) => "CheckedLength".to_owned(),

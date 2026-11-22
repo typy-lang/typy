@@ -62,6 +62,7 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> TypedExpr {
         let values = self.expression(right);
+        self.check_typing_text(&values);
         let pieces = match percent_format::parse(format) {
             Ok(pieces) => pieces,
             Err(message) => return self.error(*mismatch(format_span, message), span),
@@ -113,6 +114,7 @@ impl BodyChecker<'_> {
             return None;
         }
         self.mapping_keys(&values.ty);
+        self.check_typing_text(values);
         Some(Self::dynamic(format.clone(), values.clone(), span))
     }
 

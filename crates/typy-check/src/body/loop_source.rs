@@ -389,7 +389,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the value of the one keyword argument `accepted`, after reporting any other.
-    fn only_keyword<'call>(
+    pub(super) fn only_keyword<'call>(
         &mut self,
         builtin: Builtin,
         accepted: &str,

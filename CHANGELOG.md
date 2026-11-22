@@ -6,6 +6,170 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-22
+
+### Added
+
+- `object` as a type: a variable, a parameter, an attribute, a result or a
+  collection item holds a value of any type, such as `items: list[object] =
+  [1, "a", None]` or `def __eq__(self, other: object) -> bool`. It compares,
+  prints and tests its truth as its value does, `1 == 1.0 == True` among
+  them, and `isinstance`, a class pattern or `type(x) is C` narrows it before
+  any other operation (TYP-23). `isinstance(x, int)` narrows to `int |
+  bool`, since a bool stays a bool; narrowing to a collection waits for
+  `Any` in 0.13.
+- `typing.cast(T, value)`, checked when the program runs: a value of `T`
+  passes, and any other raises `TypeError`, such as `cast to int found
+  str`, where CPython trusts the cast and goes on (TYP-24). A cast to a
+  collection of items, such as `list[int]`, is refused.
+- Arithmetic on `bool` as CPython does it: a `bool` beside a number is the
+  `int` 0 or 1, so `True + 1 == 2`, `True / 2 == 0.5`, `-True == -1`,
+  `True == 1`, `abs`, `round` and `sum` of bools, and `"ab" * True`; `&`,
+  `|` and `^` of two bools still give a bool (DAT-19). They were E0406,
+  which now refuses only `~` of a bool, which CPython deprecates and Python
+  3.16 removes.
+- A nested function, a method or a `lambda` with defaults, `*args` or
+  `**kwargs` is a value where a `Callable` is expected that its parameters
+  take, as a function of a module is since 0.10: `apply(add, 1)` with a
+  nested `def add(value: int, *more: int)`, `sorted(items,
+  key=Meter().scale)`, a method read through a class or a protocol value,
+  and `lambda value, by=3: value * by` or `lambda *values: sum(values)`
+  (FUN-19). The value is the function itself to `is`, `==`, `hash` and
+  `repr`. These were E0201.
+- Typing values: a name of `typing` or `collections.abc`, such a name or a
+  built-in class given type arguments, and a union written with `|` are
+  values that a program stores, passes, compares and writes as CPython
+  3.15 writes them, such as `kinds = [list[int], int | None]` and
+  `Optional[int] == int | None` (TYP-18). Writing one that an older
+  release from the program's floor writes otherwise, such as
+  `print(Optional[int])` below 3.14, is E0202. They were E0201.
+- A type alias's `__value__` and `__type_params__`, a generic alias given
+  type arguments such as `Pair[int]`, and an alias a function or a class
+  defines read as a value; a function's alias is a new object each time
+  its `type` statement runs, as in CPython (TYP-18). They were E0201. An
+  alias without type parameters given some is E0401, as CPython raises
+  `TypeError`.
+- A call of a function value takes `*` of any iterable, such as
+  `add(*values)`, and checks when it runs that the values are as many as
+  the `Callable` takes, raising CPython's `TypeError` that names the
+  function (EXP-22). It was E0201. `**` there is planned for 1.0 (EXP-21).
+- `print` takes its keywords from a dict held in a variable,
+  `print(*values, **options)`, bound when the call runs with CPython's
+  errors, each checked by the value it holds (EXP-22). It was E0201.
+- A method called through a protocol value takes `*` of any iterable and
+  `**` of a dict held in a variable, `shape.scaled(*values, **options)`,
+  bound when the call runs as a method of the class it holds binds them,
+  with CPython's errors (EXP-22). It was E0201.
+- A call of an exception class takes `*` of any iterable and `**` of a
+  dict held in a variable, `ValueError(*codes)`. The positional values
+  have one type, and `args` gains the member `tuple[T, ...]`. A class
+  without an `__init__` of its own raises CPython's `TypeError` for a
+  dict with an entry, such as `ValueError() takes no keyword arguments`;
+  one with an `__init__` binds the values to it when the call runs
+  (EXP-22). It was E0201. `OSError` and its subclasses without an
+  `__init__` of the program's refuse `*` of a value only the run knows
+  with E0202.
+- A call of a built-in function takes `*` of any iterable,
+  `range(*bounds)`, `max(*values)` or `zip(*rows)`, checked for each
+  number of arguments the built-in takes; any other number raises CPython
+  3.15's `TypeError`. `zip(*rows)` gives `tuple[T, ...]` items (EXP-22).
+  It was E0201.
+- A call of a method of a built-in type takes `*` of any iterable,
+  `text.split(*separators)` or `seen.union(*others)`, with each method's
+  own messages for a number of arguments it does not take (EXP-22). It
+  was E0201.
+- A call of a function of `math` or `sys` takes `*` of any iterable,
+  `math.gcd(*numbers)` or `math.floor(*values)`, with each function's own
+  messages for a number of arguments it does not take (EXP-22). It was
+  E0201. `*` of a value only the run knows in a call of a function of
+  `ctypes` is E0202.
+- `**` of a dict held in a variable in a call of a builtin other than
+  `print` is planned for 1.0 (EXP-24, ADR-0099); it stays E0201.
+- `isinstance` takes a union written with `|`, such as `isinstance(x, int
+  | None)`, as CPython 3.10 and later do.
+- A corpus report, `docs/testing/corpus-report.md`, which gives the share
+  of a fixed corpus of typed Python that TyPy builds unchanged and runs as
+  CPython 3.15 runs it: 667 modules of TheAlgorithms/Python and of mypyc's
+  run tests that pass `mypy --strict`, of which TyPy runs 11.0 and 18.1
+  percent. The release workflow fails when a share falls (NFR-24).
+- A function nested in another may have type parameters of its own, such
+  as `def tagged[T](value: T) -> tuple[str, T]` inside a function; each
+  call runs the copy for its types, with the variables it captures
+  (FUN-18). It was E0201.
+
+### Changed
+
+- The methods of `str` and `bytes` read text of one byte a code point a
+  run of bytes at a time: `upper` and the other case methods of ASCII
+  text, `split`, `join`, `find`, `count`, `replace` and `strip` run two to
+  ten times faster, and the strings benchmark runs about three times
+  faster (NFR-21).
+- Debug and `--release` builds link a runtime optimised for speed, and
+  `--release-small` builds the runtime optimised for size, installed in
+  `lib/typy-small/` (ADR-0100). Every program of the benchmark suite now
+  runs faster than with CPython 3.15 (NFR-21).
+- A `str` hashes and compares by its stored data, a dict finds a key
+  object it holds without comparing it, and every `str` of one character
+  up to U+00FF, and the empty one, is shared, as in CPython, so a program
+  that makes many one-character strings allocates none (NFR-21).
+- A slice of a `str` or `bytes` of one byte a code point copies its bytes
+  as a run, and a dict or a set hashes and compares `str` and `bytes` keys
+  without looking up their type. The knucleotide benchmark runs in 0.85 of
+  CPython 3.15's time, against 1.01 (NFR-21).
+- A `str` or `bytes` keeps its hash once it is first hashed, as in
+  CPython, so a key looked up and then stored is hashed once, and each
+  takes 8 more bytes (ADR-0101). The knucleotide benchmark runs in 0.80
+  of CPython 3.15's time.
+- The refusals of forms a later release gives now name that release:
+  `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
+  to TYP-31); `typing.Any` and `TypedDict` with `Required`,
+  `NotRequired` and `ReadOnly` 0.13 (TYP-25, TYP-32); the modules `enum`,
+  `abc`, `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`,
+  `random`, `copy` and `string` 0.12 (CLS-44, CLS-45, LIB-27), and `os`
+  1.0 (LIB-07); `from __future__ import annotations` and the builtins
+  `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` 0.12
+  (LIB-28, LIB-29); and `doctest` a release after 1.0. They were E0202,
+  E0206, E0403 or E0425, and are E0201.
+- From the Python floor 3.14, template strings are refused as planned for
+  0.13 (LEX-12); they were refused as a form TyPy cannot compile. From
+  the floor 3.15, `[*row for row in rows]`, `frozendict` and
+  `math.integer` are refused as planned for 0.12 (EXP-23, DAT-18,
+  LIB-26).
+- A nested function or a method with `*args` or `**kwargs` read where no
+  `Callable` is expected is E0203, with the help to annotate the variable,
+  as a function of a module is; it was E0201. Such a function read as a
+  value inside another nested function, which captures it, is refused as
+  well; it was accepted with a `Callable` type that listed `*args` as one
+  tuple parameter.
+- The help of E0204, a missing return annotation, and of E0410, an empty
+  `[]`, `{}` or `set()` without an annotation, names 0.12, which infers
+  them (TYP-26, TYP-27).
+
+### Removed
+
+- E0403 is retired: `object` and `typing.cast`, which it refused, are
+  accepted, and `typing.Any` is E0201, planned for 0.13. `typy explain
+  E0403` says so.
+
+### Fixed
+
+- `Literal["r", "w"]` in an annotation is refused for `Literal`, which a
+  later release gives, and no longer as an annotation written as a
+  string.
+- `isinstance(None, Optional[int])` is true, as in CPython; it was false.
+- `type(value)` of a value whose type is `None` or a union, such as
+  `None | int | str`, gives the type of the value it holds; the program
+  stopped with "an object has an unknown type".
+- `enumerate`, `zip` and `reversed` read as a value with a keyword, such as
+  `pairs = enumerate(items, start=1)`, are refused as planned for after
+  1.0, as they are without one; they were refused with CPython's
+  `TypeError` for a keyword the function takes.
+- `super().name(...)` of a class method passes the class of the instance
+  as `cls`, as CPython does; it passed the base that defines the class
+  method. Where the enclosing class or a class derived from it defines
+  the class method again, the call is refused as planned for 0.14
+  (CLS-46).
+
 ## [0.10.0] - 2026-11-21
 
 ### Added
@@ -1617,7 +1781,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/typy-lang/typy/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/typy-lang/typy/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/typy-lang/typy/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/typy-lang/typy/compare/v0.7.0...v0.8.0

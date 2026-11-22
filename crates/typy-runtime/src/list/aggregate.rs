@@ -302,6 +302,25 @@ pub unsafe extern "C" fn typy_rt_list_sum_int(list: *const ListObject, start: i6
     }
 }
 
+/// Returns `sum(list, start)` for a list of `bool` items: the start plus the number of true
+/// items, as CPython adds a `bool` as the `int` 0 or 1 (DAT-19).
+///
+/// # Safety
+///
+/// `list` points to a live list of `bool` items, and `start` is an `int` word whose large
+/// integer is live.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_list_sum_bool(list: *const ListObject, start: i64) -> i64 {
+    // SAFETY: the caller passes a live list of `bool` bits.
+    let count = unsafe { items_of(list) }
+        .iter()
+        .filter(|item| **item != 0)
+        .count();
+    let count = crate::word::small(count);
+    // SAFETY: the start is live, and the count is an inline word.
+    unsafe { crate::int::typy_rt_int_add(start, count) }
+}
+
 /// Returns `sum(list, start)` for a list of `float` items, with the compensated summation of
 /// CPython 3.12 and later, Neumaier's improvement of Kahan's: the rounding error of each
 /// addition is collected and added once at the end, unless it is not finite.

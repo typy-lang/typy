@@ -202,7 +202,7 @@ fn type_parameters(
 
 /// Returns the type parameters a list declares for the definition at `owner`, each with its
 /// bound or its constraints (GEN-01, GEN-02).
-pub(super) fn resolve_type_parameters(
+pub(crate) fn resolve_type_parameters(
     parameters: &[typy_source::syntax::TypeParameter],
     owner: Span,
     scope: &AnnotationScope<'_>,
@@ -347,18 +347,7 @@ pub(super) fn definition<'tree>(
         Some(annotation) => annotation_type(annotation, scope, diagnostics),
         // `__init__` returns `None`, so it may leave its return annotation out, as mypy allows.
         None if initializer => Type::NoneType,
-        None => {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(204),
-                    parts.name.span,
-                    format!("function `{name}` has no return annotation"),
-                )
-                .with_rule(RuleId::TYP_01)
-                .with_help("write `-> None` if it returns nothing"),
-            );
-            Type::Error
-        }
+        None => missing_result(name, parts.name.span, diagnostics),
     };
     if initializer && !returns.matches(&Type::NoneType) {
         diagnostics.push(
@@ -471,4 +460,22 @@ pub(crate) fn exit_parameter(index: usize) -> Type {
         2 => Type::Exception(ExceptionClass::Builtin(BuiltinException::BaseException)),
         _ => Type::Traceback,
     })
+}
+
+/// Returns the error type after reporting a function without a result annotation; a result
+/// inferred from its `return` statements is planned (TYP-26, ADR-0092).
+fn missing_result(name: &str, span: Span, diagnostics: &mut Diagnostics) -> Type {
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(204),
+            span,
+            format!("function `{name}` has no return annotation"),
+        )
+        .with_rule(RuleId::TYP_01)
+        .with_help(
+            "write `-> None` if it returns nothing; a result inferred from the `return` \
+             statements is planned for TyPy 0.12 (TYP-26)",
+        ),
+    );
+    Type::Error
 }

@@ -193,7 +193,7 @@ impl<'context> FunctionLowerer<'context> {
             cdata_classes,
         } = tables;
         if function.generic {
-            return generic_stub(function);
+            return generic_stub(program, function);
         }
         let entry = function.id == program.entry;
         let (mut builder, generator, closure) =
@@ -628,14 +628,20 @@ pub(crate) fn function_symbol(program: &TypedProgram, function: &TypedFunction) 
 }
 
 /// Returns the stand-in for a generic function, whose copies are called in its place: it
-/// takes nothing and returns nothing, and no call reaches it (ADR-0023).
-fn generic_stub(function: &TypedFunction) -> TyirFunction {
+/// takes nothing, or a nested one's function object, returns nothing, and no call reaches it
+/// (ADR-0023).
+fn generic_stub(program: &TypedProgram, function: &TypedFunction) -> TyirFunction {
     let mut builder = FunctionBuilder::new(
         FunctionId(function.id.0),
         symbol(&function.module, &function.qualified_name),
         function.name.clone(),
         TyirType::Unit,
     );
+    // A nested function with type parameters of its own has a function object, whose
+    // descriptor's code takes the object first; its copies run in its place (FUN-18).
+    if program.closures.contains_key(&function.id) {
+        builder.add_parameter(TyirType::FUNCTION);
+    }
     let unit = builder.push_value(
         typy_tyir::Operation::Constant(typy_tyir::Constant::Unit),
         TyirType::Unit,

@@ -3,8 +3,11 @@
 //! SipHash-1-3, CPython's function, under a fixed key; CPython draws its key at random, so any
 //! key gives an order CPython could give.
 
+use core::sync::atomic::Ordering;
+
+use crate::header::IMMORTAL;
 use crate::int::value::Integer;
-use crate::string::{StrObject, code_point, length};
+use crate::string::{NOT_HASHED, StrObject, length};
 use crate::word::{inline_value, is_inline};
 
 /// The prime `2**61 - 1` hashes of numbers are reduced by, CPython's `_PyHASH_MODULUS`.
@@ -165,48 +168,66 @@ pub(crate) fn tuple(items: impl Iterator<Item = i64>, length: usize) -> i64 {
 /// as CPython stores them, one, two or four bytes each by the widest, so the hash is the one
 /// CPython gives with `PYTHONHASHSEED=0`. An empty text hashes to 0, as in CPython.
 ///
+/// The first hash of a string is kept in it, so a key looked up and then stored is hashed
+/// once (ADR-0101). An immortal string lives in read-only memory and is hashed each time.
+///
 /// # Safety
 ///
 /// `text` points to a live string.
 pub(crate) unsafe fn text(text: *const StrObject) -> i64 {
     // SAFETY: the caller passes a live string; every index stays inside it.
     unsafe {
+        let kept = (*text).hash.load(Ordering::Relaxed);
+        if kept != NOT_HASHED {
+            return kept;
+        }
         let count = length(text);
         if count == 0 {
             return 0;
         }
-        let width = (*text).kind as usize;
-        let mut state = SipHash::new();
-        for index in 0..count {
-            state.write(&code_point(text, index).to_le_bytes()[..width]);
+        let hash = not_minus_one(siphash13(crate::string::narrow::stored(text)).cast_signed());
+        // Two threads that hash one string store the same value, so a relaxed store does.
+        if (*text).header.reference_count != IMMORTAL {
+            (*text).hash.store(hash, Ordering::Relaxed);
         }
-        not_minus_one(state.finish().cast_signed())
+        hash
     }
 }
 
-/// `SipHash` with one compression round per word and three finalisation rounds.
+/// Returns SipHash-1-3 of `bytes` under a key of zeros: one compression round per word and
+/// three finalisation rounds, as CPython's `siphash13`.
+fn siphash13(bytes: &[u8]) -> u64 {
+    let mut state = SipHash {
+        v: [
+            0x736f_6d65_7073_6575,
+            0x646f_7261_6e64_6f6d,
+            0x6c79_6765_6e65_7261,
+            0x7465_6462_7974_6573,
+        ],
+    };
+    let (words, rest) = bytes.as_chunks::<8>();
+    for word in words {
+        state.compress(u64::from_le_bytes(*word));
+    }
+    // The bytes after the last whole word, then the length's low byte at the top.
+    let tail = rest
+        .iter()
+        .rev()
+        .fold(0_u64, |word, byte| (word << 8) | u64::from(*byte));
+    state.compress(tail | ((bytes.len() as u64) << 56));
+    state.v[2] ^= 0xff;
+    for _ in 0..3 {
+        state.round();
+    }
+    state.v[0] ^ state.v[1] ^ state.v[2] ^ state.v[3]
+}
+
+/// The state of `SipHash`: four words.
 struct SipHash {
     v: [u64; 4],
-    tail: u64,
-    filled: u32,
-    length: u64,
 }
 
 impl SipHash {
-    const fn new() -> Self {
-        Self {
-            v: [
-                0x736f_6d65_7073_6575,
-                0x646f_7261_6e64_6f6d,
-                0x6c79_6765_6e65_7261,
-                0x7465_6462_7974_6573,
-            ],
-            tail: 0,
-            filled: 0,
-            length: 0,
-        }
-    }
-
     fn round(&mut self) {
         let v = &mut self.v;
         v[0] = v[0].wrapping_add(v[1]);
@@ -225,30 +246,6 @@ impl SipHash {
         self.v[3] ^= word;
         self.round();
         self.v[0] ^= word;
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            self.tail |= u64::from(byte) << (8 * self.filled);
-            self.filled += 1;
-            self.length += 1;
-            if self.filled == 8 {
-                let word = self.tail;
-                self.compress(word);
-                self.tail = 0;
-                self.filled = 0;
-            }
-        }
-    }
-
-    fn finish(mut self) -> u64 {
-        let last = self.tail | (self.length << 56);
-        self.compress(last);
-        self.v[2] ^= 0xff;
-        for _ in 0..3 {
-            self.round();
-        }
-        self.v[0] ^ self.v[1] ^ self.v[2] ^ self.v[3]
     }
 }
 

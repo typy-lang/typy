@@ -1,8 +1,10 @@
 //! Tests of the hashes, against the values CPython 3.15 gives.
 
+use core::sync::atomic::Ordering;
+
 use super::{NONE, float, int, text, tuple};
 use crate::int::value::Integer;
-use crate::string::from_str;
+use crate::string::{NOT_HASHED, from_str};
 
 #[test]
 fn ints_hash_as_cpython_hashes_them() {
@@ -80,8 +82,11 @@ fn tuples_combine_their_items_as_cpython_does() {
 
 #[test]
 fn texts_hash_as_cpython_does_with_a_zero_seed() {
-    let cases: [(&str, i64); 8] = [
+    let cases: [(&str, i64); 11] = [
         ("\u{ff}\0", 7_217_110_220_190_950_386),
+        ("abcdefghijk", 1_450_545_860_578_130_900),
+        ("\u{20ac}uro and \u{e9}t\u{e9}", 1_000_435_418_511_185_583),
+        ("a\u{1f600}bc", 4_484_291_684_517_517_462),
         ("", 0),
         ("a", 4_644_417_185_603_328_019),
         ("abc", -4_594_863_902_769_663_758),
@@ -93,6 +98,26 @@ fn texts_hash_as_cpython_does_with_a_zero_seed() {
     for (value, expected) in cases {
         // SAFETY: the string is live.
         assert_eq!(unsafe { text(from_str(value)) }, expected, "{value:?}");
+    }
+}
+
+#[test]
+fn a_string_keeps_its_first_hash_and_an_immortal_one_is_not_written() {
+    let fresh = from_str("abc");
+    // SAFETY: every string is live; the shared one is immortal and only read.
+    unsafe {
+        assert_eq!((*fresh).hash.load(Ordering::Relaxed), NOT_HASHED);
+        let first = text(fresh);
+        assert_eq!((*fresh).hash.load(Ordering::Relaxed), first);
+        // A kept hash is returned as it is, so one planted is what the next hash gives.
+        (*fresh).hash.store(5, Ordering::Relaxed);
+        assert_eq!(text(fresh), 5);
+        let shared = crate::string::character(u32::from(b'a')).unwrap();
+        assert_eq!(text(shared), 4_644_417_185_603_328_019);
+        assert_eq!((*shared).hash.load(Ordering::Relaxed), NOT_HASHED);
+        let bytes = crate::bytes::from_slice(b"abc");
+        assert_eq!(text(bytes), first);
+        assert_eq!((*bytes).hash.load(Ordering::Relaxed), first);
     }
 }
 

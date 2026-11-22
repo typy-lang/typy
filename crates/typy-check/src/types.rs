@@ -90,8 +90,11 @@ pub enum Type {
     Range,
     /// A `slice`, of bounds that are each an `int` or `None` (CLS-23).
     Slice,
-    /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12).
-    TypeAlias,
+    /// A `typing.TypeAliasType`, the value a `type` statement binds (SMT-12), which every
+    /// oracle from the Python floor `3.N` writes alike, `N` being the number held: an alias a
+    /// function or a class defines is written with its qualified name only from 3.15
+    /// (TYP-18).
+    TypeAlias(u8),
     /// `sys.version_info` held as a value, whose items are those of CPython 3.15.0 (LIB-16).
     VersionInfo,
     /// The type of `NotImplemented`, which an operator or comparison method returns to give
@@ -116,6 +119,14 @@ pub enum Type {
     /// A declared abstract collection, such as `Sequence[int]`, held as the built-in types it
     /// stands for, which an expression's type is in its place (LIB-20, ADR-0086).
     Abstract(Box<crate::abstract_type::AbstractType>),
+    /// `object`: a value of any type, held as an object whose header says what it is, a value
+    /// held by value boxed, and narrowed before any operation `object` does not define
+    /// (TYP-23, ADR-0090).
+    Object,
+    /// A typing value, such as `list[int]` or `int | None` read as a value, which every
+    /// oracle from the Python floor `3.N` writes alike, `N` being the number held (TYP-18,
+    /// ADR-0087).
+    Typing(u8),
     /// The type of an expression that already has a diagnostic; every check accepts it, so one cause gives one error (DIA-04).
     Error,
 }
@@ -254,11 +265,13 @@ impl TypeObjectOf {
             | Type::ForeignLibrary(_)
             | Type::CData(_)
             | Type::CDataClass(_)
-            | Type::TypeAlias
+            | Type::TypeAlias(_)
             | Type::VersionInfo
             | Type::NotImplemented
             | Type::Optional(_)
             | Type::Union(_)
+            | Type::Object
+            | Type::Typing(_)
             | Type::Parameter(_)
             | Type::Error => {
                 return None;
@@ -417,10 +430,28 @@ impl Type {
     #[must_use]
     pub fn optional(inner: Self) -> Self {
         match inner {
-            Self::NoneType | Self::Optional(_) | Self::Error => inner,
+            // `object` holds `None` already.
+            Self::NoneType | Self::Optional(_) | Self::Error | Self::Object => inner,
             other => Self::Optional(Box::new(other)),
         }
     }
+
+    /// Returns true for `int`, `float` and `bool`, which arithmetic takes (DAT-19).
+    #[must_use]
+    pub const fn is_numeric_or_bool(&self) -> bool {
+        matches!(self, Self::Int | Self::Float | Self::Bool)
+    }
+
+    /// Returns true when a value of the type exists when the program runs, which an `object`
+    /// can hold: not a C library or a `ctypes` class, which are known only when it compiles.
+    #[must_use]
+    pub const fn has_value(&self) -> bool {
+        !matches!(self, Self::ForeignLibrary(_) | Self::CDataClass(_))
+    }
+
+    /// The floor a typing value's type names when every oracle from the program's floor writes
+    /// it alike (TYP-18).
+    pub const TYPING_ALIKE: u8 = 12;
 
     /// Returns true when a value of this type may be stored where `target` is declared: a
     /// value of the same type, `None` or a `T` where `T | None` is declared, which the checker
@@ -428,6 +459,13 @@ impl Type {
     #[must_use]
     pub fn is_assignable_to(&self, target: &Self) -> bool {
         match (self, target) {
+            // A typing value an oracle from the program's floor writes otherwise is no
+            // `object`, which a program may write anywhere (TYP-18).
+            (Self::Typing(floor) | Self::TypeAlias(floor), Self::Object) => {
+                *floor == Self::TYPING_ALIKE
+            }
+            // An `object` holds any value that exists when the program runs (TYP-23).
+            (_, Self::Object) => self.has_value(),
             (Self::Error, _)
             | (_, Self::Error)
             | (Self::NoneType, Self::Optional(_))
@@ -440,6 +478,10 @@ impl Type {
                 own == other || other.takes(&own.members)
             }
             (_, Self::Abstract(collection)) => collection.takes(self),
+            // A typing value written alike from an older floor may stand where one written
+            // alike only from a newer floor is held (TYP-18).
+            (Self::Typing(own), Self::Typing(target))
+            | (Self::TypeAlias(own), Self::TypeAlias(target)) => own <= target,
             (Self::Abstract(own), _) => own.members.is_assignable_to(target),
             // A class is held where a base's class is: a `type[C]` holds `C` or a class
             // derived from it (CLS-18, ADR-0084).
@@ -481,6 +523,10 @@ impl Type {
     #[must_use]
     pub fn is_upcast_to(&self, target: &Self) -> bool {
         match (self, target) {
+            // Any other value becomes an `object`, boxed when it is held by value (TYP-23).
+            (_, Self::Object) => {
+                !matches!(self, Self::Object | Self::Error) && self.is_assignable_to(target)
+            }
             (Self::Instance(class), Self::Instance(base)) => class.derives_from(base),
             (Self::Optional(inner), Self::Optional(base)) => inner.is_upcast_to(base),
             // A function value is held where a `Callable` it fits is, as the same object.
@@ -594,11 +640,14 @@ impl Type {
     #[must_use]
     pub fn can_test_equality(&self, other: &Self) -> bool {
         match (self, other) {
+            // An `object` compares with any value, as the value's own type compares (TYP-23).
+            (Self::Object, other) | (other, Self::Object) => other.has_value(),
             // Two type objects are equal when they are one object (CLS-12), and so are two
             // functions, so any two function values compare (FUN-05).
             (Self::Error, _)
             | (_, Self::Error)
             | (Self::TypeObject(_), Self::TypeObject(_))
+            | (Self::Typing(_), Self::Typing(_))
             | (Self::Callable { .. }, Self::Callable { .. }) => true,
             // The runtime compares items by the list's own item kind, so two lists compare when
             // their items have one type.
@@ -627,7 +676,7 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
@@ -641,7 +690,7 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback,
@@ -685,8 +734,10 @@ impl Type {
             }
             // A class orders its instances with `__lt__` and the other operator methods, which
             // are planned for 0.4 (CLS-07).
+            // An `object` defines no order; a value is narrowed first (TYP-23).
             (
                 Self::Parameter(_)
+                | Self::Object
                 | Self::Union(_)
                 | Self::NoneType
                 | Self::Dict(..)
@@ -698,7 +749,8 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
+                | Self::Typing(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
@@ -713,6 +765,7 @@ impl Type {
             | (
                 _,
                 Self::Parameter(_)
+                | Self::Object
                 | Self::Union(_)
                 | Self::NoneType
                 | Self::Dict(..)
@@ -724,7 +777,8 @@ impl Type {
                 | Self::Generator { .. }
                 | Self::Iterable(_)
                 | Self::Module(_)
-                | Self::TypeAlias
+                | Self::TypeAlias(_)
+                | Self::Typing(_)
                 | Self::VersionInfo
                 | Self::AnyModule
                 | Self::Traceback
@@ -902,7 +956,7 @@ impl Type {
             Self::Exception(class) if class.name().starts_with(['A', 'E', 'I', 'O', 'U']) => {
                 format!("an {class}")
             }
-            Self::Iterator(_) | Self::Iterable(_) => format!("an {self}"),
+            Self::Iterator(_) | Self::Iterable(_) | Self::Object => format!("an {self}"),
             Self::Parameter(parameter) => format!("a value of type {}", parameter.name),
             // The article reads with the first member, as in `an A | B`.
             Self::Union(members) => {
@@ -928,6 +982,7 @@ impl fmt::Display for Type {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Abstract(collection) => write!(formatter, "{collection}"),
+            Self::Object => formatter.write_str("object"),
             Self::Int => formatter.write_str("int"),
             Self::Float => formatter.write_str("float"),
             Self::Bool => formatter.write_str("bool"),
@@ -968,7 +1023,16 @@ impl fmt::Display for Type {
             } => write!(formatter, "Generator[{yields}, {sends}, {returns}]"),
             Self::Iterable(item) => write!(formatter, "Iterable[{item}]"),
             Self::AnyModule => formatter.write_str("ModuleType"),
-            Self::TypeAlias => formatter.write_str("TypeAliasType"),
+            Self::TypeAlias(Self::TYPING_ALIKE) => formatter.write_str("TypeAliasType"),
+            Self::TypeAlias(floor) => write!(
+                formatter,
+                "TypeAliasType written alike only from Python 3.{floor}"
+            ),
+            Self::Typing(Self::TYPING_ALIKE) => formatter.write_str("typing value"),
+            Self::Typing(floor) => write!(
+                formatter,
+                "typing value written alike only from Python 3.{floor}"
+            ),
             Self::VersionInfo => formatter.write_str("sys.version_info"),
             Self::NotImplemented => formatter.write_str("NotImplementedType"),
             Self::TextFile => formatter.write_str("TextIOWrapper"),

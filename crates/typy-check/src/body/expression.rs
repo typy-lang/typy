@@ -34,6 +34,9 @@ impl BodyChecker<'_> {
         if let Some(part) = self.exception_part_use(expression) {
             return part;
         }
+        if let Some(value) = self.typing_value(expression) {
+            return value;
+        }
         match expression {
             Expr::Constant { value, .. } => {
                 let constant = match value {
@@ -44,10 +47,25 @@ impl BodyChecker<'_> {
                     Constant::Str(value) => TypedConstant::Str(value.clone()),
                     Constant::StrPoints(points) => TypedConstant::StrPoints(points.clone()),
                     Constant::Bytes(value) => TypedConstant::Bytes(value.clone()),
-                    Constant::Complex { .. } | Constant::Ellipsis => {
+                    // The subset check reports an imaginary literal.
+                    Constant::Complex { .. } => {
                         return Self::typed(
                             TypedExprKind::Constant(TypedConstant::None),
                             Type::Error,
+                            span,
+                        );
+                    }
+                    // `...` reaches here only as a type argument of a subscript that is no
+                    // typing value (TYP-18).
+                    Constant::Ellipsis => {
+                        return self.error(
+                            Diagnostic::new(
+                                DiagnosticCode::error(202),
+                                span,
+                                "`...` as a value cannot be compiled by TyPy with CPython's \
+                                 meaning",
+                            )
+                            .with_rule(RuleId::STD_04),
                             span,
                         );
                     }
@@ -107,6 +125,7 @@ impl BodyChecker<'_> {
                 if let Some(formatted) = self.percent_dynamic(*operator, &left, &right, span) {
                     return formatted;
                 }
+                let (left, right) = Self::bool_operands(*operator, left, right);
                 let ty = self.binary_type(*operator, &left, &right, span);
                 Self::typed(
                     TypedExprKind::Binary {
@@ -127,6 +146,12 @@ impl BodyChecker<'_> {
                 {
                     return call;
                 }
+                // `-` and `+` of a `bool` are of the `int` it is (DAT-19).
+                let operand = match operator {
+                    typy_source::syntax::UnaryOperator::USub
+                    | typy_source::syntax::UnaryOperator::UAdd => Self::int_of_bool(operand),
+                    _ => operand,
+                };
                 let ty = self.unary_type(*operator, &operand, span);
                 Self::typed(
                     TypedExprKind::Unary {
@@ -192,7 +217,9 @@ impl BodyChecker<'_> {
                 comparators,
                 ..
             } => {
-                let mut operands = self.comparison_operands(left, comparators, operators);
+                let operands = self.comparison_operands(left, comparators, operators);
+                let operands = Self::objects_compared(operators, operands);
+                let mut operands = Self::numbers_compared(operators, operands);
                 let mut comparators = operands.split_off(1);
                 let mut left = operands.remove(0);
                 // `sys.version_info` held as a value compares as CPython compares it (LIB-16).
@@ -200,6 +227,12 @@ impl BodyChecker<'_> {
                     && let Some(folded) = Self::version_comparison(*operator, &left, right, span)
                 {
                     return folded;
+                }
+                // `type(x) is C` narrows an `object` `x` (TYP-23).
+                if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice())
+                    && let Some(test) = self.type_is(*operator, &left, right, span)
+                {
+                    return test;
                 }
                 // A comparison of instances may call a comparison method (CLS-07).
                 if let ([operator], [right]) = (operators.as_slice(), comparators.as_slice()) {
@@ -326,18 +359,11 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                // CPython gives a generic alias, a value of `typing` (TYP-18).
-                if value.ty == Type::TypeAlias {
-                    return self.error(
-                        Diagnostic::new(
-                            DiagnosticCode::error(201),
-                            span,
-                            "a type alias given its type arguments as a value is planned for \
-                             TyPy 0.11 (TYP-18)",
-                        )
-                        .with_rule(RuleId::TYP_18),
-                        span,
-                    );
+                // A generic alias of a module given type arguments is a typing value (TYP-18);
+                // one a function or a class defines, or one held in a variable, waits for
+                // TYP-22.
+                if matches!(value.ty, Type::TypeAlias(_)) {
+                    return self.subscripted_alias(&value, span);
                 }
                 if value.ty != Type::Str {
                     return self.error(

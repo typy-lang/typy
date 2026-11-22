@@ -16,7 +16,7 @@ pub(crate) fn program(source: &str) -> (tempfile::TempDir, Utf8PathBuf) {
 
 /// A pipeline whose compiler sits in Cargo's target directory, where `make runtime` stages the
 /// archive.
-fn pipeline() -> Pipeline {
+pub(crate) fn pipeline() -> Pipeline {
     let target = option_env!("CARGO_TARGET_DIR").map_or_else(
         || Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target"),
         Utf8PathBuf::from,

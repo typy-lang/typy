@@ -27,8 +27,11 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Set(_) => TyirType::SET,
         Type::Dict(..) => TyirType::DICT,
         Type::DictView(..) => TyirType::VIEW,
-        // A protocol value is an instance of any class that satisfies it (ADR-0041).
+        // A protocol value is an instance of any class that satisfies it (ADR-0041), an
+        // `object` an object of any type, a value held by value boxed (ADR-0090), and a typing
+        // value an object whose header says what it is (TYP-18).
         Type::Instance(class) if class.protocol => TyirType::UNION,
+        Type::Object | Type::Typing(_) => TyirType::UNION,
         Type::Instance(class) => TyirType::Object(TypeId::class(class.id.0)),
         Type::TypeObject(_) => TyirType::TYPE,
         Type::Exception(_) => TyirType::EXCEPTION,
@@ -38,7 +41,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Range => TyirType::RANGE,
         Type::Slice => TyirType::SLICE,
         Type::Module(_) | Type::AnyModule => TyirType::MODULE,
-        Type::TypeAlias => TyirType::TYPE_ALIAS,
+        Type::TypeAlias(_) => TyirType::TYPE_ALIAS,
         Type::VersionInfo => TyirType::VERSION_INFO,
         Type::NotImplemented => TyirType::NOT_IMPLEMENTED,
         // A binary file is the same runtime object as a text file, with flags of its own.

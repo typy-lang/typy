@@ -12,7 +12,7 @@ use crate::string::{StrObject, from_str};
 use crate::tuple::{TupleType, field, field_type};
 
 /// The part `args`.
-const ARGUMENTS: i64 = 0;
+pub(super) const ARGUMENTS: i64 = 0;
 
 /// Returns the part an `int` word names, 0 for `args` and 1 for `code`.
 fn decoded(part: i64) -> i64 {
@@ -20,7 +20,7 @@ fn decoded(part: i64) -> i64 {
 }
 
 /// What a part of an exception holds.
-enum Part {
+pub(super) enum Part {
     /// No value: the `code` of a `SystemExit` without arguments, `None`.
     Nothing,
     /// One value of this type: the runtime's text, or the one argument of a `SystemExit`.
@@ -33,7 +33,7 @@ enum Part {
 
 /// Returns what `part`, 0 for `args` or 1 for `code`, of `exception` holds: its arguments
 /// first, then the text the runtime gave it, which stands for its one argument.
-fn part_of(exception: &ExceptionObject, part: i64) -> Part {
+pub(super) fn part_of(exception: &ExceptionObject, part: i64) -> Part {
     let arguments = Arguments::of(exception);
     if arguments.is_none() && !exception.message.is_null() {
         let text = ItemType::from(ItemKind::Object);

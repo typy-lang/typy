@@ -4,12 +4,17 @@ mod builder;
 mod case;
 mod character;
 mod methods;
+pub(crate) mod narrow;
 mod operations;
+#[cfg(test)]
+pub(crate) use operations::typy_rt_str_index;
 mod points;
 mod repr;
 mod split;
 mod unicode;
 mod utf8;
+
+use core::sync::atomic::AtomicI64;
 
 use crate::allocator::{allocate, array_size};
 use crate::header::{ObjectHeader, STR_TYPE_ID};
@@ -70,9 +75,76 @@ pub struct StrObject {
     /// The width of each code point.
     pub kind: StrKind,
     padding: u32,
+    /// The hash of the string, or `NOT_HASHED` until it is first hashed (ADR-0101).
+    pub(crate) hash: AtomicI64,
 }
 
+/// What `hash` holds until the string is first hashed: -1, which no hash is.
+pub(crate) const NOT_HASHED: i64 = -1;
+
 const DATA_OFFSET: usize = core::mem::size_of::<StrObject>();
+
+/// An immortal `str` of at most one code point of one byte, with the zero unit after it.
+#[repr(C)]
+struct Shared {
+    object: StrObject,
+    data: [u8; 8],
+}
+
+/// Returns the immortal `str` of the code point `point`, or the empty one for `None`.
+const fn shared(point: Option<u8>) -> Shared {
+    let (length, byte) = match point {
+        Some(byte) => (1, byte),
+        None => (0, 0),
+    };
+    Shared {
+        object: StrObject {
+            header: ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: STR_TYPE_ID,
+            },
+            length,
+            kind: StrKind::Latin1,
+            padding: 0,
+            hash: AtomicI64::new(NOT_HASHED),
+        },
+        data: [byte, 0, 0, 0, 0, 0, 0, 0],
+    }
+}
+
+/// The `str` of each code point up to U+00FF, which every string of one such code point is,
+/// as CPython shares them: text of one character is common, and needs no allocation.
+static CHARACTERS: [Shared; 256] = {
+    let mut all = [const { shared(None) }; 256];
+    let mut point: u8 = 0;
+    loop {
+        all[point as usize] = shared(Some(point));
+        if point == u8::MAX {
+            break all;
+        }
+        point += 1;
+    }
+};
+
+/// The empty `str`, which every empty string a method makes is.
+static EMPTY: Shared = shared(None);
+
+/// Returns the shared `str` of `point`, for a code point up to U+00FF.
+pub(crate) fn character(point: u32) -> Option<*mut StrObject> {
+    let index = usize::try_from(point).ok().filter(|index| *index < 256)?;
+    Some(object_of(&CHARACTERS[index]))
+}
+
+/// Returns the shared empty `str`.
+pub(crate) fn empty() -> *mut StrObject {
+    object_of(&EMPTY)
+}
+
+/// Returns the `str` a shared string holds. The pointer is made from the whole of it, so
+/// reading the data after the fixed part stays inside what the pointer may reach.
+fn object_of(shared: &'static Shared) -> *mut StrObject {
+    core::ptr::from_ref(shared).cast::<StrObject>().cast_mut()
+}
 
 /// Returns a new string of `length` code points of `kind`, with its data not yet written and
 /// a zero unit after it. A string never changes its length, so the zero stays there, and a
@@ -91,6 +163,7 @@ pub(crate) fn new_string(length: usize, kind: StrKind) -> *mut StrObject {
             length: length as u64,
             kind,
             padding: 0,
+            hash: AtomicI64::new(NOT_HASHED),
         });
         core::ptr::write_bytes(
             object
@@ -127,6 +200,34 @@ pub unsafe extern "C" fn typy_rt_bytes_data(bytes: *const StrObject) -> *const u
 pub(crate) unsafe fn length(string: *const StrObject) -> usize {
     // SAFETY: the caller passes a live string.
     usize::try_from(unsafe { (*string).length }).unwrap_or(usize::MAX)
+}
+
+/// Returns the bytes of a string of ASCII characters only, or `None` for any other string,
+/// which a method then reads code point by code point (NFR-21).
+///
+/// # Safety
+///
+/// `string` points to a live `str` object, which outlives the slice.
+pub(crate) unsafe fn ascii_bytes<'a>(string: *const StrObject) -> Option<&'a [u8]> {
+    // SAFETY: the caller passes a live string; a `Latin1` string's data is one byte per code
+    // point, `length` of them.
+    unsafe {
+        if (*string).kind != StrKind::Latin1 {
+            return None;
+        }
+        let bytes =
+            core::slice::from_raw_parts(string.cast::<u8>().add(DATA_OFFSET), length(string));
+        bytes.is_ascii().then_some(bytes)
+    }
+}
+
+/// Returns a new string of `length` ASCII characters, which `fill` writes.
+pub(crate) fn new_ascii(length: usize, fill: impl FnOnce(&mut [u8])) -> *mut StrObject {
+    let string = new_string(length, StrKind::Latin1);
+    // SAFETY: the new string has room for `length` one-byte code points, which nothing else
+    // refers to yet.
+    fill(unsafe { core::slice::from_raw_parts_mut(string.cast::<u8>().add(DATA_OFFSET), length) });
+    string
 }
 
 /// Returns the code point at `index`.
@@ -235,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn the_fixed_part_takes_twenty_four_bytes() {
-        assert_eq!(super::DATA_OFFSET, 24);
+    fn the_fixed_part_takes_thirty_two_bytes() {
+        assert_eq!(super::DATA_OFFSET, 32);
     }
 }

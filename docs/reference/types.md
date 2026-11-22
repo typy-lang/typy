@@ -15,7 +15,7 @@ value.
 | An empty `[]`, `{}`, `set()` or `dict()` needs an annotation or a typed context | TYP-05 |
 | `list[T]`, `dict[K, V]`, `set[T]`, `tuple[A, B]`, `tuple[T, ...]` and `T \| None` | TYP-06 |
 | An `int` is refused where a `float` is declared, since CPython keeps it an `int` | TYP-09 |
-| `typing.Any`, `typing.cast` and `object` annotations are refused | TYP-10 |
+| A value whose type neither an annotation nor inference gives is refused | TYP-10 |
 | A variable read before it is assigned on every path is refused | TYP-12 |
 | `T \| None` narrows to `T` after `is not None`, a failed `is None` test or a truth test | TYP-13 |
 | A variable narrows to a derived class after `isinstance` | TYP-07 |
@@ -27,6 +27,70 @@ value.
 | `Generator` of `typing` or `collections.abc` as the class of `isinstance`, and of `collections.abc` in a class pattern | TYP-21 |
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 | `Callable[[A, ...], R]` from `typing` or `collections.abc`, the type of a function value; see [Functions as values](functions.md#functions-as-values) | FUN-05, NFR-19 |
+| `object`: a value of any type, narrowed by `isinstance`, a class pattern or `type(x) is C` before an operation `object` does not define; see [Objects](#objects) | TYP-23 |
+
+## Objects
+
+A variable, a parameter, an attribute, a result or a collection item of
+type `object` holds a value of any type, as Java's `Object` does (TYP-23,
+ADR-0090). Without a test it does what every value does: `==`, `!=`,
+`is`, `str`, `repr`, an f-string, a truth test, `type()` and
+`isinstance`. An `int`, a `float` and a `bool` compare by their numbers,
+as in CPython, so `1 == 1.0 == True`.
+
+<!-- typy-expect: accepted -->
+```python
+def describe(value: object) -> str:
+    if isinstance(value, str):
+        return value.upper()
+    if type(value) is int:
+        return str(value + 1)
+    match value:
+        case float():
+            return f"{value:.1f}"
+        case None:
+            return "none"
+        case _:
+            return repr(value)
+
+
+items: list[object] = ["a", 1, 2.5, None, (1, "b")]
+print([describe(item) for item in items], items[1] == 1.0)
+```
+
+Any other operation, such as `value + 1` or `value.upper()`, needs a test
+first and is E0401, E0407, E0411 or E0412 without one. `isinstance(x, int)`
+narrows to `int | bool`, since a `bool` is an `int` and stays a `bool`;
+`type(x) is int` narrows to `int` alone. A test of a collection, such as
+`isinstance(x, list)`, is E0201: its items would be of type `Any`, which
+is planned for 0.13 (TYP-25). Sorting a list of `object` items is E0407,
+as an `object` has no order.
+
+## Casts
+
+`typing.cast(T, value)` gives `value` as a `T` (TYP-24, ADR-0091). A value
+the checker proves is a `T` passes as it is; any other is tested as
+`isinstance` tests it when the program runs, and a value that is not a
+`T` raises `TypeError`, such as `cast to int found str`. CPython trusts
+a cast and goes on with the value, but TyPy reads a value by the layout
+its type gives, so a wrong cast cannot go on. A `bool` is not an `int` in
+TyPy's types (TYP-03), so `cast(int, True)` raises as well.
+
+<!-- typy-expect: accepted -->
+```python
+from typing import cast
+
+record: dict[str, object] = {"name": "ada", "age": 36}
+name = cast(str, record["name"])
+age = cast(int, record["age"])
+print(name.upper(), age + 1)
+```
+
+`T` is a type a test decides from the value's class: a built-in type such
+as `int` or `str`, a class, `object`, `None` and unions of them. A cast to
+a collection of items, such as `list[int]`, is E0404, since a test reads
+the class and not the items, and so is a cast that can never hold, such
+as `cast(str, 3)`.
 
 ## Iterators and iterables
 
@@ -110,7 +174,8 @@ The older names of `typing` spell the types above: `Optional[int]` is
 `Tuple` and `Type` are `list`, `dict`, `set`, `tuple` and `type` (LIB-17).
 `Iterable`, `Iterator` and `Generator`, of either module, and `List`,
 `Dict`, `Set`, `Tuple`, `Type`, `Optional[...]` and `Union[...]` of
-`typing` may also be the class of `isinstance`, answered as CPython
+`typing` may also be the class of `isinstance`, and so may a union written
+with `|`, such as `isinstance(x, int | None)`, answered as CPython
 answers them: a list is `Iterable` and not an `Iterator`, its iterator is
 both, a generator is all three, and a class is `Iterable` when it, or a
 base, defines `__iter__`, an `Iterator` when it also defines `__next__`,
@@ -146,11 +211,64 @@ print(describe(None), describe(3), describe([1]), describe(Bag()))
 As in CPython, a bare `Optional` and a subscripted name such as
 `List[int]` in `isinstance` are E0401, and a bare `Union` is E0202, since
 CPython 3.12 and 3.13 raise `TypeError` where 3.14 and 3.15 answer
-`False`. The names held in a variable, passed or printed are planned for
-0.11 (TYP-18). `NamedTuple` is a base for a named tuple's class, as
-[Classes](classes.md#named-tuples) describes (CLS-27). `typing.Any` and
-`typing.cast` are refused, since every value in TyPy has one type
-(TYP-10).
+`False`. `NamedTuple` is a base for a named tuple's class, as
+[Classes](classes.md#named-tuples) describes (CLS-27).
+
+## Typing values
+
+A name of `typing` or `collections.abc`, such a name or a built-in class
+given type arguments, and a union of types written with `|` are values of
+their own, as in CPython (TYP-18, ADR-0087). A typing value is written as
+CPython 3.15 writes it, and compares and hashes as CPython compares it: a
+union by its members, whatever their order or spelling, so
+`Optional[int] == int | None`, while `List[int] == list[int]` is false. A
+union of one class, such as `int | int`, is that class.
+
+<!-- typy-expect: accepted -->
+```python
+from collections.abc import Callable, Iterator
+from typing import Dict, Optional
+
+
+class Box:
+    pass
+
+
+kinds = [list[int], dict[str, list[int]], tuple[int, ...], Box | None]
+print(kinds, Dict[str, None], Callable[[int], str], Iterator)
+print(Optional[int] == int | None, {list[int]: "list"}[list[int]])
+print(isinstance(None, int | None), int | int)
+```
+
+Some of these values are written differently by older CPython releases:
+`Optional[...]`, `Union[...]` and a bare `typing.Union` are written as
+`int | None` and `<class 'typing.Union'>` only from 3.14, and a type
+alias inside a typing value is written with its module, such as
+`list[__main__.Score]`, only from 3.15. Writing one with `print`, `str`,
+`repr`, an f-string or `%` below the floor that writes it alike is E0202;
+set the floor to that release to write it. Storing, passing, comparing
+and hashing it are accepted from any floor, but such a value is no
+`object`, which a program may write anywhere.
+
+`is` compares two names of `typing` or `collections.abc`, each one object
+in CPython. Between other typing values it is E0202, since CPython keeps
+one object of some, such as `typing.Iterator[int]`, and makes others
+anew, such as `list[int]`. A function of `typing`, such as `cast`, read
+as a value is E0202, and so is the module `typing` itself. An annotation
+for typing values, calling one, and reading one through `type()`,
+`__origin__` or `__args__` are planned for 1.0 (TYP-22).
+
+These forms are planned, and each is E0201 until its release:
+
+| Form | Release | Requirement |
+| --- | --- | --- |
+| A result inferred from `return` statements, and an empty collection's item type from its first use | 0.12 | TYP-26, TYP-27 |
+| `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-28 to TYP-31 |
+| `typing.Any`, bound when the program runs | 0.13 | TYP-25 |
+| `TypedDict`, `Required`, `NotRequired` and `ReadOnly` | 0.13 | TYP-32 |
+
+A missing return annotation stays E0204 and an empty `[]` E0410 until
+0.12, and their help names the release.
 
 ## Abstract collections
 
@@ -415,11 +533,42 @@ print(Score, Score.__name__, Score.__module__, type(Score), kinds[0] is Score)
 ```
 
 As in CPython, calling an alias, or giving it to `isinstance`, is E0401.
-An alias a function or a class defines read as a value, whose text
-CPython 3.15 changed, an alias given its type arguments as a value, and
-an alias's `__value__` and `__type_params__` are planned for 0.11
-(TYP-18). Two aliases compare with `is`; `==` between them is E0407, as
-for module objects.
+Two aliases compare with `is`; `==` between them is E0407, as for module
+objects.
+
+An alias's `__value__` is what its `type` statement writes, a class or a
+typing value read in the names of the alias's module, and its
+`__type_params__` is the tuple of its type parameters, each written by
+its name (TYP-18). A generic alias given type arguments is a typing
+value, such as `Pair[int]`, and an alias without type parameters given
+some is E0401, as CPython raises `TypeError`. An alias a function
+defines is a variable of the function, which each run of its `type`
+statement gives a new alias; one a class defines is a class variable,
+read as `Holder.Inner`.
+
+<!-- typy-expect: accepted -->
+```python
+type Score = int
+type Pair[T] = tuple[T, T]
+
+
+def make() -> list[str]:
+    type Local = list[int]
+    return [Local.__name__, str(Local.__value__)]
+
+
+print(Score.__value__, Pair.__value__, Pair.__type_params__)
+print(make(), Pair[int] == Pair[int])
+```
+
+CPython 3.15 writes an alias a function or a class defines by its
+qualified name, such as `make.<locals>.Local`, and an alias given type
+arguments with its module, such as `__main__.Pair[int]`, where older
+releases write `Local` and `Pair[int]`; writing these below the floor
+3.15 is E0202, as for any typing value. `__value__` and `__type_params__`
+are read through the alias's own name, and an alias held in another
+variable is E0202 there. An alias a function or a class defines given
+type arguments is planned for 1.0 (TYP-22).
 
 ## Example
 

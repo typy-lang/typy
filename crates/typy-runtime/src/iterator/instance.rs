@@ -66,6 +66,7 @@ pub(super) unsafe fn wrap(instance: *mut ObjectHeader) -> *mut IteratorObject {
             number: 0,
             pair_type: class.next_tuple,
             pair,
+            owned: core::ptr::null_mut(),
         });
     }
     iterator

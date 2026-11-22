@@ -240,6 +240,25 @@ impl FunctionLowerer<'_> {
         result
     }
 
+    /// Returns `gcd`, `lcm` or `hypot` of the items of the list `values`, `int`s for the first
+    /// two and `float`s for `hypot` (EXP-22).
+    pub(crate) fn math_of_list(
+        &mut self,
+        function: MathFunction,
+        values: &TypedExpr,
+        span: Span,
+    ) -> Lowered {
+        let runtime = match function {
+            MathFunction::Gcd => RuntimeFunction::MathGcdList,
+            MathFunction::Lcm => RuntimeFunction::MathLcmList,
+            _ => RuntimeFunction::MathHypot,
+        };
+        let list = self.expression(values);
+        let result = self.call_runtime(runtime, vec![list.value], span);
+        self.release(list, span);
+        result
+    }
+
     /// Returns `perm(n)`, or `perm(n, k)` where `k` may be `None`, which is `perm(n)`.
     fn permutations(&mut self, values: &[Lowered], span: Span) -> Lowered {
         let n = self.integer(values[0], span);

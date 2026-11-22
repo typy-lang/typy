@@ -220,7 +220,7 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` on every target; `"linux"` in a program built for Linux and `"darwin"` in one built for macOS |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
-| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.10.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.11.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,
@@ -237,7 +237,11 @@ error first. `except Exception` does not catch it, since `SystemExit`
 derives from `BaseException`, as in CPython.
 
 `print(..., file=sys.stderr)` writes to standard error, and
-`flush=True` writes out what standard output holds. `input(prompt)`
+`flush=True` writes out what standard output holds. `print` also takes
+its keywords from a dict of `str` keys, `print(*values, **options)`,
+bound when the call runs, with CPython's errors for a keyword given
+twice or unknown, a `sep` or an `end` that is no `str`, and a `file`
+without `write` (EXP-22). `input(prompt)`
 writes `str(prompt)`, then reads a line of standard input without its
 `\n`, and raises `EOFError` at the end of the input:
 

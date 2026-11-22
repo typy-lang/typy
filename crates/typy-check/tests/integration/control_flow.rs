@@ -109,7 +109,7 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar`, \
             `Protocol`, `NamedTuple`, `Sequence`, `MutableSequence`, `Mapping`, \
             `MutableMapping`, `AbstractSet`, `MutableSet`, `Collection`, `Container`, \
-            `Reversible`, `KeysView`, `ValuesView` and `ItemsView`, not `Awaitable`",
+            `Reversible`, `KeysView`, `ValuesView`, `ItemsView` and `cast`, not `Awaitable`",
         ),
         (
             "from dataclasses import asdict\n",

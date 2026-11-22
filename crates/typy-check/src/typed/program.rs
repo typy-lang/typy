@@ -11,6 +11,19 @@ pub struct TypedTypeAlias {
     pub name: String,
     /// The qualified name of its module.
     pub module: String,
+    /// Its qualified name: its name, or for one a function or a class defines, the names
+    /// around it, such as `make.<locals>.Local` (TYP-18).
+    pub qualified_name: String,
+}
+
+/// A typing value a program reads (TYP-18): its text, as CPython 3.15 writes it, and the key
+/// that the values CPython finds equal share.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TypedTypingValue {
+    /// The value's text.
+    pub text: String,
+    /// The key it compares and hashes by.
+    pub key: String,
 }
 
 /// The whole program after checking.
@@ -33,6 +46,9 @@ pub struct TypedProgram {
     /// The type aliases the program reads as values, indexed as
     /// `TypedExprKind::TypeAliasObject` names them (SMT-12).
     pub type_aliases: Vec<TypedTypeAlias>,
+    /// The typing values the program reads, indexed as `TypedExprKind::TypingValue` names
+    /// them (TYP-18).
+    pub typing_values: Vec<TypedTypingValue>,
     /// Whether the program closes a text file, by `close()` or a `with` block, which may be
     /// `sys.stdout`; `print` then checks that standard output is open (LIB-14).
     pub closes_text_files: bool,

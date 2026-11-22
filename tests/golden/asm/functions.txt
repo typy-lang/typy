@@ -745,9 +745,10 @@ typy_rt_heap_free:
 	.quad	8
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"negative"
 	.zero	7
-	.size	.Ltypy.str.0, 40
+	.size	.Ltypy.str.0, 48
 
 	.type	.Ltypy.str.1,@object
 	.p2align	4, 0x0
@@ -757,9 +758,10 @@ typy_rt_heap_free:
 	.quad	9
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"positive "
 	.zero	6
-	.size	.Ltypy.str.1, 40
+	.size	.Ltypy.str.1, 48
 
 	.type	.Ltypy.cstr.2,@object
 	.section	.rodata.str1.1,"aMS",@progbits,1
@@ -768,7 +770,7 @@ typy_rt_heap_free:
 	.size	.Ltypy.cstr.2, 9
 
 	.type	.Ltypy.str.2,@object
-	.section	.rodata.cst32,"aM",@progbits,32
+	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0
 .Ltypy.str.2:
 	.long	4294967295
@@ -776,9 +778,10 @@ typy_rt_heap_free:
 	.quad	4
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"zero"
 	.zero	3
-	.size	.Ltypy.str.2, 32
+	.size	.Ltypy.str.2, 40
 
 	.type	.Ltypy.str.3,@object
 	.p2align	4, 0x0
@@ -788,9 +791,10 @@ typy_rt_heap_free:
 	.quad	5
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"small"
 	.zero	2
-	.size	.Ltypy.str.3, 32
+	.size	.Ltypy.str.3, 40
 
 	.type	.Ltypy.str.4,@object
 	.p2align	4, 0x0
@@ -800,9 +804,10 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	" "
 	.zero	6
-	.size	.Ltypy.str.4, 32
+	.size	.Ltypy.str.4, 40
 
 	.type	.Ltypy.cstr.3,@object
 	.section	.rodata.str1.1,"aMS",@progbits,1
@@ -811,7 +816,7 @@ typy_rt_heap_free:
 	.size	.Ltypy.cstr.3, 7
 
 	.type	.Ltypy.str.5,@object
-	.section	.rodata.cst32,"aM",@progbits,32
+	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0
 .Ltypy.str.5:
 	.long	4294967295
@@ -819,9 +824,10 @@ typy_rt_heap_free:
 	.quad	1
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	"\n"
 	.zero	6
-	.size	.Ltypy.str.5, 32
+	.size	.Ltypy.str.5, 40
 
 	.type	.Ltypy.cstr.4,@object
 	.section	.rodata.str1.1,"aMS",@progbits,1
@@ -830,7 +836,7 @@ typy_rt_heap_free:
 	.size	.Ltypy.cstr.4, 9
 
 	.type	.Ltypy.str.6,@object
-	.section	.rodata.cst32,"aM",@progbits,32
+	.section	.rodata,"a",@progbits
 	.p2align	4, 0x0
 .Ltypy.str.6:
 	.long	4294967295
@@ -838,8 +844,9 @@ typy_rt_heap_free:
 	.quad	2
 	.long	1
 	.long	0
+	.quad	-1
 	.asciz	": "
 	.zero	5
-	.size	.Ltypy.str.6, 32
+	.size	.Ltypy.str.6, 40
 
 	.section	".note.GNU-stack","",@progbits

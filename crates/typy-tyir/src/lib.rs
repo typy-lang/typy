@@ -30,6 +30,7 @@ pub use library::{
 };
 pub use module::{
     GlobalId, TyirAllocator, TyirClass, TyirGlobal, TyirModule, TyirModuleObject, TyirTypeAlias,
+    TyirTypingValue,
 };
 pub use operation::{
     BoolOperator, Comparison, FloatOperator, IntOperator, IntUnaryOperator, Operation, ScalarKind,

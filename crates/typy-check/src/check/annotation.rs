@@ -77,6 +77,8 @@ pub(crate) enum AnnotationName {
     Dataclasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
+    /// `typing.cast`, a function a call checks when the program runs (TYP-24).
+    Cast,
     /// `typing.NamedTuple`, the base of a named tuple, which the dataclass expansion reads
     /// (CLS-27).
     NamedTuple,
@@ -91,10 +93,10 @@ pub(crate) enum AnnotationName {
     /// in lower case (LIB-17).
     Builtin(&'static str),
     /// `Callable` of `typing` or `collections.abc`, the type of a function value (FUN-05).
-    Callable,
+    Callable(Origin),
     /// An abstract collection of `typing` or `collections.abc`, such as `Sequence`, held as
     /// the union of the built-in types CPython registers with it (LIB-20, ADR-0086).
-    Abstract(AbstractCollection),
+    Abstract(AbstractCollection, Origin),
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -121,12 +123,15 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing" | "collections.abc", "Generator") => {
             Some(AnnotationName::Generator(origin(module)))
         }
-        ("typing" | "collections.abc", "Callable") => Some(AnnotationName::Callable),
+        ("typing" | "collections.abc", "Callable") => {
+            Some(AnnotationName::Callable(origin(module)))
+        }
         ("types", "TracebackType") => Some(AnnotationName::TracebackType),
         ("types", "ModuleType") => Some(AnnotationName::ModuleType),
         ("typing", "ClassVar") => Some(AnnotationName::ClassVar),
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
+        ("typing", "cast") => Some(AnnotationName::Cast),
         ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
@@ -136,9 +141,8 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Tuple") => Some(AnnotationName::Builtin("tuple")),
         ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
-        ("typing" | "collections.abc", _) => {
-            AbstractCollection::named(module, name).map(AnnotationName::Abstract)
-        }
+        ("typing" | "collections.abc", _) => AbstractCollection::named(module, name)
+            .map(|collection| AnnotationName::Abstract(collection, origin(module))),
         _ => None,
     }
 }
@@ -174,7 +178,10 @@ pub(crate) fn is_protocol(
 
 /// Returns the annotation name an expression names: an imported name, or a name read
 /// through one of the modules, such as `typing.Iterator` or `collections.abc.Iterable`.
-fn standard_name(expression: &Expr, scope: &AnnotationScope<'_>) -> Option<AnnotationName> {
+pub(crate) fn standard_name(
+    expression: &Expr,
+    scope: &AnnotationScope<'_>,
+) -> Option<AnnotationName> {
     match expression {
         Expr::Name { id, .. } => scope.names.get(id).copied(),
         Expr::Attribute {
@@ -207,7 +214,10 @@ fn standard_annotation(
             }
         }
         Expr::Subscript { value, index, span }
-            if standard_name(value, scope) == Some(AnnotationName::Callable) =>
+            if matches!(
+                standard_name(value, scope),
+                Some(AnnotationName::Callable(_))
+            ) =>
         {
             super::callable_annotation::callable_annotation(index, *span, scope, diagnostics)
         }
@@ -221,7 +231,7 @@ fn standard_annotation(
         }
         // `Sequence[int]` is the union of the built-in sequences of `int` (LIB-20).
         Expr::Subscript { value, index, span }
-            if let Some(AnnotationName::Abstract(collection)) = standard_name(value, scope) =>
+            if let Some(AnnotationName::Abstract(collection, _)) = standard_name(value, scope) =>
         {
             let written: Vec<&Expr> = match index.as_ref() {
                 Expr::Tuple { elements, .. } => elements.iter().collect(),
@@ -288,16 +298,8 @@ fn bare_standard(
     match name {
         AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
         AnnotationName::Final => final_elsewhere(annotation, diagnostics),
-        AnnotationName::Dataclasses => {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(408),
-                    annotation.span(),
-                    "`dataclass` and `field` are not types",
-                )
-                .with_rule(RuleId::CLS_05),
-            );
-            Type::Error
+        AnnotationName::Dataclasses | AnnotationName::Cast => {
+            not_a_type(&name, annotation.span(), diagnostics)
         }
         AnnotationName::Protocol => {
             diagnostics.push(
@@ -352,11 +354,11 @@ fn bare_standard(
             );
             Type::Error
         }
-        AnnotationName::Callable => {
+        AnnotationName::Callable(_) => {
             diagnostics.push(super::callable_annotation::callable_form(annotation.span()));
             Type::Error
         }
-        AnnotationName::Abstract(collection) => {
+        AnnotationName::Abstract(collection, _) => {
             diagnostics.push(abstract_form(collection, annotation.span()));
             Type::Error
         }
@@ -855,17 +857,9 @@ fn named_type(
         "bytes" => Type::Bytes,
         "range" => Type::Range,
         "slice" => Type::Slice,
-        "Any" | "object" => {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(403),
-                    span,
-                    format!("`{id}` does not give the value one type"),
-                )
-                .with_rule(RuleId::TYP_10),
-            );
-            Type::Error
-        }
+        // A value of any type, narrowed before use, as Java holds `Object` (TYP-23, ADR-0090).
+        "object" => Type::Object,
+        "Any" => planned_open_type(id, span, diagnostics),
         "tuple" => {
             diagnostics.push(
                 Diagnostic::new(
@@ -1029,4 +1023,40 @@ fn tuple_annotation(
             .map(|item| annotation_type(item, scope, diagnostics))
             .collect(),
     )
+}
+
+/// Returns the error type after reporting `Any` as a type, which a later release gives, bound
+/// when the program runs (ADR-0094).
+fn planned_open_type(
+    id: &str,
+    span: typy_diagnostics::Span,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let (release, rule) = ("0.13", RuleId::TYP_25);
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            span,
+            format!("`{id}` as a type is planned for TyPy {release} ({rule})"),
+        )
+        .with_rule(rule)
+        .with_help("annotate the value with its type, or a union of its types"),
+    );
+    Type::Error
+}
+
+/// Returns the error type after reporting a name of `dataclasses` or `typing.cast` used as a
+/// type: they are functions.
+fn not_a_type(
+    name: &AnnotationName,
+    span: typy_diagnostics::Span,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let (message, rule) = if *name == AnnotationName::Cast {
+        ("`cast` is a function, not a type", RuleId::TYP_24)
+    } else {
+        ("`dataclass` and `field` are not types", RuleId::CLS_05)
+    };
+    diagnostics.push(Diagnostic::new(DiagnosticCode::error(408), span, message).with_rule(rule));
+    Type::Error
 }

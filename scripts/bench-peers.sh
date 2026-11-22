@@ -43,6 +43,12 @@ for entry in "${archives[@]}"; do
     echo "${name} ${version}: installed in ${home}"
 done
 
+# Codon links its programs with -lz, and the image has zlib's shared library
+# but not the link the linker looks for, which the -dev package would add.
+# compare.py puts this directory on Codon's LIBRARY_PATH.
+mkdir -p "${root}/lib"
+ln -sf /usr/lib/x86_64-linux-gnu/libz.so.1 "${root}/lib/libz.so"
+
 environment="${root}/python-3.14"
 if [[ ! -x "${environment}/bin/python" ]]; then
     uv venv --quiet --python /usr/local/bin/python3.14 "${environment}"

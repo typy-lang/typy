@@ -2,6 +2,7 @@
 //! `join`, as CPython's `stringlib` does them (LIB-03).
 
 use super::builder::{StrBuilder, is_bytes, space_for, substring};
+use super::narrow;
 use super::{StrObject, code_point, length};
 use crate::ListObject;
 use crate::Raising;
@@ -16,11 +17,8 @@ use crate::word::inline_value;
 ///
 /// `list` points to a live list of objects.
 unsafe fn push(list: *mut ListObject, text: *mut StrObject) {
-    // SAFETY: the caller passes a live list; the list keeps the string's only reference.
-    unsafe {
-        crate::list::typy_rt_list_append(list, text.expose_provenance() as u64);
-        crate::refcount::typy_rt_decrement(text.cast());
-    }
+    // SAFETY: the caller passes a live list; the list takes over the string's only reference.
+    unsafe { crate::list::typy_rt_list_append_moved(list, text.expose_provenance() as u64) };
 }
 
 /// Returns whether `needle` occurs in `text` at `at`.
@@ -64,7 +62,8 @@ pub unsafe extern "C" fn typy_rt_str_split(
     let backwards = flags & 2 != 0;
     // SAFETY: the caller passes live strings; every index stays inside them.
     unsafe {
-        let parts = new_list(ItemKind::Object, 0);
+        // Room for twelve parts, as CPython's `split` makes its list, saves growing it.
+        let parts = new_list(ItemKind::Object, 12);
         if flags & 1 == 0 {
             if backwards {
                 split_whitespace_backwards(text, limit, parts);
@@ -79,6 +78,10 @@ pub unsafe extern "C" fn typy_rt_str_split(
             return empty_separator(core::ptr::null_mut());
         }
         let whole = length(text);
+        if let (Some(bytes), Some(between)) = (narrow::latin1(text), narrow::latin1(separator)) {
+            split_narrow(text, (bytes, between), (limit, backwards), parts);
+            return Raising::ok(parts);
+        }
         if backwards {
             let (mut end, mut splits) = (whole, 0);
             let mut at = whole;
@@ -295,6 +298,9 @@ pub unsafe extern "C" fn typy_rt_str_join(
 ) -> *mut StrObject {
     // SAFETY: the caller passes a live list of live strings.
     unsafe {
+        if let Some(joined) = join_narrow(separator, parts) {
+            return joined;
+        }
         let mut builder = StrBuilder::with_capacity(0);
         for index in 0..(*parts).length {
             if index > 0 {
@@ -306,5 +312,83 @@ pub unsafe extern "C" fn typy_rt_str_join(
             builder.push_str(part);
         }
         builder.finish_like(separator)
+    }
+}
+
+/// Returns `separator.join(parts)` when the separator and every part hold one byte a code
+/// point, copied a part at a time; `None` otherwise.
+///
+/// # Safety
+///
+/// `separator` points to a live string, and `parts` to a live list of live strings.
+unsafe fn join_narrow(
+    separator: *const StrObject,
+    parts: *const ListObject,
+) -> Option<*mut StrObject> {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        let between = narrow::latin1(separator)?;
+        let count = (*parts).length;
+        let part = |index: usize| {
+            core::ptr::with_exposed_provenance::<StrObject>(
+                usize::try_from((*parts).item(index)).unwrap_or(0),
+            )
+        };
+        let mut total = between.len() * count.saturating_sub(1);
+        for index in 0..count {
+            total += narrow::latin1(part(index))?.len();
+        }
+        Some(narrow::new_like(separator, total, |out| {
+            let mut at = 0;
+            for index in 0..count {
+                if index > 0 {
+                    out[at..at + between.len()].copy_from_slice(between);
+                    at += between.len();
+                }
+                let bytes = narrow::latin1(part(index)).unwrap_or_default();
+                out[at..at + bytes.len()].copy_from_slice(bytes);
+                at += bytes.len();
+            }
+        }))
+    }
+}
+
+/// Splits `text`, whose code points are `bytes`, on `between`, which is not empty, at most
+/// `limit` times, from the right when `backwards`, into `parts`.
+///
+/// # Safety
+///
+/// `text` is a live string and `parts` a live list of objects.
+unsafe fn split_narrow(
+    text: *const StrObject,
+    (bytes, between): (&[u8], &[u8]),
+    (limit, backwards): (usize, bool),
+    parts: *mut ListObject,
+) {
+    let mut splits = 0;
+    // SAFETY: the caller's guarantee; every part lies inside the text.
+    unsafe {
+        if backwards {
+            let mut end = bytes.len();
+            while splits < limit
+                && let Some(at) = narrow::rfind(&bytes[..end], between)
+            {
+                push(parts, substring(text, at + between.len(), end));
+                end = at;
+                splits += 1;
+            }
+            push(parts, substring(text, 0, end));
+            crate::list::typy_rt_list_reverse(parts);
+        } else {
+            let mut start = 0;
+            while splits < limit
+                && let Some(at) = narrow::find(&bytes[start..], between)
+            {
+                push(parts, substring(text, start, start + at));
+                start += at + between.len();
+                splits += 1;
+            }
+            push(parts, substring(text, start, bytes.len()));
+        }
     }
 }

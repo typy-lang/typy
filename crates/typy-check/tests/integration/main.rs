@@ -3,6 +3,8 @@
 
 mod call_arguments;
 mod call_unpacking;
+mod callable_adapters;
+mod casts;
 mod checker;
 mod class_bodies;
 mod class_members;
@@ -30,16 +32,19 @@ mod modules;
 mod named_tuples;
 mod nested_functions;
 mod nonlocal_statement;
+mod object_values;
 mod open;
 mod operands;
 mod operators;
 mod parameters;
 mod percent;
+mod planned_forms;
 mod protocols;
 mod sys;
 mod type_aliases;
 mod type_objects;
 mod typing_names;
+mod typing_values;
 mod unions;
 mod unpacking;
 mod variadic;

@@ -4,23 +4,31 @@ benchmark report describes: each peer builds each workload from a clean state, i
 checked against CPython 3.15's, and then it is timed at the workload's main size, with its peak
 memory, and once at a quarter and at half of it.
 
-Every run is pinned to the same two cores with taskset. A run's time is the wall time of the
-process, and its memory the peak resident size the kernel reports through `wait4`. The raw
-figures go to .tmp/bench/results.json, which tests/bench/report.py turns into tables. A peer that
-cannot build a workload is recorded with the reason, never left out silently.
+Every run is pinned to the same two cores with taskset, one job at a time. `--lanes N` runs N
+jobs at once instead, each lane pinned to the hardware threads of a physical core of its own
+other than core 0: a quicker run, whose times run higher and vary more, since the lanes share the
+caches and a busy chip lowers its clock; the report names the cores and the jobs at once. A
+run's time is the wall time of the process, and its memory the peak resident size the kernel
+reports through `wait4`. The raw figures go to .tmp/bench/results.json, which
+tests/bench/report.py turns into tables. A peer that cannot build a workload is recorded with the
+reason, never left out silently.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import platform
+import queue
 import shutil
 import statistics
 import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -98,7 +106,13 @@ PEERS = [
     Peer("mypyc", "Python", ".py", [PYTHON_314, "-m", "mypy", "--version"]),
     Peer("Cython", "Python", ".py", [PYTHON_314, "-m", "cython", "--version"]),
     Peer("Nuitka", "Python", ".py", [PYTHON_314, "-m", "nuitka", "--version"]),
-    Peer("Codon", "Python", ".py", [tool("codon-0.20.6", "bin", "codon"), "--version"]),
+    Peer(
+        "Codon",
+        "Python",
+        ".py",
+        [tool("codon-0.20.6", "bin", "codon"), "--version"],
+        {"LIBRARY_PATH": tool("lib")},
+    ),
     Peer("TyPy", "Python", ".py", [str(TARGET / "release" / "typy"), "--version"]),
     Peer("C (gcc)", "C", ".c", ["gcc", "--version"]),
     Peer("C (clang)", "C", ".c", ["clang", "--version"]),
@@ -199,12 +213,36 @@ def build(peer: Peer, workload: str, source: Path) -> Built:
     return Built([str(output)], directory, elapsed, output.stat().st_size)
 
 
-def measure(built: Built, size: int, environment: dict[str, str]) -> tuple[float, int]:
-    """Runs a built program once at `size`, pinned to the benchmark's cores, its output
-    discarded, and returns its wall time and its peak resident size in KiB, as
-    tests/bench/measure.c reports them."""
-    result = WORK / "measured"
-    command = ["taskset", "-c", CORES, str(MEASURE), str(result), *built.command, str(size)]
+@dataclass(frozen=True)
+class Lane:
+    """Where a job runs: the cores its runs are pinned to, and the file measure.c reports in."""
+
+    cores: str
+    result: Path
+
+
+def lanes(count: int) -> list[Lane]:
+    """Returns `count` lanes: the benchmark's two cores for one, and otherwise the hardware
+    threads of a physical core each, from the last, leaving core 0 to the system."""
+    if count == 1:
+        return [Lane(CORES, WORK / "measured")]
+    cores: dict[int, list[int]] = {}
+    for cpu in sorted(os.sched_getaffinity(0)):
+        core = int(Path(f"/sys/devices/system/cpu/cpu{cpu}/topology/core_id").read_text())
+        cores.setdefault(core, []).append(cpu)
+    physical = [cores[core] for core in sorted(cores) if core != 0][-count:]
+    return [
+        Lane(",".join(str(cpu) for cpu in cpus), WORK / f"measured-{index}")
+        for index, cpus in enumerate(physical)
+    ]
+
+
+def measure(built: Built, size: int, environment: dict[str, str], lane: Lane) -> tuple[float, int]:
+    """Runs a built program once at `size`, pinned to the lane's cores, its output discarded,
+    and returns its wall time and its peak resident size in KiB, as tests/bench/measure.c
+    reports them."""
+    result = lane.result
+    command = ["taskset", "-c", lane.cores, str(MEASURE), str(result), *built.command, str(size)]
     done = subprocess.run(
         command,
         cwd=built.directory,
@@ -239,7 +277,7 @@ def version_of(peer: Peer) -> str:
     return text[0] if text else "unknown"
 
 
-def machine() -> dict[str, str]:
+def machine(running: list[Lane]) -> dict[str, str]:
     model = "unknown"
     for line in Path("/proc/cpuinfo").read_text().splitlines():
         if line.startswith("model name"):
@@ -249,50 +287,95 @@ def machine() -> dict[str, str]:
         "cpu": model,
         "logical cpus": str(os.cpu_count()),
         "kernel": platform.release(),
-        "pinned cores": CORES,
+        "pinned cores": " and ".join(lane.cores for lane in running),
+        "jobs at once": str(len(running)),
         "date": time.strftime("%Y-%m-%d"),
     }
 
 
 def main() -> None:
-    chosen = set(sys.argv[1:]) or set(WORKLOADS)
+    arguments = sys.argv[1:]
+    count = 1
+    if arguments[:1] == ["--lanes"]:
+        count = max(1, int(arguments[1]))
+        arguments = arguments[2:]
+    chosen = set(arguments) or set(WORKLOADS)
     WORK.mkdir(parents=True, exist_ok=True)
     measure_source = ROOT / "tests" / "bench" / "measure.c"
     subprocess.run(["gcc", "-O2", "-o", str(MEASURE), str(measure_source)], check=True)
+    running = lanes(count)
     results: dict[str, object] = {
-        "machine": machine(),
+        "machine": machine(running),
         "versions": {peer.name: version_of(peer) for peer in PEERS},
         "runs": RUNS,
         "workloads": {},
         "startup": {},
     }
-    with tempfile.TemporaryDirectory() as scratch:
+    free: queue.Queue[Lane] = queue.Queue()
+    for lane in running:
+        free.put(lane)
+
+    def in_a_lane(job: Callable[[Lane], dict[str, object]], label: str) -> dict[str, object]:
+        """Runs `job` in the first free lane and prints its line when it is done."""
+        lane = free.get()
+        try:
+            entry = job(lane)
+        finally:
+            free.put(lane)
+        print(f"{label} {summary(entry)}", flush=True)
+        return entry
+
+    with tempfile.TemporaryDirectory() as scratch, ThreadPoolExecutor(len(running)) as pool:
         reference = Path(scratch)
-        for workload, (size, check_size, scaling) in WORKLOADS.items():
-            if workload not in chosen:
-                continue
-            source = PROGRAMS / workload / f"{workload}.py"
-            expected = subprocess.run(
-                ["python3.15", str(source), str(check_size)],
+        # Every reference output comes first, so no job is timed while CPython makes one.
+        expected: dict[str, str] = {
+            workload: subprocess.run(
+                ["python3.15", str(PROGRAMS / workload / f"{workload}.py"), str(check_size)],
                 cwd=reference,
                 capture_output=True,
                 text=True,
                 check=True,
             ).stdout
-            entries: dict[str, object] = {}
-            for peer in PEERS:
-                entries[peer.name] = run_peer(peer, workload, (size, check_size, scaling), expected)
-                print(f"{workload:14} {peer.name:20} {summary(entries[peer.name])}", flush=True)
-            results["workloads"][workload] = {"size": size, "scaling": list(scaling), "peers": entries}
-    for peer in PEERS:
-        results["startup"][peer.name] = startup(peer)
-        print(f"{'startup':14} {peer.name:20} {summary(results['startup'][peer.name])}", flush=True)
+            for workload, (_, check_size, _) in WORKLOADS.items()
+            if workload in chosen
+        }
+        pending: dict[str, dict[str, Future[dict[str, object]]]] = {}
+        for workload, output in expected.items():
+            size, check_size, scaling = WORKLOADS[workload]
+            sizes = (size, check_size, scaling)
+            pending[workload] = {
+                peer.name: pool.submit(
+                    in_a_lane,
+                    functools.partial(run_peer, peer, workload, sizes, output),
+                    f"{workload:14} {peer.name:20}",
+                )
+                for peer in PEERS
+            }
+        for workload, futures in pending.items():
+            size, _, scaling = WORKLOADS[workload]
+            entries = {name: future.result() for name, future in futures.items()}
+            results["workloads"][workload] = {
+                "size": size,
+                "scaling": list(scaling),
+                "peers": entries,
+            }
+        starts = {
+            peer.name: pool.submit(
+                in_a_lane, functools.partial(startup, peer), f"{'startup':14} {peer.name:20}"
+            )
+            for peer in PEERS
+        }
+        results["startup"] = {name: future.result() for name, future in starts.items()}
     (WORK / "results.json").write_text(json.dumps(results, indent=1))
     print(f"results: {WORK / 'results.json'}")
 
 
 def run_peer(
-    peer: Peer, workload: str, sizes: tuple[int, int, tuple[int, int]], expected: str
+    peer: Peer,
+    workload: str,
+    sizes: tuple[int, int, tuple[int, int]],
+    expected: str,
+    lane: Lane,
 ) -> dict[str, object]:
     size, check_size, scaling = sizes
     source = peer.source(workload)
@@ -302,9 +385,9 @@ def run_peer(
         built = build(peer, workload, source)
         if output_of(built, check_size, peer.environment) != expected:
             return {"error": "output differs from CPython 3.15's"}
-        runs = [measure(built, size, peer.environment) for _ in range(RUNS)]
+        runs = [measure(built, size, peer.environment, lane) for _ in range(RUNS)]
         times = [elapsed for elapsed, _ in runs]
-        scaled = {str(each): measure(built, each, peer.environment)[0] for each in scaling}
+        scaled = {str(each): measure(built, each, peer.environment, lane)[0] for each in scaling}
     except (RuntimeError, OSError) as failure:
         return {"error": str(failure).splitlines()[0][:200]}
     return {
@@ -317,13 +400,13 @@ def run_peer(
     }
 
 
-def startup(peer: Peer) -> dict[str, object]:
+def startup(peer: Peer, lane: Lane) -> dict[str, object]:
     source = peer.source("hello")
     if source is None:
         return {"error": "no program"}
     try:
         built = build(peer, "hello", source)
-        runs = [measure(built, 1, peer.environment) for _ in range(STARTUP_RUNS)]
+        runs = [measure(built, 1, peer.environment, lane) for _ in range(STARTUP_RUNS)]
     except (RuntimeError, OSError) as failure:
         return {"error": str(failure).splitlines()[0][:200]}
     times = [elapsed for elapsed, _ in runs]

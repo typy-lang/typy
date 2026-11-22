@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Builds the runtime archive for each target the host builds for, with the
-# `runtime` profile: the Linux targets on a Linux host and macOS on a Mac
-# (ADR-0051, ADR-0055). Each is staged where a compiler in <target>/debug or
-# <target>/release finds it, <target>/lib/typy/<triple>/, as an installed
-# compiler finds it in <prefix>/lib/typy/<triple>/. The copy under
-# llvm-cov-target serves the compiler that `make coverage` builds there.
+# Builds the runtime archives for each target the host builds for: the Linux
+# targets on a Linux host and macOS on a Mac (ADR-0051, ADR-0055). The
+# `runtime` profile, optimised for speed, gives the archive debug and
+# `--release` builds link, and `runtime-small`, optimised for size, the one
+# `--release-small` builds link (ADR-0100). Each is staged where a compiler in
+# <target>/debug or <target>/release finds it, <target>/lib/typy/<triple>/ and
+# <target>/lib/typy-small/<triple>/, as an installed compiler finds them in
+# <prefix>/lib/. The copy under llvm-cov-target serves the compiler that
+# `make coverage` builds there.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -25,6 +28,9 @@ for triple in $(scripts/host-targets.sh); do
     cargo rustc -p typy-runtime --profile runtime --locked --crate-type staticlib \
         --target "${triple}"
     stage "${target}/${triple}/runtime/libtypy_runtime.a" "" "${triple}"
+    cargo rustc -p typy-runtime --profile runtime-small --locked --crate-type staticlib \
+        --target "${triple}"
+    stage "${target}/${triple}/runtime-small/libtypy_runtime.a" "-small" "${triple}"
 done
 
 # The runtime instrumented with AddressSanitizer, for the conformance suite's

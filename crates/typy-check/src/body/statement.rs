@@ -225,6 +225,23 @@ impl BodyChecker<'_> {
             } => {
                 let checked_value = self.expression(value);
                 let current = self.expression(target);
+                // A number held as a variable of a union of numbers, such as an `int | bool`
+                // an `isinstance` test gave, is combined member by member, as `x = x + y` is
+                // (TYP-14, DAT-19).
+                if let (Expr::Name { .. }, Expr::Name { .. }) = (target, value)
+                    && matches!(&checked_value.ty, Type::Union(members)
+                        if members.iter().all(Type::is_numeric_or_bool))
+                    && current.ty.is_numeric_or_bool()
+                {
+                    let combined = Expr::BinOp {
+                        left: Box::new(target.clone()),
+                        operator: *operator,
+                        right: Box::new(value.clone()),
+                        span: *span,
+                    };
+                    let result = self.expression(&combined);
+                    return self.rebound(target, result, *span);
+                }
                 let instance_item = self.is_instance_item(&current);
                 let property = self.is_property_read(target, &current);
                 // A `ctypes` object's value, item or field is read, combined and written back, as an
@@ -292,6 +309,9 @@ impl BodyChecker<'_> {
                     }
                     return self.rebound(target, formatted, *span);
                 }
+                // A `bool` value is added as its `int`; a `bool` target stays one, so a result of
+                // another type is refused when it is assigned (DAT-19, TYP-03).
+                let value = Self::int_of_bool(value);
                 let result = self.binary_type(*operator, &current, &value, *span);
                 let class_value = match target {
                     Expr::Attribute {
@@ -428,6 +448,14 @@ impl BodyChecker<'_> {
                 return self.import_statement(statement, *span);
             }
             Stmt::FunctionDef { .. } if self.in_function() => return self.nested_def(statement),
+            Stmt::TypeAlias {
+                name,
+                type_parameters,
+                value,
+                span,
+            } if self.in_function() => {
+                return self.local_type_alias((name, type_parameters, value), *span);
+            }
             // `global` changes where names resolve, which `declare_globals` did.
             // The aliases are expanded in the annotations, and a program reads none as a value.
             // A module's functions are checked on their own.

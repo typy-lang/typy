@@ -90,7 +90,10 @@ impl BodyChecker<'_> {
                     "an empty set needs an annotation that names its item type",
                 )
                 .with_rule(RuleId::TYP_05)
-                .with_help("annotate the variable, such as `items: set[int] = set()`"),
+                .with_help(
+                    "annotate the variable, such as `items: set[int] = set()`; the item type \
+                     inferred from its first use is planned for TyPy 0.12 (TYP-27)",
+                ),
                 span,
             ),
             ([source], _) => {

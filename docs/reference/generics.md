@@ -11,6 +11,7 @@ those types costs (GEN-01 to GEN-03, ADR-0023, ADR-0028).
 | Item | Rule |
 | --- | --- |
 | `def name[T, U](...)`: a generic function at module level | GEN-01 |
+| `def name[T](...)` inside a function: a nested generic function | FUN-18 |
 | `def name[T](self, ...)`: a method with type parameters, also a static method | GEN-01 |
 | `class Name(Protocol):`, satisfied by any class with its members | GEN-04 |
 | `class Name[T]:`, a generic class, and `Name[int]` in annotations and calls | GEN-01 |
@@ -104,6 +105,36 @@ A call whose argument is outside the bound or the constraints is E0404.
 A function that calls itself with a larger type each time, as
 `f(x)` calling `f([x])`, would need copies without end; past 64 copies
 inside one another it is E0428.
+
+## Nested generic functions
+
+A function nested in another may have type parameters of its own. It
+reads the variables around it as any nested function does, and each call
+by name runs the copy for the types its arguments give (FUN-18,
+ADR-0081). Each run of its `def` makes one function object, which every
+copy shares:
+
+<!-- typy-expect: accepted -->
+```python
+def describe(prefix: str) -> list[str]:
+    def tagged[T](value: T) -> tuple[str, T]:
+        return (prefix, value)
+
+    def depth[T](value: T, count: int) -> int:
+        if count == 0:
+            return 0
+        return 1 + depth(value, count - 1)
+
+    return [str(tagged(1)), str(tagged("a")), str(depth(2.5, 3))]
+
+
+print(describe("#"))
+```
+
+Its body is checked as a generic function's is, and its bounds and
+constraints work the same way. Since it is a copy for each set of types,
+it has no one value: reading it other than to call it, such as
+`held = tagged`, is E0202.
 
 ## Generic classes
 

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.29 |
+| Version | 1.38 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-21 |
+| Last updated | 2026-11-22 |
 
 ## 1. Purpose
 
@@ -34,6 +34,7 @@ Each test sits at the lowest level that can prove its behaviour.
 | End-to-end (E2E) | The `typy` executable as a user runs it: arguments, exit status, files written, and the built program run as a subprocess | `crates/typy-cli/tests/end_to_end/cli.rs` | Every commit |
 | Fuzz | No input crashes the compiler (NFR-09) | `fuzz/` | 30 minutes before each release; 60 seconds on demand |
 | Benchmark | The numbered budgets of NFR-03 to NFR-05, NFR-13 and NFR-14, and how TyPy compares with other languages | `tests/bench/` | `make bench` in CI from 0.3 for NFR-04, NFR-05 and NFR-14; the run-time suite of NFR-03 before a release, from 1.0; `make bench-compare`, which writes the [benchmark report](benchmark-report.md), on demand from 0.5 |
+| Corpus | That code written by others, typed for `mypy --strict`, builds unchanged and runs as CPython runs it, and that the share of it which does never falls (NFR-24) | `tests/corpus/modules.txt`, the list of the modules of two corpora pinned by commit, and `scripts/corpus.py` | `make corpus` before each release, which writes the [corpus report](corpus-report.md); `make corpus-check` in the release workflow |
 | Mutation | Tests fail when the code they cover is changed | `make mutants` over the lines a change adds or alters, each mutant against its own crate's tests, in a container limited to 6 GB with no swap, since a mutant can turn a bounded loop into one that allocates until memory runs out. `typy-build`, `typy-driver` and `typy-cli` are left out, since their tests need the runtime archives built beside the compiler; the end-to-end and conformance tests cover them. A whole crate is run with `make mutants-package` when its tests are reviewed | On demand, for a change whose tests deserve a closer look |
 
 ## 3. Test design
@@ -243,6 +244,10 @@ A release ships when all of these hold:
 - Large inputs, such as the 16 MiB source file and the 10,000-line
   project, are generated when the tests start, from a seed committed with
   the test.
+- The corpus is not committed: `scripts/corpus.py` fetches its two
+  sources at their pinned commits into the cache volume, and only the list
+  of the modules chosen from them, `tests/corpus/modules.txt`, is in the
+  repository.
 - The benchmark programs and their C versions are committed as source. The
   build-time projects are written by `tests/bench/build_time.py` when it
   starts: a 10,000-line project in one file and in 200 modules, and 50 and
@@ -276,6 +281,7 @@ that the specification does not define.
 | STD-05 | 0.3 | IT | `tests/conformance/std/STD-05_*.py` |
 | STD-06 | 0.1 | IT | `tests/conformance/std/STD-06_*.py` |
 | STD-07 | 0.1 | IT | `tests/conformance/std/STD-07_*.py` |
+| STD-08 | 0.11 | IT | The conformance suite run on each oracle version, and `typy-check` tests of the Python floors `python-floor` takes; checked against the release plan when a CPython version is released or reaches its end of life |
 | CLI-01 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-01 |
 | CLI-02 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-02 |
 | CLI-03 | 0.1 | E2E | `crates/typy-cli/tests/end_to_end/cli.rs`, tests named for CLI-03 |
@@ -306,6 +312,7 @@ that the specification does not define.
 | LEX-09 | 0.1 | IT | `tests/conformance/lex/LEX-09_*.py` |
 | LEX-10 | 0.5 | IT | `tests/conformance/lex/LEX-10_*.py` |
 | LEX-11 | 0.3 | UT, IT, E2E | `crates/typy-source/src/parse/tests.rs` for each limit just inside and just past it; `crates/typy-tyir/src/verify/tests.rs` for a function of 100000 blocks; `crates/typy-cli/tests/end_to_end/nesting.rs` for a program as deep as CPython compiles and each refusal; `tests/conformance/lex/LEX-11_*.py` |
+| LEX-12 | 0.13 | UT, IT | `typy-check` tests of the floor 3.14 and of the refusal below it; runtime tests of a template's parts; `tests/conformance/lex/LEX-12_*.py` for `strings`, `interpolations`, `values`, iteration and `+` |
 | TYP-01 | 0.1 | IT | `tests/conformance/typ/TYP-01_*.py` |
 | TYP-02 | 0.1 | IT | `tests/conformance/typ/TYP-02_*.py` |
 | TYP-03 | 0.1 | IT | `tests/conformance/typ/TYP-03_*.py` |
@@ -328,6 +335,16 @@ that the specification does not define.
 | TYP-20 | 0.9 | UT, IT | `typy-check` tests of the classes that fit `Iterator[T]` and `Iterable[T]`, and of those that do not; `tests/conformance/typ/TYP-20_*.py`, one function given each kind of iterator, also in the sanitizer run |
 | TYP-21 | 0.9 | UT, IT | `typy-check` tests of `Generator` in `isinstance` and a class pattern, and of an `Iterable[T]` read as an `Iterator[T]` after a test; `tests/conformance/typ/TYP-21_*.py` |
 | TYP-22 | 1.0 | UT, IT | `typy-check` tests of each refusal while it is planned; `tests/conformance/typ/TYP-22_*.py` |
+| TYP-23 | 0.11 | UT, IT | `typy-check` tests of each operation an `object` takes and refuses before narrowing, and of narrowing by `isinstance`, a class pattern and `type(x) is C`; runtime tests of boxing and unboxing each type held by value; `tests/conformance/typ/TYP-23_*.py` for `__eq__(self, other: object)`, `list[object]` and `dict[str, object]` |
+| TYP-24 | 0.11 | UT, IT | `typy-check` tests of the types a cast decides and refuses; `tests/conformance/typ/TYP-24_*.py` for a right cast and a wrong one that raises `TypeError` |
+| TYP-25 | 0.13 | UT, IT | `typy-check` tests of the refusal while it is planned; runtime tests of binding an attribute, an operator and a call by type, with the cache; `tests/conformance/typ/TYP-25_*.py` for each operation and each error CPython raises |
+| TYP-26 | 0.12 | UT, IT | `typy-check` tests of a result inferred from one `return`, from several, and from none, and of each case that keeps the annotation; `tests/conformance/typ/TYP-26_*.py` |
+| TYP-27 | 0.12 | UT, IT | `typy-check` tests of each statement that fills an empty list, dict or set, and of a read before it; `tests/conformance/typ/TYP-27_*.py` |
+| TYP-28 | 0.12 | UT, IT | `typy-check` tests of each literal kind, of a constant that passes and one that does not, and of narrowing by `==`, `in` and `match`; `tests/conformance/typ/TYP-28_*.py` |
+| TYP-29 | 0.12 | UT, IT | `typy-check` tests of a call that matches each signature, one that matches none, and a body that breaks a signature; `tests/conformance/typ/TYP-29_*.py` |
+| TYP-30 | 0.12 | UT, IT | `typy-check` tests of `Self` through a base and a derived class; `tests/conformance/typ/TYP-30_*.py` |
+| TYP-31 | 0.12 | UT, IT | `typy-check` tests of narrowing after a `TypeGuard` and a `TypeIs` call, and of `TypeIs`'s narrowing in the `else` branch; `tests/conformance/typ/TYP-31_*.py` |
+| TYP-32 | 0.13 | UT, IT | `typy-check` tests of each key kind and of a missing or unknown key; `tests/conformance/typ/TYP-32_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -345,6 +362,8 @@ that the specification does not define.
 | DAT-15 | 0.2 | IT | `tests/conformance/dat/DAT-15_*.py` |
 | DAT-16 | 0.3 | IT | `tests/conformance/dat/DAT-16_*.py` |
 | DAT-17 | 0.3 | IT | `tests/conformance/dat/DAT-17_*.py` |
+| DAT-18 | 0.12 | UT, IT | `typy-check` tests of each refused change and of the floor 3.15; `tests/conformance/dat/DAT-18_*.py` for its methods, `\|`, hashing and text |
+| DAT-19 | 0.11 | UT, IT | `typy-check` tests of the result type of each operator, `abs`, `round` and `sum` with bool operands and of `~` of a bool; runtime tests of `typy_rt_list_sum_bool`; `tests/conformance/dat/DAT-19_*.py` |
 | EXP-01 | 0.1 | IT | `tests/conformance/exp/EXP-01_*.py` |
 | EXP-02 | 0.1 | IT | `tests/conformance/exp/EXP-02_*.py` |
 | EXP-03 | 0.1 | IT | `tests/conformance/exp/EXP-03_*.py` |
@@ -366,7 +385,9 @@ that the specification does not define.
 | EXP-19 | 0.10 | UT, IT | `typy-check` tests of unpacking written out in full in each kind of callee, and of a dict display that names a key twice; `tests/conformance/exp/EXP-19_*.py` for built-ins, `print`, function values and exception classes |
 | EXP-20 | 1.0 | UT | `typy-check` subset test of the refusal while it is planned; a conformance program of each kind of default |
 | EXP-21 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/exp/EXP-21_*.py` |
-| EXP-22 | 0.11 | UT, IT | Runtime tests of the call check against each built-in's description, with its message style; `typy-check` tests of `max(*xs)` by item type and of the refusals while they are planned; `tests/conformance/exp/EXP-22_*.py` for built-ins, `print(**options)`, function values and exception classes |
+| EXP-22 | 0.11 | UT, IT | Runtime tests of exceptions made from a list, of `print`'s keyword check and of `zip` of a list; `typy-check` tests of each form a built-in, a method and a module function takes with `*`, of `max(*xs)` by item type and of the refusals; `tests/conformance/exp/EXP-22_*.py` for built-ins, methods, module functions, `print(**options)`, function values, protocol methods and exception classes |
+| EXP-23 | 0.12 | UT, IT | `typy-check` tests of each comprehension kind with unpacking and of the floor 3.15; `tests/conformance/exp/EXP-23_*.py` |
+| EXP-24 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/exp/EXP-24_*.py` |
 | SMT-01 | 0.1 | IT | `tests/conformance/smt/SMT-01_*.py` |
 | SMT-02 | 0.2 | IT | `tests/conformance/smt/SMT-02_*.py`, a list, a `str`, a range, a dict and generators unpacked with CPython 3.15's messages |
 | SMT-03 | 0.1 | IT | `tests/conformance/smt/SMT-03_*.py` |
@@ -407,8 +428,8 @@ that the specification does not define.
 | FUN-15 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-15_*.py` |
 | FUN-16 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/fun/FUN-16_*.py` |
 | FUN-17 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned, including a property read through its class; `tests/conformance/fun/FUN-17_*.py` |
-| FUN-18 | 0.11 | UT, IT | `typy-check` tests of the refusal while it is planned; `tests/conformance/fun/FUN-18_*.py` for nested generic functions, their copies and their qualified names |
-| FUN-19 | 0.11 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/fun/FUN-19_*.py` for closures, bound methods and `lambda *values`, with the identity of the original |
+| FUN-18 | 0.11 | UT, IT | `typy-check` tests of a generic function of a group and of reads as a value, also inside another nested function; `tests/conformance/fun/FUN-18_*.py` for nested generic functions with bounds, constraints, generators, recursion and groups, inside ordinary and generic functions, their copies and the qualified names of what they nest |
+| FUN-19 | 0.11 | UT, IT | `typy-check` tests of each kind of function that fits a `Callable` through an adapter and of each refusal (`callable_adapters.rs`); runtime test that adapters of one nested function are one function to `is`, `==` and `hash`; `tests/conformance/fun/FUN-19_*.py` for closures, bound methods through an instance, a class and a protocol value, class and static methods, overrides and `lambda`s with defaults and `*values`, with the identity and `repr` of the original |
 | CLS-01 | 0.2 | IT | `tests/conformance/cls/CLS-01_*.py` |
 | CLS-02 | 0.2 | IT | `tests/conformance/cls/CLS-02_*.py` |
 | CLS-03 | 0.3 | IT | `tests/conformance/cls/CLS-03_*.py` |
@@ -452,6 +473,9 @@ that the specification does not define.
 | CLS-41 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-41_*.py` |
 | CLS-42 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-42_*.py` |
 | CLS-43 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-43_*.py` |
+| CLS-44 | 0.12 | UT, IT | `typy-check` tests of the expansion of each enum kind and of `auto()`; `tests/conformance/cls/CLS-44_*.py` for members, iteration, lookup, comparison, hashing, `match` and the `Flag` operators, with CPython's errors |
+| CLS-45 | 0.12 | UT, IT | `typy-check` tests of an abstract class named in a call, and of a subclass that overrides every abstract method; `tests/conformance/cls/CLS-45_*.py` for the `TypeError` through a `type[C]` value |
+| CLS-46 | 0.14 | IT | `tests/conformance/cls/CLS-46_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |
@@ -528,6 +552,10 @@ that the specification does not define.
 | LIB-23 | 0.10 | UT, IT | Conformance tests of `map` and `filter` objects that step on after the function raises, and of `strict=` from floor 3.14; `typy-check` tests of their types, of each refused call with CPython's text, `strict=` below floor 3.14 and `callable`; `tests/conformance/lib/LIB-23_*.py` |
 | LIB-24 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/lib/LIB-24_*.py` |
 | LIB-25 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/lib/LIB-25_*.py` |
+| LIB-26 | 0.12 | UT, IT | `typy-check` tests of the floor 3.15; `tests/conformance/lib/LIB-26_*.py` for each function |
+| LIB-27 | 0.12 | UT, IT | The typeshed comparison test of each module's signatures; `tests/conformance/lib/LIB-27_*.py` comparing each module with CPython's |
+| LIB-28 | 0.12 | IT | `tests/conformance/lib/LIB-28_*.py` |
+| LIB-29 | 0.12 | IT | `tests/conformance/lib/LIB-29_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
 | LIB-14 | 0.4 | IT | `tests/conformance/lib/LIB-14_*.py` |
 | MEM-01 | 0.1 | UT, IT | `typy-runtime` unit tests; `tests/conformance/mem/MEM-01_*.py` under sanitizers |
@@ -540,6 +568,7 @@ that the specification does not define.
 | MEM-08 | 0.5 | UT, IT, E2E | `crates/typy-source/src/settings_file/allocator/tests.rs` for each wrong `[allocator]` table; `crates/typy-codegen/tests/codegen.rs` for the hooks; `crates/typy-build/src/linker.rs` for the library's place among the arguments; `crates/typy-cli/tests/end_to_end/allocator.rs` for a program built with a counting allocator, one that has no memory, and a library the linker cannot find |
 | MEM-10 | 1.0 | UT, IT | `crates/typy-tyir/src/escape/tests.rs`; `tests/conformance/mem/MEM-10_*.py` under sanitizers |
 | MEM-11 | 0.8 | UT, IT | `typy-codegen` tests of the order of each layout and of every descriptor's offsets against LLVM's; the conformance programs, whose output shows the declared order |
+| MEM-12 | 1.0 | UT, IT | Runtime tests of counting in the owning thread and in another, and of freeing when both counts reach zero; the conformance programs on one thread |
 | MEM-09 | 0.3 | UT, IT | `crates/typy-lower/tests/integration/moves.rs` for each store that moves and each read that must not; `crates/typy-runtime/src/moved_tests.rs` for the counts of each moved store; `tests/conformance/mem/MEM-09_*.py` under sanitizers |
 | FFI-01 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each way of naming `ctypes` and loading a library; `tests/conformance/ffi/FFI-01_*.py` against CPython 3.12 to 3.15 |
 | FFI-02 | 0.5 | UT, IT | `crates/typy-check/src/check/ctypes_declarations/tests.rs` for each E0430 of a declaration; `tests/conformance/ffi/FFI-02_*.py` for calls declared in time, too early, without a `restype`, and with an argument of the wrong type |
@@ -592,9 +621,10 @@ that the specification does not define.
 | NFR-21 | 0.11 | Benchmark | `make bench-compare` over `tests/bench/programs`, run weekly: the median of each program against CPython 3.15's |
 | NFR-22 | 0.12 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 5 times |
 | NFR-23 | 0.15 | Benchmark | `tests/bench/` suite against its C versions, geometric mean within 3 times |
-| NFR-24 | 0.11 | Corpus | the corpus of `mypy --strict` modules, pinned by commit, checked, built and run against CPython in the release workflow, its share compared with the last release's |
+| NFR-24 | 0.11 | Corpus | the modules of `tests/corpus/modules.txt`, chosen by `make corpus-select` from two corpora pinned by commit for passing `mypy --strict` and running alike under CPython 3.15, built and run against CPython by `make corpus`, which refuses a share below the corpus report's, and by `make corpus-check` in the release workflow |
 | NFR-25 | 0.10 | Release check | `scripts/check-sbom.py`, run by `make dist` on each host: fails when the archive's `sbom.cdx.json` misses a file of the archive or lists it with another SHA-256, misses a crate `cargo tree` gives for the compiler or the runtime, or misses LLVM or the Rust standard library |
 | NFR-26 | 0.10 | Release check | the publish job of `release.yml` attests each archive with `actions/attest-build-provenance` and runs `gh attestation verify` on each before it creates the release, and again on the x86-64 archive it downloads back |
+| NFR-27 | 1.0 | Benchmark | The benchmark suite built with biased and with plain counts, compared on one thread against the 2% budget |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

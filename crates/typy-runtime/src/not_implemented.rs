@@ -55,6 +55,29 @@ pub unsafe extern "C" fn typy_rt_operands_unsupported(
     message.raise(ExceptionKind::TypeError)
 }
 
+/// Returns the `TypeError` of a checked `cast` whose value is not of its type:
+/// `cast to int found str`, named by the cast's type as TyPy writes it and the value's class
+/// (TYP-24, ADR-0091).
+///
+/// # Safety
+///
+/// `target` points to a live `str`, and `found` to a live type object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_cast_failed(
+    target: *const StrObject,
+    found: *const TypeObject,
+) -> *mut ExceptionObject {
+    let mut message = MessageBuffer::new();
+    message.push_str("cast to ");
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        message.push_text(target);
+        message.push_str(" found ");
+        message.push_str((*found).name());
+    }
+    message.raise(ExceptionKind::TypeError)
+}
+
 /// Returns the `TypeError` an ordering raises when every method it calls gave way:
 /// `'<' not supported between instances of 'A' and 'B'`.
 ///
@@ -147,6 +170,20 @@ mod tests {
             );
             crate::refcount::typy_rt_decrement(plus.cast());
             crate::refcount::typy_rt_decrement(less.cast());
+        }
+    }
+
+    #[test]
+    fn typ_24_a_wrong_cast_raises_type_error_naming_the_type_and_the_class() {
+        use crate::type_object::STR;
+        let target = crate::string::from_str("int | None");
+        // SAFETY: the string is live, and the type object is the runtime's static.
+        unsafe {
+            assert_eq!(
+                shown(super::typy_rt_cast_failed(target, &raw const STR)),
+                "cast to int | None found str"
+            );
+            crate::refcount::typy_rt_decrement(target.cast());
         }
     }
 }

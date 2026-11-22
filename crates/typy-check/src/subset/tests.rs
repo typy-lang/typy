@@ -93,10 +93,6 @@ fn later_features_name_their_release_and_rule() {
             "decorators of methods are planned for TyPy 0.14 (FUN-15)",
         ),
         (
-            "f = lambda *a: 0\n",
-            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.11 (FUN-19)",
-        ),
-        (
             "def f(a: int = g()) -> None:\n    pass\n",
             "default values other than constants are planned for TyPy 1.0 (EXP-20)",
         ),
@@ -120,6 +116,26 @@ fn later_features_name_their_release_and_rule() {
     ];
     for (source, expected) in cases {
         let found = diagnostics(source);
+        assert!(
+            found.iter().any(|(_, message)| message == expected),
+            "{source:?} gave {found:?}"
+        );
+    }
+}
+
+#[test]
+fn newer_python_forms_name_their_release_at_their_floor() {
+    for (source, expected) in [
+        (
+            "name = 'x'\nt = t'hi {name}'\n",
+            "template strings are planned for TyPy 0.13 (LEX-12)",
+        ),
+        (
+            "rows = [[1]]\nflat = [*row for row in rows]\n",
+            "`*` and `**` in comprehension elements are planned for TyPy 0.12 (EXP-23)",
+        ),
+    ] {
+        let found = diagnostics_with_floor(source, PythonFloor::V3_15);
         assert!(
             found.iter().any(|(_, message)| message == expected),
             "{source:?} gave {found:?}"

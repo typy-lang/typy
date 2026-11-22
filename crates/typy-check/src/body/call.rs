@@ -73,6 +73,10 @@ impl BodyChecker<'_> {
         if let ("<hash>", [value]) = (name, arguments) {
             return self.hash_of(value, span);
         }
+        // A hidden function calls the method it adapts directly (FUN-19).
+        if let Some((function, shown)) = super::builtin_value::direct_function(name) {
+            return self.call_function(function, shown, arguments, keywords, span);
+        }
         if let Some(function) = self.program.function_ids.get(name).copied() {
             let call = self.call_function(function, name, arguments, keywords, span);
             return self.through_lazy(name, call);
@@ -212,6 +216,18 @@ impl BodyChecker<'_> {
                      class derived from `C`, is planned for TyPy 0.14 (CLS-39)",
                 )
                 .with_rule(RuleId::CLS_39),
+                span,
+            );
+        }
+        // A type alias is a `typing.TypeAliasType`, which CPython does not call (SMT-12).
+        if let Type::TypeAlias(_) = ty {
+            return self.error(
+                Diagnostic::new(
+                    DiagnosticCode::error(401),
+                    at,
+                    "'typing.TypeAliasType' object is not callable: CPython raises `TypeError`",
+                )
+                .with_rule(RuleId::SMT_12),
                 span,
             );
         }

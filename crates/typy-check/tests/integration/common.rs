@@ -7,16 +7,28 @@ use typy_source::{Project, ProjectSettings};
 /// Returns the code of each diagnostic of the program `files`, whose first file is `app.py`,
 /// or nothing when it is accepted.
 pub(crate) fn codes(files: &[(&str, &str)]) -> Vec<String> {
-    found(files).into_iter().map(|(code, _, _)| code).collect()
+    found(files, typy_source::PythonFloor::V3_12)
+        .into_iter()
+        .map(|(code, _, _)| code)
+        .collect()
 }
 
 /// Returns the code, the message and the rule of each diagnostic of the one-module program
 /// `source`, in the order the checker gives them, or nothing when it is accepted.
 pub(crate) fn messages(source: &str) -> Vec<(String, String, String)> {
-    found(&[("app.py", source)])
+    found(&[("app.py", source)], typy_source::PythonFloor::V3_12)
 }
 
-fn found(files: &[(&str, &str)]) -> Vec<(String, String, String)> {
+/// Returns the code, message and rule of each diagnostic of `source` at the Python floor
+/// `floor`.
+pub(crate) fn messages_at(
+    source: &str,
+    floor: typy_source::PythonFloor,
+) -> Vec<(String, String, String)> {
+    found(&[("app.py", source)], floor)
+}
+
+fn found(files: &[(&str, &str)], floor: typy_source::PythonFloor) -> Vec<(String, String, String)> {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let base = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
@@ -29,7 +41,9 @@ fn found(files: &[(&str, &str)]) -> Vec<(String, String, String)> {
     for (path, text) in files {
         std::fs::write(root.join(path), text).unwrap();
     }
-    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
+    let mut settings = ProjectSettings::new(root.clone());
+    settings.python_floor = floor;
+    let project = Project::load(&root.join("app.py"), settings).unwrap();
     let found = match TypeChecker::check(&project) {
         Ok(_) => Vec::new(),
         Err(diagnostics) => diagnostics

@@ -17,7 +17,7 @@ pub(super) fn check(
     diagnostics: &mut Diagnostics,
 ) {
     program.generic_pass = Some(id);
-    for arguments in combinations(definition) {
+    for arguments in combinations(&definition.type_parameters) {
         program.type_arguments = definition
             .type_parameters
             .iter()
@@ -37,9 +37,9 @@ pub(super) fn check(
 
 /// Returns each list of type arguments the body is checked with: each unconstrained
 /// parameter as its opaque type, and each constrained one as each of its constraints.
-fn combinations(definition: &Definition<'_>) -> Vec<Vec<Type>> {
+pub(crate) fn combinations(parameters: &[crate::generic::TypeParameter]) -> Vec<Vec<Type>> {
     let mut lists = vec![Vec::new()];
-    for parameter in &definition.type_parameters {
+    for parameter in parameters {
         let choices = if parameter.constraints.is_empty() {
             vec![Type::parameter(parameter.clone())]
         } else {

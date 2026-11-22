@@ -24,12 +24,12 @@ xcode-select --install
 
 Download the archive for your machine and its `.sha256` file from the
 [release page](https://github.com/typy-lang/typy/releases):
-`typy-0.10.0-x86_64-unknown-linux-gnu.tar.gz` on x86_64 or
-`typy-0.10.0-aarch64-unknown-linux-gnu.tar.gz` on AArch64 Linux, as
+`typy-0.11.0-x86_64-unknown-linux-gnu.tar.gz` on x86_64 or
+`typy-0.11.0-aarch64-unknown-linux-gnu.tar.gz` on AArch64 Linux, as
 `uname -m` names the machine. Check the archive and unpack it:
 
 ```sh
-archive="typy-0.10.0-$(uname -m)-unknown-linux-gnu"
+archive="typy-0.11.0-$(uname -m)-unknown-linux-gnu"
 sha256sum --check "$archive.tar.gz.sha256"
 tar -xzf "$archive.tar.gz"
 export PATH="$PWD/$archive/bin:$PATH"
@@ -48,15 +48,15 @@ The archive's `sbom.cdx.json`, also published beside it, is its bill of
 materials: each file with its SHA-256, and each crate and library the
 compiler holds with its licence.
 
-On a Mac the archive is `typy-0.10.0-aarch64-apple-darwin.tar.gz`, which
+On a Mac the archive is `typy-0.11.0-aarch64-apple-darwin.tar.gz`, which
 [Using TyPy on macOS](../using/macos.md) installs, clearing the quarantine
 a browser download carries.
 
-The archive holds the `typy` command in `bin/` and the runtime library of
-each target it builds for in `lib/typy/`: either Linux archive builds for
-x86_64 and AArch64 Linux, and the Mac archive for macOS; see
-[Building for another target][cross]. Keep the two together: `typy` finds
-the runtime beside itself.
+The archive holds the `typy` command in `bin/` and the runtime libraries of each
+target it builds for in `lib/typy/` and `lib/typy-small/`, the second for
+`--release-small`: either Linux archive builds for x86_64 and AArch64 Linux, and
+the Mac archive for macOS; see [Building for another target][cross]. Keep the
+two together: `typy` finds the runtime beside itself.
 
 [cross]: ../using/command-line.md#building-for-another-target
 

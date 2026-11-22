@@ -25,6 +25,17 @@ impl BuildMode {
         }
     }
 
+    /// Returns the directory of `<prefix>/lib/` whose runtime archive the mode links: the one
+    /// optimised for size for `--release-small`, and the one optimised for speed otherwise
+    /// (ADR-0100).
+    #[must_use]
+    pub const fn runtime_directory(self) -> &'static str {
+        match self {
+            Self::ReleaseSmall => "typy-small",
+            Self::Debug | Self::Release => "typy",
+        }
+    }
+
     /// Returns the mode's name as the command line and the build cache write it.
     #[must_use]
     pub const fn name(self) -> &'static str {

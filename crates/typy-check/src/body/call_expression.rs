@@ -8,6 +8,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
+use super::builtin_module::{BuiltinName, ModuleFunction};
 use crate::builtin::Builtin;
 use crate::exception::BuiltinException;
 use crate::typed::TypedExpr;
@@ -32,6 +33,33 @@ impl BodyChecker<'_> {
         {
             return self.call_expression(function, &arguments, &keywords, span);
         }
+        // A function of a built-in module is checked for each number of arguments `*` may give
+        // (EXP-22).
+        if let Some(module_function) = self.module_function_of(function)
+            && let Some(call) =
+                self.module_unpacked((function, module_function), arguments, keywords, span)
+        {
+            return call;
+        }
+        // A method of a built-in type is checked for each number of arguments `*` may give
+        // (EXP-22).
+        if let Expr::Attribute {
+            value, attribute, ..
+        } = function
+            && self.module_of(value).is_none()
+            && let Some(call) = self.method_unpacked((value, attribute), arguments, keywords, span)
+        {
+            return call;
+        }
+        // A built-in function is checked for each number of arguments `*` may give (EXP-22).
+        if let Expr::Name { id, .. } = function
+            && self.peek_type(function).is_none()
+            && let Some(builtin) = Builtin::named(id)
+            && let Some(call) =
+                self.builtin_unpacked((function, builtin), arguments, keywords, span)
+        {
+            return call;
+        }
         // A callee that takes the unpacked arguments binds them and notes the call; any other
         // saw each `*value` as an error it does not report, so its diagnostics give way, but
         // for an error in the callee itself, such as a name that is not defined.
@@ -53,17 +81,16 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 at,
-                "`*` and `**` of a value only the run knows in a call of a builtin other than \
-                 `print`, of a function value, of a protocol method or of an exception class \
-                 are planned for TyPy 0.11 (EXP-22)",
+                "`**` of a dict held in a variable in a call of a builtin other than `print` is \
+                 planned for TyPy 1.0 (EXP-24)",
             )
-            .with_rule(RuleId::EXP_22)
+            .with_rule(RuleId::EXP_24)
             .with_help("unpack the values into variables first, and pass them one by one"),
             span,
         )
     }
 
-    fn call_expression(
+    pub(super) fn call_expression(
         &mut self,
         function: &Expr,
         arguments: &[Expr],
@@ -73,6 +100,21 @@ impl BodyChecker<'_> {
         match function {
             // A module's declaration of a library holds nothing to evaluate (FFI-01).
             _ if let Some(library) = self.foreign_library(span) => library,
+            // `typing.cast`, imported by name or read through the module (TYP-24).
+            Expr::Name { id, .. }
+                if self.program.annotation_names.get(id)
+                    == Some(&crate::check::AnnotationName::Cast) =>
+            {
+                self.cast_call(arguments, keywords, span)
+            }
+            Expr::Attribute {
+                value, attribute, ..
+            } if attribute.name == "cast"
+                && matches!(value.as_ref(), Expr::Name { id, .. }
+                    if self.program.annotation_modules.get(id).map(String::as_str) == Some("typing")) =>
+            {
+                self.cast_call(arguments, keywords, span)
+            }
             Expr::Name {
                 id,
                 span: name_span,
@@ -115,10 +157,20 @@ impl BodyChecker<'_> {
 impl BodyChecker<'_> {
     /// Returns true when the callee binds what a call unpacks when the program runs, with
     /// CPython's errors: a function, a method or a class of the program, or a class held in a
-    /// variable (ADR-0073). A built-in, a function value and a protocol method take only
-    /// unpacking written out in full.
+    /// variable (ADR-0073), or a method through a protocol value (EXP-22). A built-in, a
+    /// function value and an exception class first take unpacking written out in full.
     fn binds_when_it_runs(&self, function: &Expr) -> bool {
         match function {
+            // An exception class without an `__init__` of the program's takes unpacking
+            // written out as fixed arguments, which `args` shows as they are.
+            Expr::Name { id, .. }
+                if self.program.class_ids.get(id).is_some_and(|class| {
+                    matches!(self.program.instance_type(*class), Type::Exception(_))
+                        && self.program.method(*class, "__init__").is_none()
+                }) =>
+            {
+                false
+            }
             Expr::Name { id, .. } => match self.peek_type(function) {
                 Some(Type::Callable { .. }) => false,
                 Some(_) => true,
@@ -132,13 +184,37 @@ impl BodyChecker<'_> {
                 if let Some(module) = self.module_of(value) {
                     return !super::builtin_module::is_builtin_module(&module);
                 }
+                // A method through a protocol value binds as the protocol's method, whose
+                // parameters its dispatcher takes (EXP-22, ADR-0041).
                 match self.peek_type(value) {
-                    Some(Type::Instance(class)) => !self.program.is_protocol(class.id),
-                    Some(Type::TypeObject(_)) | None => true,
+                    Some(Type::Instance(_) | Type::TypeObject(_)) | None => true,
                     Some(_) => false,
                 }
             }
             _ => true,
+        }
+    }
+
+    /// Returns the function of a built-in module `function` names: `module.name`, or a name
+    /// imported from the module.
+    fn module_function_of(&self, function: &Expr) -> Option<ModuleFunction> {
+        match function {
+            Expr::Attribute {
+                value, attribute, ..
+            } => {
+                let module = self.module_of(value)?;
+                match self
+                    .program
+                    .builtin_lookup(&module, &attribute.name, attribute.span)
+                {
+                    Ok(BuiltinName::Function(function)) => Some(function),
+                    _ => None,
+                }
+            }
+            Expr::Name { id, .. } if !self.locals.contains_key(id) => {
+                self.program.module_functions.get(id).copied()
+            }
+            _ => None,
         }
     }
 

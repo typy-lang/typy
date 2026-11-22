@@ -13,7 +13,7 @@ documents it.
 | [Exceptions](exceptions.md) | Raising, catching and `with`, and the built-in exception classes | EXC |
 | [Built-in functions and modules](functions-and-modules.md) | Builtins, methods of the built-in types, `%` formatting, `math`, `sys` and files | LIB |
 
-TyPy 0.10 provides these modules of the standard library:
+TyPy 0.11 provides these modules of the standard library:
 
 | Module | What TyPy provides | Described in |
 | --- | --- | --- |
@@ -23,5 +23,11 @@ TyPy 0.10 provides these modules of the standard library:
 | `typing`, `collections.abc` and `types` | Names for annotations, such as `Iterator`, `Final` and `Protocol` | [Modules](../reference/modules.md) |
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
-A module planned for a later release, such as `os`, `time` or `random`, is
-refused with E0201.
+A module planned for a later release is refused with E0201, naming the
+release: `enum` and `abc` (CLS-44, CLS-45), `textwrap`, `base64`,
+`heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string`
+(LIB-27), and `from __future__ import annotations` (LIB-29) in 0.12;
+`math.integer` (LIB-26) in 0.12 from the Python floor 3.15; `os` (LIB-07)
+in 1.0; and `doctest` in a release after 1.0. Each other module is E0206.
+The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and
+`bytearray` are planned for 0.12 (LIB-28).

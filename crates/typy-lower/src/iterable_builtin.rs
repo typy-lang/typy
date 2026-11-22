@@ -41,7 +41,13 @@ impl FunctionLowerer<'_> {
                     Some(start) => start.value,
                     None => self.constant(Constant::Int("0".to_owned()), span),
                 };
-                self.call_runtime(RuntimeFunction::ListSumInt, vec![list.value, start], span)
+                // A list of bools adds each as the `int` it is (DAT-19).
+                let function = if iterable.ty.sequence_item() == Some(&Type::Bool) {
+                    RuntimeFunction::ListSumBool
+                } else {
+                    RuntimeFunction::ListSumInt
+                };
+                self.call_runtime(function, vec![list.value, start], span)
             }
             Builtin::Any => self.call_runtime(RuntimeFunction::ListAny, vec![list.value], span),
             Builtin::All => self.call_runtime(RuntimeFunction::ListAll, vec![list.value], span),

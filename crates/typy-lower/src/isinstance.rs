@@ -21,6 +21,13 @@ impl FunctionLowerer<'_> {
     /// the runtime finds its class derives from one of the classes left to check.
     pub(crate) fn isinstance(&mut self, test: &IsInstanceTest, span: Span) -> Lowered {
         let lowered = self.expression(&test.value);
+        let result = self.tested(Self::borrowed(lowered.value, lowered.ty), test, span);
+        self.release(lowered, span);
+        result
+    }
+
+    /// Returns the outcome of `test` for `lowered`, its value evaluated already.
+    fn tested(&mut self, lowered: Lowered, test: &IsInstanceTest, span: Span) -> Lowered {
         // The classes held in values are evaluated after the value, as CPython evaluates the
         // arguments of `isinstance` (CLS-18).
         let (owners, held) = self.held_classes(&test.held, span);
@@ -47,8 +54,81 @@ impl FunctionLowerer<'_> {
         for owner in owners.into_iter().rev() {
             self.release(owner, span);
         }
-        self.release(lowered, span);
         result
+    }
+
+    /// Returns `cast(target, value)` checked when the program runs (TYP-24, ADR-0091): the
+    /// value as `target` when the test finds it one, and otherwise the `TypeError` that names
+    /// the cast's type and the value's class.
+    pub(crate) fn cast(
+        &mut self,
+        cast: &typy_check::CastCheck,
+        target: &Type,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let value = self.expression(&cast.test.value);
+        let holds = self.tested(Self::borrowed(value.value, value.ty), &cast.test, span);
+        // The class the message names is found before the branch, which a tagged union reads
+        // through blocks of its own.
+        let name = self.string(&cast.target, span);
+        let found = self.runtime_type(
+            Self::borrowed(value.value, value.ty),
+            &cast.test.value.ty,
+            span,
+        );
+        let fails = self.builder.create_block();
+        let passes = self.builder.create_block();
+        self.builder.terminate(typy_tyir::Terminator::Branch {
+            condition: holds.value,
+            then: passes,
+            otherwise: fails,
+        });
+        self.builder.switch_to(fails);
+        self.call_runtime(RuntimeFunction::CastFailed, vec![name, found.value], span);
+        self.builder.terminate(typy_tyir::Terminator::Unreachable);
+        self.builder.switch_to(passes);
+        self.cast_narrowed(value, &cast.test.value.ty, target, ty, span)
+    }
+
+    /// Returns `value`, of `source`, as the `target` a test found it to be, held as `ty`; the
+    /// result takes over the value's reference.
+    fn cast_narrowed(
+        &mut self,
+        value: Lowered,
+        source: &Type,
+        target: &Type,
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        if value.ty == ty {
+            return value;
+        }
+        if *source == Type::Object {
+            return self.unboxed(value, target, ty, span);
+        }
+        if let Type::Optional(inner) = source
+            && !matches!(target, Type::Optional(_))
+        {
+            let base = self.base_type(value.ty);
+            let held = self
+                .builder
+                .push_value(Operation::Unwrap(value.value), base, span);
+            let held = self.transfer(value, held, base);
+            return self.cast_narrowed(held, inner, target, ty, span);
+        }
+        if self.involves_tag(value.ty) || self.involves_tag(ty) {
+            return self.union_converted(value, source, target, ty, false, span);
+        }
+        let downcast = self.builder.push_value(
+            Operation::Downcast {
+                value: value.value,
+                ty,
+            },
+            ty,
+            span,
+        );
+        self.transfer(value, downcast, ty)
     }
 
     /// Returns the values of `classes`, evaluated in order, and the classes they hold: a class,

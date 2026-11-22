@@ -11,8 +11,7 @@ use typy_source::syntax::{Expr, Keyword, ParameterKind, Stmt};
 use super::BodyChecker;
 use crate::check::{Definition, FunctionParts, function_definition};
 use crate::typed::{
-    CapturedVariable, FunctionId, FunctionSignature, SymbolId, TypedConstant, TypedExpr,
-    TypedExprKind, TypedStmt,
+    CapturedVariable, FunctionId, FunctionSignature, SymbolId, TypedExpr, TypedExprKind, TypedStmt,
 };
 use crate::types::Type;
 
@@ -56,6 +55,21 @@ impl Closure {
         captures.into_iter().map(|(_, captured)| captured).collect()
     }
 
+    /// Returns the closure of an adapter whose one capture, `name`, holds the function object
+    /// of `original`, of type `ty`, which a call by that name runs (FUN-19, ADR-0080).
+    pub(super) fn adapting(name: &str, original: FunctionId, ty: Type) -> Self {
+        let captured = Captured {
+            position: 0,
+            ty,
+            cell: false,
+            function: Some(original),
+        };
+        Self {
+            captures: BTreeMap::from([(name.to_owned(), captured)]),
+            ..Self::default()
+        }
+    }
+
     /// Returns the position and the value type of the captured cell of the variable `name`.
     pub(super) fn captured_cell(&self, name: &str) -> Option<(u32, Type)> {
         let captured = self.captures.get(name).filter(|captured| captured.cell)?;
@@ -76,44 +90,32 @@ struct Captured {
 
 /// A nested `def` whose body is checked after the body around it.
 pub(super) struct Pending {
-    function: FunctionId,
-    body: Vec<Stmt>,
-    definition: OwnedDefinition,
-    closure: Closure,
+    pub(super) function: FunctionId,
+    pub(super) body: Vec<Stmt>,
+    pub(super) definition: OwnedDefinition,
+    pub(super) closure: Closure,
 }
 
-/// The parts of a nested function's definition, kept while its body waits.
-struct OwnedDefinition {
-    name: String,
-    qualified_name: String,
-    signature: FunctionSignature,
-    parameters: Vec<(String, Span)>,
-    span: Span,
+/// The parts of a nested function's definition, kept while its body waits: with its own
+/// type parameters, if it has some (FUN-18).
+pub(super) struct OwnedDefinition {
+    pub(super) name: String,
+    pub(super) qualified_name: String,
+    pub(super) signature: FunctionSignature,
+    pub(super) type_parameters: Vec<crate::generic::TypeParameter>,
+    pub(super) parameters: Vec<(String, Span)>,
+    pub(super) span: Span,
 }
 
 impl BodyChecker<'_> {
     /// Checks a `def` in a function: its signature now, in the annotations of the function
     /// around it, and its body once that function's is checked. A nested function of a
     /// generic function is checked in each copy; one with type parameters of its own has a
-    /// copy for each set of types, which is planned for 0.11 (FUN-18).
+    /// copy for each set of types its calls give, which share its function object (FUN-18).
     pub(super) fn nested_def(&mut self, statement: &Stmt) -> Option<TypedStmt> {
         let parts = FunctionParts::of(statement)?;
         let name = &parts.name.name;
         let symbol = *self.locals.get(name)?;
-        // A nested function inside a generic function is checked, and compiled, in each copy
-        // (ADR-0081); one with type parameters of its own waits for its copies.
-        if !parts.type_parameters.is_empty() {
-            self.diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    parts.name.span,
-                    "a nested function with type parameters of its own is planned for TyPy 0.11 \
-                     (FUN-18)",
-                )
-                .with_rule(RuleId::FUN_18),
-            );
-            return self.refused_def(symbol);
-        }
         if self.types.contains_key(&symbol) {
             self.diagnostics.push(also_assigned(name, parts.name.span));
             return None;
@@ -134,6 +136,19 @@ impl BodyChecker<'_> {
         let function = self.program.next_function();
         self.program.signatures.push(found.signature.clone());
         self.program.functions.push(None);
+        // A nested function inside a generic function is checked, and compiled, in each copy
+        // (ADR-0081); one with type parameters of its own is checked with them opaque, and
+        // its copies once the body around it is (FUN-18).
+        if !found.type_parameters.is_empty() {
+            self.program.generics.functions.insert(
+                function,
+                super::generic_copy::Generic {
+                    parameters: found.type_parameters.clone(),
+                    module: self.program.module.clone(),
+                    nested: true,
+                },
+            );
+        }
         self.nested_functions.insert(symbol, function);
         self.types.insert(symbol, callable_of(&found.signature));
         let (mut closure, captures) = match self.group_captures(name, function, &group, parts.span)
@@ -152,6 +167,7 @@ impl BodyChecker<'_> {
                 name: found.name,
                 qualified_name: found.qualified_name,
                 signature: found.signature,
+                type_parameters: found.type_parameters,
                 parameters: found.parameters,
                 span: found.span,
             },
@@ -165,20 +181,28 @@ impl BodyChecker<'_> {
         })
     }
 
-    /// Gives the variable of a refused `def` the error type, assigned, so its uses report
-    /// nothing more: one cause gives one error (DIA-04).
-    fn refused_def(&mut self, symbol: SymbolId) -> Option<TypedStmt> {
-        self.types.insert(symbol, Type::Error);
-        if let Some(facts) = &mut self.assigned {
-            facts.insert(super::flow::Fact::Assigned(symbol));
-        }
-        None
-    }
-
     /// Returns the definition of a nested `def`, its annotations read where it is.
     fn definition_of<'tree>(&mut self, parts: &FunctionParts<'tree>) -> Definition<'tree> {
         let scope = super::locals::annotation_scope(self.program);
-        let found = function_definition(parts, &scope, self.diagnostics);
+        let own = crate::check::resolve_type_parameters(
+            parts.type_parameters,
+            parts.span,
+            &scope,
+            self.diagnostics,
+        );
+        // Its own type parameters stand for their opaque types in its annotations, beside
+        // those of a generic function around it (FUN-18).
+        let mut in_scope = self.program.type_arguments.clone();
+        in_scope.extend(
+            own.iter()
+                .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone()))),
+        );
+        let scope = crate::check::AnnotationScope {
+            parameters: &in_scope,
+            ..scope
+        };
+        let mut found = function_definition(parts, &scope, self.diagnostics);
+        found.type_parameters = own;
         // An annotation may name a copy of a generic class, which the program then holds.
         self.program.make_class_copies();
         found
@@ -210,9 +234,10 @@ impl BodyChecker<'_> {
         let mut values = Vec::new();
         // The function's own name reads the running object inside it, so it is no capture.
         for (position, each) in captured.iter().filter(|each| *each != name).enumerate() {
+            // A nested function is captured as it is, whatever a `Callable` takes of it.
             let (read, cell) = match self.cell_of(each, span) {
                 Some(cell) => (cell, true),
-                None => (self.name(each, span), false),
+                None => (self.local_function(each, span), false),
             };
             closure.captures.insert(
                 each.clone(),
@@ -308,7 +333,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns the nested function the variable `name` holds when a `def` alone binds it.
-    fn function_held(&self, name: &str) -> Option<FunctionId> {
+    pub(super) fn function_held(&self, name: &str) -> Option<FunctionId> {
         if let Some(symbol) = self.locals.get(name) {
             return self.nested_functions.get(symbol).copied();
         }
@@ -361,19 +386,6 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> Option<TypedExpr> {
-        if self.refused_sibling(name) {
-            for argument in arguments
-                .iter()
-                .chain(keywords.iter().map(|keyword| &keyword.value))
-            {
-                self.expression(argument);
-            }
-            return Some(Self::typed(
-                TypedExprKind::Constant(TypedConstant::None),
-                Type::Error,
-                span,
-            ));
-        }
         let function = self.function_held(name)?;
         let sibling = self.closure.as_ref().and_then(|closure| {
             let (_, own) = closure.own.as_ref()?;
@@ -388,15 +400,22 @@ impl BodyChecker<'_> {
         } else {
             self.closure_read(name, name_span)?
         };
+        // A nested function with type parameters of its own runs the copy for the types the
+        // arguments give, with its one function object (FUN-18).
+        let (target, signature) =
+            match self.call_target(function, 0, name, arguments, keywords, span) {
+                Ok(found) => found,
+                Err(error) => return Some(error),
+            };
         Some(
-            match self.bind_arguments(function, 0, name, arguments, keywords, span) {
+            match self.bind_to(&signature, 0, name, arguments, keywords, span) {
                 Ok(bound) => Self::typed(
                     TypedExprKind::CallNested {
-                        function,
+                        function: target,
                         closure: Box::new(closure),
                         arguments: bound,
                     },
-                    self.program.signatures[function.0 as usize].returns.clone(),
+                    signature.returns,
                     span,
                 ),
                 Err(error) => error,
@@ -404,40 +423,58 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns true when `name` names a function of the running function's group whose
-    /// `def` was refused, so a call of it reports nothing more: one cause gives one error
-    /// (DIA-04).
-    fn refused_sibling(&self, name: &str) -> bool {
-        !self.locals.contains_key(name)
-            && self.closure.as_ref().is_some_and(|closure| {
-                closure.group.contains(name)
-                    && !closure.siblings.contains_key(name)
-                    && closure.own.as_ref().is_none_or(|(own, _)| own != name)
-            })
-    }
-
-    /// Returns the read of the variable `symbol`, named `name`, that holds a nested function,
-    /// for a call of it: an error when the call may come before its `def` runs (TYP-12).
-    fn local_function(&mut self, name: &str, span: Span) -> TypedExpr {
+    /// Returns the read of the variable named `name` that holds a nested function, for a call,
+    /// a capture or an adapter of it, which take it whatever its parameters: an error when
+    /// the read may come before its `def` runs (TYP-12).
+    pub(super) fn local_function(&mut self, name: &str, span: Span) -> TypedExpr {
         self.reading_function = true;
         let read = self.name(name, span);
         self.reading_function = false;
         read
     }
 
-    /// Returns E0202 for a nested function with a keyword-only parameter read as a value,
-    /// since a `Callable` passes every argument by position, and E0201 for one with `*args`
-    /// or `**kwargs` (FUN-13).
+    /// Returns the error for the nested function the variable `symbol`, named `name`, holds,
+    /// read as a value where `refused_function_value` gives one.
     pub(super) fn refused_nested_value(
         &mut self,
         symbol: SymbolId,
         name: &str,
         span: Span,
     ) -> Option<TypedExpr> {
+        let function = *self.nested_functions.get(&symbol)?;
+        self.refused_function_value(function, name, span)
+    }
+
+    /// Returns the error for `function`, a nested function named `name`, read as a value where
+    /// no `Callable` is expected, unless it is read for a call, a capture or an adapter: E0202
+    /// for one with type parameters of its own (FUN-18), E0203 for one with `*args` or
+    /// `**kwargs` (FUN-19), and E0202 for one with a keyword-only parameter, since a `Callable`
+    /// passes every argument by position.
+    pub(super) fn refused_function_value(
+        &mut self,
+        function: FunctionId,
+        name: &str,
+        span: Span,
+    ) -> Option<TypedExpr> {
         if self.reading_function {
             return None;
         }
-        let function = *self.nested_functions.get(&symbol)?;
+        if self.program.generic(function).is_some() {
+            let message = format!(
+                "the generic function `{name}` is a copy for each set of types, so it has no one \
+                 value"
+            );
+            return Some(
+                self.error(
+                    Diagnostic::new(DiagnosticCode::error(202), span, message)
+                        .with_rule(RuleId::FUN_18)
+                        .with_help(format!(
+                            "define a function of the types you need that calls `{name}`"
+                        )),
+                    span,
+                ),
+            );
+        }
         if let Some(refused) = self.refused_variadic_value(function, name, span) {
             return Some(refused);
         }
@@ -508,6 +545,9 @@ impl BodyChecker<'_> {
         pending: Vec<Pending>,
         diagnostics: &mut typy_diagnostics::Diagnostics,
     ) {
+        let (generic, pending): (Vec<Pending>, Vec<Pending>) = pending
+            .into_iter()
+            .partition(|nested| !nested.definition.type_parameters.is_empty());
         for nested in pending {
             program
                 .closures
@@ -533,6 +573,8 @@ impl BodyChecker<'_> {
                 diagnostics,
             );
         }
+        // The other functions may call a generic one, so its copies are checked last.
+        Self::check_nested_generics(program, &generic, diagnostics);
     }
 }
 

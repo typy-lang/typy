@@ -63,7 +63,7 @@ impl BodyChecker<'_> {
         if takes_one_iterable(builtin, arguments.len()) {
             return self.call_over_iterable(builtin, arguments, keywords, span);
         }
-        let values: Vec<TypedExpr> = arguments
+        let mut values: Vec<TypedExpr> = arguments
             .iter()
             .map(|argument| {
                 let value = self.expression(argument);
@@ -134,6 +134,13 @@ impl BodyChecker<'_> {
             }
             other => other,
         };
+        // A source of a loop read as a value of its own is planned, whatever its keywords.
+        if matches!(
+            builtin,
+            Builtin::Enumerate | Builtin::Zip | Builtin::Reversed
+        ) {
+            return self.loop_only(builtin, span);
+        }
         if let Some(keyword) = keywords.first() {
             // `min(a, b, key=f)` and `max` were taken above; any other keyword is CPython's
             // `TypeError`, with its message.
@@ -189,9 +196,13 @@ impl BodyChecker<'_> {
             | Builtin::Sorted
             | Builtin::Sum
             | Builtin::Any
-            | Builtin::All => {
+            | Builtin::All
+            | Builtin::Enumerate
+            | Builtin::Zip
+            | Builtin::Reversed => {
                 unreachable!(
-                    "print, round, type and the builtins of one iterable are checked above"
+                    "print, round, type, the sources of a loop and the builtins of one iterable \
+                     are checked above"
                 )
             }
             // `input(prompt)` writes `str(prompt)` first, so the prompt may be any value.
@@ -204,9 +215,6 @@ impl BodyChecker<'_> {
                     Type::Str,
                     span,
                 );
-            }
-            Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
-                return self.loop_only(builtin, span);
             }
             Builtin::Range => {
                 if !self.arity(builtin, values.len(), 1..=3, span) {
@@ -268,7 +276,12 @@ impl BodyChecker<'_> {
                 }
                 match &types[0] {
                     Type::Int | Type::Float => types[0].clone(),
-                    Type::Bool => self.bool_arithmetic(values[0].span),
+                    // `abs` of a `bool` is the `int` it is (DAT-19).
+                    Type::Bool => {
+                        let value = values.remove(0);
+                        values.insert(0, Self::int_of_bool(value));
+                        Type::Int
+                    }
                     other => self.operator_error("abs", other, other, values[0].span),
                 }
             }
@@ -349,6 +362,9 @@ impl BodyChecker<'_> {
                 } else {
                     1..=1
                 };
+                if let Some(value) = values.first() {
+                    self.check_typing_text(value);
+                }
                 if !self.arity(builtin, values.len(), allowed, span) {
                     return Self::typed(
                         TypedExprKind::Constant(TypedConstant::None),
@@ -425,6 +441,7 @@ impl BodyChecker<'_> {
             let value = self
                 .written_part(argument, false)
                 .unwrap_or_else(|| self.expression(argument));
+            self.check_typing_text(&value);
             values.push(value);
         }
         if !each.is_empty() {
@@ -434,9 +451,16 @@ impl BodyChecker<'_> {
         let mut end = None;
         let mut file = None;
         let mut flush = None;
+        let mut options: Vec<TypedExpr> = Vec::new();
         for keyword in keywords {
             let value = self.expression(&keyword.value);
             let Some(name) = &keyword.name else {
+                // `**dict` binds its keys to the keywords when the call runs (EXP-22).
+                self.unpacking_calls.push(span);
+                if let Some(error) = self.print_options(&value, options.first()) {
+                    return error;
+                }
+                options.push(value);
                 continue;
             };
             match name.name.as_str() {
@@ -482,10 +506,38 @@ impl BodyChecker<'_> {
                 end,
                 file,
                 flush,
+                options,
             })),
             Type::NoneType,
             span,
         )
+    }
+
+    /// Returns the error for `**value` in a call of `print` that is no `dict[str, V]`, or
+    /// whose `V` is not that of the dict of an earlier `**` (EXP-22).
+    fn print_options(&mut self, value: &TypedExpr, first: Option<&TypedExpr>) -> Option<TypedExpr> {
+        let span = value.span;
+        let message = match (&value.ty, first.map(|first| &first.ty)) {
+            (Type::Error, _) => return Some(value.clone()),
+            (Type::Dict(key, _), None) if **key == Type::Str => return None,
+            (Type::Dict(key, own), Some(Type::Dict(_, earlier)))
+                if **key == Type::Str && own == earlier =>
+            {
+                return None;
+            }
+            (Type::Dict(key, own), Some(Type::Dict(_, earlier))) if **key == Type::Str => format!(
+                "the dicts `**` gives a call of `print` hold values of one type; this holds \
+                 {own}, and the first holds {earlier}"
+            ),
+            (other, _) => format!(
+                "`**` in a call of `print` takes a dict of `str` keys, and this is {}",
+                other.with_article()
+            ),
+        };
+        Some(self.error(
+            Diagnostic::new(DiagnosticCode::error(404), span, message).with_rule(RuleId::EXP_22),
+            span,
+        ))
     }
 
     pub(super) fn arity(

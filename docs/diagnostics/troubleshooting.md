@@ -146,8 +146,12 @@ Every parameter except `self` needs an annotation (TYP-01). Write the
 type, such as `def area(width: float) -> float:`. A `lambda` parameter
 takes its type from the `Callable` its context expects, such as
 `double: Callable[[int], int] = lambda n: n * 2`, so a `lambda` with a
-parameter where none is expected, or with more parameters than the
-expected `Callable` passes, gives E0203 too (EXP-14).
+parameter where none is expected, or with a parameter past those the
+expected `Callable` passes that has no default, gives E0203 too (EXP-14).
+A `lambda` with `**kwargs`, which a `Callable` never fills, gives E0203,
+and so does a nested function or a method with `*args` or `**kwargs` read
+where no `Callable` is expected, such as `loose = meter.total`; annotate
+the variable with the `Callable` you call it as (FUN-19).
 
 This program gives E0203:
 
@@ -558,27 +562,6 @@ label = "none"
 print(count, label)
 ```
 
-## E0403: `Any`, `cast` or an untyped value
-
-`typing.Any`, `typing.cast` and `object` annotations would leave a value
-without one type (TYP-10). Annotate the type the value holds.
-
-This program gives E0403:
-
-<!-- typy-expect: rejected E0403 at 1:8 -->
-```python
-value: object = 1
-print(value)
-```
-
-This one is correct:
-
-<!-- typy-expect: accepted -->
-```python
-value: int = 1
-print(value)
-```
-
 ## E0404: argument of the wrong type
 
 An argument does not match its parameter, an argument is missing or extra,
@@ -635,17 +618,19 @@ def half(n: int) -> int:
 print(half(4))
 ```
 
-## E0406: arithmetic on `bool`
+## E0406: `~` of a `bool`
 
-`True + 1` is valid Python, but TyPy keeps `bool` and `int` apart
-(DAT-03). Convert with `int(flag)` first.
+`~` of a `bool` inverts the `int` it is, so `~True` is `-2`, not
+`False`. CPython 3.12 to 3.15 warn that it is deprecated, and Python 3.16
+removes it, so TyPy refuses it (DAT-19). Any other arithmetic takes a
+`bool` as its `int`, as CPython does: `True + 1` is `2`.
 
 This program gives E0406:
 
 <!-- typy-expect: rejected E0406 at 2:7 -->
 ```python
 done = True
-print(done + 1)
+print(~done)
 ```
 
 This one is correct:
@@ -653,7 +638,7 @@ This one is correct:
 <!-- typy-expect: accepted -->
 ```python
 done = True
-print(int(done) + 1)
+print(not done, ~int(done), done + 1)
 ```
 
 ## E0407: comparison between unsupported types

@@ -16,18 +16,32 @@ fn refused_with(code: &str, cases: &[&str]) {
 }
 
 #[test]
-fn each_bitwise_operator_on_a_bool_and_an_int_is_bool_arithmetic() {
-    refused_with(
-        "E0406",
-        &[
-            "print(True & 1)\n",
-            "print(1 & True)\n",
-            "print(True | 1)\n",
-            "print(1 | True)\n",
-            "print(True ^ 1)\n",
-            "print(1 ^ True)\n",
-        ],
-    );
+fn dat_19_a_bitwise_operator_on_a_bool_and_an_int_takes_the_bool_as_an_int() {
+    for source in [
+        "print(True & 1)\n",
+        "print(1 & True)\n",
+        "print(True | 1)\n",
+        "print(1 | True)\n",
+        "print(True ^ 1)\n",
+        "print(1 ^ True)\n",
+    ] {
+        assert_eq!(app(source), Vec::<String>::new(), "{source}");
+    }
+}
+
+#[test]
+fn dat_19_arithmetic_on_bools_gives_cpython_s_types() {
+    for source in [
+        "x: int = True + True\n",
+        "y: float = True / 2\n",
+        "z: int = abs(False) + round(True) + sum([True, False], 1)\n",
+        "w: int = -True\n",
+        "def f(value: object) -> int:\n    total = 0\n    if isinstance(value, int):\n        \
+         total += value\n    return total\n",
+        "print(True == 1, 1.0 == True, True < 2)\n",
+    ] {
+        assert_eq!(app(source), Vec::<String>::new(), "{source}");
+    }
 }
 
 #[test]

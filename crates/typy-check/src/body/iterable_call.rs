@@ -116,6 +116,8 @@ impl BodyChecker<'_> {
         let option = option.value();
         let option_type = match builtin {
             Builtin::Sorted => Type::Bool,
+            // The bools `sum` adds count as ints, so it starts from an `int` (DAT-19).
+            Builtin::Sum if item == Type::Bool => Type::Int,
             _ => item.clone(),
         };
         let option = option.map(|value| {
@@ -230,8 +232,8 @@ impl BodyChecker<'_> {
         }
     }
 
-    /// `sum` adds `int` or `float` items. A `float` list needs its start, because CPython
-    /// returns the `int` 0 for an empty list without one.
+    /// `sum` adds `int`, `bool` or `float` items. A `float` list needs its start, because
+    /// CPython returns the `int` 0 for an empty list without one.
     fn sum_result(
         &mut self,
         iterable: &TypedExpr,
@@ -240,7 +242,8 @@ impl BodyChecker<'_> {
         span: Span,
     ) -> Option<Type> {
         match item {
-            Type::Int => Some(Type::Int),
+            // `sum` of bools counts the true ones, as CPython adds them as ints (DAT-19).
+            Type::Int | Type::Bool => Some(Type::Int),
             Type::Float if has_start => Some(Type::Float),
             Type::Float => {
                 self.diagnostics.push(
@@ -252,10 +255,6 @@ impl BodyChecker<'_> {
                     .with_rule(RuleId::LIB_02)
                     .with_help("give the start, such as `sum(values, 0.0)`"),
                 );
-                None
-            }
-            Type::Bool => {
-                self.bool_arithmetic(iterable.span);
                 None
             }
             other => {
@@ -308,14 +307,16 @@ impl BodyChecker<'_> {
                 Type::Error
             }
             other => {
-                self.diagnostics.push(
-                    Diagnostic::new(
-                        DiagnosticCode::error(411),
-                        iterable.span,
-                        format!("{} cannot be iterated over", other.with_article()),
-                    )
-                    .with_rule(RuleId::CST_03),
-                );
+                let mut diagnostic = Diagnostic::new(
+                    DiagnosticCode::error(411),
+                    iterable.span,
+                    format!("{} cannot be iterated over", other.with_article()),
+                )
+                .with_rule(RuleId::CST_03);
+                if *other == Type::Object {
+                    diagnostic = diagnostic.with_help(super::operator::OBJECT_HELP);
+                }
+                self.diagnostics.push(diagnostic);
                 Type::Error
             }
         }

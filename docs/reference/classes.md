@@ -218,7 +218,11 @@ so no attribute is read before it holds a value. `super()` outside a
 method is E0414. `super(Base, self)` names the enclosing class or one of
 its bases, and the method found is that of the nearest base of `Base`, as
 in CPython (CLS-26); with an instance other than `self` it is planned for
-0.14 (CLS-29).
+0.14 (CLS-29). `super()` binds the instance before the arguments are
+evaluated, and a class method called through it takes the class of the
+instance as `cls` (CLS-25). Where the enclosing class or a class derived
+from it defines that class method again, the call is planned for 0.14
+(CLS-46).
 
 A method may also be called through a class with the instance first,
 `Shape.describe(square)`, which runs the method that class holds or

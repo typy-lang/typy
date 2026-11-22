@@ -46,6 +46,9 @@ pub(crate) struct ClassInfo {
     pub(crate) class_variables: Vec<String>,
     /// The copies of the class methods the class has, each by its name (ADR-0025).
     pub(crate) class_methods: Vec<(String, FunctionId)>,
+    /// The copy each class method of the class is made from, by its name: the one of the
+    /// class that defines it, so two classes run one body when they name the same.
+    pub(crate) class_method_origins: Vec<(String, FunctionId)>,
     /// The static methods the class defines (CLS-06).
     pub(crate) static_methods: Vec<String>,
     /// The methods with type parameters the class defines, each called through its copies
@@ -476,7 +479,7 @@ pub(super) fn collect_members<'tree>(
         };
         for statement in class.body {
             match (statement, FunctionParts::of(statement)) {
-                (Stmt::AnnAssign { .. } | Stmt::Assign { .. }, _) => {
+                (Stmt::AnnAssign { .. } | Stmt::Assign { .. } | Stmt::TypeAlias { .. }, _) => {
                     class_body_name(statement, &mut info, &scope, names, diagnostics);
                 }
                 (_, Some(parts)) => {
@@ -664,6 +667,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         init: None,
         class_variables: Vec::new(),
         class_methods: Vec::new(),
+        class_method_origins: Vec::new(),
         static_methods: Vec::new(),
         generic_methods: Vec::new(),
         properties: Vec::new(),
@@ -867,6 +871,8 @@ impl<'tree> ClassMethodCopies<'tree> {
             method.qualified_name = format!("{}.{}", info.name, parts.name.name);
             method.copy_of = origin;
             info.class_methods.push((parts.name.name.clone(), id));
+            info.class_method_origins
+                .push((parts.name.name.clone(), origin.unwrap_or(id)));
             made.push((statement, origin.unwrap_or(id), module));
             collected.methods.push(method);
         }
@@ -1440,6 +1446,8 @@ fn class_body_name(
                 info.class_variables.push(id.clone());
             }
         }
+        // A class's alias is a class variable that holds an alias object (TYP-18).
+        Stmt::TypeAlias { name, .. } => info.class_variables.push(name.name.clone()),
         _ => {}
     }
 }
@@ -1863,6 +1871,17 @@ pub(crate) fn class_value_variable(class: &str, name: &str) -> String {
     format!("{class}.{name}")
 }
 
+/// Returns the hidden name a class value reads the alias its class's `type` statement
+/// defines by, such as `<type alias Holder.Inner>` (TYP-18).
+fn class_alias_variable(class: &str, name: &str) -> String {
+    format!("<type alias {class}.{name}>")
+}
+
+/// Returns the qualified name of the class's alias the hidden name `id` reads, when it is one.
+pub(crate) fn class_alias_name(id: &str) -> Option<&str> {
+    id.strip_prefix("<type alias ")?.strip_suffix('>')
+}
+
 /// Returns the values a class body gives, in source order: `name = value`, and
 /// `name: ClassVar[T] = value`, for a class variable, and `name: T = value` for the default
 /// of an instance attribute.
@@ -1925,6 +1944,20 @@ pub(crate) fn class_values(
                     assignment,
                 })
             }
+            // A class's alias is a class value of its own, an alias object (TYP-18).
+            Stmt::TypeAlias {
+                name: alias, span, ..
+            } => Some(ClassValue {
+                name: alias.name.clone(),
+                assignment: Stmt::Assign {
+                    targets: vec![renamed(&alias.name, alias.span)],
+                    value: Expr::Name {
+                        id: class_alias_variable(class, &alias.name),
+                        span: alias.span,
+                    },
+                    span: *span,
+                },
+            }),
             Stmt::Assign {
                 targets,
                 value,

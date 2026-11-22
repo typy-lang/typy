@@ -254,6 +254,17 @@ impl Program {
         if !is_builtin_module(module.top().as_str()) || self.loaded.contains(module.as_str()) {
             return Ok(None);
         }
+        // `math.integer` is a submodule from Python 3.15 (PEP 791), planned for 0.12.
+        if module.as_str() == "math.integer" && self.floor >= 15 {
+            return Err(Box::new(
+                Diagnostic::new(
+                    DiagnosticCode::error(201),
+                    span,
+                    "the module `math.integer` is planned for TyPy 0.12 (LIB-26)",
+                )
+                .with_rule(RuleId::LIB_26),
+            ));
+        }
         if module.parent().is_some() {
             return Err(Box::new(not_a_package(module, span)));
         }
@@ -351,8 +362,14 @@ impl Program {
         if !self.standard.contains(top) {
             return Ok(());
         }
+        // The modules a later release gives (ADR-0093, ADR-0097).
         let planned = match top {
-            "os" | "time" | "random" => Some(("1.0", RuleId::LIB_07)),
+            "os" => Some(("1.0", RuleId::LIB_07)),
+            "enum" => Some(("0.12", RuleId::CLS_44)),
+            "abc" => Some(("0.12", RuleId::CLS_45)),
+            "textwrap" | "base64" | "heapq" | "bisect" | "statistics" | "time" | "random"
+            | "copy" | "string" => Some(("0.12", RuleId::LIB_27)),
+            "__future__" => Some(("0.12", RuleId::LIB_29)),
             _ => None,
         };
         Err(Box::new(match planned {
@@ -362,6 +379,13 @@ impl Program {
                 format!("the module `{module}` is planned for TyPy {release} ({rule})"),
             )
             .with_rule(rule),
+            // doctest runs the examples of docstrings through `exec` when the program runs.
+            None if top == "doctest" => Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                "the module `doctest` is planned for a release after TyPy 1.0",
+            )
+            .with_rule(RuleId::LIB_08),
             None => Diagnostic::new(
                 DiagnosticCode::error(206),
                 span,
@@ -388,9 +412,8 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 }
 
 /// Returns the error for a name of `typing`, `collections.abc`, `types` or `dataclasses` that
-/// TyPy does not give: `Any` and `cast` are refused (TYP-10), the views of a dict and some
-/// abstract collections are planned for a later release, and any other name is not given
-/// (LIB-17).
+/// TyPy does not give: one a later release gives, such as `Any`, `cast`, `Literal` or some
+/// abstract collections, names that release, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
     if module.as_str() == "types" {
@@ -414,21 +437,19 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         .with_rule(RuleId::GEN_01)
         .with_help("write `def first[T](items: list[T]) -> T:` or `class Box[T]:`");
     }
-    // A value of any type, or one forced to a type, would carry its type when the program
-    // runs, which TyPy's values do not (TYP-10, TYP-11).
-    if module.as_str() == "typing" && matches!(name.as_str(), "Any" | "cast") {
-        return Diagnostic::new(
-            DiagnosticCode::error(202),
-            alias.name.span,
-            format!("`typing.{name}` is refused: every value in TyPy has one type (TYP-10)"),
-        )
-        .with_rule(RuleId::TYP_10)
-        .with_help("annotate the value with its type, or a union of its types");
-    }
     // The names a later release gives, with the release and the requirement that plans them
-    // (ADR-0086).
+    // (ADR-0086, ADR-0090, ADR-0091, ADR-0094).
+    let typing = module.as_str() == "typing";
     let planned = match name.as_str() {
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
+        "Literal" if typing => Some(("0.12", RuleId::TYP_28)),
+        "overload" if typing => Some(("0.12", RuleId::TYP_29)),
+        "Self" if typing => Some(("0.12", RuleId::TYP_30)),
+        "TypeGuard" | "TypeIs" if typing => Some(("0.12", RuleId::TYP_31)),
+        "Any" if typing => Some(("0.13", RuleId::TYP_25)),
+        "TypedDict" | "Required" | "NotRequired" | "ReadOnly" if typing => {
+            Some(("0.13", RuleId::TYP_32))
+        }
         _ => None,
     };
     if let Some((release, rule)) = planned {
@@ -501,6 +522,7 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "KeysView",
             "ValuesView",
             "ItemsView",
+            "cast",
         ],
     }
 }

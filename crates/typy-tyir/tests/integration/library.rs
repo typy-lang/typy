@@ -32,6 +32,7 @@ fn module(export: TyirExport) -> TyirModule {
         globals: Vec::new(),
         modules: Vec::new(),
         type_aliases: Vec::new(),
+        typing_values: Vec::new(),
         strings: Vec::new(),
         str_points: Vec::new(),
         tuple_types: TupleTypes::default(),

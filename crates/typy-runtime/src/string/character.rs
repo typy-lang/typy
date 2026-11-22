@@ -29,6 +29,9 @@ pub unsafe extern "C" fn typy_rt_chr(value: i64) -> Raising<*mut StrObject> {
             ),
         );
     };
+    if let Some(shared) = super::character(point) {
+        return Raising::ok(shared);
+    }
     let result = new_string(1, StrKind::of(point));
     // SAFETY: the string is new and holds one code point of its kind.
     unsafe { set_code_point(result, 0, point) };

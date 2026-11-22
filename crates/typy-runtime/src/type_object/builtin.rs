@@ -38,7 +38,7 @@ unsafe extern "C" fn text_hash(object: *mut ObjectHeader) -> i64 {
 )]
 unsafe extern "C" fn text_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
     // SAFETY: the types of the objects say they are both `str` or both `bytes`.
-    unsafe { crate::string::typy_rt_str_compare(left.cast(), right.cast(), equal_code()) }
+    unsafe { crate::string::narrow::same_text(left.cast(), right.cast()) }
 }
 
 #[allow(
@@ -227,9 +227,16 @@ const fn builtin(name: &'static str) -> TypeObject {
     TypeObject::new(name, &raw const OBJECT)
 }
 
-/// The type of an `int`, whose large values are heap objects.
+/// The type of an `int`, whose large values are heap objects, and which a value of type
+/// `object` holds boxed (TYP-23).
 #[unsafe(export_name = "typy_rt_type_int")]
-pub(crate) static INT: TypeObject = builtin("int");
+pub(crate) static INT: TypeObject = TypeObject {
+    truth: Some(crate::boxed::number_is_true),
+    hash: Some(crate::boxed::number_hash),
+    equal: Some(crate::boxed::numbers_equal),
+    repr: Some(crate::boxed::int_repr),
+    ..builtin("int")
+};
 
 /// The type of a `str`.
 #[unsafe(export_name = "typy_rt_type_str")]
@@ -313,15 +320,34 @@ pub(crate) static DICT_VALUES: TypeObject = view("dict_values");
 #[unsafe(export_name = "typy_rt_type_dict_items")]
 pub(crate) static DICT_ITEMS: TypeObject = view("dict_items");
 
-/// The type of a `float`, whose values are never objects; `type(1.5)` gives it.
+/// The type of a `float`, whose values are objects only where a value of type `object` holds
+/// them boxed (TYP-23); `type(1.5)` gives it.
 #[unsafe(export_name = "typy_rt_type_float")]
-pub(crate) static FLOAT: TypeObject = builtin("float");
+pub(crate) static FLOAT: TypeObject = TypeObject {
+    truth: Some(crate::boxed::number_is_true),
+    hash: Some(crate::boxed::number_hash),
+    equal: Some(crate::boxed::numbers_equal),
+    repr: Some(crate::boxed::float_repr),
+    ..builtin("float")
+};
 
-/// The type of a `bool`, whose values are never objects; `type(True)` gives it. It derives
-/// from `int`, as in CPython, which a test against a class held in a value reads (CLS-18).
+/// The type of a `bool`, whose values are objects only where a value of type `object` holds
+/// `True` or `False` (TYP-23); `type(True)` gives it. It derives from `int`, as in CPython,
+/// which a test against a class held in a value reads (CLS-18).
 #[unsafe(export_name = "typy_rt_type_bool")]
-pub(crate) static BOOL: TypeObject = TypeObject::new("bool", &raw const INT);
+pub(crate) static BOOL: TypeObject = TypeObject {
+    truth: Some(crate::boxed::number_is_true),
+    hash: Some(crate::boxed::number_hash),
+    equal: Some(crate::boxed::numbers_equal),
+    repr: Some(crate::boxed::bool_repr),
+    ..TypeObject::new("bool", &raw const INT)
+};
 
-/// The type of `None`.
+/// The type of `None`, which a value of type `object` holds as one immortal object (TYP-23).
 #[unsafe(export_name = "typy_rt_type_none")]
-pub(crate) static NONE_TYPE: TypeObject = builtin("NoneType");
+pub(crate) static NONE_TYPE: TypeObject = TypeObject {
+    truth: Some(crate::boxed::none_is_true),
+    hash: Some(crate::instance::typy_rt_identity_hash),
+    repr: Some(crate::boxed::none_repr),
+    ..builtin("NoneType")
+};

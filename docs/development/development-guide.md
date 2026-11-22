@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.28 |
+| Version | 0.29 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-18 |
+| Last updated | 2026-11-22 |
 
 ## 1. Purpose
 
@@ -70,16 +70,19 @@ The `macos-15` job of CI does the same on every pull request.
 | `make dev` | Starts the `dev` service, building its image the first time |
 | `make shell` | Opens a shell in the `dev` service |
 | `make build` | Builds the compiler, `<target>/debug/typy`, after `make runtime` |
-| `make runtime` | Builds the runtime archive for `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` with `scripts/build-runtime.sh`, and stages each in `<target>/lib/typy/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds it; `make test` and `make coverage` run it first |
+| `make runtime` | Builds the runtime archives for `x86_64-unknown-linux-gnu` and `x86_64-unknown-linux-musl` with `scripts/build-runtime.sh`, one for speed and one for size (ADR-0100), and stages them in `<target>/lib/typy/<triple>/` and `<target>/lib/typy-small/<triple>/`, where a compiler in `<target>/debug` or `<target>/release` finds them; `make test` and `make coverage` run it first |
 | `make bless` | Rewrites the golden files in `tests/golden/` from the current compiler; review the diff before committing |
 | `make miri` | Runs the runtime's unit tests under Miri with the pinned nightly toolchain, in about 8 minutes |
 | `make fuzz` | Fuzzes the source, checking and lowering stages for `FUZZ_SECONDS` seconds, 60 by default; a crash leaves its input in `fuzz/artifacts/` |
 | `make runtime-size` | Links a hello world for each target and fails when the runtime it links is over the size budgets of NFR-02 |
 | `make mutants` | Mutation-tests the Rust lines changed since `MUTANTS_BASE`, by default the work not yet committed, new files included, each mutant against its own crate's tests; a slice takes minutes. It is run on demand, for a change whose tests deserve a closer look, and each survivor is then caught by a new test, removed as dead code, or listed in `.cargo/mutants.toml` with the reason it cannot change a result. It runs in a container limited to 6 GB of memory with no swap, 4 CPUs and no network, made from an image of the dev container that is removed afterwards; the survivors are in `.tmp/mutants/diff/mutants.out/missed.txt` |
 | `make mutants-package MUTANTS_PACKAGE=typy-check` | Mutation-tests every mutant of one crate, which takes hours for a large one; for a review of a crate's tests, not for each change |
-| `make bench-compare` | Builds the release compiler and runs `tests/bench/compare.py`: each workload of `tests/bench/programs/` built by TyPy and by every peer of `make bench-peers`, its output checked against CPython 3.15's, then timed three times pinned to two cores with its peak memory; `tests/bench/report.py` writes the tables of the [benchmark report](../testing/benchmark-report.md). It takes about an hour and is run on demand, on a quiet machine; `BENCH_WORKLOADS="nbody dicts"` runs a subset |
+| `make bench-compare` | Builds the release compiler and runs `tests/bench/compare.py`: each workload of `tests/bench/programs/` built by TyPy and by every peer of `make bench-peers`, its output checked against CPython 3.15's, then timed three times pinned to two cores with its peak memory; `tests/bench/report.py` writes the tables of the [benchmark report](../testing/benchmark-report.md). It takes about two hours, or about 45 minutes with `BENCH_LANES=3`, and is run on demand, on a quiet machine; `BENCH_WORKLOADS="nbody dicts"` runs a subset. `BENCH_LANES=3` runs three jobs at once, each pinned to a physical core of its own other than core 0, for a quicker check whose times run higher and vary more, as the lanes share the caches and a busy chip lowers its clock; the report names the cores and the jobs at once |
+| `make corpus-select` | Fetches, the first time, the two corpora of the [corpus report](../testing/corpus-report.md) at their pinned commits into `/var/cache/typy/corpus`, about 19 MB, and chooses the corpus with the mypy of `make bench-peers`: the modules that import only the standard library, run something as a program, pass `mypy --strict` and run alike twice under CPython 3.15. It writes their names to `tests/corpus/modules.txt` and section 3.1 of the report. It is run when a pin changes |
+| `make corpus` | Builds the release compiler, then builds each module of `tests/corpus/modules.txt` and runs it against CPython 3.15, and writes the shares into section 3.2 of the corpus report; it fails, and writes nothing, when a share falls below the one the report holds (NFR-24). Run it before "Prepare X.Y.Z" |
+| `make corpus-check` | Builds and runs the corpus as `make corpus` does, and fails when a share falls below the one the report holds; the release workflow runs it |
 | `make bench` | Builds the compiler in release mode and times it on generated 10,000-line projects, in one file and in 200 modules, against the budgets of NFR-04, NFR-05 and NFR-14, with a check that checking time grows linearly with the modules |
-| `make bench-peers` | Downloads, once, the languages the cross-language benchmark compares with TyPy that the image lacks, about 0.5 GB: Go 1.27.4, the Temurin JDK 25.0.5, PyPy 3.11 v7.3.23 and Codon 0.20.6 from their release archives, and mypyc, Cython and Nuitka into a CPython 3.14 environment from `tests/bench/peers/requirements.txt`. Each archive is checked against the sha256 its project publishes and each wheel against its hash; everything goes into the `bench-tools` volume, `/var/cache/typy/bench`, and a tool already there is kept |
+| `make bench-peers` | Downloads, once, the languages the cross-language benchmark compares with TyPy that the image lacks, about 0.5 GB: Go 1.27.4, the Temurin JDK 25.0.5, PyPy 3.11 v7.3.23 and Codon 0.20.6 from their release archives, and mypyc, Cython and Nuitka into a CPython 3.14 environment from `tests/bench/peers/requirements.txt`. Each archive is checked against the sha256 its project publishes and each wheel against its hash; everything goes into the `bench-tools` volume, `/var/cache/typy/bench`, and a tool already there is kept. It also links `lib/libz.so` there to the image's zlib, which Codon links its programs with |
 | `make stdlib-names` | Writes `crates/typy-source/src/stdlib_names.rs`, the standard library module names of CPython 3.12 to 3.15, which the loader leaves to the checker (LIB-08); `make check` runs `make stdlib-names-check` |
 | `make check` | Runs the sweep below, then the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the five documentation checks below, the Unicode table check and the runtime size check |
 | `make fmt` | Formats the Rust code |
@@ -138,6 +141,7 @@ samples (DOC-04).
 | `scripts/` | The checks and builds that `make` runs, the release scripts, the build of LLVM, and the generator of the Unicode tables |
 | `tests/conformance/` | The conformance programs, by requirement area |
 | `tests/golden/` | The golden programs and the expected text of each stage and diagnostic |
+| `tests/corpus/` | The list of the modules of the corpus of NFR-24, which `make corpus-select` writes |
 | `dist/` | Release archives that `make dist` builds. Ignored by Git |
 | `mkdocs.yml` | The settings and the navigation of the documentation site |
 | `site/` | The documentation site that `make docs` builds. Ignored by Git |
@@ -289,7 +293,11 @@ each release's branch stays on origin and an issue can be traced to it.
 3. A tag `vX.Y.Z` on that commit starts `release.yml`.
 4. `scripts/check-release.sh` checks that the tag names the version and that
    the changelog has a dated section for it, whose text becomes the release
-   notes. The job then runs `make dist` for x86-64 hosts, while a job on an
+   notes. The job runs `make corpus-check`, which fails when the share of
+   the corpus TyPy builds and runs as CPython does falls below the
+   [corpus report](../testing/corpus-report.md)'s (NFR-24), so the
+   "Prepare X.Y.Z" commit carries the report `make corpus` wrote. The job
+   then runs `make dist` for x86-64 hosts, while a job on an
    `ubuntu-24.04-arm` runner runs it for AArch64 Linux hosts and one on a
    `macos-15` runner runs `make EXEC= dist` for Macs. None runs the quality
    gate again: `main` changes only through pull requests whose latest
@@ -312,19 +320,19 @@ each release's branch stays on origin and an issue can be traced to it.
 
 `make dist` builds `dist/typy-X.Y.Z-HOST.tar.gz` for the host's triple,
 `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` or
-`aarch64-apple-darwin`: the `typy` executable in `bin/` and a runtime
-archive in `lib/typy/<triple>/` for each target the host builds for, which
-`scripts/host-targets.sh` lists, in the layout of an installation prefix, with
-the licences, the third-party notices, README and changelog. Its
-`licenses/` directory holds the licences of the crates `typy` links, which
-cargo-about lists with `about.toml` and `about.hbs`, of LLVM and of Rust's
-standard library; a crate under a licence `about.toml` does not accept fails
-the build. The tarball is reproducible, so two builds of one commit have the
-same SHA-256; on a Mac, GNU tar's `gtar` writes it. The executable links
-LLVM statically and, on Linux, needs glibc 2.39 or later and `libstdc++`,
-and on macOS 11 or later only `libSystem`, `libc++` and `libiconv`, which
-`scripts/check-executable-needs.sh` checks before the archive is packed,
-and a C toolchain to link programs. LLVM's licence comes from its archive.
+`aarch64-apple-darwin`: the `typy` executable in `bin/` and the runtime archives
+in `lib/typy/<triple>/` and `lib/typy-small/<triple>/` for each target the host
+builds for, which `scripts/host-targets.sh` lists, in the layout of an
+installation prefix, with the licences, the third-party notices, README and
+changelog. Its `licenses/` directory holds the licences of the crates `typy`
+links, which cargo-about lists with `about.toml` and `about.hbs`, of LLVM and of
+Rust's standard library; a crate under a licence `about.toml` does not accept
+fails the build. The tarball is reproducible, so two builds of one commit have
+the same SHA-256; on a Mac, GNU tar's `gtar` writes it. The executable links
+LLVM statically and, on Linux, needs glibc 2.39 or later and `libstdc++`, and on
+macOS 11 or later only `libSystem`, `libc++` and `libiconv`, which
+`scripts/check-executable-needs.sh` checks before the archive is packed, and a C
+toolchain to link programs. LLVM's licence comes from its archive.
 
 `scripts/write-sbom.py` then writes the archive's bill of materials,
 `sbom.cdx.json`, in CycloneDX 1.6: every file of the archive with its

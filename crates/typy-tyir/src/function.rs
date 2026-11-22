@@ -57,6 +57,8 @@ pub enum StandsFor {
     BuiltinType,
     /// An adapter that fits a function of the program to a `Callable`, which stands for that
     /// function: its value is that function's to `is`, `==` and `hash` (FUN-13, ADR-0080).
+    /// The adapter of a nested function or a `lambda` captures the function object first and
+    /// stands for it (FUN-19).
     Adapter(FunctionId),
 }
 

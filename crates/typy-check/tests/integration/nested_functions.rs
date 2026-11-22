@@ -90,10 +90,9 @@ fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
              position, so `g` has no `Callable` type",
         ),
         (
-            "def f() -> None:\n    def g[T](value: T) -> T:\n        return value\n",
-            "E0201",
-            "a nested function with type parameters of its own is planned for TyPy 0.11 \
-             (FUN-18)",
+            "def f() -> None:\n    def g[T](value: T) -> T:\n        return value\n    h = g\n",
+            "E0202",
+            "the generic function `g` is a copy for each set of types, so it has no one value",
         ),
         (
             "def f() -> None:\n    g = 1\n    def g() -> int:\n        return 1\n",
@@ -101,10 +100,10 @@ fn fun_04_a_nested_function_without_one_binding_or_one_type_is_refused() {
             "`g` is a function and is also assigned as a variable",
         ),
         (
-            "def f() -> int:\n    return 1\n    def g[T](value: T) -> T:\n        return value\n",
-            "E0201",
-            "a nested function with type parameters of its own is planned for TyPy 0.11 \
-             (FUN-18)",
+            "def f() -> None:\n    def g[T](value: T) -> T:\n        return value\n    \
+             def h() -> None:\n        print(g)\n",
+            "E0202",
+            "the generic function `g` is a copy for each set of types, so it has no one value",
         ),
         (
             "from typing import Callable\n\n\ndef f(g: Callable[[int, int], int]) -> int:\n    \
@@ -161,11 +160,12 @@ fn fun_04_functions_that_call_one_another_by_name_share_the_first_ones_captures(
 }
 
 #[test]
-fn fun_04_a_refused_function_of_a_group_gives_one_error() {
+fn fun_18_a_function_of_a_group_may_have_type_parameters_of_its_own() {
     let found = messages(
-        "def f(n: int) -> int:\n    def a(k: int) -> int:\n        return 0 if k == 0 else b(k - 1)\n    \
-         def b[T](k: T) -> T:\n        return a(k)\n    return a(n)\n",
+        "def f(n: int) -> bool:\n    def even[T](value: T, k: int) -> bool:\n        \
+         return True if k == 0 else odd(value, k - 1)\n    \
+         def odd[T](value: T, k: int) -> bool:\n        \
+         return False if k == 0 else even(value, k - 1)\n    return even(\"a\", n)\n",
     );
-    let codes: Vec<&str> = found.iter().map(|(code, _, _)| code.as_str()).collect();
-    assert_eq!(codes, ["E0201"], "{found:?}");
+    assert_eq!(found, Vec::new());
 }

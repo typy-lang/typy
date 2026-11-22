@@ -9,6 +9,7 @@ mod part;
 mod report;
 mod text;
 mod traceback;
+mod variadic;
 
 use crate::allocator::{allocate, free};
 use crate::header::{EXCEPTION_TYPE_ID, ObjectHeader};
@@ -42,8 +43,9 @@ pub struct ExceptionObject {
     /// The text the runtime gave an exception it raised, an owned `str`; null for an
     /// exception the program built from arguments.
     pub message: *mut StrObject,
-    /// The layout of the arguments the program built the exception with; null for an
-    /// exception the runtime raised.
+    /// The layout of the arguments the program built the exception with: a descriptor the
+    /// compiler emitted, or one in the block of the arguments a call with `*` gave, freed with
+    /// them (EXP-22); null for an exception the runtime raised.
     pub arguments_type: *const TupleType,
     /// The arguments, owned, laid out as `arguments_type` says; null when there are none.
     pub arguments: *mut u8,

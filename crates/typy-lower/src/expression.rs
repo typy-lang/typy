@@ -38,6 +38,13 @@ impl FunctionLowerer<'_> {
                 arguments,
                 init,
             } => self.new_exception(class, arguments, init.as_deref(), span),
+            TypedExprKind::NewExceptionUnpacked(call) => self.new_exception_unpacked(call, span),
+            TypedExprKind::MathOfList { function, values } => {
+                self.math_of_list(*function, values, span)
+            }
+            TypedExprKind::ZipMany { iterables, strict } => {
+                self.zip_many(iterables, strict.as_deref(), &expression.ty, span)
+            }
             TypedExprKind::SetArguments {
                 exception,
                 arguments,
@@ -75,6 +82,7 @@ impl FunctionLowerer<'_> {
                 self.converted(inner, &expression.ty, ty, false, span)
             }
             TypedExprKind::IsInstance(test) => self.isinstance(test, span),
+            TypedExprKind::Cast(cast) => self.cast(cast, &expression.ty, ty, span),
             TypedExprKind::IsSubclass { class, bases } => self.issubclass(class, bases, span),
             TypedExprKind::EachMember(each) => self.each_member(each, ty, span),
             TypedExprKind::CheckedLength(call) => {
@@ -326,7 +334,20 @@ impl FunctionLowerer<'_> {
             TypedExprKind::CallValue { callee, arguments } => {
                 self.call_value(callee, arguments, ty, span)
             }
+            TypedExprKind::CallValueUnpacked {
+                callee,
+                fixed,
+                rest,
+            } => self.call_value_unpacked(callee, (fixed, rest), ty, span),
             // A type alias object is immortal, so it is borrowed (SMT-12).
+            TypedExprKind::NewTypeAlias(index) => {
+                let description = self.constant(Constant::TypeAlias(*index), span);
+                self.call_runtime(RuntimeFunction::TypeAliasNew, vec![description], span)
+            }
+            TypedExprKind::TypingValue(index) => {
+                let value = self.constant(Constant::TypingValue(*index), span);
+                Self::borrowed(value, TyirType::UNION)
+            }
             TypedExprKind::TypeAliasObject(index) => {
                 let value = self.constant(Constant::TypeAlias(*index), span);
                 Self::borrowed(value, TyirType::TYPE_ALIAS)

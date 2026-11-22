@@ -31,7 +31,9 @@ assigns the variable of the function or module around it. A test of
 `(name := value) is not None` narrows `name`, as a test of the variable
 does. CPython's syntax errors are E0103: rebinding a name the
 comprehension binds, `:=` in a comprehension's source, and `__debug__`
-as the name.
+as the name. A comprehension element that unpacks, such as
+`[*row for row in rows]`, which needs the Python floor 3.15, is E0201,
+planned for 0.12 (EXP-23).
 
 <!-- typy-expect: accepted -->
 ```python
@@ -71,10 +73,17 @@ print(adder(10)(5), double(21), [each() for each in made])
 print(sorted(words, key=lambda word: (len(word), word)))
 ```
 
-A `lambda` with a parameter where no `Callable` is expected, or with more
-parameters than the expected `Callable` passes, is E0203; define the
-function with `def`. A parameter taken by keyword only is E0202, since a
-`Callable` passes every argument by position. A `lambda` that reads a
+A parameter past those the `Callable` passes, or one taken by keyword
+only, takes its default, as in `lambda value, by=3: value * by` where a
+`Callable[[int], int]` is expected, and `*values` takes the arguments past
+the other parameters, which have one type (FUN-19). A `lambda` with a
+parameter where no `Callable` is expected, or with one past those the
+`Callable` passes that has no default, is E0203; so is `**kwargs`, which a
+`Callable` never fills, and `*args` where the `Callable` passes nothing
+past the other parameters. Define the function with `def` instead. A
+keyword-only parameter without a default is E0202, since a `Callable`
+passes every argument by position, and `*args` whose arguments have two
+types is E0409. A `lambda` that reads a
 variable assigned no type yet where it stands is E0306, since its body is
 checked there. A `lambda` inside a generic function is checked, and made,
 in each copy of the function, with the copy's types (FUN-10). A `lambda`

@@ -45,6 +45,19 @@ impl Walker {
             }
         }
         for expression in made {
+            // An element that unpacks, from Python 3.15 (PEP 798), which the parser accepts
+            // only at that floor.
+            if let Expr::Starred { span, .. } = expression {
+                self.report(
+                    *span,
+                    planned(
+                        "`*` and `**` in comprehension elements",
+                        "0.12",
+                        RuleId::EXP_23,
+                    ),
+                );
+                continue;
+            }
             self.expression(expression);
         }
         self.comprehension_names.pop();
@@ -228,6 +241,9 @@ impl Walker {
             Expr::Subscript { value, index, .. } if names_callable(value) => {
                 self.callable_annotation(index);
             }
+            // `Literal[...]` holds values, not annotations; the checker reports the name, which
+            // a later release gives (TYP-28).
+            Expr::Subscript { value, .. } if names_literal(value) => {}
             // A generic class or type alias of the module, given its type arguments (GEN-01),
             // or a name of another module, which the checker reads (SMT-12).
             Expr::Subscript { value, index, .. }
@@ -395,7 +411,16 @@ impl Walker {
             },
             Expr::Subscript { value, index, .. } => {
                 self.expression(value);
-                self.expression(index);
+                // `tuple[int, ...]` and `Callable[..., R]` are typing values (TYP-18).
+                let typing_arguments = names_variadic_generic(value);
+                match index.as_ref() {
+                    Expr::Tuple { elements, .. } if typing_arguments => {
+                        for element in elements.iter().filter(|each| !is_ellipsis(each)) {
+                            self.expression(element);
+                        }
+                    }
+                    other => self.expression(other),
+                }
             }
             Expr::Name { .. } => {}
             Expr::Slice {
@@ -484,6 +509,37 @@ fn collect_names(target: &Expr, names: &mut Vec<String>) {
 
 /// Returns true when `value` names `Callable`, by name or through `typing` or
 /// `collections.abc`, which the checker resolves (FUN-05).
+fn names_literal(value: &Expr) -> bool {
+    matches!(
+        value,
+        Expr::Name { id, .. }
+            | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
+            if id == "Literal"
+    )
+}
+
+/// Returns true when a subscript of `value` may take `...` as a type argument: `tuple`,
+/// `Tuple` or `Callable` (TYP-18).
+fn names_variadic_generic(value: &Expr) -> bool {
+    matches!(
+        value,
+        Expr::Name { id, .. }
+            | Expr::Attribute { attribute: typy_source::syntax::Identifier { name: id, .. }, .. }
+            if matches!(id.as_str(), "tuple" | "Tuple" | "Callable")
+    )
+}
+
+/// Returns true for `...`.
+const fn is_ellipsis(expression: &Expr) -> bool {
+    matches!(
+        expression,
+        Expr::Constant {
+            value: Constant::Ellipsis,
+            ..
+        }
+    )
+}
+
 fn names_callable(value: &Expr) -> bool {
     matches!(
         value,

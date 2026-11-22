@@ -99,10 +99,13 @@ impl BodyChecker<'_> {
             Type::Error => None,
             other => {
                 let message = format!("{} has no attributes in TyPy", other.with_article());
-                self.diagnostics.push(
+                let mut diagnostic =
                     Diagnostic::new(DiagnosticCode::error(412), object.span, message)
-                        .with_rule(RuleId::LIB_03),
-                );
+                        .with_rule(RuleId::LIB_03);
+                if *other == Type::Object {
+                    diagnostic = diagnostic.with_help(super::operator::OBJECT_HELP);
+                }
+                self.diagnostics.push(diagnostic);
                 None
             }
         }
@@ -183,7 +186,7 @@ impl BodyChecker<'_> {
         if let Type::TypeObject(_) = object.ty {
             return self.type_object_attribute(object, attribute, span);
         }
-        if object.ty == Type::TypeAlias {
+        if matches!(object.ty, Type::TypeAlias(_)) {
             return self.type_alias_attribute(object, attribute, span);
         }
         if object.ty == Type::VersionInfo {
@@ -522,13 +525,19 @@ impl BodyChecker<'_> {
         let init = self.program.method(class, "__init__");
         let ty = self.program.instance_type(class);
         if let Type::Exception(exception) = &ty {
-            // An exception keeps the arguments given by position, which unpacking would make
-            // a number only the run knows; the call refuses it (EXP-19).
-            if super::call_expression::unpacking(arguments, keywords).is_some() {
-                return Self::invalid_call(span);
-            }
             let exception = exception.clone();
             return match init {
+                Some(function)
+                    if super::call_expression::unpacking(arguments, keywords).is_some() =>
+                {
+                    self.exception_init_unpacked(
+                        exception,
+                        function,
+                        &name,
+                        (arguments, keywords),
+                        span,
+                    )
+                }
                 Some(function) => {
                     match self.bind_arguments(function, 1, &name, arguments, keywords, span) {
                         Ok(bound) => {

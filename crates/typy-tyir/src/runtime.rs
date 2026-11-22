@@ -72,6 +72,8 @@ pub enum RuntimeFunction {
     ListKeepExtreme,
     ListExtreme,
     ListSumInt,
+    /// Adds a start and the number of true items of a list of bools (DAT-19).
+    ListSumBool,
     ListSumFloat,
     ListAny,
     ListAll,
@@ -182,6 +184,21 @@ pub enum RuntimeFunction {
     TypeName,
     TypeAliasName,
     TypeAliasModule,
+    /// A new copy of the static description of an alias a function defines, which each run of
+    /// its `type` statement makes (TYP-18).
+    TypeAliasNew,
+    /// Checks that a call through a function value with `*` gives as many values as its
+    /// `Callable` takes, raising CPython's `TypeError` naming the function (EXP-22).
+    ValueArity,
+    /// Checks the keywords `print` took from `**` dicts, raising CPython's error for one whose
+    /// value it cannot take (EXP-22).
+    PrintCheck,
+    /// The `sep` or `end` `print` takes from its `**` dicts, or the default given.
+    PrintText,
+    /// The file `print` takes from its `**` dicts, or standard output.
+    PrintFile,
+    /// Whether `print` flushes, from its `**` dicts.
+    PrintFlush,
     /// A new bound method of the descriptor and the instance, which it holds a reference to
     /// (FUN-05).
     MethodNew,
@@ -191,6 +208,20 @@ pub enum RuntimeFunction {
     /// A bound method of a descriptor and an instance, or a static method's function object,
     /// as the `bool` says (FUN-09).
     MethodOrFunction,
+    /// Boxes an `int` word as an object, for a value of type `object` (TYP-23, ADR-0090).
+    BoxInt,
+    /// Boxes a `float` as an object (TYP-23).
+    BoxFloat,
+    /// Gives the immortal `True` or `False` object (TYP-23).
+    BoxBool,
+    /// Gives the immortal `None` object (TYP-23).
+    BoxNone,
+    /// Reads the `int` word of a boxed `int`, a large integer or a `bool` (TYP-23).
+    UnboxInt,
+    /// Reads the value of a boxed `float` (TYP-23).
+    UnboxFloat,
+    /// Reads the value of `True` or `False` (TYP-23).
+    UnboxBool,
     /// Raises `NameError` for a captured variable, named by the `str`, that has no value yet
     /// (FUN-04).
     FreeVariableUnbound,
@@ -201,6 +232,14 @@ pub enum RuntimeFunction {
     ExceptionPartEqual,
     ExceptionArgumentsMatch,
     ExceptionArgumentsAddress,
+    /// Makes an exception of a class from a list of the values `*` gave (EXP-22).
+    ExceptionFromList,
+    /// Raises `TypeError` for keywords `**` gave a call of an exception class (EXP-22).
+    ExceptionKeywords,
+    /// Tests that every item of `args` is held as a list of one item type holds it (EXP-22).
+    ExceptionArgumentsAll,
+    /// Reads `args` as a `tuple[T, ...]` (EXP-22).
+    ExceptionArgumentsTuple,
     OsErrorNew,
     PercentDynamic,
     ExceptionSetCause,
@@ -221,6 +260,8 @@ pub enum RuntimeFunction {
     /// the pair of a view of items (LIB-20).
     IteratorReversed,
     IterableIterator,
+    /// Makes `zip(*iterables)` of a list of iterables (EXP-22).
+    ZipMany,
     /// What `next()` steps for a value held as an `Iterator[T]`: the iterator itself, or a
     /// wrapper of an instance of a class with `__next__` (TYP-20).
     IteratorStepper,
@@ -291,6 +332,9 @@ pub enum RuntimeFunction {
     NotImplemented,
     /// Raises the `TypeError` of an arithmetic operator whose methods all gave way (CLS-21).
     OperandsUnsupported,
+    /// Raises the `TypeError` of a checked `cast`, named by the cast's type and the value's
+    /// class (TYP-24).
+    CastFailed,
     /// Raises the `TypeError` of an ordering whose methods all gave way (CLS-21).
     OrderingUnsupported,
     /// Raises the exception a method a type object's slot called raised (CLS-22).
@@ -412,6 +456,10 @@ pub enum RuntimeFunction {
     MathPerm,
     MathGcd,
     MathLcm,
+    /// `math.gcd(*values)` of a list of `int`s (EXP-22).
+    MathGcdList,
+    /// `math.lcm(*values)` of a list of `int`s (EXP-22).
+    MathLcmList,
     MathGamma,
     MathLgamma,
     MathFsum,
@@ -519,7 +567,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 381] = [
+    pub const ALL: [Self; 403] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -581,6 +629,7 @@ impl RuntimeFunction {
         Self::ListKeepExtreme,
         Self::ListExtreme,
         Self::ListSumInt,
+        Self::ListSumBool,
         Self::ListSumFloat,
         Self::ListAny,
         Self::ListAll,
@@ -691,9 +740,22 @@ impl RuntimeFunction {
         Self::TypeName,
         Self::TypeAliasName,
         Self::TypeAliasModule,
+        Self::TypeAliasNew,
+        Self::ValueArity,
+        Self::PrintCheck,
+        Self::PrintText,
+        Self::PrintFile,
+        Self::PrintFlush,
         Self::MethodNew,
         Self::BuiltinMethodNew,
         Self::MethodOrFunction,
+        Self::BoxInt,
+        Self::BoxFloat,
+        Self::BoxBool,
+        Self::BoxNone,
+        Self::UnboxInt,
+        Self::UnboxFloat,
+        Self::UnboxBool,
         Self::FreeVariableUnbound,
         Self::ExceptionNew,
         Self::ExceptionPartText,
@@ -702,6 +764,10 @@ impl RuntimeFunction {
         Self::ExceptionPartEqual,
         Self::ExceptionArgumentsMatch,
         Self::ExceptionArgumentsAddress,
+        Self::ExceptionFromList,
+        Self::ExceptionKeywords,
+        Self::ExceptionArgumentsAll,
+        Self::ExceptionArgumentsTuple,
         Self::OsErrorNew,
         Self::PercentDynamic,
         Self::ExceptionSetCause,
@@ -717,6 +783,7 @@ impl RuntimeFunction {
         Self::IteratorNew,
         Self::IteratorReversed,
         Self::IterableIterator,
+        Self::ZipMany,
         Self::IteratorStepper,
         Self::Iter,
         Self::IteratorAdvance,
@@ -765,6 +832,7 @@ impl RuntimeFunction {
         Self::SysVersionInfo,
         Self::NotImplemented,
         Self::OperandsUnsupported,
+        Self::CastFailed,
         Self::OrderingUnsupported,
         Self::SlotRaised,
         Self::SliceNew,
@@ -870,6 +938,8 @@ impl RuntimeFunction {
         Self::MathPerm,
         Self::MathGcd,
         Self::MathLcm,
+        Self::MathGcdList,
+        Self::MathLcmList,
         Self::MathGamma,
         Self::MathLgamma,
         Self::MathFsum,
@@ -1024,7 +1094,9 @@ impl RuntimeFunction {
             }
             Self::ListNew => signature(&[Int, Int, Bits], LIST, false),
             Self::ListAppend | Self::ListAppendMoved => signature(&[LIST, Bits], Unit, false),
-            Self::ListLength => signature(&[LIST], Int, false),
+            Self::ListLength | Self::MathGcdList | Self::MathLcmList => {
+                signature(&[LIST], Int, false)
+            }
             Self::ListGet | Self::ListExtreme => signature(&[LIST, Int], Bits, true),
             Self::ListSet | Self::ListSetMoved => signature(&[LIST, Int, Bits], Unit, true),
             Self::ListEqual => signature(&[LIST, LIST], Bool, false),
@@ -1048,7 +1120,9 @@ impl RuntimeFunction {
             Self::ListSort => signature(&[LIST, Int], Unit, false),
             Self::ListSortKeyed => signature(&[LIST, LIST, Int], Unit, false),
             Self::ListKeepExtreme => signature(&[LIST, Bits, LIST, Bits, Int], Unit, false),
-            Self::ListSumInt | Self::MathProdInt => signature(&[LIST, Int], Int, false),
+            Self::ListSumInt | Self::ListSumBool | Self::MathProdInt => {
+                signature(&[LIST, Int], Int, false)
+            }
             Self::ListSumFloat => signature(&[LIST, Float], Float, false),
             Self::ListAny | Self::ListAll | Self::MathHasFloat => signature(&[LIST], Bool, false),
             Self::ZipUnequal => signature(INT_INT, Unit, true),
@@ -1134,10 +1208,23 @@ impl RuntimeFunction {
             Self::TypeAliasName | Self::TypeAliasModule => {
                 signature(&[TyirType::TYPE_ALIAS], STR, false)
             }
+            Self::TypeAliasNew => signature(&[TyirType::TYPE_ALIAS], TyirType::TYPE_ALIAS, false),
+            Self::ValueArity => signature(&[Bits, Int, Int], Unit, true),
+            Self::PrintCheck => signature(&[DICT], Unit, true),
+            Self::PrintText => signature(&[DICT, STR, STR], STR, false),
+            Self::PrintFile => signature(&[DICT], TyirType::TEXT_FILE, false),
+            Self::PrintFlush => signature(&[DICT], Bool, false),
             Self::MethodNew | Self::BuiltinMethodNew => {
                 signature(&[Bits, Bits], TyirType::FUNCTION, false)
             }
             Self::MethodOrFunction => signature(&[Bits, Bits, Bool], TyirType::FUNCTION, false),
+            Self::BoxInt => signature(&[Int], TyirType::UNION, false),
+            Self::BoxFloat => signature(&[Float], TyirType::UNION, false),
+            Self::BoxBool => signature(&[Bool], TyirType::UNION, false),
+            Self::BoxNone => signature(&[], TyirType::UNION, false),
+            Self::UnboxInt => signature(&[TyirType::UNION], Int, false),
+            Self::UnboxFloat => signature(&[TyirType::UNION], Float, false),
+            Self::UnboxBool => signature(&[TyirType::UNION], Bool, false),
             Self::ExceptionNew | Self::OsErrorNew => {
                 signature(&[TYPE, Bits, Bits], EXCEPTION, false)
             }
@@ -1147,6 +1234,10 @@ impl RuntimeFunction {
             Self::ExceptionPartTruth => signature(&[EXCEPTION, Int], Bool, false),
             Self::ExceptionPartEqual => signature(&[EXCEPTION, Int, Bits, Bits], Bool, false),
             Self::ExceptionArgumentsMatch => signature(&[EXCEPTION, Bits, Int], Bool, false),
+            Self::ExceptionFromList => signature(&[TYPE, LIST], EXCEPTION, false),
+            Self::ExceptionKeywords => signature(&[TYPE, DICT], Unit, true),
+            Self::ExceptionArgumentsAll => signature(&[EXCEPTION, Int, Bits], Bool, false),
+            Self::ExceptionArgumentsTuple => signature(&[EXCEPTION, Int, Bits], LIST, false),
             Self::ExceptionSetCause | Self::ExceptionKeep => {
                 signature(&[EXCEPTION, Bits], Unit, false)
             }
@@ -1168,6 +1259,7 @@ impl RuntimeFunction {
             Self::IterableIterator | Self::Iter => {
                 signature(&[TyirType::ITERABLE, Bits], ITERATOR, true)
             }
+            Self::ZipMany => signature(&[LIST, Int, Bits, Bool], ITERATOR, true),
             Self::IteratorStepper => signature(&[ITERATOR], ITERATOR, false),
             Self::IteratorAdvance => signature(&[ITERATOR, Int], Bool, true),
             Self::GeneratorSend => signature(&[TyirType::GENERATOR, Bits, Bool], Bool, true),
@@ -1216,6 +1308,7 @@ impl RuntimeFunction {
             Self::OperandsUnsupported | Self::OrderingUnsupported => {
                 signature(&[STR, TYPE, TYPE], Unit, true)
             }
+            Self::CastFailed => signature(&[STR, TYPE], Unit, true),
             Self::SysStdout | Self::SysStderr | Self::SysStdin => {
                 signature(&[], TyirType::TEXT_FILE, false)
             }
@@ -1400,6 +1493,7 @@ impl RuntimeFunction {
             Self::ListKeepExtreme => "list_keep_extreme",
             Self::ListExtreme => "list_extreme",
             Self::ListSumInt => "list_sum_int",
+            Self::ListSumBool => "list_sum_bool",
             Self::ListSumFloat => "list_sum_float",
             Self::ListAny => "list_any",
             Self::ListAll => "list_all",
@@ -1510,9 +1604,22 @@ impl RuntimeFunction {
             Self::TypeName => "type_name",
             Self::TypeAliasName => "type_alias_name",
             Self::TypeAliasModule => "type_alias_module",
+            Self::TypeAliasNew => "type_alias_new",
+            Self::ValueArity => "value_arity",
+            Self::PrintCheck => "print_check",
+            Self::PrintText => "print_text",
+            Self::PrintFile => "print_file",
+            Self::PrintFlush => "print_flush",
             Self::MethodNew => "method_new",
             Self::BuiltinMethodNew => "builtin_method_new",
             Self::MethodOrFunction => "method_or_function",
+            Self::BoxInt => "box_int",
+            Self::BoxFloat => "box_float",
+            Self::BoxBool => "box_bool",
+            Self::BoxNone => "box_none",
+            Self::UnboxInt => "unbox_int",
+            Self::UnboxFloat => "unbox_float",
+            Self::UnboxBool => "unbox_bool",
             Self::FreeVariableUnbound => "free_variable_unbound",
             Self::ExceptionNew => "exception_new",
             Self::ExceptionPartText => "exception_part_text",
@@ -1521,6 +1628,10 @@ impl RuntimeFunction {
             Self::ExceptionPartEqual => "exception_part_equal",
             Self::ExceptionArgumentsMatch => "exception_arguments_match",
             Self::ExceptionArgumentsAddress => "exception_arguments_address",
+            Self::ExceptionFromList => "exception_from_list",
+            Self::ExceptionKeywords => "exception_keywords",
+            Self::ExceptionArgumentsAll => "exception_arguments_all",
+            Self::ExceptionArgumentsTuple => "exception_arguments_tuple",
             Self::OsErrorNew => "os_error_new",
             Self::PercentDynamic => "percent_dynamic",
             Self::ExceptionSetCause => "exception_set_cause",
@@ -1536,6 +1647,7 @@ impl RuntimeFunction {
             Self::IteratorNew => "iterator_new",
             Self::IteratorReversed => "iterator_reversed",
             Self::IterableIterator => "iterable_iterator",
+            Self::ZipMany => "zip_many",
             Self::IteratorStepper => "iterator_stepper",
             Self::Iter => "iter",
             Self::IteratorAdvance => "iterator_advance",
@@ -1584,6 +1696,7 @@ impl RuntimeFunction {
             Self::SysVersionInfo => "sys_version_info",
             Self::NotImplemented => "not_implemented",
             Self::OperandsUnsupported => "operands_unsupported",
+            Self::CastFailed => "cast_failed",
             Self::OrderingUnsupported => "ordering_unsupported",
             Self::SlotRaised => "slot_raised",
             Self::SliceNew => "slice_new",
@@ -1688,6 +1801,8 @@ impl RuntimeFunction {
             Self::MathComb => "math_comb",
             Self::MathPerm => "math_perm",
             Self::MathGcd => "math_gcd",
+            Self::MathGcdList => "math_gcd_list",
+            Self::MathLcmList => "math_lcm_list",
             Self::MathGamma => "math_gamma",
             Self::MathLgamma => "math_lgamma",
             Self::MathFsum => "math_fsum",

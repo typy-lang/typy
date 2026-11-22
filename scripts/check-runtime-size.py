@@ -80,7 +80,8 @@ def main() -> int:
         return 1
     status = 0
     for triple, linker in LINKERS.items():
-        archive = target / "lib/typy" / triple / "libtypy_runtime.a"
+        # `--release-small` links the runtime optimised for size (ADR-0100).
+        archive = target / "lib/typy-small" / triple / "libtypy_runtime.a"
         if not archive.exists():
             print(f"check-runtime-size: {archive} is missing; run make runtime", file=sys.stderr)
             return 1

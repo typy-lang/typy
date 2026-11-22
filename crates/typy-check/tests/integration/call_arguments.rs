@@ -76,9 +76,8 @@ fn a_call_its_callee_does_not_take_is_refused_with_the_reason() {
         ),
         (
             "def f() -> None:\n    type T = int\n    print(T())\n",
-            "E0201",
-            "reading the type alias `T`, which a function or a class defines, as a value \
-            is planned for TyPy 0.11 (TYP-18)",
+            "E0401",
+            "'typing.TypeAliasType' object is not callable: CPython raises `TypeError`",
         ),
         (
             "import sys\n\nprint(sys.setrecursionlimit())\n",

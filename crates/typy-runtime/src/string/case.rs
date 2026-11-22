@@ -59,6 +59,10 @@ unsafe fn lower_at(text: *const StrObject, index: usize, builder: &mut StrBuilde
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_str_case(text: *const StrObject, mode: i64) -> *mut StrObject {
     let mode = inline_value(mode);
+    // SAFETY: the caller passes a live string.
+    if let Some(bytes) = unsafe { super::ascii_bytes(text) } {
+        return ascii_case(bytes, mode);
+    }
     // SAFETY: the caller passes a live string; every index stays inside it.
     unsafe {
         let whole = length(text);
@@ -86,6 +90,26 @@ pub unsafe extern "C" fn typy_rt_str_case(text: *const StrObject, mode: i64) -> 
         }
         builder.finish()
     }
+}
+
+/// Returns the string of ASCII characters `bytes` in the case `mode` asks for, as
+/// `typy_rt_str_case` gives it, a byte at a time: no ASCII character maps to more than one, and
+/// none is a capital sigma (NFR-21).
+fn ascii_case(bytes: &[u8], mode: i64) -> *mut StrObject {
+    super::new_ascii(bytes.len(), |cased| {
+        let mut previous_cased = false;
+        for (index, (out, byte)) in cased.iter_mut().zip(bytes).enumerate() {
+            *out = match mode {
+                0 => byte.to_ascii_uppercase(),
+                3 if byte.is_ascii_lowercase() => byte.to_ascii_uppercase(),
+                4 if index == 0 => byte.to_ascii_uppercase(),
+                1..=4 => byte.to_ascii_lowercase(),
+                _ if previous_cased => byte.to_ascii_lowercase(),
+                _ => byte.to_ascii_uppercase(),
+            };
+            previous_cased = byte.is_ascii_alphabetic();
+        }
+    })
 }
 
 /// Returns the answer to the test `question`, an `int` word, names: 0 `isalpha`, 1 `isalnum`, 2 `isdecimal`,

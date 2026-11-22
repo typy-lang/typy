@@ -70,18 +70,19 @@ fn exp_17_an_argument_left_over_is_refused_where_cpython_or_typing_refuses_it() 
         (
             "def outer() -> None:\n    def inner(**options: int) -> None:\n        pass\n    \
              keep = inner\n",
-            "`inner` takes `**options`, and a function with `*args` or `**kwargs` as a value is \
-             planned for TyPy 0.11 (FUN-19)",
+            "`inner` takes `**options`, so as a value it needs the `Callable` type its context \
+             expects",
         ),
         (
             "class Box:\n    def put(self, *items: int) -> None:\n        pass\n\n\n\
              method = Box().put\n",
-            "`Box.put` takes `*items`, and a function with `*args` or `**kwargs` as a value is \
-             planned for TyPy 0.11 (FUN-19)",
+            "`Box.put` takes `*items`, so as a value it needs the `Callable` type its context \
+             expects",
         ),
         (
             "from typing import Callable\n\ncount: Callable[[], int] = lambda *values: 0\n",
-            "`*args` and `**kwargs` in a `lambda` are planned for TyPy 0.11 (FUN-19)",
+            "`lambda` parameter `*values` has no type: the `Callable` expected here passes no \
+             argument past the others",
         ),
         (
             "class Base:\n    def run(self, steps: int) -> None:\n        pass\n\n\n\

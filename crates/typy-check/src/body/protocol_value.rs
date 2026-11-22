@@ -32,6 +32,9 @@ pub(crate) struct ProtocolValues {
     /// The adapter of each class's method to the signature of a method a value reads, a
     /// protocol's or a base's, by the method and that signature's method (FUN-09).
     pub(crate) adapters: BTreeMap<(FunctionId, FunctionId), FunctionId>,
+    /// Each method read through a protocol value where a `Callable` takes it through an
+    /// adapter, by the name its value binds by (FUN-19).
+    pub(crate) adapted_reads: BTreeMap<String, super::protocol_method_value::AdaptedRead>,
 }
 
 impl Program {

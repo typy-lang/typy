@@ -36,6 +36,7 @@ use typy_source::{Module, Project};
 
 pub(crate) use annotation::{
     ANNOTATION_MODULES, AnnotationName, AnnotationScope, Origin, annotation_name, annotation_type,
+    standard_name,
 };
 
 /// The names a module's imports give its annotations: each module's classes by the name
@@ -51,8 +52,11 @@ pub(crate) struct ImportedNames {
     pub(crate) standard: BTreeMap<String, String>,
 }
 pub(crate) use annotation::{AliasTable, ClassVarAnnotation, ExportedAlias, final_type};
-pub(crate) use class::{ClassInfo, Frozen, class_value_variable, class_values};
-pub(crate) use definition::{Definition, FunctionParts, factory_call, function_definition};
+pub(crate) use class::{ClassInfo, Frozen, class_alias_name, class_value_variable, class_values};
+pub(crate) use definition::{
+    Definition, FunctionParts, factory_call, function_definition, resolve_type_parameters,
+};
+pub(crate) use generic_body::combinations;
 
 use crate::body::{BodyChecker, Program};
 use crate::exception_arguments::Creations;
@@ -290,7 +294,7 @@ impl Checked<'_> {
         }
         // Every class that satisfies a protocol is known now (ADR-0041).
         program.write_protocol_dispatchers();
-        program.write_protocol_method_values();
+        program.write_protocol_method_values(diagnostics);
         program
     }
 }

@@ -1,6 +1,8 @@
 //! `typing.TypeAliasType` objects, the value a `type` statement binds (SMT-12): an immortal
-//! static object the compiler emits for each alias, with the alias's name and the name of
-//! its module. Its `repr` and `str` are the name, and it hashes and compares by identity.
+//! static object the compiler emits for each alias, with the alias's name, the name of its
+//! module and its qualified name, which its `repr` and `str` write. One a function defines is
+//! a new copy of its static description each time its `type` statement runs (TYP-18). It
+//! hashes and compares by identity.
 
 use crate::Raising;
 use crate::header::ObjectHeader;
@@ -14,6 +16,7 @@ pub(crate) struct TypeAliasObject {
     header: ObjectHeader,
     name: *const StrObject,
     module: *const StrObject,
+    qualified_name: *const StrObject,
 }
 
 /// The type `typing.TypeAliasType`.
@@ -26,11 +29,52 @@ pub(crate) static TYPE_ALIAS: TypeObject = TypeObject {
     ..TypeObject::new("TypeAliasType", &raw const OBJECT)
 };
 
-/// Returns `repr` of a type alias: its name, as CPython writes an alias of a module's top
-/// level.
+/// Returns `repr` of a type alias: its qualified name, which is its name for an alias of a
+/// module's top level, as CPython 3.15 writes it.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "a type alias object is a static the compiler aligns for its pointers, or a copy of one"
+)]
 unsafe extern "C" fn type_alias_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
-    // SAFETY: the type of the object says it is a type alias object.
-    Raising::ok(unsafe { typy_rt_type_alias_name(object.cast()) })
+    // SAFETY: the type of the object says it is a type alias object, whose qualified name is
+    // an immortal static string.
+    unsafe {
+        let name = (*object.cast::<TypeAliasObject>())
+            .qualified_name
+            .cast_mut();
+        crate::refcount::typy_rt_increment(name.cast());
+        Raising::ok(name)
+    }
+}
+
+/// Returns a new type alias of one reference, a copy of `description`, the static object of
+/// an alias a function defines: each run of its `type` statement makes one (TYP-18).
+///
+/// # Safety
+///
+/// `description` points to a type alias object the compiler emitted.
+#[unsafe(no_mangle)]
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "malloc returns memory aligned for every type"
+)]
+pub unsafe extern "C" fn typy_rt_type_alias_new(
+    description: *const ObjectHeader,
+) -> *mut ObjectHeader {
+    let alias = crate::allocator::allocate(core::mem::size_of::<TypeAliasObject>())
+        .cast::<TypeAliasObject>();
+    // SAFETY: the allocation holds a type alias object; the caller's guarantee gives the
+    // description's immortal strings, which the copy shares.
+    unsafe {
+        let description = description.cast::<TypeAliasObject>();
+        alias.write(TypeAliasObject {
+            header: ObjectHeader::new(crate::header::TYPE_ALIAS_TYPE_ID),
+            name: (*description).name,
+            module: (*description).module,
+            qualified_name: (*description).qualified_name,
+        });
+    }
+    alias.cast()
 }
 
 /// Returns a type alias's `__name__`, a reference of the caller's own.
@@ -94,6 +138,7 @@ mod tests {
             },
             name,
             module,
+            qualified_name: name,
         };
         // SAFETY: the alias and the strings are live for the whole test.
         unsafe {
@@ -108,6 +153,41 @@ mod tests {
             }
             // `__module__` gave a second reference to the module's name.
             crate::refcount::typy_rt_decrement(module.cast());
+        }
+    }
+
+    #[test]
+    fn typ_18_a_function_s_alias_is_a_new_object_written_by_its_qualified_name() {
+        let (name, module) = (from_str("Local"), from_str("__main__"));
+        let qualified_name = from_str("make.<locals>.Local");
+        let description = super::TypeAliasObject {
+            header: crate::header::ObjectHeader {
+                reference_count: crate::header::IMMORTAL,
+                type_id: crate::header::TYPE_ALIAS_TYPE_ID,
+            },
+            name,
+            module,
+            qualified_name,
+        };
+        // SAFETY: the description and the strings are live for the whole test.
+        unsafe {
+            let description = core::ptr::from_ref(&description).cast();
+            let first = super::typy_rt_type_alias_new(description);
+            let second = super::typy_rt_type_alias_new(description);
+            assert!(!core::ptr::eq(first, second));
+            assert_eq!((*first).reference_count, 1);
+            let repr = super::type_alias_repr(first).value;
+            assert_eq!(text(repr), "make.<locals>.Local");
+            let own = super::typy_rt_type_alias_name(first);
+            assert_eq!(text(own), "Local");
+            for each in [repr, own] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
+            crate::refcount::typy_rt_decrement(first);
+            crate::refcount::typy_rt_decrement(second);
+            for each in [name, module, qualified_name] {
+                crate::refcount::typy_rt_decrement(each.cast());
+            }
         }
     }
 }

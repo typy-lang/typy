@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.113 |
+| Version | 1.122 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-21 |
+| Last updated | 2026-11-22 |
 
 ## 1. Introduction
 
@@ -134,6 +134,7 @@ or later.
 | STD-05 | When the oracle ends with an uncaught exception, the TyPy binary shall end with the same exception type on the last line of standard error, with the same message where every oracle version words it alike and otherwise with the wording of the newest (OI-14), and exit status 1. | M | 0.3 | 4.3 |
 | STD-06 | A program shall run its module-level statements in order, as `python file.py` does, with `__name__` equal to `"__main__"` in the main module. | M | 0.1 | 9.1 |
 | STD-07 | TyPy shall add no module, function, type, decorator or syntax of its own. A program shall use only the Python language and the standard library modules TyPy provides (LIB). | M | 0.1 | |
+| STD-08 | The first minor release after a CPython version's final release shall add it to the oracle and to the Python floors, with a requirement for each of its language changes, and the first minor release after a version's end of life shall stop accepting it as a floor (ADR-0095). | S | 0.11 | |
 
 ### 3.2 Command line and builds (CLI)
 
@@ -177,12 +178,13 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LEX-09 | A source file larger than 16 MiB shall be rejected with a diagnostic before it is parsed, so input size cannot exhaust the compiler's memory (NFR-09, NFR-14). | M | 0.1 | |
 | LEX-10 | A `\u` or `\U` escape of a surrogate code point, U+D800 to U+DFFF, in a `str` literal shall give that code point, as CPython keeps it. | S | 0.5 | 2.4.1.1 |
 | LEX-11 | Brackets nested more than 200 deep and blocks nested more than 99 deep shall be rejected with CPython's messages, and expressions and statements nested more than 25000 deep shall be rejected, so that no program nests past what the compiler's stack holds. | M | 0.3 | 2.1.8 |
+| LEX-12 | A template string (PEP 750) shall evaluate to a `string.templatelib.Template` whose `strings`, `interpolations` and `values`, iteration and `+` are CPython's, under a Python floor of 3.14 or later. | S | 0.13 | 2.4.3 |
 
 ### 3.4 Types and annotations (TYP)
 
 | ID | Requirement | Priority | Release | LR |
 | --- | --- | --- | --- | --- |
-| TYP-01 | Every function parameter except `self` and `cls`, and every function return, shall carry a type annotation. | M | 0.1 | 8.7 |
+| TYP-01 | Every function parameter except `self` and `cls`, and every function return that TYP-26 does not infer, shall carry a type annotation. | M | 0.1 | 8.7 |
 | TYP-02 | A local variable without an annotation shall take the type of its first assignment. | M | 0.1 | 7.2 |
 | TYP-03 | Assigning a value of another type to a variable shall be rejected. | M | 0.1 | 7.2 |
 | TYP-04 | Type inference shall stay within one function; it shall not use the bodies of other functions. | M | 0.1 | |
@@ -191,7 +193,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-07 | A value of type `T \| None`, or of a union of classes, shall narrow after `isinstance` tests. | M | 0.4 | |
 | TYP-08 | A name annotated `Final` shall not be assigned again. | M | 0.4 | |
 | TYP-09 | An `int` value shall be rejected where a `float` is declared, because CPython keeps it an `int`: `x: float = 1` prints `1`. Arithmetic that mixes `int` and `float` gives a `float`, as in Python (EXP-02). | M | 0.1 | |
-| TYP-10 | `typing.Any`, `typing.cast` and unannotated `object` values shall be rejected. | M | 0.1 | |
+| TYP-10 | A value whose type the program gives neither by an annotation nor by inference shall be rejected. | M | 0.1 | |
 | TYP-11 | The type of an expression shall be fixed when the program is compiled, and a value shall carry no type information of its own beyond the type object a heap object refers to (ADR-0012). | M | 0.1 | |
 | TYP-12 | A read of a local variable shall be rejected unless the variable is assigned on every path that reaches the read, so `UnboundLocalError` cannot occur. | M | 0.1 | 4.2.2 |
 | TYP-13 | A local variable or parameter of type `T \| None` shall narrow to `T` where an `is None` or `is not None` test, or a truth test that holds, shows it is not `None`, and using it as `T` anywhere else shall be rejected. | M | 0.2 | |
@@ -204,6 +206,16 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-20 | A class whose `__next__` returns `T` and whose `__iter__` returns the instance shall be an `Iterator[T]`, and a class whose `__iter__` returns an `Iterator[T]` an `Iterable[T]`, as `typing` reads the protocols, so its instances are held and passed where those are expected (ADR-0065). | S | 0.9 | |
 | TYP-21 | `Generator` of `typing` and `collections.abc` shall be accepted as the class of `isinstance` and of a class pattern, and a value of type `Iterable[T]` shall be testable against `Iterator` and `Generator`, with CPython's answers (ADR-0065). | S | 0.9 | |
 | TYP-22 | A typing value shall have the annotations `types.GenericAlias`, `types.UnionType` and `typing.TypeAliasType` where every oracle from the program's floor gives it that class, and shall be callable, testable with `isinstance` when held in a variable, and read through `type()`, `__origin__`, `__args__`, `__name__`, `typing.get_origin` and `typing.get_args` as CPython reads them; so shall the attributes of a type parameter, and an alias a function defines given its type arguments. | C | 1.0 | |
+| TYP-23 | A parameter, variable, attribute, collection item or result annotated `object` shall hold a value of any type, support `==`, `!=`, `is`, `hash`, `str`, `repr`, truth, `type()` and `isinstance`, and narrow by `isinstance`, a class pattern and `type(x) is C`, as Java narrows `Object` (ADR-0090). | S | 0.11 | 3.1 |
+| TYP-24 | `typing.cast(T, value)` shall give `value` as a `T` when it is one, and raise `TypeError` when it is not (ADR-0091). | S | 0.11 | |
+| TYP-25 | A value of type `typing.Any` shall support every operation, bound when the program runs, and raise the `TypeError` or `AttributeError` CPython raises for an operation it does not support (ADR-0094). | S | 0.13 | |
+| TYP-26 | A function without a result annotation, other than a generator function, one that calls itself, a method that overrides or is overridden, and a function a library exports, shall return the type its `return` statements give (ADR-0092). | S | 0.12 | 8.7 |
+| TYP-27 | An unannotated local variable assigned an empty list, dict or set display shall take its item types from the first statement of the same function that adds to it (ADR-0092). | S | 0.12 | 7.2 |
+| TYP-28 | `typing.Literal` of `int`, `str`, `bytes`, `bool` and `None` constants shall be accepted, a constant passing for its literal type and `==`, `in` and `match` narrowing to it. | S | 0.12 | |
+| TYP-29 | `typing.overload` shall be accepted on functions and methods, each call checked against the signature it matches and the body against every signature. | S | 0.12 | |
+| TYP-30 | `typing.Self` shall be accepted in a method's parameters and result as the class the method is called through. | S | 0.12 | |
+| TYP-31 | A function annotated to return `typing.TypeGuard[T]` or `typing.TypeIs[T]` shall narrow its argument where a call of it is tested, as CPython's type system reads them. | S | 0.12 | |
+| TYP-32 | A class derived from `typing.TypedDict` shall be accepted, its instances being dicts whose keys it names and whose values it types, with `total`, `Required`, `NotRequired` and `ReadOnly`. | S | 0.13 | |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -211,7 +223,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | --- | --- | --- | --- | --- |
 | DAT-01 | `int` shall be an integer without a size limit, as in Python. A value that fits in 63 bits shall be held inline, without a heap allocation. | M | 0.1 | 3.2.4 |
 | DAT-02 | `float` shall be an IEEE 754 double, and `str()` and `repr()` of a `float` shall give the same text as CPython. | M | 0.1 | 3.2.4 |
-| DAT-03 | `bool` shall have the values `True` and `False`. Arithmetic operators on `bool` operands shall be rejected; `&`, `\|`, `^` and `not` shall be accepted. | M | 0.1 | 3.2.4 |
+| DAT-03 | `bool` shall have the values `True` and `False`, and `&`, `\|`, `^` and `not` shall be accepted on them. | M | 0.1 | 3.2.4 |
 | DAT-04 | `None` shall be the only value of its type. | M | 0.1 | 3.2.1 |
 | DAT-05 | `str` shall be an immutable sequence of Unicode code points. `len()` and indexing shall count code points, and indexing shall return a `str` of length 1. | M | 0.1 | 3.2.5 |
 | DAT-06 | `bytes` shall be an immutable sequence of integers from 0 to 255. | M | 0.2 | 3.2.5 |
@@ -226,6 +238,8 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-15 | The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order. | M | 0.2 | 3.2.6 |
 | DAT-16 | `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results. | S | 0.3 | 3.2.7 |
 | DAT-17 | `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python. | S | 0.3 | 3.2.5 |
+| DAT-18 | `frozendict` (PEP 814) shall be an immutable, hashable mapping with CPython's methods, `\|` and text, under a Python floor of 3.15 or later. | S | 0.12 | 3.2.5 |
+| DAT-19 | Arithmetic on `bool` operands, and `abs`, `round` and `sum` of them, shall give CPython's results, a `bool` taken as the `int` 0 or 1, such as `True + 1 == 2` and `-True == -1`; `~` of a `bool`, which CPython deprecates since 3.12, shall be rejected (ADR-0098). | S | 0.11 | 3.2.4 |
 
 ### 3.6 Expressions (EXP)
 
@@ -252,7 +266,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-19 | `*` of a tuple display or of a variable that holds a fixed tuple, and `**` of a dict display whose keys are `str` literals, shall be accepted in a call of a built-in function or method, of a function value, of a method through a protocol value and of an exception class, binding as CPython binds them (ADR-0073, ADR-0083). | C | 0.10 | 6.3.4 |
 | EXP-20 | A default value other than a constant, such as `-1`, a tuple or a call, shall be accepted and evaluated once, when the function is defined. | C | 1.0 | 6.3.4 |
 | EXP-21 | `**` shall be accepted in a call of a function value, binding the keywords by the names of the function the value holds, as CPython binds them. | C | 1.0 | 6.3.4 |
-| EXP-22 | `*` of any iterable and `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print`, of a method through a protocol value and of an exception class, `*` in a call of a function value, and `**` in a call of `print`, binding when the program runs as CPython binds them (ADR-0083). | C | 0.11 | 6.3.4 |
+| EXP-22 | `*` of any iterable shall be accepted in a call of a built-in function or method, of a function of a built-in module, of a function value, of a method through a protocol value and of an exception class, and `**` of any `dict[str, V]` in a call of `print`, of a method through a protocol value and of an exception class, binding when the program runs as CPython binds them (ADR-0083, ADR-0099). | C | 0.11 | 6.3.4 |
+| EXP-23 | A list, set or generator comprehension whose element is `*iterable`, and a dict comprehension whose element is `**mapping` (PEP 798), shall unpack each into the result, under a Python floor of 3.15 or later. | S | 0.12 | 6.2.4 |
+| EXP-24 | `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print` and of a function of a built-in module, each key binding the keyword it names when the program runs, with CPython's error for a value its parameter does not take (ADR-0099). | C | 1.0 | 6.3.4 |
 
 ### 3.7 Simple statements (SMT)
 
@@ -357,6 +373,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-41 | A named tuple made by a call, such as `NamedTuple("P", [("x", int)])`, a subclass of a named tuple with `__new__`, `__init__` or attributes of its own, and a named tuple whose class defines `__len__`, `__getitem__`, `__iter__` or `__contains__` shall be accepted. | C | 1.0 | |
 | CLS-42 | A named tuple shall be accepted where a plain tuple type or an abstract collection is expected, keeping its class. | C | 1.0 | |
 | CLS-43 | A named tuple shall have `_make` and `_field_defaults`, and its `_replace` shall be a value, be called through its class and take `**` arguments, as CPython's are and do. | C | 0.14 | |
+| CLS-44 | A class derived from `enum.Enum`, `IntEnum`, `StrEnum`, `Flag` or `IntFlag` shall be accepted, with its members, `name`, `value`, `auto()`, iteration, `len`, lookup by value and by name, comparison, hashing and the `Flag` operators as CPython gives them (ADR-0093). | S | 0.12 | |
+| CLS-45 | A class derived from `abc.ABC` shall accept `@abstractmethod`, and making an instance of a class that leaves an abstract method without an override shall be rejected where the class is named and raise CPython's `TypeError` otherwise (ADR-0093). | S | 0.12 | |
+| CLS-46 | A class method called through `super()` shall run with the class of the instance as `cls` also when a class derived from the class of the enclosing method defines the class method again. | C | 0.14 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)
@@ -437,7 +456,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-04 | `sys.argv`, `sys.exit`, `sys.stdout`, `sys.stderr`, the `file` argument of `print`, `input` and `open` for text files shall be available. | M | 0.3 |
 | LIB-05 | The `math` module shall be available with its constants and its functions of numbers, with CPython's results and errors; a name the module gained after the program's Python floor shall be rejected. | M | 0.3 |
 | LIB-06 | The `dataclasses` names in CLS-05 and the `typing` names in TYP and GEN shall be available. | M | 0.4 |
-| LIB-07 | `os.environ`, `os.path`, `time` and `random` shall be available. | S | 1.0 |
+| LIB-07 | `os.environ` and `os.path` shall be available. | S | 1.0 |
 | LIB-08 | Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides. | M | 0.3 |
 | LIB-09 | Each standard library module TyPy provides shall be TyPy's own implementation, with the names and results the Python library documentation defines. | M | 0.1 |
 | LIB-10 | `str % values`, printf-style formatting of a string literal with a value, a tuple of values or a dict of named values, shall be accepted with Python's results, and a format that does not fit its values shall be rejected with CPython's message. | S | 0.3 |
@@ -456,6 +475,10 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-23 | `map`, `filter` and `callable` shall be available, `map` and `filter` giving iterators that go on after the function raises, as CPython's do (ADR-0077, ADR-0089). | S | 0.10 |
 | LIB-24 | `Sized`, `Hashable` and `MappingView` shall be accepted as types, and a class of the program with the methods of `Collection`, `Container` or `Reversible` shall be accepted where that collection is expected. | C | 0.14 |
 | LIB-25 | `map` and `filter` themselves shall be values, held in a variable, passed, written and given to `isinstance`, and `map` shall take `*` arguments, as CPython's classes are and do. | C | 1.0 |
+| LIB-26 | `math.integer` (PEP 791) shall be available with `comb`, `factorial`, `gcd`, `isqrt`, `lcm` and `perm`, under a Python floor of 3.15 or later. | S | 0.12 |
+| LIB-27 | `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097). | S | 0.12 |
+| LIB-28 | The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` shall be available, as CPython gives them. | S | 0.12 |
+| LIB-29 | `from __future__ import annotations` shall be accepted, and shall change nothing TyPy compiles. | S | 0.12 |
 
 ### 3.15 Memory management (MEM)
 
@@ -472,6 +495,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | MEM-09 | The last use of a variable in an assignment, or as an item a collection stores, shall move its value instead of counting it. | S | 0.3 |
 | MEM-10 | A list, dict, set, string or exception object that the compiler proves does not outlive its function shall be allocated without a heap call. | C | 1.0 |
 | MEM-11 | The attributes of an instance and the items of a tuple, a closure's captures and a cell's value shall be stored in decreasing order of alignment, while the program reads, writes, compares, hashes and writes out each in its declared order. | M | 0.8 |
+| MEM-12 | Each object's header shall hold the thread that owns it and a shared reference count, so a count changes with plain instructions in the owning thread and atomically in others, ready for threads that run in parallel over shared objects (ADR-0096). | S | 1.0 |
 
 ### 3.16 C interoperability (FFI)
 
@@ -562,6 +586,7 @@ cache, unless a row says otherwise.
 | NFR-24 | Each release shall report the share of a fixed corpus of Python modules that pass `mypy --strict` which TyPy compiles unchanged and runs with CPython's output, and the share shall not fall from one release to the next. | 0.11 | Corpus run in the release workflow |
 | NFR-25 | Each release archive shall come with a software bill of materials, in CycloneDX or SPDX form, that lists every component the archive holds with its version and licence. | 0.10 | Release workflow check |
 | NFR-26 | Each release archive shall be signed with Sigstore's keyless signing and carry SLSA build provenance from the release workflow, so a user verifies it without a key the project keeps. | 0.10 | `gh attestation verify` in the release workflow |
+| NFR-27 | On one thread, biased reference counts (MEM-12) shall cost no more than 2% of the geometric mean run time of the benchmark suite, against plain counts. | 1.0 | Benchmark with budget |
 
 ## 5. Release plan
 
@@ -577,55 +602,66 @@ cache, unless a row says otherwise.
 | 0.8 | Functions as values: nested functions and closures, `lambda`, `nonlocal`, keyword-only and positional-only parameters, the `key` argument of `sorted`, `list.sort`, `min` and `max` | Attributes, tuple items, captures and cells stored by decreasing alignment |
 | 0.9 | Generators: `yield` and `yield from`, generator functions of `Generator`, `Iterator` and `Iterable` types, generator expressions; classes with `__iter__` and `__next__` as iterators; `*args`, `**kwargs` and unpacking with `*` and `**` | Generator objects of one allocation |
 | 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions of a module with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking written out in full in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass` | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
-| 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable and dict in the calls of built-ins and function values (EXP-22) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
-| 0.12 | | The benchmark suite within 5 times C |
-| 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `ctypes` callbacks, headers and the rest of `ctypes` | |
+| 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable in the calls of built-ins and function values, and of a dict in a call of `print` (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24); arithmetic on `bool` as CPython does it (DAT-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
+| 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27) | The benchmark suite within 5 times C |
+| 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes` | |
 | 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |
 | 0.15 | | The benchmark suite within 3 times C |
-| 1.0 | The remaining requirements of section 3 marked 1.0 | Cycle collection, `weakref`; Windows; performance budgets |
+| 1.0 | The remaining requirements of section 3 marked 1.0 | Cycle collection, `weakref`; the object header of biased reference counts (MEM-12); Windows; performance budgets |
 
 ## 6. Out of scope
 
 ### 6.1 Excluded from TyPy
 
-These features cannot be compiled ahead of time with CPython's meaning, so
-TyPy rejects them (STD-04):
+TyPy rejects these features (STD-04). The research note "values whose type
+is known late" separates the limits of compiling ahead of time from the
+costs TyPy has not taken on.
 
-- `eval`, `exec`, `compile` and `__import__`.
-- Metaclasses, class decorators that change the class, and `type()` with
-  three arguments. A class decorator that returns the class it is given is
+These need what no ahead-of-time compiler gives without CPython or an
+interpreter inside the program:
+
+- `eval`, `exec`, `compile` and `__import__` of code that exists only when
+  the program runs.
+- Running CPython extension modules or CPython packages, such as NumPy,
+  which need CPython's object layout and C API.
+
+These are costs TyPy has not taken on, which a later decision may plan:
+
+- Metaclasses other than those `enum` and `abc` give (CLS-44, CLS-45),
+  class decorators that change the class, and `type()` with three
+  arguments. A class decorator that returns the class it is given is
   planned for 1.0 (CLS-38).
 - Adding or replacing attributes of classes, modules or functions at run
   time, and `__getattr__`, `__getattribute__`, `__setattr__` and
   `__delattr__`.
 - `globals()`, `locals()` and `vars()`.
-- `typing.Any`, `typing.cast` and untyped values (TYP-10).
+- A value whose type the program gives neither by an annotation nor by
+  inference (TYP-10). `object`, `typing.cast` and `typing.Any` are
+  planned (TYP-23 to TYP-25).
 - Complex numbers (LEX-08).
-- Running CPython extension modules or CPython packages, such as NumPy.
-- Names that are not Python's: TyPy offers no fixed-width integer types, no
-  `unsafe` blocks and no decorators of its own (STD-07).
+
+By design, TyPy adds no names of its own: no fixed-width integer types, no
+`unsafe` blocks and no decorators of its own (STD-07).
 
 ### 6.2 Planned for after 1.0
 
 | Feature | First Python version |
 | --- | --- |
-| `typing.Self`, exception groups and `except*` | 3.11 |
+| Exception groups and `except*` | 3.11 |
 | `async` and `await` | 3.5 |
-| Threads | |
+| Threads running in parallel over shared objects, through `threading`, `queue`, `concurrent.futures` and `concurrent.interpreters` (ADR-0096) | |
 | Multiple inheritance | |
 | `__del__` | |
 | A language server | |
 | `enumerate`, `zip` and `reversed` objects held as values | |
 | `from module import *` | |
+| Running the code that defines classes in the compiler, for metaclasses other than those `enum` and `abc` give (OI-34) | |
+| `doctest`, which runs the examples in a module's docstrings through `exec` when the program runs (OI-43) | |
 
 ## 7. Open issues
 
 A new question gets the next unused issue number, after the last of the
-resolved issues below.
-
-| ID | Question | Raised |
-| --- | --- | --- |
-| OI-31 | Which concurrency model does TyPy take, and does safe code promise freedom from data races? The answer decides the object header and how reference counts change, which ADR-0074 fixes at 1.0, so it is settled before 1.0 although threads come after it: CPython's free-threaded build uses biased reference counting, and Swift 6 and Rust check data races when a program compiles. A research note measures three models on TyPy's benchmarks, isolated workers as in Python 3.14's `concurrent.interpreters` (PEP 734), free threads as in CPython's free-threaded build (PEP 703), and sharing that the checker proves safe, and the question is settled in the 0.11 planning. | 2026-11-20 |
+resolved issues below. No question is open.
 
 ## 8. Resolved issues
 
@@ -661,6 +697,20 @@ resolved issues below.
 | OI-28 | How is LLVM pinned so that a release built in CI is byte for byte the build a developer makes of the same commit (NFR-06)? The dev image installs LLVM 23 from apt.llvm.org, which publishes dated snapshot builds of 23.1.x and removes old ones, so a CI image built later gets a newer build than a local image, and the 0.5.0 archive rebuilt locally differs from the published one. | TyPy builds LLVM 23.1.6 from its sources for each host in a workflow of its own, keeps each build as an asset of a toolchain release with its SHA-256 recorded in the repository, and the dev image and every CI job install that build (ADR-0054). | 2026-11-18 |
 | OI-29 | Should the macOS release archive be notarized, so a browser download runs without clearing the quarantine first? Notarizing needs a paid Apple Developer membership and a signing identity in CI. | No. The archive stays unsigned and not notarized, so CI holds no Apple signing key; the macOS page shows how to clear the quarantine, and a download with `curl` or `gh` carries none (ADR-0055). | 2026-11-20 |
 | OI-30 | How should a TyPy library on Linux find the stack of a thread its C host created with a stack smaller than `RLIMIT_STACK`? The stack check measures from the limit, so such a thread can overflow before `RecursionError`; `pthread_getattr_np` gives the thread's own stack but reads `/proc/self/maps` for the main thread on every export call. | The first export call on a thread other than the main one reads the thread's stack with `pthread_getattr_np` and keeps it for the thread; the main thread keeps `getrlimit`, so `/proc/self/maps` is never read (ADR-0075, FFI-15). | 2026-11-20 |
+| OI-31 | Which concurrency model does TyPy take, and does safe code promise freedom from data races? The answer decides the object header and how reference counts change, which ADR-0074 fixes at 1.0, so it is settled before 1.0 although threads come after it: CPython's free-threaded build uses biased reference counting, and Swift 6 and Rust check data races when a program compiles. A research note measures three models on TyPy's benchmarks, isolated workers as in Python 3.14's `concurrent.interpreters` (PEP 734), free threads as in CPython's free-threaded build (PEP 703), and sharing that the checker proves safe, and the question is settled in the 0.11 planning. | Threads run in parallel over shared objects, as CPython's free-threaded build runs them: biased reference counts, a lock in each list, dict and set, and memory safety under any interleaving. Safe code does not promise freedom from data races, as neither CPython nor Java does; the checker may warn about races it proves. The header takes the owner and the shared count before 1.0 (MEM-12, NFR-27, ADR-0096). | 2026-11-21 |
+| OI-32 | Is `object` a type, whose value of a type held by value is boxed and narrowed by `isinstance` and `match` as Java narrows `Object`, and in which release? TyPy rejects it today (TYP-10), although every program the research measured that mypy accepts with it is typable. | Yes, in 0.11: a value of type `object` is an object, boxed when it is held by value and narrowed by its type ID, as Java narrows `Object` (TYP-23, ADR-0090). | 2026-11-21 |
+| OI-33 | Does TyPy infer a function's result from its `return` statements, an empty collection's item type from its first use, and unannotated parameters as type parameters with a copy for each set of argument types, which changes TYP-01? | Results are inferred from `return` statements and empty collections from their first use, in 0.12; parameters keep their annotations, so module interfaces stay readable from signatures (TYP-26, TYP-27, ADR-0092). | 2026-11-21 |
+| OI-34 | Which code that defines classes, such as a metaclass, an `Enum` or a class decorator, may the compiler run while it compiles, and how is it shown to give the program CPython's meaning? | The checker expands the classes of `enum` and `abc`, as it expands dataclasses and named tuples, in 0.12; running definition code in the compiler stays planned for after 1.0 (CLS-44, CLS-45, ADR-0093). | 2026-11-21 |
+| OI-35 | Does TyPy accept `Any` as a value whose operations bind when the program runs, with CPython's `TypeError` and `AttributeError`, paid for only where `Any` appears? | Yes, in 0.13: the operations of an `Any` value bind when the program runs, with CPython's errors, and only code that uses `Any` pays (TYP-25, ADR-0094). | 2026-11-21 |
+| OI-36 | Does `typing.cast` compile to a check that raises `TypeError`, as mypyc compiles it, where CPython trusts the cast? | It compiles to a check that raises `TypeError` when the cast is wrong, as mypyc compiles it, in 0.11 (TYP-24, ADR-0091). | 2026-11-21 |
+| OI-37 | Which CPython versions join the oracle after 3.15, and when does the lowest Python floor rise above 3.12? | Each CPython version joins the oracle in the first minor release after its final release, and the lowest floor rises in the first minor release after a version's end of life; 3.12 stays the lowest until October 2028 (STD-08, ADR-0095). | 2026-11-21 |
+| OI-38 | In which release do template strings (PEP 750) become a planned feature, from the Python floor 3.14? TyPy 0.10 classes them as a form it cannot compile with CPython's meaning, though a template is an immutable object fixed when the expression runs. | Template strings are planned for 0.13, from the Python floor 3.14 (LEX-12). | 2026-11-21 |
+| OI-39 | In which releases do `Literal`, `@overload`, `Self`, `TypeGuard`, `TypeIs` and `TypedDict` come, and does `Self` move from after 1.0? About one definition in seven of the standard library's stubs is an overload. | `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` come in 0.12, `Self` moving from after 1.0, and `TypedDict` in 0.13 (TYP-28 to TYP-32). | 2026-11-21 |
+| OI-40 | In which release do PEP 798's unpacking in comprehensions, `frozendict` (PEP 814) and `math.integer` (PEP 791) come, from the Python floor 3.15? | All three come in 0.12, from the Python floor 3.15 (EXP-23, DAT-18, LIB-26). | 2026-11-21 |
+| OI-41 | In which release does the `typy-stdlib` crate of ADR-0007 start, with which modules first, and are its signatures checked against typeshed? | The crate and `_typy` start in 0.12 with `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string`, their signatures compared with typeshed in a test (LIB-27, ADR-0097). | 2026-11-21 |
+| OI-42 | Does TyPy accept `from __future__ import annotations`, and in which release? Under it CPython keeps each annotation as a string and lets an annotation name a class defined later; TyPy reads annotations when it compiles, so the import changes no meaning it gives, but it is E0206 today. It is the first error of 127 of the 584 algorithm scripts of the [corpus](../testing/corpus-report.md) and of 2 of its 83 mypyc run tests. | Yes, in 0.12 (LIB-29); until then it is E0201, planned for 0.12. | 2026-11-22 |
+| OI-43 | How does TyPy treat a module whose main program runs `doctest.testmod()`? doctest reads the examples in the module's docstrings and runs them through `exec` when the program runs, which a compiled program cannot do; `doctest` is E0206 today. It is the first error of 165 of the 584 algorithm scripts of the corpus. | `doctest` is planned for a release after 1.0, and is E0201 until then; its modules stay in the corpus, refused. | 2026-11-22 |
+| OI-44 | In which release do the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format`, `id` and `bytearray` come? Each is E0202 today, as a builtin TyPy does not provide (STD-04), and together they are the first error of 24 modules of the corpus. | `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` come in 0.12 (LIB-28), and are E0201, planned for 0.12, until then; `bytearray` gets its design when it is built. `id` stays refused: its values are not CPython's, which STD-03 leaves out of what a program may print. | 2026-11-22 |
 
 ## Appendix A. Disposition of the specification pack
 

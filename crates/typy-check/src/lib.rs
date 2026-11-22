@@ -45,13 +45,14 @@ pub use open::OpenAccess;
 pub use sys::SysValue;
 pub use typed::{
     Argument, AssignTarget, Attribute, BuiltinValue, CDataExpr, CDataPlace, CapturedVariable,
-    ClassId, Conversion, DictPart, EachMember, ExceptionPart, FStringPart, FileAttribute,
-    FormattedValue, FunctionId, FunctionSignature, Generator, GeneratorTypes, ImportBinding,
-    InitCall, IsInstanceTest, KeyedOperation, LoopSource, MemberTest, OpenOptions, OperatorCall,
-    OperatorKind, PartOperation, Passed, PercentConversion, PercentField, PercentNumber,
-    PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind, SignatureParameter, SpreadKind,
-    SpreadPart, Symbol, SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr,
-    TypedExprKind, TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt,
-    TypedTypeAlias, WithProtocol, dump,
+    CastCheck, ClassId, Conversion, DictPart, EachMember, ExceptionPart, ExceptionValues,
+    FStringPart, FileAttribute, FormattedValue, FunctionId, FunctionSignature, Generator,
+    GeneratorTypes, ImportBinding, InitCall, IsInstanceTest, KeyedOperation, LoopSource,
+    MemberTest, OpenOptions, OperatorCall, OperatorKind, PartOperation, Passed, PercentConversion,
+    PercentField, PercentNumber, PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind,
+    SignatureParameter, SpreadKind, SpreadPart, Symbol, SymbolId, SymbolKind, TypedCase,
+    TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
+    TypedPattern, TypedProgram, TypedStmt, TypedTypeAlias, TypedTypingValue, UnpackedException,
+    WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

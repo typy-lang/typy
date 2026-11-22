@@ -28,8 +28,14 @@ impl BodyChecker<'_> {
             return Self::cdata_class(class, span);
         }
         // A nested function reads its own name and its captures from its function object
-        // (FUN-04).
+        // (FUN-04); one that holds a nested function is refused as a value as the variable
+        // that holds it is.
         if let Some(read) = self.closure_read(id, span) {
+            if let Some(function) = self.function_held(id)
+                && let Some(refused) = self.refused_function_value(function, id, span)
+            {
+                return refused;
+            }
             return read;
         }
         if self.in_function()
@@ -201,6 +207,16 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn unknown_name(&mut self, id: &str, span: Span) -> TypedExpr {
+        // `frozendict` is a builtin from Python 3.15 (PEP 814), planned for 0.12.
+        if id == "frozendict" && self.program.floor >= 15 {
+            let diagnostic = Diagnostic::new(
+                DiagnosticCode::error(201),
+                span,
+                "`frozendict` is planned for TyPy 0.12 (DAT-18)",
+            )
+            .with_rule(RuleId::DAT_18);
+            return self.error(diagnostic, span);
+        }
         let diagnostic = match unprovided(id) {
             Some(Unprovided::Planned { release, rule }) => Diagnostic::new(
                 DiagnosticCode::error(201),
@@ -292,28 +308,27 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::Downcast(Box::new(read)), narrowed, span)
     }
 
-    /// Reports a name that only annotations read: a type alias of the module, or a name of
-    /// `typing`, `collections.abc` or `types`.
+    /// Returns a type alias read as a value, and reports a name that only annotations read:
+    /// a module of `typing`, `collections.abc` or `types` itself, or a name whose class
+    /// depends on the import that ran last; a name of those modules is a typing value
+    /// (TYP-18).
     fn annotation_only(&mut self, id: &str, span: Span) -> Option<TypedExpr> {
         if let Some(alias) = self.type_alias_value(id, span) {
             return Some(alias);
         }
-        if self.program.annotation_names.contains_key(id)
-            || self.program.annotation_modules.contains_key(id)
-        {
-            return Some(
-                self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(201),
-                        span,
-                        format!("using `{id}` as a value is planned for TyPy 0.11 (TYP-18)"),
-                    )
-                    .with_rule(RuleId::TYP_18)
-                    .with_help("TyPy reads it in annotations, `isinstance` and class patterns"),
-                    span,
-                ),
-            );
-        }
-        None
+        let message = if let Some(module) = self.program.annotation_modules.get(id) {
+            format!(
+                "the module `{module}` is read through its names, such as `{id}.Optional`, \
+                 and is no value itself"
+            )
+        } else if self.program.annotation_names.contains_key(id) {
+            format!("`{id}` is read only in annotations, `isinstance` and class patterns")
+        } else {
+            return None;
+        };
+        Some(self.error(
+            Diagnostic::new(DiagnosticCode::error(202), span, message).with_rule(RuleId::TYP_18),
+            span,
+        ))
     }
 }

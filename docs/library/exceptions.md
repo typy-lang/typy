@@ -232,6 +232,34 @@ for text in ["", "x"]:
             print(item)
 ```
 
+A call of an exception class takes `*` of any iterable, and `**` of a
+dict held in a variable (EXP-22). The values `*` gives join the other
+positional values in one tuple of the first value's type, so
+`ValueError(*codes)` with a `list[int]` gives `args` the member
+`tuple[int, ...]`, and a value of another type is E0409. A class without
+an `__init__` of its own takes no keywords, so a dict `**` gives raises
+CPython's `TypeError` when it holds an entry, such as `ValueError() takes
+no keyword arguments`. A class with an `__init__` binds the values to it
+when the call runs, as any class does, and keeps those given by position
+as `args`. `OSError` and its subclasses read `errno`, `strerror` and the
+file names by position, so `*` of a value only the run knows is E0202 in
+a call of one without an `__init__` of the program's:
+
+<!-- typy-expect: accepted -->
+```python
+def check(codes: list[int]) -> None:
+    try:
+        raise ValueError(*codes)
+    except ValueError as error:
+        print(len(error.args), error)
+        for item in error.args:
+            print(item)
+
+
+check([404, 500])
+check([])
+```
+
 `code` of a `SystemExit` is `None` for `sys.exit()`, the argument for
 one, and the tuple for several. A `KeyError` TyPy raises holds the
 missing key, so `args` of a `KeyError` includes `tuple[K]` for the key
