@@ -81,6 +81,8 @@ All notable changes to TyPy are recorded here. The format follows
   messages for a number of arguments it does not take (EXP-22). It was
   E0201. `*` of a value only the run knows in a call of a function of
   `ctypes` is E0202.
+- `**` of a dict held in a variable in a call of a builtin other than
+  `print` is planned for 1.0 (EXP-24, ADR-0099); it stays E0201.
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such

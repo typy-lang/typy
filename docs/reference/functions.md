@@ -326,7 +326,7 @@ print(math.gcd(*numbers), math.hypot(*[3.0, 4.0]), math.pow(*[2.0, 3.0]))
 ```
 
 `**` of a dict held in a variable in a call of a builtin other than
-`print` is planned for 0.11 (EXP-22).
+`print` is planned for 1.0 (EXP-24, ADR-0099).
 
 ## Nested functions
 
@@ -736,7 +736,7 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
+| `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 1.0 | E0201 (EXP-24) |
 | `*` of a value only the run knows in a call of a function of `ctypes` | E0202 (EXP-22) |
 | `*` in a call of a built-in function whose result type depends on the number of values it gives, such as `tuple(*rows)` or `max(*rows)` of lists | E0202 (EXP-22) |
 | `*` in a call of a built-in function given more values before the first `*` than it takes | E0404 (EXP-22) |

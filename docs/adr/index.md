@@ -104,3 +104,4 @@ supersedes it.
 | [ADR-0096](0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md) | Run threads in parallel over shared objects with biased reference counts | Accepted | 2026-11-21 |
 | [ADR-0097](0097-check-the-standard-librarys-signatures-against-typeshed.md) | Check the standard library's signatures against typeshed | Accepted | 2026-11-21 |
 | [ADR-0098](0098-do-arithmetic-on-bool-as-cpython-does.md) | Do arithmetic on bool as CPython does | Accepted | 2026-11-21 |
+| [ADR-0099](0099-plan-star-star-in-calls-of-built-ins-for-1-0.md) | Plan `**` in calls of built-ins for 1.0 | Accepted | 2026-11-22 |

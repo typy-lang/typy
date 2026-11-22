@@ -711,40 +711,39 @@ whose `__iter__` returns an iterator of another kind goes over the call of
 
 A call with `*value` or `**value` goes through `body/call_expression.rs`. For a
 callee that `binds_when_it_runs` does not take, a builtin, a function value or
-an exception class, `written_out` gives the call's arguments
-with each `*` of a tuple display or of a variable of a fixed tuple as its items,
-`name[0]` on, and each `**` of a dict display with `str` literal keys as keyword
-arguments, checked as written (EXP-19). It keeps a call `bind_to` or `print`
-binds, and otherwise refuses it with E0201, planned for 0.11 (EXP-22). A call of
-a function value with `*` (`body/value_unpacking.rs`) is
-`TypedExprKind::CallValueUnpacked`: the values before the first `*`, converted
-to their parameters, then one `Spread` list of the rest, of the one type the
-parameters left take. Lowering checks the count with `typy_rt_value_arity`,
-which raises CPython's `TypeError` naming the function from the value's
-descriptor, counting a bound method's instance and writing a built-in's count as
-a built-in does, then reads each item with `ListGet` and calls through the
-value. `**` there is E0201, planned for 1.0 (EXP-21). A call of `print` with
-`**` keeps the dicts in `PrintCall::options`; lowering (`print_options.rs`)
-binds the keywords and the dicts against a description of `print` with
-`CallName`, `CallMerge` and `CallCheck`, as for any call, then
-`typy_rt_print_check` raises CPython's error for a `sep` or an `end` whose value
-is no `str` and a `file` whose value has no `write` or is a binary file, each
-value read as the one it holds, so `None` keeps the default whatever the dict's
-value type. Each keyword no argument names takes `typy_rt_print_text`,
-`typy_rt_print_file` or `typy_rt_print_flush` from the merged dict, which lives
-to the end of the call; a keyword reads the dict only when its value type may
-hold what it takes. `Argument::passed`
-says how each argument reaches its parameter: `Position`, `Name`, `Keyword` for
-one `**kwargs` takes, `Items` for the items of a tuple of a fixed number of
-items `*` unpacks, each bound as a positional argument, `Tail` for the list of
-every positional value from the first `*iterable` of unknown length on,
-`Entries` for a `**dict`, and `Default` for a default a call makes.
-`body/unpacked_arguments.rs` gives the tail one type: that of the parameters it
-may reach when they share one, which each part must hold its values alike to,
-E0404, or else the first value's, which each part must hold alike, E0409, and
-which must fit each parameter it may reach, E0404; the dicts share one value
-type, which fits each parameter a keyword may still fill. Such a call binds when
-it runs (ADR-0073).
+an exception class, `written_out` gives the call's arguments with each `*` of a
+tuple display or of a variable of a fixed tuple as its items, `name[0]` on, and
+each `**` of a dict display with `str` literal keys as keyword arguments,
+checked as written (EXP-19). It keeps a call `bind_to` or `print` binds, or one
+the arms below take, and otherwise refuses `**` of a dict in a call of a builtin
+with E0201, planned for 1.0 (EXP-24, ADR-0099). A call of a function value with
+`*` (`body/value_unpacking.rs`) is `TypedExprKind::CallValueUnpacked`: the
+values before the first `*`, converted to their parameters, then one `Spread`
+list of the rest, of the one type the parameters left take. Lowering checks the
+count with `typy_rt_value_arity`, which raises CPython's `TypeError` naming the
+function from the value's descriptor, counting a bound method's instance and
+writing a built-in's count as a built-in does, then reads each item with
+`ListGet` and calls through the value. `**` there is E0201, planned for 1.0
+(EXP-21). A call of `print` with `**` keeps the dicts in `PrintCall::options`;
+lowering (`print_options.rs`) binds the keywords and the dicts against a
+description of `print` with `CallName`, `CallMerge` and `CallCheck`, as for any
+call, then `typy_rt_print_check` raises CPython's error for a `sep` or an `end`
+whose value is no `str` and a `file` whose value has no `write` or is a binary
+file, each value read as the one it holds, so `None` keeps the default whatever
+the dict's value type. Each keyword no argument names takes
+`typy_rt_print_text`, `typy_rt_print_file` or `typy_rt_print_flush` from the
+merged dict, which lives to the end of the call; a keyword reads the dict only
+when its value type may hold what it takes. `Argument::passed` says how each
+argument reaches its parameter: `Position`, `Name`, `Keyword` for one `**kwargs`
+takes, `Items` for the items of a tuple of a fixed number of items `*` unpacks,
+each bound as a positional argument, `Tail` for the list of every positional
+value from the first `*iterable` of unknown length on, `Entries` for a `**dict`,
+and `Default` for a default a call makes. `body/unpacked_arguments.rs` gives the
+tail one type: that of the parameters it may reach when they share one, which
+each part must hold its values alike to, E0404, or else the first value's, which
+each part must hold alike, E0409, and which must fit each parameter it may
+reach, E0404; the dicts share one value type, which fits each parameter a
+keyword may still fill. Such a call binds when it runs (ADR-0073).
 
 A function of the program read without a call, by its name or as
 `module.name`, is `TypedExprKind::FunctionValue(id)`, of the type

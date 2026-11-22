@@ -82,9 +82,9 @@ impl BodyChecker<'_> {
                 DiagnosticCode::error(201),
                 at,
                 "`**` of a dict held in a variable in a call of a builtin other than `print` is \
-                 planned for TyPy 0.11 (EXP-22)",
+                 planned for TyPy 1.0 (EXP-24)",
             )
-            .with_rule(RuleId::EXP_22)
+            .with_rule(RuleId::EXP_24)
             .with_help("unpack the values into variables first, and pass them one by one"),
             span,
         )

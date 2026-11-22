@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.118 |
+| Version | 1.119 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-21 |
+| Last updated | 2026-11-22 |
 
 ## 1. Introduction
 
@@ -266,8 +266,9 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | EXP-19 | `*` of a tuple display or of a variable that holds a fixed tuple, and `**` of a dict display whose keys are `str` literals, shall be accepted in a call of a built-in function or method, of a function value, of a method through a protocol value and of an exception class, binding as CPython binds them (ADR-0073, ADR-0083). | C | 0.10 | 6.3.4 |
 | EXP-20 | A default value other than a constant, such as `-1`, a tuple or a call, shall be accepted and evaluated once, when the function is defined. | C | 1.0 | 6.3.4 |
 | EXP-21 | `**` shall be accepted in a call of a function value, binding the keywords by the names of the function the value holds, as CPython binds them. | C | 1.0 | 6.3.4 |
-| EXP-22 | `*` of any iterable and `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print`, of a method through a protocol value and of an exception class, `*` in a call of a function value, and `**` in a call of `print`, binding when the program runs as CPython binds them (ADR-0083). | C | 0.11 | 6.3.4 |
+| EXP-22 | `*` of any iterable shall be accepted in a call of a built-in function or method, of a function of a built-in module, of a function value, of a method through a protocol value and of an exception class, and `**` of any `dict[str, V]` in a call of `print`, of a method through a protocol value and of an exception class, binding when the program runs as CPython binds them (ADR-0083, ADR-0099). | C | 0.11 | 6.3.4 |
 | EXP-23 | A list, set or generator comprehension whose element is `*iterable`, and a dict comprehension whose element is `**mapping` (PEP 798), shall unpack each into the result, under a Python floor of 3.15 or later. | S | 0.12 | 6.2.4 |
+| EXP-24 | `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print` and of a function of a built-in module, each key binding the keyword it names when the program runs, with CPython's error for a value its parameter does not take (ADR-0099). | C | 1.0 | 6.3.4 |
 
 ### 3.7 Simple statements (SMT)
 
@@ -598,7 +599,7 @@ cache, unless a row says otherwise.
 | 0.8 | Functions as values: nested functions and closures, `lambda`, `nonlocal`, keyword-only and positional-only parameters, the `key` argument of `sorted`, `list.sort`, `min` and `max` | Attributes, tuple items, captures and cells stored by decreasing alignment |
 | 0.9 | Generators: `yield` and `yield from`, generator functions of `Generator`, `Iterator` and `Iterable` types, generator expressions; classes with `__iter__` and `__next__` as iterators; `*args`, `**kwargs` and unpacking with `*` and `**` | Generator objects of one allocation |
 | 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions of a module with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking written out in full in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass` | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
-| 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable and dict in the calls of built-ins and function values (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24); arithmetic on `bool` as CPython does it (DAT-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
+| 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable in the calls of built-ins and function values, and of a dict in a call of `print` (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24); arithmetic on `bool` as CPython does it (DAT-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
 | 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27) | The benchmark suite within 5 times C |
 | 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes` | |
 | 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program | |

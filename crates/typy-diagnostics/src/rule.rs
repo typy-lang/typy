@@ -213,6 +213,8 @@ impl RuleId {
     pub const EXP_22: Self = Self("EXP-22");
     /// A list, set or generator comprehension whose element is `*iterable`, and a dict comprehension whose element is `**mapping` (PEP 798), shall unpack each into the result, under a Python floor of 3.15 or later.
     pub const EXP_23: Self = Self("EXP-23");
+    /// `**` of any `dict[str, V]` shall be accepted in a call of a built-in function or method other than `print` and of a function of a built-in module, each key binding the keyword it names when the program runs, with CPython's error for a value its parameter does not take (ADR-0099).
+    pub const EXP_24: Self = Self("EXP-24");
     /// A module-level `ctypes.CDLL` or `ctypes.cdll.LoadLibrary` call with a string literal shall link the named library.
     pub const FFI_01: Self = Self("FFI-01");
     /// A C function shall be callable when its `argtypes` and `restype` are assigned at module level, with ctypes types, before its first call. A call to a function without both shall be rejected.
@@ -576,6 +578,7 @@ impl RuleId {
         Self::EXP_21,
         Self::EXP_22,
         Self::EXP_23,
+        Self::EXP_24,
         Self::FFI_01,
         Self::FFI_02,
         Self::FFI_03,

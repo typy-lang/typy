@@ -96,15 +96,15 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 }
 
 #[test]
-fn exp_22_star_star_of_a_dict_in_a_call_of_a_builtin_is_planned() {
+fn exp_24_star_star_of_a_dict_in_a_call_of_a_builtin_is_planned() {
     let planned = "`**` of a dict held in a variable in a call of a builtin other than `print` \
-                   is planned for TyPy 0.11 (EXP-22)";
+                   is planned for TyPy 1.0 (EXP-24)";
     let source = format!("{PAIR}options = {{\"reverse\": True}}\nprint(sorted([1], **options))\n");
     let found = messages(&source);
     assert!(
         found
             .iter()
-            .any(|(code, text, rule)| code == "E0201" && text == planned && rule == "EXP-22"),
+            .any(|(code, text, rule)| code == "E0201" && text == planned && rule == "EXP-24"),
         "{source}: {found:?}"
     );
 }
