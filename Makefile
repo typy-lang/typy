@@ -111,10 +111,10 @@ bench-peers: dev ## Download and install the languages bench-compare measures th
 	@$(COMPOSE) exec -T -u root dev chown dev:dev /var/cache/typy/bench
 	@$(EXEC) scripts/bench-peers.sh
 
-# One job at a time, as the published benchmark report runs.
+# One job at a time unless asked; the report names the jobs at once.
 BENCH_LANES ?= 1
 
-bench-compare: runtime ## Compare TyPy with the languages of make bench-peers on tests/bench/programs, about 90 minutes, and write the results into docs/testing/benchmark-report.md; BENCH_WORKLOADS names a subset, BENCH_LANES=N runs N jobs at once for a quicker, noisier check
+bench-compare: runtime ## Compare TyPy with the languages of make bench-peers on tests/bench/programs, about two hours, and write the results into docs/testing/benchmark-report.md; BENCH_WORKLOADS names a subset, BENCH_LANES=N runs N jobs at once for a quicker, noisier check
 	@$(EXEC) cargo build --release -p typy-cli --locked
 	@$(EXEC) python3.15 tests/bench/compare.py --lanes $(BENCH_LANES) $(BENCH_WORKLOADS)
 	@$(EXEC) python3.15 tests/bench/report.py

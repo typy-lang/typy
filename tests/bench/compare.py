@@ -4,14 +4,14 @@ benchmark report describes: each peer builds each workload from a clean state, i
 checked against CPython 3.15's, and then it is timed at the workload's main size, with its peak
 memory, and once at a quarter and at half of it.
 
-Every run is pinned to the same two cores with taskset, one job at a time, which the published
-report uses. `--lanes N` runs N jobs at once instead, each lane pinned to the hardware threads
-of a physical core of its own other than core 0: a quicker check, whose times run higher and vary
-more, since the lanes share the caches and a busy chip lowers its clock. A run's time is the wall
-time of the
-process, and its memory the peak resident size the kernel reports through `wait4`. The raw
-figures go to .tmp/bench/results.json, which tests/bench/report.py turns into tables. A peer that
-cannot build a workload is recorded with the reason, never left out silently.
+Every run is pinned to the same two cores with taskset, one job at a time. `--lanes N` runs N
+jobs at once instead, each lane pinned to the hardware threads of a physical core of its own
+other than core 0: a quicker run, whose times run higher and vary more, since the lanes share the
+caches and a busy chip lowers its clock; the report names the cores and the jobs at once. A
+run's time is the wall time of the process, and its memory the peak resident size the kernel
+reports through `wait4`. The raw figures go to .tmp/bench/results.json, which
+tests/bench/report.py turns into tables. A peer that cannot build a workload is recorded with the
+reason, never left out silently.
 """
 
 from __future__ import annotations
