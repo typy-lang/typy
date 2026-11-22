@@ -27,6 +27,35 @@ pub(crate) struct Arguments {
     /// Fail with status 1 when there are warnings, before any code is generated.
     #[arg(long, global = true)]
     pub(crate) deny_warnings: bool,
+    /// Write each command typy runs, such as the C linker with its arguments, to standard
+    /// error before running it.
+    #[arg(short, long, global = true)]
+    pub(crate) verbose: bool,
+    /// Write how long each stage of the command took to standard error.
+    #[arg(long, global = true)]
+    pub(crate) timings: bool,
+}
+
+/// The options every command takes.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Global {
+    /// `--deny-warnings` (DIA-07).
+    pub(crate) deny_warnings: bool,
+    /// `-v` (CLI-23).
+    pub(crate) verbose: bool,
+    /// `--timings` (CLI-22).
+    pub(crate) timings: bool,
+}
+
+impl Arguments {
+    /// Returns the options every command takes.
+    pub(crate) const fn global(&self) -> Global {
+        Global {
+            deny_warnings: self.deny_warnings,
+            verbose: self.verbose,
+            timings: self.timings,
+        }
+    }
 }
 
 /// The commands of `typy`; any other runs the program `typy-NAME` from `PATH` (ADR-0105).
@@ -57,6 +86,8 @@ pub(crate) enum Command {
         #[command(flatten)]
         mode: Mode,
         #[command(flatten)]
+        temps: Temps,
+        #[command(flatten)]
         settings: Settings,
         #[command(flatten)]
         library: Library,
@@ -74,6 +105,8 @@ pub(crate) enum Command {
         file: Utf8PathBuf,
         #[command(flatten)]
         mode: Mode,
+        #[command(flatten)]
+        temps: Temps,
         #[command(flatten)]
         settings: Settings,
         /// The program's arguments.
@@ -145,6 +178,14 @@ impl Mode {
             (false, false) => BuildMode::Debug,
         }
     }
+}
+
+/// The flag that keeps a build's intermediate files (CLI-24).
+#[derive(Clone, Copy, Debug, Args)]
+pub(crate) struct Temps {
+    /// Keep the build's object file beside its output, named after it: `app.o` for `app`.
+    #[arg(long)]
+    pub(crate) save_temps: bool,
 }
 
 /// The flag that builds or checks the main file as a C library (CLI-09).

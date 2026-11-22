@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.106 |
+| Version | 2.107 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -3605,6 +3605,7 @@ copies nothing.
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
 | Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
 | `typy print WHAT` | `command::print` writes one fact a line, in `typy.toml`'s form (CLI-25): `targets` from `TargetTriple::ALL` with `builds_on` the host; `target-cpus` the triple's baseline `TargetTriple::cpu`, `native` with `typy_codegen::host_processor` for the host, and the processors LLVM lists, which it writes only to standard error, so `print` runs its own `typy` with the hidden command `llvm-processor-help` and reads them from the child; `paths` from `RuntimeArchive::path_beside` and the cache directory; `settings` from `ProjectSettings::read` with the command line's overrides, refused as `typy check` refuses them; and `version` |
+| Inspection | `-v` and `--timings` are global options, and `--save-temps` an option of `build` and `run` (ADR-0104). `Pipeline::with_verbose` passes `-v` to `Linker::with_verbose` and `Toolchain::with_verbose`, whose `run` writes `typy_build::command_line` of each tool before running it; `typy run -v` writes the program's command too (CLI-23). `Pipeline::timed` records each stage it runs, `load`, `check`, `lower`, `generate` and `link`, behind a `Mutex` of the pipeline, which the conformance suite shares between threads; `command::write_timings` writes them and their total after the command, also when it fails (CLI-22). `Pipeline::with_save_temps` writes the object a build generated beside its output, named after the output up to its first dot, E0106 when it cannot (CLI-24) |
 | External commands | clap's external subcommand gives `typy NAME ARGS` for any NAME that is not a command; `command::external` accepts a NAME of letters, digits, `-` and `_` only, so it never names a path, finds the first executable `typy-NAME` in `PATH`, and runs it with ARGS, `TYPY` set to `typy`'s own path, its streams and status passed through as `typy run` passes a program's; otherwise exit status 2 (CLI-32, ADR-0105) |
 | `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |
 | Logging | `--log-level` arrives in 0.3 with UC-10; the 0.1 compiler has no log events |

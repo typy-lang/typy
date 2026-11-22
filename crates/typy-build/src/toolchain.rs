@@ -20,6 +20,8 @@ pub struct Toolchain {
     pub(crate) object_copier: String,
     /// Whether programs link statically, as they do for musl.
     pub(crate) static_link: bool,
+    /// Whether each command is written to standard error before it runs (CLI-23).
+    verbose: bool,
 }
 
 impl Toolchain {
@@ -75,6 +77,14 @@ impl Toolchain {
         self
     }
 
+    /// Returns the tools, writing each command to standard error before it runs when
+    /// `verbose`, as `typy -v` asks (CLI-23).
+    #[must_use]
+    pub const fn with_verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
+    }
+
     /// Returns the target the tools build for.
     pub(crate) const fn target(&self) -> TargetTriple {
         self.target
@@ -83,6 +93,9 @@ impl Toolchain {
     /// Runs one of the tools with `arguments`; a tool that is not installed is E0701, which
     /// names the target it builds for (UC-08, flow 3a).
     pub(crate) fn run(&self, program: &str, arguments: &[String]) -> Result<(), Diagnostics> {
+        if self.verbose {
+            eprintln!("{}", command_line(program, arguments));
+        }
         run_tool(program, arguments, self.target)
     }
 
@@ -97,8 +110,30 @@ impl Toolchain {
             archiver: archiver.to_owned(),
             object_copier: object_copier.to_owned(),
             static_link,
+            verbose: false,
         }
     }
+}
+
+/// Returns a command as a shell would read it, each word that holds anything but letters,
+/// digits and `-_./=:,+@%` in single quotes, so a user can run it again.
+#[must_use]
+pub fn command_line(program: &str, arguments: &[String]) -> String {
+    std::iter::once(program)
+        .chain(arguments.iter().map(String::as_str))
+        .map(|word| {
+            let plain = !word.is_empty()
+                && word.chars().all(|character| {
+                    character.is_ascii_alphanumeric() || "-_./=:,+@%".contains(character)
+                });
+            if plain {
+                word.to_owned()
+            } else {
+                format!("'{}'", word.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]

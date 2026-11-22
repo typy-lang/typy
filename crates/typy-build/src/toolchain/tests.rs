@@ -88,3 +88,21 @@ fn typy_toml_knows_the_targets_the_code_generator_supports() {
         .collect();
     assert_eq!(triples, typy_source::TARGET_TRIPLES);
 }
+
+#[test]
+fn cli_23_a_command_is_shown_as_a_shell_reads_it() {
+    let arguments = [
+        "-o".to_owned(),
+        "my app".to_owned(),
+        "it's".to_owned(),
+        String::new(),
+    ];
+    assert_eq!(
+        super::command_line("cc", &arguments),
+        "cc -o 'my app' 'it'\\''s' ''"
+    );
+    assert_eq!(
+        super::command_line("/usr/bin/cc", &["-Wl,--gc-sections".to_owned()]),
+        "/usr/bin/cc -Wl,--gc-sections"
+    );
+}

@@ -1,5 +1,8 @@
 //! Runs the stages of one build in order and stops after the stage `--emit` names.
 
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
+
 use camino::{Utf8Path, Utf8PathBuf};
 use typy_build::{
     Artifact, BuildRequest, EmitStage, LibraryKind, LibraryLayout, Linker, RuntimeArchive,
@@ -19,11 +22,31 @@ use crate::success::{Success, Warnings};
 /// Runs builds and checks. It holds the compiler's location, which finds the runtime
 /// archive, and the settings the command line gives, so one pipeline runs any number of
 /// builds (detailed design section 12).
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Pipeline {
     compiler: Utf8PathBuf,
     overrides: SettingOverrides,
     deny_warnings: bool,
+    /// Whether each command of the C toolchain is written before it runs (CLI-23).
+    verbose: bool,
+    /// Whether the object file of a build is kept beside its output (CLI-24).
+    save_temps: bool,
+    /// How long each stage that ran took, in order, for `--timings` (CLI-22). A pipeline
+    /// may run builds on several threads, as the conformance suite does, so it is locked.
+    timings: Mutex<Vec<(&'static str, Duration)>>,
+}
+
+impl Clone for Pipeline {
+    fn clone(&self) -> Self {
+        Self {
+            compiler: self.compiler.clone(),
+            overrides: self.overrides,
+            deny_warnings: self.deny_warnings,
+            verbose: self.verbose,
+            save_temps: self.save_temps,
+            timings: Mutex::new(self.timings()),
+        }
+    }
 }
 
 impl Pipeline {
@@ -35,7 +58,57 @@ impl Pipeline {
             compiler: compiler.into(),
             overrides: SettingOverrides::default(),
             deny_warnings: false,
+            verbose: false,
+            save_temps: false,
+            timings: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Returns the pipeline, writing each command of the C toolchain to standard error before
+    /// it runs when `verbose` (CLI-23).
+    #[must_use]
+    pub const fn with_verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
+    }
+
+    /// Returns the pipeline, keeping a build's object file beside its output when
+    /// `save_temps` (CLI-24).
+    #[must_use]
+    pub const fn with_save_temps(mut self, save_temps: bool) -> Self {
+        self.save_temps = save_temps;
+        self
+    }
+
+    /// Returns whether each command `typy` runs is written to standard error first (CLI-23).
+    #[must_use]
+    pub const fn is_verbose(&self) -> bool {
+        self.verbose
+    }
+
+    /// Returns how long each stage that ran took, in order, for `--timings` (CLI-22).
+    #[must_use]
+    pub fn timings(&self) -> Vec<(&'static str, Duration)> {
+        self.timings
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Records that `stage` took `time`.
+    fn record(&self, stage: &'static str, time: Duration) {
+        self.timings
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((stage, time));
+    }
+
+    /// Runs `work` as the stage `stage`, and records how long it took.
+    fn timed<T>(&self, stage: &'static str, work: impl FnOnce() -> T) -> T {
+        let started = Instant::now();
+        let result = work();
+        self.record(stage, started.elapsed());
+        result
     }
 
     /// Returns the pipeline with warnings that fail a build or a check, before any code is
@@ -56,8 +129,8 @@ impl Pipeline {
     /// Loads and checks the program whose main file is `main` for `target`, without generating
     /// code (CLI-03).
     pub fn check(&self, main: &Utf8Path, target: Target) -> Result<Success, Failure> {
-        let project = self.load(main, false, target)?;
-        let (_, warnings) = self.check_program(&project)?;
+        let project = self.timed("load", || self.load(main, false, target))?;
+        let (_, warnings) = self.timed("check", || self.check_program(&project))?;
         Ok(Success {
             outcome: Outcome::Checked(Sources::Project(Box::new(project))),
             warnings,
@@ -106,41 +179,45 @@ impl Pipeline {
         stage: EmitStage,
         request: &BuildRequest,
     ) -> Result<(Emission, Warnings), Failure> {
-        let project = self.load(
-            request.main(),
-            request.library().is_some(),
-            request.target(),
-        )?;
+        let project = self.timed("load", || {
+            self.load(
+                request.main(),
+                request.library().is_some(),
+                request.target(),
+            )
+        })?;
         if stage == EmitStage::Ast {
             let warnings = self.warnings(project.warnings().clone(), &project)?;
             return Ok((syntax_text(&project), warnings));
         }
-        let (program, warnings) = self.check_program(&project)?;
+        let (program, warnings) = self.timed("check", || self.check_program(&project))?;
         if stage == EmitStage::TypedAst {
             let text = typy_check::dump(&program, &project);
             return Ok((Emission::Text(text), warnings));
         }
-        let module = lower(&program, &project)?;
+        let module = self.timed("lower", || lower(&program, &project))?;
         let target = request.target();
         let optimization = request.mode().optimization();
         let failed = |diagnostics| with_project(diagnostics, &project);
-        let emission = match stage {
-            EmitStage::Ast => syntax_text(&project),
-            EmitStage::TypedAst => Emission::Text(typy_check::dump(&program, &project)),
-            EmitStage::Tyir => Emission::Text(typy_tyir::print_without_counting(&module)),
-            EmitStage::TyirMem => Emission::Text(typy_tyir::print(&module)),
-            EmitStage::LlvmIr => {
-                Emission::Text(llvm_ir(&module, target, optimization, &project).map_err(failed)?)
-            }
-            EmitStage::Asm => {
-                Emission::Text(assembly(&module, target, optimization, &project).map_err(failed)?)
-            }
-            EmitStage::Obj => Emission::Bytes(
-                object(&module, target, optimization, &project)
-                    .map_err(failed)?
-                    .bytes,
-            ),
-        };
+        let emission = self.timed("generate", || -> Result<Emission, Failure> {
+            Ok(match stage {
+                EmitStage::Ast => syntax_text(&project),
+                EmitStage::TypedAst => Emission::Text(typy_check::dump(&program, &project)),
+                EmitStage::Tyir => Emission::Text(typy_tyir::print_without_counting(&module)),
+                EmitStage::TyirMem => Emission::Text(typy_tyir::print(&module)),
+                EmitStage::LlvmIr => Emission::Text(
+                    llvm_ir(&module, target, optimization, &project).map_err(failed)?,
+                ),
+                EmitStage::Asm => Emission::Text(
+                    assembly(&module, target, optimization, &project).map_err(failed)?,
+                ),
+                EmitStage::Obj => Emission::Bytes(
+                    object(&module, target, optimization, &project)
+                        .map_err(failed)?
+                        .bytes,
+                ),
+            })
+        })?;
         Ok((emission, warnings))
     }
 
@@ -148,22 +225,28 @@ impl Pipeline {
     /// installation fails before any work.
     fn build(&self, request: &BuildRequest) -> Result<(Artifact, Warnings), Failure> {
         let archive = self.runtime_archive(request)?;
-        let project = self.load(
-            request.main(),
-            request.library().is_some(),
-            request.target(),
-        )?;
-        let (program, warnings) = self.check_program(&project)?;
-        let module = lower(&program, &project)?;
-        let linker = linker(request, archive, &project, &module);
+        let project = self.timed("load", || {
+            self.load(
+                request.main(),
+                request.library().is_some(),
+                request.target(),
+            )
+        })?;
+        let (program, warnings) = self.timed("check", || self.check_program(&project))?;
+        let module = self.timed("lower", || lower(&program, &project))?;
+        let linker = linker(request, archive, &project, &module).with_verbose(self.verbose);
         let failed = |diagnostics| with_project(diagnostics, &project);
-        let object = object(
-            &module,
-            request.target(),
-            request.mode().optimization(),
-            &project,
-        )
-        .map_err(failed)?;
+        let object = self
+            .timed("generate", || {
+                object(
+                    &module,
+                    request.target(),
+                    request.mode().optimization(),
+                    &project,
+                )
+            })
+            .map_err(failed)?;
+        let linking = Instant::now();
         let artifact = match (request.library(), &module.library) {
             (Some(kind), Some(library)) => {
                 let layout = match request.output() {
@@ -206,6 +289,10 @@ impl Pipeline {
                 .link(&object, &request.output_path())
                 .map_err(failed)?,
         };
+        self.record("link", linking.elapsed());
+        if self.save_temps {
+            keep_object(&object.bytes, &artifact.path).map_err(Failure::without_sources)?;
+        }
         Ok((artifact, warnings))
     }
 
@@ -381,6 +468,27 @@ fn linker(
 }
 
 /// Returns the program in TyIR, allocating with the functions the project names (MEM-08).
+/// Writes the object file of a build beside its output, named after the output's name up to
+/// its first dot: `app.o` for `app`, `libtools.o` for `libtools.so.1` (CLI-24).
+fn keep_object(bytes: &[u8], output: &Utf8Path) -> Result<(), Diagnostics> {
+    let name = output.file_name().unwrap_or("output");
+    let stem = name
+        .split('.')
+        .next()
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or(name);
+    let path = output.with_file_name(format!("{stem}.o"));
+    std::fs::write(&path, bytes).map_err(|error| {
+        Diagnostics::from(
+            typy_diagnostics::Diagnostic::without_location(
+                typy_diagnostics::DiagnosticCode::error(106),
+                format!("cannot write {path}: {error}"),
+            )
+            .with_help("check that the directory exists and is writable"),
+        )
+    })
+}
+
 fn lower(program: &TypedProgram, project: &Project) -> Result<TyirModule, Failure> {
     let mut module =
         typy_lower::lower(program).map_err(|diagnostics| with_project(diagnostics, project))?;

@@ -19,6 +19,9 @@ The `typy` command checks, builds and runs a program from its main file.
 | `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
 | `--error-format=json` | Writes diagnostics as one JSON object per line | DIA-05 |
 | `--python-floor VERSION` | Sets the Python floor for this command, over `typy.toml` | CLI-07, CLI-12 |
+| `--timings` | Writes how long each stage took to standard error: `load`, `check`, `lower`, `generate`, `link` and the `total` | CLI-22 |
+| `-v`, `--verbose` | Writes each command `typy` runs to standard error before it runs it, as a shell would read it: the C linker with its arguments, and for `typy run` the program | CLI-23 |
+| `--save-temps` | Keeps a build's object file beside its output, named after it up to its first dot: `app.o` for `app`, `libtools.o` for `libtools.so.1` | CLI-24 |
 
 The exit status of `typy` is 0 on success, 1 when the program has errors,
 2 on wrong command usage and 101 on an internal compiler error (CLI-06).
@@ -49,6 +52,20 @@ for debug and `--release` builds and for `--release-small`, and its cache.
 main file, `typy.toml` and the command line together, and refuses a
 `typy.toml` that `typy check` refuses. `version` names the versions of
 `typy`, its runtime and LLVM, and the Python floors.
+
+## Seeing what a build does
+
+`--timings` and `-v` show where a build spends its time and what it runs:
+
+```sh
+typy build app.py --timings -v --save-temps
+```
+
+`-v` writes the linker's command as `typy` runs it, which names the
+temporary object file it links; `--save-temps` keeps that object as
+`app.o` beside `app`, and the command links it the same way. A `typy run`
+that takes its build from the cache runs no build, so it writes the
+timings of loading and checking only, and keeps no object file.
 
 ## Commands of other tools
 

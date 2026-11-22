@@ -16,6 +16,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `typy NAME ARGS`, for a NAME that is not a command of `typy`, runs the
   program `typy-NAME` found on `PATH`, as `git` and `cargo` run theirs,
   with `TYPY` naming the compiler that ran it (CLI-32, ADR-0105).
+- `--timings` writes how long each stage of a command took, `-v` writes
+  each command `typy` runs, such as the C linker with its arguments, and
+  `--save-temps` keeps a build's object file beside its output, as `app.o`
+  for `app` (CLI-22 to CLI-24).
 
 ### Changed
 

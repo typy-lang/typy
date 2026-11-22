@@ -25,4 +25,4 @@ pub use linker::Linker;
 pub use mode::BuildMode;
 pub use request::{BuildRequest, RequestError};
 pub use runtime_archive::RuntimeArchive;
-pub use toolchain::Toolchain;
+pub use toolchain::{Toolchain, command_line};

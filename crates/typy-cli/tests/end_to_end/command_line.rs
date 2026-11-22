@@ -220,3 +220,67 @@ fn cli_32_an_unknown_command_without_a_program_is_wrong_usage() {
         )
     );
 }
+
+#[test]
+fn cli_22_timings_name_each_stage_of_a_build_and_the_total() {
+    let project = Project::new();
+    let output = project.typy(&["build", "app.py", "--timings"], None);
+    assert_eq!(status(&output), 0, "{}", stderr(&output));
+    let text = stderr(&output);
+    let stages: Vec<&str> = text
+        .lines()
+        .map(|line| {
+            let mut words = line.split_whitespace();
+            let stage = words.next().unwrap();
+            let seconds: f64 = words.next().unwrap().parse().unwrap();
+            assert!(seconds >= 0.0, "{line}");
+            assert_eq!(words.next(), Some("s"), "{line}");
+            stage
+        })
+        .collect();
+    assert_eq!(
+        stages,
+        ["load", "check", "lower", "generate", "link", "total"]
+    );
+    let check = stderr(&project.typy(&["check", "app.py", "--timings"], None));
+    assert!(check.starts_with("load "), "{check}");
+    assert!(!check.contains("link"), "{check}");
+}
+
+#[test]
+fn cli_23_verbose_writes_the_link_and_the_program_typy_runs() {
+    let project = Project::new();
+    let build = project.typy(&["build", "app.py", "-v"], None);
+    assert_eq!(status(&build), 0, "{}", stderr(&build));
+    let link = stderr(&build);
+    assert!(link.contains(" -o "), "{link}");
+    assert!(link.contains("libtypy_runtime.a"), "{link}");
+    let quiet = project.typy(&["build", "app.py"], None);
+    assert_eq!(stderr(&quiet), "");
+    let run = project.typy(&["run", "-v", "app.py", "--", "an argument"], None);
+    assert_eq!(stdout(&run), "hello\n");
+    let shown = stderr(&run);
+    assert!(
+        shown
+            .lines()
+            .any(|line| line.ends_with("/app 'an argument'")),
+        "{shown}"
+    );
+}
+
+#[test]
+fn cli_24_save_temps_keeps_the_object_file_beside_the_executable() {
+    let project = Project::new();
+    let plain = project.typy(&["build", "app.py"], None);
+    assert_eq!(status(&plain), 0, "{}", stderr(&plain));
+    assert!(!project.root.join("app.o").exists());
+    let kept = project.typy(&["build", "app.py", "--save-temps", "-o", "tool"], None);
+    assert_eq!(status(&kept), 0, "{}", stderr(&kept));
+    let object = std::fs::read(project.root.join("tool.o")).unwrap();
+    let magic: &[u8] = if cfg!(target_os = "macos") {
+        &[0xcf, 0xfa, 0xed, 0xfe]
+    } else {
+        b"\x7fELF"
+    };
+    assert!(object.starts_with(magic));
+}

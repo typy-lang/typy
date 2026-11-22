@@ -67,6 +67,14 @@ impl Linker {
         self
     }
 
+    /// Returns the linker, writing each command it runs to standard error when `verbose`
+    /// (CLI-23).
+    #[must_use]
+    pub fn with_verbose(mut self, verbose: bool) -> Self {
+        self.tools = self.tools.with_verbose(verbose);
+        self
+    }
+
     /// Returns the linker that looks for libraries in each of `paths` first, as `-L`.
     #[must_use]
     pub fn with_library_paths(mut self, paths: Vec<camino::Utf8PathBuf>) -> Self {

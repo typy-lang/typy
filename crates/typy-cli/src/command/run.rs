@@ -56,6 +56,12 @@ pub(super) fn run(
         // A build from the cache shows the warnings its program has, as a new build does.
         reporter.warnings(success.warnings);
     }
+    if pipeline.is_verbose() {
+        eprintln!(
+            "{}",
+            typy_build::command_line(executable.as_str(), arguments)
+        );
+    }
     match Command::new(&executable).args(arguments).status() {
         Ok(status) => ExitStatus::Program(program_status(status)),
         Err(error) => {

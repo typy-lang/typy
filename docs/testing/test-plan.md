@@ -299,7 +299,7 @@ that the specification does not define.
 | CLI-20 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-20 |
 | CLI-21 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-21 |
 | CLI-22 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-22 |
-| CLI-23 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-23 |
+| CLI-23 | 0.12 | UT, E2E | `crates/typy-build/src/toolchain/tests.rs` for the command as a shell reads it; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-23 |
 | CLI-24 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-24 |
 | CLI-25 | 0.12 | UT, E2E | `crates/typy-cli/src/command/print/tests.rs`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-25 |
 | CLI-26 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-26 |

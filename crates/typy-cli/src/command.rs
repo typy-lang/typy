@@ -10,12 +10,12 @@ mod run;
 use camino::Utf8PathBuf;
 use typy_driver::Pipeline;
 
-use crate::arguments::Command;
+use crate::arguments::{Command, Global};
 use crate::exit_status::ExitStatus;
 use crate::output::Reporter;
 
 /// Runs the command and returns the status `typy` exits with.
-pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> ExitStatus {
+pub(crate) fn run(command: Command, global: Global, reporter: Reporter) -> ExitStatus {
     // An external command and the processor list need no pipeline.
     let command = match command {
         Command::External(arguments) => return external::external(&arguments),
@@ -23,80 +23,116 @@ pub(crate) fn run(command: Command, deny_warnings: bool, reporter: Reporter) -> 
         other => other,
     };
     let pipeline = match compiler() {
-        Ok(path) => Pipeline::new(path).with_deny_warnings(deny_warnings),
+        Ok(path) => Pipeline::new(path)
+            .with_deny_warnings(global.deny_warnings)
+            .with_verbose(global.verbose),
         Err(message) => {
             reporter.internal(&message);
             return ExitStatus::Internal;
         }
     };
+    let (status, pipeline) = dispatch(command, pipeline, global.deny_warnings, reporter);
+    if global.timings {
+        write_timings(&pipeline.timings());
+    }
+    status
+}
+
+/// Runs a command of the compiler with `pipeline`, configured for it, and returns its status
+/// with the pipeline, which holds the time each stage took.
+fn dispatch(
+    command: Command,
+    pipeline: Pipeline,
+    deny_warnings: bool,
+    reporter: Reporter,
+) -> (ExitStatus, Pipeline) {
     match command {
-        Command::Explain { code } => explain::explain(&code),
+        Command::Explain { code } => (explain::explain(&code), pipeline),
         // The target's operating system gives `sys.platform` (LIB-22).
         Command::Check {
             file,
             settings,
             library,
             target,
-        } => check::check(
-            &pipeline.with_overrides(settings.overrides_for(library)),
-            &file,
-            target
+        } => {
+            let pipeline = pipeline.with_overrides(settings.overrides_for(library));
+            let target = target
                 .triple
                 .map_or_else(typy_codegen::Target::host, |triple| typy_codegen::Target {
                     triple,
-                }),
-            reporter,
-        ),
+                });
+            (check::check(&pipeline, &file, target, reporter), pipeline)
+        }
         Command::Build {
             file,
             emit,
             output,
             mode,
+            temps,
             settings,
             library,
             target,
-        } => build::build(
-            &pipeline.with_overrides(settings.overrides_for(library)),
-            file,
-            &build::Flags {
+        } => {
+            let pipeline = pipeline
+                .with_overrides(settings.overrides_for(library))
+                .with_save_temps(temps.save_temps);
+            let flags = build::Flags {
                 emit,
                 output,
                 mode: mode.build_mode(),
                 library: library.kind,
                 target: target.triple,
-            },
-            reporter,
-        ),
+            };
+            (build::build(&pipeline, file, &flags, reporter), pipeline)
+        }
         Command::Run {
             file,
             mode,
+            temps,
             settings,
             arguments,
-        } => run::run(
-            &pipeline.with_overrides(settings.overrides()),
-            file,
-            mode.build_mode(),
-            settings.overrides(),
-            deny_warnings,
-            &arguments,
-            reporter,
-        ),
+        } => {
+            let pipeline = pipeline
+                .with_overrides(settings.overrides())
+                .with_save_temps(temps.save_temps);
+            let status = run::run(
+                &pipeline,
+                file,
+                mode.build_mode(),
+                settings.overrides(),
+                deny_warnings,
+                &arguments,
+                reporter,
+            );
+            (status, pipeline)
+        }
         Command::Print {
             what,
             file,
             settings,
             library,
             target,
-        } => print::print(
-            what,
-            file.as_deref(),
-            settings.overrides_for(library),
-            target.triple,
-            reporter,
-        ),
+        } => {
+            let status = print::print(
+                what,
+                file.as_deref(),
+                settings.overrides_for(library),
+                target.triple,
+                reporter,
+            );
+            (status, pipeline)
+        }
         Command::External(_) | Command::ProcessorHelp { .. } => {
             unreachable!("taken before the pipeline is made")
         }
+    }
+}
+
+/// Writes how long each stage took, then the total, to standard error (CLI-22).
+fn write_timings(timings: &[(&'static str, std::time::Duration)]) {
+    let total: std::time::Duration = timings.iter().map(|(_, time)| *time).sum();
+    for (stage, time) in timings.iter().chain(std::iter::once(&("total", total))) {
+        eprintln!("{stage:<9}{:>9.3} s", time.as_secs_f64());
     }
 }
 

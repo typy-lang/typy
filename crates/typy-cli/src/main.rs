@@ -18,13 +18,13 @@ const COMPILER_STACK: usize = 512 * 1024 * 1024;
 fn main() -> std::process::ExitCode {
     let arguments = arguments::Arguments::parse();
     let reporter = output::Reporter::new(arguments.error_format);
-    let deny_warnings = arguments.deny_warnings;
+    let global = arguments.global();
     let compiler = std::thread::Builder::new()
         .name("compiler".to_owned())
         .stack_size(COMPILER_STACK)
         .spawn(move || {
             guard::guarded(reporter, || {
-                command::run(arguments.command, deny_warnings, reporter)
+                command::run(arguments.command, global, reporter)
             })
         });
     // The guard turns a panic into E9001 on the compiler's own thread, so joining it fails
