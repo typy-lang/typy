@@ -134,6 +134,13 @@ impl BodyChecker<'_> {
             }
             other => other,
         };
+        // A source of a loop read as a value of its own is planned, whatever its keywords.
+        if matches!(
+            builtin,
+            Builtin::Enumerate | Builtin::Zip | Builtin::Reversed
+        ) {
+            return self.loop_only(builtin, span);
+        }
         if let Some(keyword) = keywords.first() {
             // `min(a, b, key=f)` and `max` were taken above; any other keyword is CPython's
             // `TypeError`, with its message.
@@ -189,9 +196,13 @@ impl BodyChecker<'_> {
             | Builtin::Sorted
             | Builtin::Sum
             | Builtin::Any
-            | Builtin::All => {
+            | Builtin::All
+            | Builtin::Enumerate
+            | Builtin::Zip
+            | Builtin::Reversed => {
                 unreachable!(
-                    "print, round, type and the builtins of one iterable are checked above"
+                    "print, round, type, the sources of a loop and the builtins of one iterable \
+                     are checked above"
                 )
             }
             // `input(prompt)` writes `str(prompt)` first, so the prompt may be any value.
@@ -204,9 +215,6 @@ impl BodyChecker<'_> {
                     Type::Str,
                     span,
                 );
-            }
-            Builtin::Enumerate | Builtin::Zip | Builtin::Reversed => {
-                return self.loop_only(builtin, span);
             }
             Builtin::Range => {
                 if !self.arity(builtin, values.len(), 1..=3, span) {

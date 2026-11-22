@@ -142,6 +142,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `type(value)` of a value whose type is `None` or a union, such as
   `None | int | str`, gives the type of the value it holds; the program
   stopped with "an object has an unknown type".
+- `enumerate`, `zip` and `reversed` read as a value with a keyword, such as
+  `pairs = enumerate(items, start=1)`, are refused as planned for after
+  1.0, as they are without one; they were refused with CPython's
+  `TypeError` for a keyword the function takes.
 
 ## [0.10.0] - 2026-11-21
 

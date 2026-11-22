@@ -172,3 +172,27 @@ fn a_loop_over_values_whose_items_one_type_cannot_hold_is_refused() {
         );
     }
 }
+
+#[test]
+fn enumerate_zip_and_reversed_as_values_are_planned_with_or_without_keywords() {
+    let planned = "`enumerate` outside a `for` loop, a comprehension or an iterable argument is \
+                   planned for after TyPy 1.0";
+    for source in [
+        "numbers = enumerate([7])\n",
+        "numbers = enumerate([7], start=2)\n",
+    ] {
+        let found = messages(source);
+        assert!(
+            found
+                .iter()
+                .any(|(code, text, rule)| code == "E0201" && text == planned && rule == "CST-09"),
+            "{source}: {found:?}"
+        );
+    }
+    for source in [
+        "print(list(enumerate([7], start=2)))\n",
+        "for index, value in enumerate([7], start=2):\n    print(index, value)\n",
+    ] {
+        assert_eq!(messages(source), Vec::new(), "{source}");
+    }
+}
