@@ -19,7 +19,7 @@ use crate::types::Type;
 
 /// How many positional arguments a built-in takes, and CPython 3.15's `TypeError` for any
 /// other number; `{}` in a message stands for the number given.
-struct Arity {
+pub(super) struct Arity {
     minimum: usize,
     maximum: usize,
     /// A number between the two that the built-in does not take.
@@ -31,7 +31,12 @@ struct Arity {
 }
 
 impl Arity {
-    const fn new(minimum: usize, maximum: usize, few: &'static str, many: &'static str) -> Self {
+    pub(super) const fn new(
+        minimum: usize,
+        maximum: usize,
+        few: &'static str,
+        many: &'static str,
+    ) -> Self {
         Self {
             minimum,
             maximum,
@@ -170,13 +175,32 @@ impl BodyChecker<'_> {
             return Some(self.zip_unpacked(arguments, keywords, span));
         }
         let arity = arity(builtin)?;
+        Some(self.arity_arms(
+            (function, builtin.name()),
+            &arity,
+            Vec::new(),
+            (arguments, keywords),
+            span,
+        ))
+    }
+
+    /// Checks a call of `callee`, named `name` in messages, of `arity`, whose arguments unpack
+    /// with `*` of a value only the run knows: `prelude` runs first, then the positional
+    /// values are stored, and the number `*` gives picks the arm that runs.
+    pub(super) fn arity_arms(
+        &mut self,
+        (callee, name): (&Expr, &str),
+        arity: &Arity,
+        mut prelude: Vec<TypedExpr>,
+        (arguments, keywords): (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> TypedExpr {
         // The call takes what it unpacks, so its own errors stand (ADR-0073).
         self.unpacking_calls.push(span);
         let first = arguments
             .iter()
             .position(|argument| matches!(argument, Expr::Starred { .. }))
             .unwrap_or(arguments.len());
-        let mut prelude = Vec::new();
         let mut written = Vec::new();
         for argument in &arguments[..first] {
             let (store, name) = self.held_argument("argument", argument);
@@ -194,12 +218,13 @@ impl BodyChecker<'_> {
             .filter(|count| Some(*count) != arity.gap)
             .collect();
         if counts.is_empty() {
-            return Some(self.too_many_before_star(builtin, &arity, span));
+            return self.too_many_before_star(name, arity, span);
         }
         let items: Vec<SymbolId> = (0..arity.maximum - first)
             .map(|_| self.call_variable("item", item.clone(), span))
             .collect();
         let mut arms = Vec::new();
+        let mut refused_any = false;
         for count in counts {
             let taken = count - first;
             let mut call_arguments = written.clone();
@@ -209,7 +234,7 @@ impl BodyChecker<'_> {
                     .map(|symbol| self.hidden_name(*symbol, span)),
             );
             let reported = self.diagnostics.len();
-            let call = self.call_expression(function, &call_arguments, keywords, span);
+            let call = self.call_expression(callee, &call_arguments, keywords, span);
             // An arm's error says how many values `*` gave it.
             let shown = format!(
                 "when `*` gives {taken} value{}",
@@ -218,6 +243,7 @@ impl BodyChecker<'_> {
             let refused: Vec<Diagnostic> =
                 self.diagnostics.iter().skip(reported).cloned().collect();
             self.diagnostics.truncate(reported);
+            refused_any |= !refused.is_empty();
             for diagnostic in refused {
                 self.diagnostics
                     .push(diagnostic.with_label(span, shown.clone()));
@@ -227,8 +253,13 @@ impl BodyChecker<'_> {
                 .collect();
             arms.push((taken, Self::in_order(stores, call)));
         }
-        let ty = self.arms_type(builtin, &arms, span);
-        let refusal = self.wrong_count(&arity, first, (tail, &ty), span);
+        // A refused arm was reported, so the arms' types are not compared.
+        let ty = if refused_any {
+            Type::Error
+        } else {
+            self.arms_type(name, &arms, span)
+        };
+        let refusal = self.wrong_count(arity, first, (tail, &ty), span);
         let switch = arms
             .into_iter()
             .rev()
@@ -244,7 +275,7 @@ impl BodyChecker<'_> {
                     span,
                 )
             });
-        Some(Self::in_order(prelude, switch))
+        Self::in_order(prelude, switch)
     }
 }
 
@@ -260,7 +291,7 @@ impl BodyChecker<'_> {
 
     /// Returns a new hidden variable of type `ty`, which the call stores before an arm reads
     /// it by its name.
-    fn call_variable(&mut self, kind: &str, ty: Type, span: Span) -> SymbolId {
+    pub(super) fn call_variable(&mut self, kind: &str, ty: Type, span: Span) -> SymbolId {
         let symbol = self.hidden_variable(kind, ty, span);
         self.assigned.iter_mut().for_each(|assigned| {
             assigned.insert(Fact::Assigned(symbol));
@@ -269,7 +300,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns a name that reads the hidden variable `symbol`.
-    fn hidden_name(&self, symbol: SymbolId, span: Span) -> Expr {
+    pub(super) fn hidden_name(&self, symbol: SymbolId, span: Span) -> Expr {
         Expr::Name {
             id: self.program.symbols[symbol.0 as usize].name.clone(),
             span,
@@ -334,9 +365,9 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Returns the type the arms of a call of `builtin` give, which must be one: E0202 when
-    /// it depends on the number of values `*` gives.
-    fn arms_type(&mut self, builtin: Builtin, arms: &[(usize, TypedExpr)], span: Span) -> Type {
+    /// Returns the type the arms of a call of `name` give, which must be one: E0202 when it
+    /// depends on the number of values `*` gives.
+    fn arms_type(&mut self, name: &str, arms: &[(usize, TypedExpr)], span: Span) -> Type {
         let mut types: Vec<&Type> = Vec::new();
         for (_, arm) in arms {
             if arm.ty.has_error() {
@@ -351,9 +382,8 @@ impl BodyChecker<'_> {
         }
         let shown: Vec<String> = types.iter().map(ToString::to_string).collect();
         let message = format!(
-            "`{}` gives {} as the number of values `*` gives decides, so its result has no one \
-             type",
-            builtin.name(),
+            "`{name}` gives {} as the number of values `*` gives decides, so its result has no \
+             one type",
             shown.join(" or ")
         );
         self.diagnostics.push(
@@ -531,7 +561,7 @@ impl BodyChecker<'_> {
         if given.is_empty() {
             return item.clone();
         }
-        self.arms_type(builtin, &given, span)
+        self.arms_type(builtin.name(), &given, span)
     }
 
     /// Returns `"'" + type(item).__name__ + "' object is not iterable"` of the hidden variable
@@ -627,12 +657,11 @@ impl BodyChecker<'_> {
         Self::typed(TypedExprKind::Raise(Box::new(exception)), ty.clone(), span)
     }
 
-    /// Returns E0404 for a call of `builtin` with more values before its first `*` than it
+    /// Returns E0404 for a call of `name` with more values before its first `*` than it
     /// takes.
-    fn too_many_before_star(&mut self, builtin: Builtin, arity: &Arity, span: Span) -> TypedExpr {
+    fn too_many_before_star(&mut self, name: &str, arity: &Arity, span: Span) -> TypedExpr {
         let message = format!(
-            "`{}` takes at most {} argument{}, and more come before `*`",
-            builtin.name(),
+            "`{name}` takes at most {} argument{}, and more come before `*`",
             arity.maximum,
             if arity.maximum == 1 { "" } else { "s" }
         );
@@ -643,7 +672,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns `then` after each of `first`, which are evaluated in order for their effects.
-    fn in_order(first: Vec<TypedExpr>, then: TypedExpr) -> TypedExpr {
+    pub(super) fn in_order(first: Vec<TypedExpr>, then: TypedExpr) -> TypedExpr {
         first.into_iter().rev().fold(then, |then, first| {
             let (ty, span) = (then.ty.clone(), then.span);
             Self::typed(
@@ -658,7 +687,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns `symbol := value`, which stores `value` in the hidden variable `symbol`.
-    fn stored(symbol: SymbolId, value: TypedExpr) -> TypedExpr {
+    pub(super) fn stored(symbol: SymbolId, value: TypedExpr) -> TypedExpr {
         let (ty, span) = (value.ty.clone(), value.span);
         Self::typed(
             TypedExprKind::Named {

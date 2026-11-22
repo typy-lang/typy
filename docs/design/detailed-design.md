@@ -2394,7 +2394,13 @@ made a `tuple[T, ...]` by a comprehension; lowering calls `typy_rt_zip_many`,
 which makes an iterator of each iterable, as CPython's `zip` does, and whose
 `IteratorKind::ZipMany` steps them all into a new tuple it owns, raising
 `typy_rt_zip_unequal`'s `ValueError` for `strict` iterables of different
-lengths.
+lengths. A method of a built-in type (`body/method_unpacking.rs`) stores its
+receiver in a hidden variable and goes through the same arms, with the numbers
+and messages `body/method_arity.rs` gives each method, read from CPython 3.15 by
+calling it with zero to eight arguments; a method of a file has those of its
+class. The methods of a set that take any number of iterables apply the method
+that updates a set to each iterable, in a comprehension, on a copy of the
+receiver for `union`, `intersection` and `difference`.
 
 `body/os_error.rs` accepts an `OSError` of arguments of any type, as CPython
 does (EXC-14, EXC-16, ADR-0035), except a number as the third of three to five

@@ -97,11 +97,11 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 
 #[test]
 fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
-    let planned = "`*` of a value only the run knows in a call of a method of a built-in type \
-                   or a function of a built-in module, and `**` of one in a call of a builtin \
-                   other than `print`, are planned for TyPy 0.11 (EXP-22)";
+    let planned = "`*` of a value only the run knows in a call of a function of a built-in \
+                   module, and `**` of one in a call of a builtin other than `print`, are \
+                   planned for TyPy 0.11 (EXP-22)";
     for call in [
-        "separators = [\",\"]\nprint(\"a,b\".split(*separators))\n",
+        "import math\nprint(math.floor(*[1.5]))\n",
         "options = {\"key\": len}\nprint(max(*[\"a\"], **options))\n",
     ] {
         let source = format!("{PAIR}{call}");
@@ -491,7 +491,7 @@ fn exp_22_unpacking_reaches_each_kind_of_callee_and_argument() {
     }
     let planned = [
         "import math\nprint(math.floor(*[1.5]))\n",
-        "print(\"a\".split(*(\",\", *[\"b\"])))\n",
+        "import math\nprint(math.floor(*(1.5, *[2.5])))\n",
     ];
     for call in planned {
         let found = messages(call);
@@ -648,4 +648,37 @@ fn exp_22_zip_takes_star_of_iterables_of_one_type() {
             .iter()
             .all(|(code, ..)| code == "E0205")
     );
+}
+
+#[test]
+fn exp_22_a_method_of_a_built_in_type_takes_star_in_each_form_it_has() {
+    for call in [
+        "words = [\"a\"]\nwords.append(*[\"b\"])\nprint(\"-\".join(*[words]))\n",
+        "places = [1]\nprint(\"abcb\".find(\"b\", *places), [1, 2].pop(*places))\n",
+        "seen = {1}\nothers = [[2]]\nprint(seen.union(*others), seen.difference(*others))\n\
+         seen.update(*others)\nseen.intersection_update(*others)\n",
+    ] {
+        assert_eq!(messages(call), Vec::new(), "{call}");
+    }
+    for (call, code, message) in [
+        (
+            "names = {\"a\": \"b\"}\nkeys = [\"a\"]\nprint(names.get(*keys))\n",
+            "E0202",
+            "`dict.get` gives str | None or str as the number of values `*` gives decides, \
+             so its result has no one type",
+        ),
+        (
+            "words = [\"a\"]\nwords.append(\"b\", \"c\", *words)\n",
+            "E0404",
+            "`list.append` takes at most 1 argument, and more come before `*`",
+        ),
+    ] {
+        let found = messages(call);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
+            "{call}: {found:?}"
+        );
+    }
 }

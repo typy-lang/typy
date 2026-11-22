@@ -72,6 +72,10 @@ All notable changes to TyPy are recorded here. The format follows
   number of arguments the built-in takes; any other number raises CPython
   3.15's `TypeError`. `zip(*rows)` gives `tuple[T, ...]` items (EXP-22).
   It was E0201.
+- A call of a method of a built-in type takes `*` of any iterable,
+  `text.split(*separators)` or `seen.union(*others)`, with each method's
+  own messages for a number of arguments it does not take (EXP-22). It
+  was E0201.
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such

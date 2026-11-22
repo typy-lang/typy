@@ -32,6 +32,16 @@ impl BodyChecker<'_> {
         {
             return self.call_expression(function, &arguments, &keywords, span);
         }
+        // A method of a built-in type is checked for each number of arguments `*` may give
+        // (EXP-22).
+        if let Expr::Attribute {
+            value, attribute, ..
+        } = function
+            && self.module_of(value).is_none()
+            && let Some(call) = self.method_unpacked((value, attribute), arguments, keywords, span)
+        {
+            return call;
+        }
         // A built-in function is checked for each number of arguments `*` may give (EXP-22).
         if let Expr::Name { id, .. } = function
             && self.peek_type(function).is_none()
@@ -62,9 +72,9 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 at,
-                "`*` of a value only the run knows in a call of a method of a built-in type or \
-                 a function of a built-in module, and `**` of one in a call of a builtin other \
-                 than `print`, are planned for TyPy 0.11 (EXP-22)",
+                "`*` of a value only the run knows in a call of a function of a built-in \
+                 module, and `**` of one in a call of a builtin other than `print`, are planned \
+                 for TyPy 0.11 (EXP-22)",
             )
             .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),

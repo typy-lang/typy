@@ -296,9 +296,23 @@ for column in zip(*rows):
     print(column, sum(column))
 ```
 
-The same unpacking in a call of a method of a built-in type or a function
-of a built-in module, and `**` of a dict held in a variable in a call of
-a builtin other than `print`, are planned for 0.11 (EXP-22).
+A method of a built-in type takes `*` as a built-in function does, the
+receiver evaluated first, with the messages of the method, such as
+`list.append() takes exactly one argument (2 given)`. The methods of a
+set that take any number of iterables, `union`, `intersection`,
+`difference`, `update`, `intersection_update` and `difference_update`,
+take `*` of a list of them:
+
+<!-- typy-expect: accepted -->
+```python
+seen = {1, 2}
+others = [[2, 3], [4]]
+print(sorted(seen.union(*others)), "-".join(*[["a", "b"]]))
+```
+
+The same unpacking in a call of a function of a built-in module, and
+`**` of a dict held in a variable in a call of a builtin other than
+`print`, are planned for 0.11 (EXP-22).
 
 ## Nested functions
 
@@ -708,7 +722,7 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `*` of a list or another iterable in a call of a method of a built-in type or a function of a built-in module, and `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
+| `*` of a list or another iterable in a call of a function of a built-in module, and `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
 | `*` in a call of a built-in function whose result type depends on the number of values it gives, such as `tuple(*rows)` or `max(*rows)` of lists | E0202 (EXP-22) |
 | `*` in a call of a built-in function given more values before the first `*` than it takes | E0404 (EXP-22) |
 | `*` of a value only the run knows in a call of `OSError` or a class derived from it, whose `errno`, `strerror` and file names are read by position | E0202 (EXP-22) |
