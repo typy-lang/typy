@@ -92,6 +92,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- The methods of `str` and `bytes` read text of one byte a code point a
+  run of bytes at a time: `upper` and the other case methods of ASCII
+  text, `split`, `join`, `find`, `count`, `replace` and `strip` run two to
+  ten times faster, and the strings benchmark runs about three times
+  faster (NFR-21).
 - The refusals of forms a later release gives now name that release:
   `Literal`, `overload`, `Self`, `TypeGuard` and `TypeIs` 0.12 (TYP-28
   to TYP-31); `typing.Any` and `TypedDict` with `Required`,

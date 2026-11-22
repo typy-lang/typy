@@ -4,6 +4,7 @@ mod builder;
 mod case;
 mod character;
 mod methods;
+mod narrow;
 mod operations;
 mod points;
 mod repr;
@@ -127,6 +128,34 @@ pub unsafe extern "C" fn typy_rt_bytes_data(bytes: *const StrObject) -> *const u
 pub(crate) unsafe fn length(string: *const StrObject) -> usize {
     // SAFETY: the caller passes a live string.
     usize::try_from(unsafe { (*string).length }).unwrap_or(usize::MAX)
+}
+
+/// Returns the bytes of a string of ASCII characters only, or `None` for any other string,
+/// which a method then reads code point by code point (NFR-21).
+///
+/// # Safety
+///
+/// `string` points to a live `str` object, which outlives the slice.
+pub(crate) unsafe fn ascii_bytes<'a>(string: *const StrObject) -> Option<&'a [u8]> {
+    // SAFETY: the caller passes a live string; a `Latin1` string's data is one byte per code
+    // point, `length` of them.
+    unsafe {
+        if (*string).kind != StrKind::Latin1 {
+            return None;
+        }
+        let bytes =
+            core::slice::from_raw_parts(string.cast::<u8>().add(DATA_OFFSET), length(string));
+        bytes.is_ascii().then_some(bytes)
+    }
+}
+
+/// Returns a new string of `length` ASCII characters, which `fill` writes.
+pub(crate) fn new_ascii(length: usize, fill: impl FnOnce(&mut [u8])) -> *mut StrObject {
+    let string = new_string(length, StrKind::Latin1);
+    // SAFETY: the new string has room for `length` one-byte code points, which nothing else
+    // refers to yet.
+    fill(unsafe { core::slice::from_raw_parts_mut(string.cast::<u8>().add(DATA_OFFSET), length) });
+    string
 }
 
 /// Returns the code point at `index`.

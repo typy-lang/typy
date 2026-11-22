@@ -2,6 +2,7 @@
 //! and suffixes, stripping, replacing and padding, with CPython's results (LIB-03).
 
 use super::builder::{StrBuilder, is_bytes, space_for, substring};
+use super::narrow;
 use super::{StrObject, code_point, length};
 use crate::Raising;
 use crate::exception::{ExceptionKind, raise};
@@ -80,12 +81,24 @@ pub unsafe extern "C" fn typy_rt_str_search(
     unsafe {
         let (first, last) = adjust(start, end, flags, length(text));
         let size = i64::try_from(length(needle)).unwrap_or(i64::MAX);
+        // A text and a needle of one byte a code point are searched as bytes.
+        let bytes = match (narrow::latin1(text), narrow::latin1(needle)) {
+            (Some(haystack), Some(needle)) if size > 0 && last - first >= size => Some((
+                &haystack[usize::try_from(first).unwrap_or(0)..usize::try_from(last).unwrap_or(0)],
+                needle,
+            )),
+            _ => None,
+        };
         if operation == 4 {
             if last - first < size {
                 return Raising::ok(word(0));
             }
             if size == 0 {
                 return Raising::ok(word(usize::try_from(last - first + 1).unwrap_or(0)));
+            }
+            if let Some((haystack, needle)) = bytes {
+                let found = narrow::count(haystack, needle, u64::MAX);
+                return Raising::ok(word(usize::try_from(found).unwrap_or(usize::MAX)));
             }
             let (mut at, mut count) = (first, 0);
             while at + size <= last {
@@ -100,6 +113,13 @@ pub unsafe extern "C" fn typy_rt_str_search(
         }
         let found = if last - first < size {
             None
+        } else if let Some((haystack, needle)) = bytes {
+            let at = if operation % 2 == 0 {
+                narrow::find(haystack, needle)
+            } else {
+                narrow::rfind(haystack, needle)
+            };
+            at.map(|at| first + i64::try_from(at).unwrap_or(0))
         } else if operation % 2 == 0 {
             (first..=last - size)
                 .find(|at| occurs_at(text, needle, usize::try_from(*at).unwrap_or(0)))
@@ -192,12 +212,11 @@ pub unsafe extern "C" fn typy_rt_str_strip(
     // SAFETY: the caller passes live strings; every index stays inside them.
     unsafe {
         let is_space = space_for(text);
-        let stripped = |point: u32| {
-            if flags & 1 == 0 {
-                is_space(point)
-            } else {
-                (0..length(chars)).any(|index| code_point(chars, index) == point)
-            }
+        let narrow_chars = narrow::latin1(chars).filter(|_| flags & 1 != 0);
+        let stripped = |point: u32| match narrow_chars {
+            Some(bytes) => u8::try_from(point).is_ok_and(|byte| bytes.contains(&byte)),
+            None if flags & 1 == 0 => is_space(point),
+            None => (0..length(chars)).any(|index| code_point(chars, index) == point),
         };
         let (mut start, mut end) = (0, length(text));
         if flags & 2 != 0 {
@@ -265,6 +284,14 @@ pub unsafe extern "C" fn typy_rt_str_replace(
     // SAFETY: the caller passes live strings; every index stays inside them.
     unsafe {
         let (whole, size) = (length(text), length(old));
+        if let (Some(bytes), Some(old), Some(new), true) = (
+            narrow::latin1(text),
+            narrow::latin1(old),
+            narrow::latin1(new),
+            size > 0,
+        ) {
+            return replace_narrow(text, bytes, (old, new), remaining);
+        }
         let mut builder = StrBuilder::with_capacity(whole);
         let mut at = 0;
         if size == 0 {
@@ -291,6 +318,38 @@ pub unsafe extern "C" fn typy_rt_str_replace(
             }
         }
         builder.finish_like(text)
+    }
+}
+
+/// Returns `text.replace(old, new)` of a text whose code points are `bytes`, at most
+/// `remaining` times, for an `old`, which is not empty, and a `new` of one byte a code point:
+/// the occurrences are counted first, so the new string is made at its length.
+///
+/// # Safety
+///
+/// `text` points to a live string.
+unsafe fn replace_narrow(
+    text: *const StrObject,
+    bytes: &[u8],
+    (old, new): (&[u8], &[u8]),
+    remaining: u64,
+) -> *mut StrObject {
+    let replaced = usize::try_from(narrow::count(bytes, old, remaining)).unwrap_or(usize::MAX);
+    let length = bytes.len() - replaced * old.len() + replaced * new.len();
+    // SAFETY: the caller passes a live string.
+    unsafe {
+        narrow::new_like(text, length, |out| {
+            let (mut from, mut to) = (0, 0);
+            for _ in 0..replaced {
+                let at = from + narrow::find(&bytes[from..], old).unwrap_or(0);
+                out[to..to + at - from].copy_from_slice(&bytes[from..at]);
+                to += at - from;
+                out[to..to + new.len()].copy_from_slice(new);
+                to += new.len();
+                from = at + old.len();
+            }
+            out[to..].copy_from_slice(&bytes[from..]);
+        })
     }
 }
 

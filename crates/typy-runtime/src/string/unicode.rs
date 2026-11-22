@@ -66,6 +66,33 @@ pub(crate) enum Property {
 
 /// Returns whether the code point has the property.
 pub(crate) fn has(property: Property, point: u32) -> bool {
+    if let Ok(byte) = u8::try_from(point)
+        && byte.is_ascii()
+    {
+        return ascii_has(property, byte);
+    }
+    table_has(property, point)
+}
+
+/// Returns whether an ASCII character has the property, as the tables say of it: most text is
+/// ASCII, so the `is` and case methods test it without a search (NFR-21).
+fn ascii_has(property: Property, byte: u8) -> bool {
+    match property {
+        Property::Alpha | Property::Cased => byte.is_ascii_alphabetic(),
+        Property::Decimal | Property::Digit | Property::Numeric => byte.is_ascii_digit(),
+        // CPython's `isspace` also holds for the separators U+001C to U+001F.
+        Property::Space => matches!(byte, b'\t'..=b'\r' | 0x1c..=0x1f | b' '),
+        Property::Upper => byte.is_ascii_uppercase(),
+        Property::Lower => byte.is_ascii_lowercase(),
+        Property::Title => false,
+        Property::IdentifierStart => byte.is_ascii_alphabetic() || byte == b'_',
+        Property::IdentifierContinue => byte.is_ascii_alphanumeric() || byte == b'_',
+        Property::CaseIgnorable => matches!(byte, b'\'' | b'.' | b':' | b'^' | b'`'),
+    }
+}
+
+/// Returns whether the code point has the property, by the tables.
+fn table_has(property: Property, point: u32) -> bool {
     use case_tables::{
         ALPHA, CASE_IGNORABLE, CASED, DECIMAL, DIGIT, IDENTIFIER_CONTINUE, IDENTIFIER_START, LOWER,
         NUMERIC, SPACE, TITLE, UPPER,
@@ -109,6 +136,25 @@ type Multiple = (u32, [u32; 3]);
 
 /// Gives each code point the mapping turns `point` into, one to three of them.
 pub(crate) fn map(mapping: Mapping, point: u32, out: &mut impl FnMut(u32)) {
+    if let Ok(byte) = u8::try_from(point)
+        && byte.is_ascii()
+    {
+        out(u32::from(ascii_mapped(mapping, byte)));
+        return;
+    }
+    table_map(mapping, point, out);
+}
+
+/// Returns the one character an ASCII character maps to, as the tables map it.
+const fn ascii_mapped(mapping: Mapping, byte: u8) -> u8 {
+    match mapping {
+        Mapping::Upper | Mapping::Title => byte.to_ascii_uppercase(),
+        Mapping::Lower | Mapping::Fold => byte.to_ascii_lowercase(),
+    }
+}
+
+/// Writes the code points `point` maps to, by the tables.
+fn table_map(mapping: Mapping, point: u32, out: &mut impl FnMut(u32)) {
     use case_tables::{
         FOLD_MULTIPLE, FOLD_RUNS, LOWER_MULTIPLE, LOWER_RUNS, TITLE_MULTIPLE, TITLE_RUNS,
         UPPER_MULTIPLE, UPPER_RUNS,
@@ -138,7 +184,51 @@ pub(crate) fn map(mapping: Mapping, point: u32, out: &mut impl FnMut(u32)) {
 
 #[cfg(test)]
 mod tests {
-    use super::{Mapping, Property, decimal_value, has, is_printable, map};
+    use super::{
+        Mapping, Property, ascii_has, ascii_mapped, decimal_value, has, is_printable, map,
+        table_has, table_map,
+    };
+
+    #[test]
+    fn ascii_answers_match_the_tables() {
+        let properties = [
+            Property::Alpha,
+            Property::Decimal,
+            Property::Digit,
+            Property::Numeric,
+            Property::Space,
+            Property::Upper,
+            Property::Lower,
+            Property::Title,
+            Property::IdentifierStart,
+            Property::IdentifierContinue,
+            Property::Cased,
+            Property::CaseIgnorable,
+        ];
+        for byte in 0..0x80_u8 {
+            for property in properties {
+                assert_eq!(
+                    ascii_has(property, byte),
+                    table_has(property, u32::from(byte)),
+                    "{property:?} {byte:#x}"
+                );
+            }
+            for mapping in [
+                Mapping::Upper,
+                Mapping::Lower,
+                Mapping::Title,
+                Mapping::Fold,
+            ] {
+                let mut out = Vec::new();
+                table_map(mapping, u32::from(byte), &mut |each| out.push(each));
+                assert_eq!(
+                    out,
+                    [u32::from(ascii_mapped(mapping, byte))],
+                    "{mapping:?} {byte:#x}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn printability_matches_cpython() {
