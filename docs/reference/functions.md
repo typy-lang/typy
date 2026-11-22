@@ -310,9 +310,23 @@ others = [[2, 3], [4]]
 print(sorted(seen.union(*others)), "-".join(*[["a", "b"]]))
 ```
 
-The same unpacking in a call of a function of a built-in module, and
+A function of `math` or `sys` takes `*` as a built-in function does,
+with its own messages, such as `math.floor() takes exactly one argument
+(2 given)`. `math.gcd`, `math.lcm` and `math.hypot` take any number of
+values, so they take `*` of a list of `int`s, or of numbers for
+`hypot`. A function of `ctypes` lays out C data from the arguments the
+program writes, so `*` there is E0202:
+
+<!-- typy-expect: accepted -->
+```python
+import math
+
+numbers = [12, 18, 30]
+print(math.gcd(*numbers), math.hypot(*[3.0, 4.0]), math.pow(*[2.0, 3.0]))
+```
+
 `**` of a dict held in a variable in a call of a builtin other than
-`print`, are planned for 0.11 (EXP-22).
+`print` is planned for 0.11 (EXP-22).
 
 ## Nested functions
 
@@ -722,7 +736,8 @@ These forms are refused:
 | A nested function or a method with `*args` or `**kwargs` read where no `Callable` is expected | E0203 (FUN-19) |
 | A `lambda` with `**kwargs`, which a `Callable` never fills, or with `*args` where the `Callable` passes nothing past the other parameters | E0203 (FUN-19) |
 | `*args` of a `lambda` where the `Callable` passes values of two types past the other parameters | E0409 (FUN-19) |
-| `*` of a list or another iterable in a call of a function of a built-in module, and `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
+| `**` of a dict held in a variable in a call of a builtin other than `print`, planned for 0.11 | E0201 (EXP-22) |
+| `*` of a value only the run knows in a call of a function of `ctypes` | E0202 (EXP-22) |
 | `*` in a call of a built-in function whose result type depends on the number of values it gives, such as `tuple(*rows)` or `max(*rows)` of lists | E0202 (EXP-22) |
 | `*` in a call of a built-in function given more values before the first `*` than it takes | E0404 (EXP-22) |
 | `*` of a value only the run knows in a call of `OSError` or a class derived from it, whose `errno`, `strerror` and file names are read by position | E0202 (EXP-22) |

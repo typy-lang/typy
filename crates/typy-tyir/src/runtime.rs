@@ -456,6 +456,10 @@ pub enum RuntimeFunction {
     MathPerm,
     MathGcd,
     MathLcm,
+    /// `math.gcd(*values)` of a list of `int`s (EXP-22).
+    MathGcdList,
+    /// `math.lcm(*values)` of a list of `int`s (EXP-22).
+    MathLcmList,
     MathGamma,
     MathLgamma,
     MathFsum,
@@ -563,7 +567,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 401] = [
+    pub const ALL: [Self; 403] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -934,6 +938,8 @@ impl RuntimeFunction {
         Self::MathPerm,
         Self::MathGcd,
         Self::MathLcm,
+        Self::MathGcdList,
+        Self::MathLcmList,
         Self::MathGamma,
         Self::MathLgamma,
         Self::MathFsum,
@@ -1088,7 +1094,9 @@ impl RuntimeFunction {
             }
             Self::ListNew => signature(&[Int, Int, Bits], LIST, false),
             Self::ListAppend | Self::ListAppendMoved => signature(&[LIST, Bits], Unit, false),
-            Self::ListLength => signature(&[LIST], Int, false),
+            Self::ListLength | Self::MathGcdList | Self::MathLcmList => {
+                signature(&[LIST], Int, false)
+            }
             Self::ListGet | Self::ListExtreme => signature(&[LIST, Int], Bits, true),
             Self::ListSet | Self::ListSetMoved => signature(&[LIST, Int, Bits], Unit, true),
             Self::ListEqual => signature(&[LIST, LIST], Bool, false),
@@ -1793,6 +1801,8 @@ impl RuntimeFunction {
             Self::MathComb => "math_comb",
             Self::MathPerm => "math_perm",
             Self::MathGcd => "math_gcd",
+            Self::MathGcdList => "math_gcd_list",
+            Self::MathLcmList => "math_lcm_list",
             Self::MathGamma => "math_gamma",
             Self::MathLgamma => "math_lgamma",
             Self::MathFsum => "math_fsum",

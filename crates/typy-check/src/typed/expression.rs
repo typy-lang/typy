@@ -242,6 +242,12 @@ pub enum TypedExprKind {
     /// A new exception of a class without an `__init__` of the program's, called with `*` or
     /// `**` (EXP-22, ADR-0083).
     NewExceptionUnpacked(Box<UnpackedException>),
+    /// `math.gcd`, `math.lcm` or `math.hypot` of the items of a list, which `*` gave a call
+    /// (EXP-22).
+    MathOfList {
+        function: crate::math::MathFunction,
+        values: Box<TypedExpr>,
+    },
     /// `zip(*iterables)` of the iterables a list holds, an iterator of `tuple[T, ...]` items,
     /// whose iterables of different lengths raise `ValueError` when `strict` is true (EXP-22).
     ZipMany {
@@ -975,7 +981,8 @@ impl TypedExpr {
             | TypedExprKind::ProtocolMethod { object: inner, .. }
             | TypedExprKind::ChosenFunction { object: inner, .. }
             | TypedExprKind::Named { value: inner, .. } => vec![inner],
-            TypedExprKind::PercentFormat { values, .. } => vec![values],
+            TypedExprKind::PercentFormat { values, .. }
+            | TypedExprKind::MathOfList { values, .. } => vec![values],
             TypedExprKind::MathCall { arguments, .. } => arguments.iter().collect(),
             TypedExprKind::Open { path, options, .. } => [
                 Some(path),

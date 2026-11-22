@@ -9,8 +9,8 @@ use typy_diagnostics::Span;
 use typy_source::syntax::{Comprehension, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
+use super::arity_table::{irregular, method_arity};
 use super::builtin_unpacking::Arity;
-use super::method_arity::method_arity;
 use crate::method::Method;
 use crate::typed::{SymbolId, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
@@ -44,7 +44,7 @@ impl BodyChecker<'_> {
         let Some(maximum) = maximum else {
             return Some(self.set_fold((holder, name), prelude, arguments, span));
         };
-        let arity = Arity::new(minimum, maximum, few, many);
+        let arity = Arity::new(minimum, maximum, few, many).worded(irregular(class, &name.name));
         Some(self.arity_arms(
             (&callee, &shown),
             &arity,

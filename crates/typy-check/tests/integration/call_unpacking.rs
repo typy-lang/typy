@@ -96,23 +96,17 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 }
 
 #[test]
-fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
-    let planned = "`*` of a value only the run knows in a call of a function of a built-in \
-                   module, and `**` of one in a call of a builtin other than `print`, are \
-                   planned for TyPy 0.11 (EXP-22)";
-    for call in [
-        "import math\nprint(math.floor(*[1.5]))\n",
-        "options = {\"key\": len}\nprint(max(*[\"a\"], **options))\n",
-    ] {
-        let source = format!("{PAIR}{call}");
-        let found = messages(&source);
-        assert!(
-            found
-                .iter()
-                .any(|(code, text, rule)| code == "E0201" && text == planned && rule == "EXP-22"),
-            "{source}: {found:?}"
-        );
-    }
+fn exp_22_star_star_of_a_dict_in_a_call_of_a_builtin_is_planned() {
+    let planned = "`**` of a dict held in a variable in a call of a builtin other than `print` \
+                   is planned for TyPy 0.11 (EXP-22)";
+    let source = format!("{PAIR}options = {{\"reverse\": True}}\nprint(sorted([1], **options))\n");
+    let found = messages(&source);
+    assert!(
+        found
+            .iter()
+            .any(|(code, text, rule)| code == "E0201" && text == planned && rule == "EXP-22"),
+        "{source}: {found:?}"
+    );
 }
 
 #[test]
@@ -489,18 +483,11 @@ fn exp_22_unpacking_reaches_each_kind_of_callee_and_argument() {
     for call in accepted {
         assert_eq!(messages(call), Vec::new(), "{call}");
     }
-    let planned = [
+    for call in [
         "import math\nprint(math.floor(*[1.5]))\n",
         "import math\nprint(math.floor(*(1.5, *[2.5])))\n",
-    ];
-    for call in planned {
-        let found = messages(call);
-        assert!(
-            found
-                .iter()
-                .any(|(code, _, rule)| code == "E0201" && rule == "EXP-22"),
-            "{call}: {found:?}"
-        );
+    ] {
+        assert_eq!(messages(call), Vec::new(), "{call}");
     }
     for (call, code, rule) in [
         (
@@ -671,6 +658,45 @@ fn exp_22_a_method_of_a_built_in_type_takes_star_in_each_form_it_has() {
             "words = [\"a\"]\nwords.append(\"b\", \"c\", *words)\n",
             "E0404",
             "`list.append` takes at most 1 argument, and more come before `*`",
+        ),
+    ] {
+        let found = messages(call);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
+            "{call}: {found:?}"
+        );
+    }
+}
+
+#[test]
+fn exp_22_a_function_of_a_built_in_module_takes_star_in_each_form_it_has() {
+    for call in [
+        "import math\nvalues = [2.5]\nprint(math.floor(*values), math.isclose(*[1.0, 1.0]))\n",
+        "from math import gcd, hypot\nnumbers = [12, 18]\nprint(gcd(*numbers), hypot(*numbers))\n",
+        "import sys\ncodes = [0]\nsys.exit(*codes)\n",
+    ] {
+        assert_eq!(messages(call), Vec::new(), "{call}");
+    }
+    let found = dump("import math\nnumbers = [12, 18]\nprint(math.lcm(*numbers))\n");
+    assert!(found.contains("MathOfList Lcm : int"), "{found}");
+    for (call, code, message) in [
+        (
+            "import math\nwords = [\"a\"]\nprint(math.gcd(*words))\n",
+            "E0404",
+            "`math.gcd` takes values of type int, and `*` gives values of type str",
+        ),
+        (
+            "import math\nnumbers = [1.5]\nprint(math.hypot(*numbers, key=1))\n",
+            "E0404",
+            "`math.hypot` takes no keyword arguments",
+        ),
+        (
+            "import ctypes\nsizes = [ctypes.c_int]\nprint(ctypes.sizeof(*sizes))\n",
+            "E0202",
+            "a function of `ctypes` lays out C data from the arguments the program writes, so \
+             `*` of a value only the run knows cannot give them",
         ),
     ] {
         let found = messages(call);

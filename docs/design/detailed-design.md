@@ -2400,7 +2400,15 @@ and messages `body/method_arity.rs` gives each method, read from CPython 3.15 by
 calling it with zero to eight arguments; a method of a file has those of its
 class. The methods of a set that take any number of iterables apply the method
 that updates a set to each iterable, in a comprehension, on a copy of the
-receiver for `union`, `intersection` and `difference`.
+receiver for `union`, `intersection` and `difference`. A function of `math` or
+`sys` (`body/module_unpacking.rs`), named `module.name` or imported, goes
+through the same arms with the numbers of `body/arity_table.rs`; `irregular`
+gives the messages that change with the number, such as `prod()` and
+`isclose()`. `math.gcd`, `math.lcm` and `math.hypot`, which take any number,
+give `TypedExprKind::MathOfList`, whose list `typy_rt_math_gcd_list`,
+`typy_rt_math_lcm_list` or `typy_rt_math_hypot` folds; an `int` list given to
+`hypot` is first made a list of `float`s by a comprehension. A function of
+`ctypes` refuses `*` with E0202.
 
 `body/os_error.rs` accepts an `OSError` of arguments of any type, as CPython
 does (EXC-14, EXC-16, ADR-0035), except a number as the third of three to five

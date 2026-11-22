@@ -28,6 +28,10 @@ pub(super) struct Arity {
     few: &'static str,
     /// The message for too many.
     many: &'static str,
+    /// The number from which another message for too many applies, with that message.
+    beyond: Option<(usize, &'static str)>,
+    /// The message for each number below the least, when each names the argument missing.
+    few_each: &'static [&'static str],
 }
 
 impl Arity {
@@ -43,6 +47,21 @@ impl Arity {
             gap: None,
             few,
             many,
+            beyond: None,
+            few_each: &[],
+        }
+    }
+
+    /// Returns the arity with the messages `irregular` gives for a method or a function
+    /// whose message depends on the number given.
+    pub(super) const fn worded(
+        self,
+        (beyond, few_each): (Option<(usize, &'static str)>, &'static [&'static str]),
+    ) -> Self {
+        Self {
+            beyond,
+            few_each,
+            ..self
         }
     }
 }
@@ -415,11 +434,46 @@ impl BodyChecker<'_> {
                 span,
             )
         };
-        let many = self.raised_type_error(arity.many, given(self), ty, span);
+        let mut many = self.raised_type_error(arity.many, given(self), ty, span);
+        if let Some((from, message)) = arity.beyond {
+            let beyond = self.raised_type_error(message, given(self), ty, span);
+            let test = self.length_is(tail, CompareOperator::GtE, from - first, span);
+            many = Self::typed(
+                TypedExprKind::IfExp {
+                    test: Box::new(test),
+                    body: Box::new(beyond),
+                    orelse: Box::new(many),
+                },
+                ty.clone(),
+                span,
+            );
+        }
         if arity.minimum <= first {
             return many;
         }
-        let few = self.raised_type_error(arity.few, given(self), ty, span);
+        let few =
+            if let Some((last, earlier)) = arity.few_each.split_last() {
+                // Each number below the least names the argument it misses.
+                let last = self.raised_type_error(last, given(self), ty, span);
+                earlier.iter().enumerate().skip(first).rev().fold(
+                    last,
+                    |orelse, (count, message)| {
+                        let raised = self.raised_type_error(message, given(self), ty, span);
+                        let test = self.length_is(tail, CompareOperator::Eq, count - first, span);
+                        Self::typed(
+                            TypedExprKind::IfExp {
+                                test: Box::new(test),
+                                body: Box::new(raised),
+                                orelse: Box::new(orelse),
+                            },
+                            ty.clone(),
+                            span,
+                        )
+                    },
+                )
+            } else {
+                self.raised_type_error(arity.few, given(self), ty, span)
+            };
         let test = self.length_is(tail, CompareOperator::Lt, arity.minimum - first, span);
         Self::typed(
             TypedExprKind::IfExp {

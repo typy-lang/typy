@@ -76,6 +76,11 @@ All notable changes to TyPy are recorded here. The format follows
   `text.split(*separators)` or `seen.union(*others)`, with each method's
   own messages for a number of arguments it does not take (EXP-22). It
   was E0201.
+- A call of a function of `math` or `sys` takes `*` of any iterable,
+  `math.gcd(*numbers)` or `math.floor(*values)`, with each function's own
+  messages for a number of arguments it does not take (EXP-22). It was
+  E0201. `*` of a value only the run knows in a call of a function of
+  `ctypes` is E0202.
 - `isinstance` takes a union written with `|`, such as `isinstance(x, int
   | None)`, as CPython 3.10 and later do.
 - A function nested in another may have type parameters of its own, such

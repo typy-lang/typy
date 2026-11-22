@@ -8,6 +8,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Constant, Expr, Identifier, Keyword};
 
 use super::BodyChecker;
+use super::builtin_module::{BuiltinName, ModuleFunction};
 use crate::builtin::Builtin;
 use crate::exception::BuiltinException;
 use crate::typed::TypedExpr;
@@ -31,6 +32,14 @@ impl BodyChecker<'_> {
             && let Some((arguments, keywords)) = self.written_out(arguments, keywords)
         {
             return self.call_expression(function, &arguments, &keywords, span);
+        }
+        // A function of a built-in module is checked for each number of arguments `*` may give
+        // (EXP-22).
+        if let Some(module_function) = self.module_function_of(function)
+            && let Some(call) =
+                self.module_unpacked((function, module_function), arguments, keywords, span)
+        {
+            return call;
         }
         // A method of a built-in type is checked for each number of arguments `*` may give
         // (EXP-22).
@@ -72,9 +81,8 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 at,
-                "`*` of a value only the run knows in a call of a function of a built-in \
-                 module, and `**` of one in a call of a builtin other than `print`, are planned \
-                 for TyPy 0.11 (EXP-22)",
+                "`**` of a dict held in a variable in a call of a builtin other than `print` is \
+                 planned for TyPy 0.11 (EXP-22)",
             )
             .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),
@@ -184,6 +192,29 @@ impl BodyChecker<'_> {
                 }
             }
             _ => true,
+        }
+    }
+
+    /// Returns the function of a built-in module `function` names: `module.name`, or a name
+    /// imported from the module.
+    fn module_function_of(&self, function: &Expr) -> Option<ModuleFunction> {
+        match function {
+            Expr::Attribute {
+                value, attribute, ..
+            } => {
+                let module = self.module_of(value)?;
+                match self
+                    .program
+                    .builtin_lookup(&module, &attribute.name, attribute.span)
+                {
+                    Ok(BuiltinName::Function(function)) => Some(function),
+                    _ => None,
+                }
+            }
+            Expr::Name { id, .. } if !self.locals.contains_key(id) => {
+                self.program.module_functions.get(id).copied()
+            }
+            _ => None,
         }
     }
 

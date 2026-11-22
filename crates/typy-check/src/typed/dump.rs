@@ -630,6 +630,7 @@ impl Dump<'_> {
             TypedExprKind::TypeObject(of) => format!("TypeObject {}", of.name()),
             TypedExprKind::TypeName(_) => "TypeName".to_owned(),
             TypedExprKind::ZipMany { .. } => "ZipMany".to_owned(),
+            TypedExprKind::MathOfList { function, .. } => format!("MathOfList {function:?}"),
             TypedExprKind::NewExceptionUnpacked(call) => {
                 format!("NewExceptionUnpacked {}", call.class)
             }

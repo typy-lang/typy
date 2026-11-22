@@ -637,7 +637,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         | TypedExprKind::CaptureOf { closure: inner, .. } => {
             expression(inner, callees);
         }
-        TypedExprKind::PercentFormat { values, .. } => expression(values, callees),
+        TypedExprKind::PercentFormat { values, .. } | TypedExprKind::MathOfList { values, .. } => {
+            expression(values, callees);
+        }
         TypedExprKind::Open { .. } => {
             for part in expression_value.operands() {
                 expression(part, callees);

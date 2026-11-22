@@ -2,6 +2,7 @@
 
 mod accessor;
 mod alias_value;
+mod arity_table;
 mod binding;
 mod builtin_call;
 mod builtin_module;
@@ -65,11 +66,11 @@ mod map_filter;
 mod matching;
 mod math_call;
 mod math_iterable;
-mod method_arity;
 mod method_call;
 mod method_unpacking;
 mod method_value;
 mod module_context;
+mod module_unpacking;
 mod name;
 mod named;
 mod named_tuple;

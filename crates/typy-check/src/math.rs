@@ -114,6 +114,14 @@ pub enum MathShape {
     Sumprod,
 }
 
+/// Returns the name of a function of `math`.
+pub(crate) fn math_function_name(function: MathFunction) -> &'static str {
+    FUNCTIONS
+        .iter()
+        .find(|(_, each)| *each == function)
+        .map_or("", |(name, _)| *name)
+}
+
 /// The functions and their names, in name order.
 const FUNCTIONS: [(&str, MathFunction); 62] = {
     use MathFunction::{

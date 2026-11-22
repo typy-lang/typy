@@ -39,6 +39,9 @@ impl FunctionLowerer<'_> {
                 init,
             } => self.new_exception(class, arguments, init.as_deref(), span),
             TypedExprKind::NewExceptionUnpacked(call) => self.new_exception_unpacked(call, span),
+            TypedExprKind::MathOfList { function, values } => {
+                self.math_of_list(*function, values, span)
+            }
             TypedExprKind::ZipMany { iterables, strict } => {
                 self.zip_many(iterables, strict.as_deref(), &expression.ty, span)
             }
