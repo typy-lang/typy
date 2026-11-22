@@ -1,9 +1,11 @@
 //! Calls of a built-in function with `*` of a value only the run knows (EXP-22, ADR-0083).
-//! The arguments are evaluated first, in order, into hidden variables, as CPython evaluates
-//! them; the call is then checked once for each number of arguments the built-in takes, and
-//! the number of values `*` gave picks that arm when the call runs. Any other number raises
-//! CPython 3.15's `TypeError` for the built-in. The arms give one type; a built-in whose
-//! result type depends on the number is refused.
+//! The positional arguments are evaluated first, in order, into hidden variables, as CPython
+//! evaluates them; the call is then checked once for each number of arguments the built-in
+//! takes, and the number of values `*` gave picks that arm when the call runs. Any other
+//! number raises CPython 3.15's `TypeError` for the built-in. The keyword arguments are
+//! evaluated in the arm, where the built-in's parameter gives them their type, so a number
+//! the built-in does not take raises before they are. The arms give one type; a built-in
+//! whose result type depends on the number is refused.
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{BinaryOperator, CompareOperator, Expr, Keyword};
@@ -158,10 +160,13 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> Option<TypedExpr> {
-        let arity = arity(builtin)?;
         if keywords.iter().any(|keyword| keyword.name.is_none()) {
             return None;
         }
+        if matches!(builtin, Builtin::Max | Builtin::Min) {
+            return Some(self.extreme_unpacked((function, builtin), arguments, keywords, span));
+        }
+        let arity = arity(builtin)?;
         // The call takes what it unpacks, so its own errors stand (ADR-0073).
         self.unpacking_calls.push(span);
         let first = arguments
@@ -182,15 +187,6 @@ impl BodyChecker<'_> {
         );
         let tail = self.hidden_variable("unpacked", list.ty.clone(), span);
         prelude.push(Self::stored(tail, list));
-        let mut named = Vec::new();
-        for keyword in keywords {
-            let (store, name) = self.held_argument("keyword", &keyword.value);
-            prelude.push(store);
-            named.push(Keyword {
-                value: name,
-                ..keyword.clone()
-            });
-        }
         let counts: Vec<usize> = (arity.minimum.max(first)..=arity.maximum)
             .filter(|count| Some(*count) != arity.gap)
             .collect();
@@ -210,7 +206,7 @@ impl BodyChecker<'_> {
                     .map(|symbol| self.hidden_name(*symbol, span)),
             );
             let reported = self.diagnostics.len();
-            let call = self.call_expression(function, &call_arguments, &named, span);
+            let call = self.call_expression(function, &call_arguments, keywords, span);
             // An arm's error says how many values `*` gave it.
             let shown = format!(
                 "when `*` gives {taken} value{}",
@@ -403,6 +399,124 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Checks `max(arguments)` or `min(arguments)` with `*` of a value only the run knows
+    /// (ADR-0083). Every positional value goes into one list of one type: none raises
+    /// CPython's `TypeError`, one is iterated, which only a `str` gives the list's type, and
+    /// more are compared, as the list itself is.
+    fn extreme_unpacked(
+        &mut self,
+        (function, builtin): (&Expr, Builtin),
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        // The call takes what it unpacks, so its own errors stand (ADR-0073).
+        self.unpacking_calls.push(span);
+        let name = builtin.name();
+        let what = format!("the positional arguments of `{name}` called with `*`");
+        let (list, item) = self.one_type_values(arguments, &what, span);
+        let tail = self.call_variable("unpacked", list.ty.clone(), span);
+        let prelude = vec![Self::stored(tail, list)];
+        let defaulted = keywords.iter().any(|keyword| {
+            keyword
+                .name
+                .as_ref()
+                .is_some_and(|name| name.name == "default")
+        });
+        let many = if defaulted {
+            let message =
+                format!("Cannot specify a default for {name}() with multiple positional arguments");
+            self.raised_type_error(&message, Self::number(0, span), &Type::Error, span)
+        } else {
+            let listed = self.hidden_name(tail, span);
+            self.call_expression(function, &[listed], keywords, span)
+        };
+        let first = self.call_variable("item", item.clone(), span);
+        let one = if item.iterable_item().is_some() {
+            let read = self.hidden_name(first, span);
+            self.call_expression(function, &[read], keywords, span)
+        } else {
+            let message = self.not_iterable(first, span);
+            self.raised(message, &Type::Error, span)
+        };
+        let none = format!("{name} expected at least 1 argument, got 0");
+        let none = self.raised_type_error(&none, Self::number(0, span), &Type::Error, span);
+        let ty = self.extreme_type(builtin, [&many, &one], &item, span);
+        let one = Self::in_order(
+            vec![Self::stored(first, Self::tail_item(tail, &item, 0, span))],
+            retyped(one, &ty),
+        );
+        let switch = [(0, none), (1, one)].into_iter().rev().fold(
+            Self::converted(retyped(many, &ty), Some(&ty)),
+            |orelse, (count, arm)| {
+                let test = self.length_is(tail, CompareOperator::Eq, count, span);
+                Self::typed(
+                    TypedExprKind::IfExp {
+                        test: Box::new(test),
+                        body: Box::new(Self::converted(retyped(arm, &ty), Some(&ty))),
+                        orelse: Box::new(orelse),
+                    },
+                    ty.clone(),
+                    span,
+                )
+            },
+        );
+        Self::in_order(prelude, switch)
+    }
+
+    /// Returns the type `max` or `min` with `*` gives: that of each arm that gives a value,
+    /// which must be one, E0202 otherwise; `item`, the type of the values, when none does.
+    fn extreme_type(
+        &mut self,
+        builtin: Builtin,
+        arms: [&TypedExpr; 2],
+        item: &Type,
+        span: Span,
+    ) -> Type {
+        let given: Vec<(usize, TypedExpr)> = arms
+            .into_iter()
+            .filter(|arm| !matches!(arm.kind, TypedExprKind::Raise(_)))
+            .map(|arm| (0, arm.clone()))
+            .collect();
+        if given.is_empty() {
+            return item.clone();
+        }
+        self.arms_type(builtin, &given, span)
+    }
+
+    /// Returns `"'" + type(item).__name__ + "' object is not iterable"` of the hidden variable
+    /// `item`, as CPython's message for iterating a value that cannot be iterated.
+    fn not_iterable(&mut self, item: SymbolId, span: Span) -> TypedExpr {
+        let text = |value: &str| Expr::Constant {
+            value: typy_source::syntax::Constant::Str(value.to_owned()),
+            span,
+        };
+        let class = Expr::Attribute {
+            value: Box::new(Expr::Call {
+                function: Box::new(Expr::Name {
+                    id: "type".to_owned(),
+                    span,
+                }),
+                arguments: vec![self.hidden_name(item, span)],
+                keywords: Vec::new(),
+                span,
+            }),
+            attribute: typy_source::syntax::Identifier {
+                name: "__name__".to_owned(),
+                span,
+            },
+            span,
+        };
+        let joined = |left: Expr, right: Expr| Expr::BinOp {
+            left: Box::new(left),
+            operator: BinaryOperator::Add,
+            right: Box::new(right),
+            span,
+        };
+        let message = joined(joined(text("'"), class), text("' object is not iterable"));
+        self.expression(&message)
+    }
+
     /// Returns `raise TypeError(message)` in place of a value of type `ty`, `{}` in `template`
     /// standing for the number `given`.
     fn raised_type_error(
@@ -444,6 +558,11 @@ impl BodyChecker<'_> {
             }
             None => text(template),
         };
+        self.raised(message, ty, span)
+    }
+
+    /// Returns `raise TypeError(message)` in place of a value of type `ty`.
+    fn raised(&mut self, message: TypedExpr, ty: &Type, span: Span) -> TypedExpr {
         let class = ExceptionClass::Builtin(BuiltinException::TypeError);
         self.program.record_creation(&class, &[Type::Str]);
         let exception = Self::typed(
@@ -500,4 +619,15 @@ impl BodyChecker<'_> {
             span,
         )
     }
+}
+
+/// Returns `arm` given the type `ty`, which a raise takes in place of a value.
+fn retyped(arm: TypedExpr, ty: &Type) -> TypedExpr {
+    if matches!(arm.kind, TypedExprKind::Raise(_)) {
+        return TypedExpr {
+            ty: ty.clone(),
+            ..arm
+        };
+    }
+    arm
 }

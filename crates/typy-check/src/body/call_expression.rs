@@ -62,9 +62,9 @@ impl BodyChecker<'_> {
             Diagnostic::new(
                 DiagnosticCode::error(201),
                 at,
-                "`*` of a value only the run knows in a call of `max`, `min`, `zip`, a method of \
-                 a built-in type or a function of a built-in module, and `**` of one in a call \
-                 of a builtin other than `print`, are planned for TyPy 0.11 (EXP-22)",
+                "`*` of a value only the run knows in a call of `zip`, a method of a built-in \
+                 type or a function of a built-in module, and `**` of one in a call of a \
+                 builtin other than `print`, are planned for TyPy 0.11 (EXP-22)",
             )
             .with_rule(RuleId::EXP_22)
             .with_help("unpack the values into variables first, and pass them one by one"),

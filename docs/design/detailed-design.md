@@ -2382,7 +2382,13 @@ built-in itself writes them. The call is checked once for each number, by name
 on hidden variables that each arm stores from the list; an arm's errors carry a
 label of how many values reached it. An `IfExp` on the list's length picks the
 arm, and the last branch raises `TypeError` with the message, its count written
-by `str` of the length. The arms must give one type, or the call is E0202.
+by `str` of the length. The arms must give one type, or the call is E0202. The
+keyword arguments are checked in each arm, where the built-in's parameter types
+them, and evaluated in the arm that runs. `max` and `min` (`extreme_unpacked`)
+put every positional value in the list and have three arms: none raises, one
+calls the built-in on the value, which it iterates, or raises `'T' object is not
+iterable` from `type(value).__name__` for a value that cannot be iterated, and
+more call it on the list.
 
 `body/os_error.rs` accepts an `OSError` of arguments of any type, as CPython
 does (EXC-14, EXC-16, ADR-0035), except a number as the third of three to five

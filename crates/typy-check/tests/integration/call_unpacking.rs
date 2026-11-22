@@ -97,12 +97,12 @@ fn exp_17_an_unpacked_argument_that_cannot_fit_is_refused() {
 
 #[test]
 fn exp_22_unpacking_a_value_only_the_run_knows_in_any_other_callee_is_planned() {
-    let planned = "`*` of a value only the run knows in a call of `max`, `min`, `zip`, a method \
-                   of a built-in type or a function of a built-in module, and `**` of one in a \
-                   call of a builtin other than `print`, are planned for TyPy 0.11 (EXP-22)";
+    let planned = "`*` of a value only the run knows in a call of `zip`, a method of a \
+                   built-in type or a function of a built-in module, and `**` of one in a call \
+                   of a builtin other than `print`, are planned for TyPy 0.11 (EXP-22)";
     for call in [
-        "print(max(*[1, 2]))\n",
         "for each in zip(*[[1]]):\n    pass\n",
+        "options = {\"key\": len}\nprint(max(*[\"a\"], **options))\n",
     ] {
         let source = format!("{PAIR}{call}");
         let found = messages(&source);
@@ -491,7 +491,7 @@ fn exp_22_unpacking_reaches_each_kind_of_callee_and_argument() {
     }
     let planned = [
         "import math\nprint(math.floor(*[1.5]))\n",
-        "print(max(*(1, *[2])))\n",
+        "print(list(zip(*([1], *[[2]]))))\n",
     ];
     for call in planned {
         let found = messages(call);
@@ -587,4 +587,24 @@ fn exp_22_a_built_in_function_refuses_what_a_form_of_it_cannot_take() {
             "{call}: {found:?}"
         );
     }
+}
+
+#[test]
+fn exp_22_max_and_min_take_star_of_values_that_one_value_iterates_alike() {
+    for call in [
+        "values = [3, 9]\nprint(max(*values), min(2, *values))\n",
+        "words = [\"ab\"]\nprint(max(*words), min(*words, key=str.upper))\n",
+        "values = [1.5]\nprint(max(*values, default=0.0))\n",
+    ] {
+        assert_eq!(messages(call), Vec::new(), "{call}");
+    }
+    let found = messages("rows = [[1, 2]]\nprint(max(*rows))\n");
+    let message = "`max` gives list[int] or int as the number of values `*` gives decides, so \
+                   its result has no one type";
+    assert!(
+        found
+            .iter()
+            .any(|(code, text, _)| code == "E0202" && text == message),
+        "{found:?}"
+    );
 }
