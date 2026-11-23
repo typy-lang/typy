@@ -114,6 +114,7 @@ mod yield_from;
 
 pub(crate) use builtin_module::ModuleFunction;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
+pub(crate) use generator::has_yield;
 pub(crate) use generic_copy::{Generic, GenericCopy};
 pub(crate) use import::Imported;
 pub(crate) use module_context::ModuleContext;
@@ -134,6 +135,34 @@ use crate::types::Type;
 use flow::Assigned;
 use program::id;
 
+/// How the result of the function being checked is known (TYP-26, ADR-0092).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ResultSource {
+    /// Its annotation gives it, or there is none to give.
+    Annotated,
+    /// Its `return` statements are being looked at, and each type they give is noted.
+    Inferring,
+    /// Its `return` statements gave it, so reaching its end returns the `None` it holds.
+    Inferred,
+}
+
+impl ResultSource {
+    /// Returns how the result of `function` is known.
+    fn of(program: &Program, function: FunctionId) -> Self {
+        if program
+            .inferring
+            .as_ref()
+            .is_some_and(|(inferred, _)| *inferred == function)
+        {
+            Self::Inferring
+        } else if program.inferred_results.contains(&function) {
+            Self::Inferred
+        } else {
+            Self::Annotated
+        }
+    }
+}
+
 /// Checks the statements of one body.
 pub(crate) struct BodyChecker<'program> {
     program: &'program mut Program,
@@ -151,6 +180,8 @@ pub(crate) struct BodyChecker<'program> {
     breaks: Vec<Vec<Assigned>>,
     reported_unassigned: BTreeSet<SymbolId>,
     returns: Option<Type>,
+    /// How the function's result is known (TYP-26).
+    result: ResultSource,
     /// The class and instance of the `__init__` being checked.
     initializing: Option<class::Initializing>,
     /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
@@ -233,6 +264,7 @@ impl<'program> BodyChecker<'program> {
             breaks: Vec::new(),
             reported_unassigned: BTreeSet::new(),
             returns,
+            result: ResultSource::Annotated,
             initializing: None,
             method: None,
             class_parameter: None,
@@ -281,6 +313,7 @@ impl<'program> BodyChecker<'program> {
     ) {
         let returns = definition.signature.returns.clone();
         let mut checker = BodyChecker::new(program, diagnostics, Some(returns.clone()));
+        checker.result = ResultSource::of(checker.program, function);
         let mut parameters = Vec::new();
         for ((name, span), parameter) in definition
             .parameters
@@ -387,11 +420,19 @@ impl<'program> BodyChecker<'program> {
     /// Reports a function that can reach its end without returning the value its annotation
     /// names; for a generator, the `R` of `Generator[Y, S, R]` (FUN-07).
     fn check_end(&mut self, definition: &Definition<'_>, returns: &Type) {
+        // A function whose result is inferred returns `None` when it can reach its end.
+        if self.result == ResultSource::Inferring && self.assigned.is_some() {
+            self.returned(Type::NoneType);
+        }
         let returns = match &self.generator {
             Some(types) => types.returns.clone(),
             None => returns.clone(),
         };
-        if self.assigned.is_none() || returns == Type::NoneType || returns == Type::Error {
+        if self.assigned.is_none()
+            || self.result == ResultSource::Inferred
+            || returns == Type::NoneType
+            || returns == Type::Error
+        {
             return;
         }
         self.diagnostics.push(

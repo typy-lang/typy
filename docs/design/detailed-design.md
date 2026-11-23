@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.116 |
+| Version | 2.117 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -2766,7 +2766,24 @@ gives the module variables theirs, then the other functions. An
 module body gives it. That check runs on the program itself, and
 `Program::snapshot` and `keep_module_types` undo all it did but those
 types, dropping its diagnostics, so a module costs the same however many
-modules come before it; one whose type needs an attribute is E0424. Parallel checking
+modules come before it; one whose type needs an attribute is E0424.
+
+A function of the module without a result annotation gets the error type
+from `definition` and no E0204. After the first check of the module
+body, `check/inference.rs` infers each such result (TYP-26, ADR-0092). It
+orders the functions so each comes after the ones it calls, from the
+names their bodies read (`referenced_functions`); one on a cycle of
+calls, a generator (`has_yield`) and one the library's `__all__` lists
+keep the annotation, E0204 with the reason. Each other body is checked
+with its diagnostics dropped, `Program::inferring` noting the type of
+each `return` value and `None` where the end can be reached, and
+`Program::undo` removes what the check added. The union of the types,
+`Type::union`, becomes the result, through `Program::set_result`, which
+also notes the function in `inferred_results`, whose end may then return
+the `None` its optional result holds. The module body is then checked
+again from the types before the first check, so a variable assigned a
+call of such a function takes its result. Methods and nested functions
+keep their annotations. Parallel checking
 (architecture section 7.5) is added when the build-time benchmarks of
 NFR-04 call for it.
 

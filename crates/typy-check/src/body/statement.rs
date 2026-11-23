@@ -675,6 +675,13 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Notes a type the function whose result is being inferred returns (TYP-26).
+    pub(super) fn returned(&mut self, ty: Type) {
+        if let Some((_, types)) = &mut self.program.inferring {
+            types.push(ty);
+        }
+    }
+
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         self.check_instance_complete(span);
         self.check_stays_in_finally("return", span);
@@ -690,6 +697,9 @@ impl BodyChecker<'_> {
         let actual = value
             .as_ref()
             .map_or(Type::NoneType, |value| value.ty.clone());
+        if self.result == super::ResultSource::Inferring {
+            self.returned(actual.clone());
+        }
         if !actual.is_assignable_to(&expected) {
             let mut diagnostic = Diagnostic::new(
                 DiagnosticCode::error(405),

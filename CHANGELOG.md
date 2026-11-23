@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- A function defined at module level may leave out its return annotation:
+  it returns what its `return` statements give, their union, with `None`
+  when it can reach its end. A method, a nested function, a generator, a
+  function that calls itself and a function a library exports keep the
+  annotation, E0204 with the reason (TYP-26, ADR-0092).
 - The builtins `divmod`, `pow`, also with a modulus, `bin`, `hex`, `oct`
   and `format`, as CPython gives them; `bin`, `hex` and `oct` are values
   of their own too, as `key=hex` (LIB-28).

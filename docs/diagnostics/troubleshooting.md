@@ -177,29 +177,33 @@ print(double(2))
 
 ## E0204: function without a return annotation
 
-Every function needs a return annotation (TYP-01). Write `-> None` when it
-returns nothing. `__init__` may leave it out.
+A function defined at module level without a return annotation returns
+what its `return` statements give (TYP-26). Every other function needs
+the annotation (TYP-01): a method, a nested function, a generator, a
+function that calls itself, directly or through others, and a function a
+library exports. Write `-> None` when it returns nothing. `__init__` may
+leave it out.
 
-This program gives E0204:
+This program gives E0204, since the function calls itself:
 
 <!-- typy-expect: rejected E0204 at 1:5 -->
 ```python
-def greet(name: str):
-    print("hello", name)
+def countdown(n: int):
+    return countdown(n - 1) if n > 0 else 0
 
 
-greet("Ada")
+print(countdown(3))
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-def greet(name: str) -> None:
-    print("hello", name)
+def countdown(n: int) -> int:
+    return countdown(n - 1) if n > 0 else 0
 
 
-greet("Ada")
+print(countdown(3))
 ```
 
 ## E0205: name is not defined

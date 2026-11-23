@@ -933,7 +933,7 @@ fn class_method_definition<'tree>(
         parameters: &in_scope,
         ..*scope
     };
-    let mut method = definition(parts, Some(owner), &method_scope, diagnostics);
+    let mut method = definition(parts, (Some(owner), false), &method_scope, diagnostics);
     method.type_parameters = type_parameters;
     method
 }
@@ -1013,7 +1013,12 @@ fn method_definition<'tree>(
         parameters: &in_scope,
         ..*scope
     };
-    let mut method = definition(parts, Some(&method_owner), &method_scope, diagnostics);
+    let mut method = definition(
+        parts,
+        (Some(&method_owner), false),
+        &method_scope,
+        diagnostics,
+    );
     method.type_parameters = type_parameters;
     // A parameter that names a protocol makes the method generic; a special method or a
     // property has one body, so its parameter takes protocol values (ADR-0041).

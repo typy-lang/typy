@@ -146,7 +146,7 @@ impl BodyChecker<'_> {
 
 /// Returns true when the statement has a `yield` or a `yield from` of its function: in it or
 /// in a block it holds, outside the functions and classes it defines.
-fn has_yield(statement: &Stmt) -> bool {
+pub(crate) fn has_yield(statement: &Stmt) -> bool {
     let mut found = false;
     crate::check::visit_statement(statement, &mut |expression| {
         found |= matches!(expression, Expr::Yield { .. } | Expr::YieldFrom { .. });

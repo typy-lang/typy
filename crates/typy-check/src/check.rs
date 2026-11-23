@@ -18,6 +18,7 @@ mod generic_class;
 mod generic_copies;
 #[cfg(test)]
 mod generic_tests;
+mod inference;
 mod module_imports;
 mod module_scope;
 pub(crate) mod not_implemented;
@@ -278,9 +279,16 @@ impl Checked<'_> {
                 .cloned()
                 .unwrap_or_default();
             copies.begin_module(module.name.as_str());
+            // A library exports the functions its main module's `__all__` names (CLI-09).
+            let exported =
+                if project.settings().library && module.name == project.main_module().name {
+                    inference::exported_names(&module.syntax.body)
+                } else {
+                    BTreeSet::new()
+                };
             let (waiting, checked) = check_module(
                 &mut program,
-                (module, aliases, &mut copies),
+                (module, aliases, &mut copies, &exported),
                 (&path, &definitions),
                 // `from __future__ import annotations` defers one module's annotations as the
                 // floor defers every module's (LIB-29).
@@ -398,10 +406,11 @@ fn known_classes<'known>(
 
 fn check_module<'tree>(
     program: &mut Program,
-    (module, aliases, copies): (
+    (module, aliases, copies, exported): (
         &'tree Module,
         &BTreeMap<String, type_alias::Alias>,
         &mut class::ClassMethodCopies<'tree>,
+        &BTreeSet<String>,
     ),
     (path, earlier): (&str, &ModuleDefinitions<'tree>),
     floor_defers: bool,
@@ -462,6 +471,7 @@ fn check_module<'tree>(
         methods.as_slice(),
     );
     check_bindings(&tree.body, &imports, defined, &variables, diagnostics);
+    let module_functions = definitions.len();
     definitions.extend(methods);
 
     program.begin_module(
@@ -480,26 +490,26 @@ fn check_module<'tree>(
     program.import_module_functions(&imports.module_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);
     program.set_rebound(imports.rebound());
-    let module_body: Vec<&Stmt> = tree
-        .body
-        .iter()
-        .filter(|statement| !matches!(statement, Stmt::FunctionDef { .. }))
-        .collect();
-    // Each `__init__` is checked first, since it gives the attributes it assigns their
-    // types; the module body comes next, since it gives the module variables theirs, and
-    // the other functions last. An `__init__` reads a module variable with the type a
-    // first look at the module body gives it, whose diagnostics are dropped and whose other
-    // effects are undone, so the cost of a module does not grow with the modules before it.
-    let snapshot = program.snapshot(first_class);
-    BodyChecker::check_module(program, &module_body, &mut Diagnostics::new());
-    program.keep_module_types(snapshot);
+    let module_body = module_statements(&tree.body);
+    // Each `__init__` comes first, as it types the attributes it assigns, then the module
+    // body, which types the module variables, then the other functions.
+    let inferred_in = (
+        &mut definitions[..],
+        module_functions,
+        first_function,
+        first_class,
+    );
+    first_look(
+        program,
+        (&module_body, &tree.body),
+        inferred_in,
+        exported,
+        diagnostics,
+    );
     let others = check_initializers(program, &definitions, first_function, diagnostics);
     // The attributes `__init__` gives now have their types, which a protocol may name.
     program.note_protocol_fits(None);
-    program.end_first_look();
-    let body = BodyChecker::check_module(program, &module_body, diagnostics);
-    let start = typy_diagnostics::Span::empty(module.file, typy_diagnostics::TextOffset(0));
-    program.initialise_first(body, &module.enclosing_packages(), start);
+    let body = check_module_body(program, module, &module_body, diagnostics);
     let deferred = check_bodies(
         program,
         others,
@@ -535,6 +545,59 @@ fn check_initializers<'definitions, 'tree>(
         program.type_arguments.clear();
     }
     others
+}
+
+/// Returns the statements of the module body that run when the module is imported: every one
+/// but a `def`, whose function is checked on its own.
+fn module_statements(body: &[Stmt]) -> Vec<&Stmt> {
+    body.iter()
+        .filter(|statement| !matches!(statement, Stmt::FunctionDef { .. }))
+        .collect()
+}
+
+/// Checks the module body after the first look, and starts it with the import of the packages
+/// that hold the module `-m` runs (CLI-28); returns its function.
+fn check_module_body(
+    program: &mut Program,
+    module: &Module,
+    module_body: &[&Stmt],
+    diagnostics: &mut Diagnostics,
+) -> FunctionId {
+    program.end_first_look();
+    let body = BodyChecker::check_module(program, module_body, diagnostics);
+    let start = typy_diagnostics::Span::empty(module.file, typy_diagnostics::TextOffset(0));
+    program.initialise_first(body, &module.enclosing_packages(), start);
+    body
+}
+
+/// Looks at the module body with its diagnostics dropped and its effects undone but the types
+/// it gives the module variables, which the `__init__` methods read, so the cost of a module
+/// does not grow with the modules before it. The results of the
+/// module's functions without a result annotation are inferred after the look, and the body
+/// is looked at again when any was, from the types before the first look, so a variable
+/// assigned a call of one takes its result (TYP-26).
+fn first_look(
+    program: &mut Program,
+    (module_body, tree_body): (&[&Stmt], &[Stmt]),
+    inferred_in: (&mut [Definition<'_>], usize, usize, usize),
+    exported: &BTreeSet<String>,
+    diagnostics: &mut Diagnostics,
+) {
+    let first_class = inferred_in.3;
+    let before_look = program.module_types();
+    let snapshot = program.snapshot(first_class);
+    BodyChecker::check_module(program, module_body, &mut Diagnostics::new());
+    let inferred = inference::infer_results(program, tree_body, inferred_in, exported, diagnostics);
+    let snapshot = if inferred {
+        program.undo(snapshot);
+        program.set_module_types(before_look);
+        let again = program.snapshot(first_class);
+        BodyChecker::check_module(program, module_body, &mut Diagnostics::new());
+        again
+    } else {
+        snapshot
+    };
+    program.keep_module_types(snapshot);
 }
 
 /// Checks the bodies of the module's functions after the module body, then the copies of

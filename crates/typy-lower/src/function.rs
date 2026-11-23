@@ -267,6 +267,13 @@ impl<'context> FunctionLowerer<'context> {
                 let unit = lowerer.constant(Constant::Unit, function.span);
                 lowerer.release_slots(function.span);
                 lowerer.builder.terminate(Terminator::Return(unit));
+            } else if let typy_check::Type::Optional(_) = function.signature.returns {
+                // A function whose result is inferred returns `None` at its end, which its
+                // optional result holds (TYP-26).
+                let ty = lowerer.lowered_type(&function.signature.returns);
+                let none = lowerer.none_of(ty, function.span);
+                lowerer.release_slots(function.span);
+                lowerer.builder.terminate(Terminator::Return(none));
             } else {
                 // The checker rejects a function that returns a value and can reach its end
                 // (TYP-01), so this point follows only paths that returned or raised.

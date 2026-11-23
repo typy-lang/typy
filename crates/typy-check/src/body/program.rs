@@ -15,6 +15,12 @@ use crate::types::Type;
 /// The program being built: symbols, finished functions, and what every body may refer to.
 #[derive(Clone)]
 pub(crate) struct Program {
+    /// The function whose result is being inferred from its `return` statements, and the
+    /// types of the values they return, `None` for one that ends without a value (TYP-26).
+    pub(crate) inferring: Option<(FunctionId, Vec<Type>)>,
+    /// The functions whose results were inferred, whose end may return `None`, which the
+    /// result holds (TYP-26).
+    pub(crate) inferred_results: BTreeSet<FunctionId>,
     pub(super) module: String,
     pub(super) symbols: Vec<Symbol>,
     pub(super) functions: Vec<Option<TypedFunction>>,
@@ -213,6 +219,8 @@ impl Program {
             assigned_in_functions: BTreeSet::new(),
             final_variables: BTreeMap::new(),
             provisional: false,
+            inferring: None,
+            inferred_results: BTreeSet::new(),
             classes: Vec::new(),
             class_modules: Vec::new(),
             class_ids: BTreeMap::new(),
@@ -853,11 +861,46 @@ impl Program {
     /// Undoes a first look at the module body but the types it gave the module variables,
     /// which the `__init__` methods read until the module body is checked again.
     pub(crate) fn keep_module_types(&mut self, snapshot: Snapshot) {
-        let found: Vec<Type> = self
-            .module_symbols
+        let found = self.module_types();
+        self.undo(snapshot);
+        self.set_module_types(found);
+        self.provisional = true;
+        // The variables now have their types, which the getters of class variables give.
+        self.add_class_variable_getters();
+    }
+
+    /// Gives the function `id` the result `returns`, which its `return` statements gave
+    /// (TYP-26).
+    pub(crate) fn set_result(&mut self, id: FunctionId, returns: Type) {
+        self.signatures[id.0 as usize].returns = returns;
+        self.inferred_results.insert(id);
+    }
+
+    /// Forgets the body of `id` that a look at it made, which the function's own check makes
+    /// again.
+    pub(crate) fn forget_function(&mut self, id: FunctionId) {
+        self.functions[id.0 as usize] = None;
+    }
+
+    /// Returns the type of each module variable, in the order of `module_symbols`.
+    pub(crate) fn module_types(&self) -> Vec<Type> {
+        self.module_symbols
             .values()
             .map(|symbol| self.symbols[symbol.0 as usize].ty.clone())
-            .collect();
+            .collect()
+    }
+
+    /// Gives each module variable its type of `types`, as `module_types` gave them.
+    pub(crate) fn set_module_types(&mut self, types: Vec<Type>) {
+        let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
+        for (symbol, ty) in symbols.into_iter().zip(types) {
+            self.symbols[symbol.0 as usize].ty = ty;
+        }
+    }
+
+    /// Undoes what checking a body added since `snapshot`: the symbols, functions,
+    /// signatures, classes and copies it made.
+    pub(crate) fn undo(&mut self, snapshot: Snapshot) {
         self.symbols.truncate(snapshot.symbols);
         let first_new = FunctionId(id(snapshot.functions));
         self.lazy_imports
@@ -875,13 +918,6 @@ impl Program {
         self.protocol_values = snapshot.protocol_values;
         crate::protocol_fits::reset(&self.protocol_values.fits);
         crate::iterator_fits::reset(&self.protocol_values.iterations);
-        let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
-        for (symbol, ty) in symbols.into_iter().zip(found) {
-            self.symbols[symbol.0 as usize].ty = ty;
-        }
-        self.provisional = true;
-        // The variables now have their types, which the getters of class variables give.
-        self.add_class_variable_getters();
     }
 
     /// Ends the first look: the module body is checked next, and gives the final types.

@@ -182,7 +182,10 @@ pub(super) fn collect_functions<'tree>(
             .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone())))
             .collect();
         scope.parameters = &in_scope;
-        let mut made = definition(&parts, None, &scope, diagnostics);
+        // A function of the module without a result annotation takes the result its
+        // `return` statements give, which `inference` finds before any call is checked
+        // (TYP-26, ADR-0092).
+        let mut made = definition(&parts, (None, true), &scope, diagnostics);
         made.type_parameters = type_parameters;
         super::protocol::protocol_parameters(&mut made, false, diagnostics);
         functions.push(made);
@@ -272,8 +275,6 @@ fn instance_parameter(
     instance
 }
 
-/// Returns the definition of a function, or of a method of `owner`, whose first parameter is
-/// the instance and needs no annotation.
 /// Returns the definition of a function that is no method, such as a nested function, its
 /// annotations read in `scope` (FUN-04).
 pub(crate) fn function_definition<'tree>(
@@ -281,12 +282,15 @@ pub(crate) fn function_definition<'tree>(
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Definition<'tree> {
-    definition(parts, None, scope, diagnostics)
+    definition(parts, (None, false), scope, diagnostics)
 }
 
+/// Returns the definition of a function, or of a method of `owner`. A function whose result
+/// may be inferred, `infers`, takes the error type for a missing result annotation, which the
+/// inference replaces; any other is E0204 without one.
 pub(super) fn definition<'tree>(
     parts: &FunctionParts<'tree>,
-    owner: Option<&Owner>,
+    (owner, infers): (Option<&Owner>, bool),
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Definition<'tree> {
@@ -347,7 +351,8 @@ pub(super) fn definition<'tree>(
         Some(annotation) => annotation_type(annotation, scope, diagnostics),
         // `__init__` returns `None`, so it may leave its return annotation out, as mypy allows.
         None if initializer => Type::NoneType,
-        None => missing_result(name, parts.name.span, diagnostics),
+        None if infers => Type::Error,
+        None => missing_result(name, parts.name.span, None, diagnostics),
     };
     if initializer && !returns.matches(&Type::NoneType) {
         diagnostics.push(
@@ -462,20 +467,32 @@ pub(crate) fn exit_parameter(index: usize) -> Type {
     })
 }
 
-/// Returns the error type after reporting a function without a result annotation; a result
-/// inferred from its `return` statements is planned (TYP-26, ADR-0092).
-fn missing_result(name: &str, span: Span, diagnostics: &mut Diagnostics) -> Type {
+/// Returns the error type after reporting a function without a result annotation whose
+/// result is not inferred, with the reason and the help when one is given (TYP-26,
+/// ADR-0092).
+pub(super) fn missing_result(
+    name: &str,
+    span: Span,
+    reason: Option<(&str, &str)>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let message = match reason {
+        Some((reason, _)) => {
+            format!("function `{name}` has no return annotation, and {reason}")
+        }
+        None => format!("function `{name}` has no return annotation"),
+    };
+    let help = match reason {
+        Some((_, help)) => help,
+        None => {
+            "write its result type, such as `-> int`; TyPy infers the result of a function \
+             defined at module level, not of a method or a nested function"
+        }
+    };
     diagnostics.push(
-        Diagnostic::new(
-            DiagnosticCode::error(204),
-            span,
-            format!("function `{name}` has no return annotation"),
-        )
-        .with_rule(RuleId::TYP_01)
-        .with_help(
-            "write `-> None` if it returns nothing; a result inferred from the `return` \
-             statements is planned for TyPy 0.12 (TYP-26)",
-        ),
+        Diagnostic::new(DiagnosticCode::error(204), span, message)
+            .with_rule(RuleId::TYP_01)
+            .with_help(help),
     );
     Type::Error
 }
