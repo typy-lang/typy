@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.134 |
+| Version | 2.135 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-23 |
+| Last updated | 2026-11-24 |
 
 ## 1. Purpose and scope
 
@@ -574,18 +574,24 @@ that is not a literal.
 TyPy gives, in `crates/typy-stdlib/lib`, embedded in the `typy` binary
 with `include_str!` (ADR-0007, ADR-0119). `source(name)` gives a module's
 text and `names()` lists them; 0.12 gives `base64`, `binascii`,
-`bisect`, `heapq`, `string` and `textwrap` (LIB-27). A module gives the
-results and messages of CPython 3.15, as ADR-0029 says, with the
-parameters Python 3.12 has; what later versions add is planned for 0.13
-(LIB-32). The loader
+`bisect`, `heapq`, `string` and `textwrap` (LIB-27), and the private
+`_frozendict`, which writes `frozendict` (DAT-18, ADR-0123). A module
+gives the results and messages of CPython 3.15, as ADR-0029 says, with
+the parameters Python 3.12 has; what later versions add is planned for
+0.13 (LIB-32). After a module of the Python floor 3.15 is parsed,
+`built_in_import::add_built_in_imports` gives it `from _frozendict import
+frozendict` when its text holds that word and its module level binds no
+such name; the checker's `body/frozendict.rs` reads a `frozendict` as its
+`_items` dict where a mapping is read. The loader
 looks for an imported module in the program's directories first, as
 CPython looks in the script's directory first, then asks `embedded`,
 which returns a `Location` holding the text under the path
 `<typy-stdlib>/name.py`; `ProjectLoader::read` reads it as any module
 of the program, so the checker, lowering and the build treat it alike. A
 module is typed Python that CPython also runs.
-`scripts/check-stdlib-signatures.py` compares each module with typeshed's
-stub of it at the revision `typeshed-revision` pins: the public names,
+`scripts/check-stdlib-signatures.py` compares each public module with
+typeshed's stub of it at the revision `typeshed-revision` pins: the
+public names,
 following `from X import *`, `sys.version_info` blocks at the floor 3.12
 and plain aliases, and each function's parameters across the stub's
 overloads, by name, how each is passed and whether it may be left out,

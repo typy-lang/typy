@@ -1,6 +1,7 @@
 //! Finds, reads and parses the modules of a TyPy program (the Source context).
 #![forbid(unsafe_code)]
 
+mod built_in_import;
 mod int_literal;
 mod lazy;
 mod line_index;

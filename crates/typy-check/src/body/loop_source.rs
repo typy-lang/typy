@@ -357,8 +357,11 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        // A loop over an enum class reads the list of its members (CLS-44).
+        // A loop over an enum class reads the list of its members (CLS-44), and one over a
+        // `frozendict` the dict it holds, which gives the same keys in the same order
+        // (DAT-18).
         let value = self.tuple_expression(expression);
+        let value = self.frozendict_items(value);
         Self::sequence_of(self.enum_members(value))
     }
 

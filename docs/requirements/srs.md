@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.141 |
+| Version | 1.142 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-23 |
+| Last updated | 2026-11-24 |
 
 ## 1. Introduction
 
@@ -261,7 +261,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | DAT-15 | The methods of `set` that combine a set with others, `union`, `intersection`, `difference`, `symmetric_difference`, `update`, `intersection_update`, `difference_update`, `symmetric_difference_update`, `issubset`, `issuperset` and `isdisjoint`, shall accept any iterable of the set's item type, and as many arguments as CPython accepts, with CPython's results and order. | M | 0.2 | 3.2.6 |
 | DAT-16 | `reversed` of a dict and of its views, `dict` with keyword arguments, `dict.fromkeys`, and the comparisons and set operations of `dict.keys()` and `dict.items()` shall be available with Python's results. | S | 0.3 | 3.2.7 |
 | DAT-17 | `range` shall be a value as well as a loop source: a sequence of `int` with `len`, indexing, slicing, `in`, `==` and `repr`, as in Python. | S | 0.3 | 3.2.5 |
-| DAT-18 | `frozendict` (PEP 814) shall be an immutable, hashable mapping with CPython's methods, `\|` and text, under a Python floor of 3.15 or later. | S | 0.12 | 3.2.5 |
+| DAT-18 | `frozendict` (PEP 814) shall be an immutable, hashable mapping with CPython's methods, `\|` and text, under a Python floor of 3.15 or later (ADR-0123). | S | 0.12 | 3.2.5 |
 | DAT-19 | Arithmetic on `bool` operands, and `abs`, `round` and `sum` of them, shall give CPython's results, a `bool` taken as the `int` 0 or 1, such as `True + 1 == 2` and `-True == -1`; `~` of a `bool`, which CPython deprecates since 3.12, shall be rejected (ADR-0098). | S | 0.11 | 3.2.4 |
 
 ### 3.6 Expressions (EXP)

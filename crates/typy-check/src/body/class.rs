@@ -517,6 +517,10 @@ impl BodyChecker<'_> {
         if let Some(found) = self.enum_lookup(class, arguments, keywords, span) {
             return found;
         }
+        // `frozendict` takes what `dict` takes (DAT-18).
+        if let Some(made) = self.frozendict_made(class, arguments, keywords, span) {
+            return made;
+        }
         self.instance_made(class, arguments, keywords, span)
     }
 

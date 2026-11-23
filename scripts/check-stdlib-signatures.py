@@ -182,6 +182,10 @@ def main() -> int:
     problems: list[str] = []
     for source in sorted((STDLIB / "lib").glob("*.py")):
         module_name = source.stem
+        # A private module writes a built-in, such as `frozendict`, whose stub is a class of
+        # `builtins`; classes are compared by name only, so it has nothing to compare.
+        if module_name.startswith("_"):
+            continue
         stub_path = STUBS / "stdlib" / f"{module_name}.pyi"
         if not stub_path.is_file():
             stub_path = STUBS / "stdlib" / module_name / "__init__.pyi"

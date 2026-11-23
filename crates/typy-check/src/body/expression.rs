@@ -116,6 +116,14 @@ impl BodyChecker<'_> {
                 let right = Self::version_tuple(right);
                 // A member of an `IntEnum` or a `StrEnum` is its value here (CLS-44).
                 let (left, right) = self.enum_operands(*operator, (left, right));
+                // A `frozendict` merged into a dict is the dict it holds (DAT-18).
+                let right = if *operator == typy_source::syntax::BinaryOperator::BitOr
+                    && matches!(left.ty, Type::Dict(..))
+                {
+                    self.frozendict_items(right)
+                } else {
+                    right
+                };
                 // An instance's class may define the operator's method (CLS-07).
                 let (left, right) = match self.operator_binary(*operator, left, right, span) {
                     super::operator_method::Comparison::Called(call) => return call,

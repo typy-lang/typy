@@ -151,6 +151,7 @@ impl BodyChecker<'_> {
         };
         // A member of an `IntEnum` or a `StrEnum` has the methods of its value (CLS-44).
         let receiver = self.enum_receiver(receiver, &name.name);
+        let receiver = self.frozendict_receiver(receiver, &name.name);
         if name.name == "fromkeys"
             && let Type::TypeObject(Some(of)) = &receiver.ty
             && **of == crate::types::TypeObjectOf::Dict

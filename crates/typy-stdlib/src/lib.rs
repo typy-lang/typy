@@ -5,7 +5,8 @@
 #![forbid(unsafe_code)]
 
 /// Each module TyPy gives, by its name, with its source.
-const MODULES: [(&str, &str); 6] = [
+const MODULES: [(&str, &str); 7] = [
+    ("_frozendict", include_str!("../lib/_frozendict.py")),
     ("base64", include_str!("../lib/base64.py")),
     ("binascii", include_str!("../lib/binascii.py")),
     ("bisect", include_str!("../lib/bisect.py")),

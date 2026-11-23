@@ -255,6 +255,7 @@ nav:
           - adr/0120-check-a-comparison-of-a-type-parameter-in-each-copy.md
           - adr/0121-give-copy-from-the-compiler-in-0-13.md
           - adr/0122-give-hash-as-the-hash-a-dict-keeps-a-key-by.md
+          - adr/0123-write-frozendict-as-a-class-every-module-of-the-floor-imports.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

@@ -32,7 +32,9 @@ mod types;
 mod union_type;
 mod unprovided;
 
-pub use body::{COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, member_class, member_test};
+pub use body::{
+    COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, is_built_in_module, member_class, member_test,
+};
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use check::builtin_iterators::built_in_class;

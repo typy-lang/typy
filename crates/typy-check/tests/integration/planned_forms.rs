@@ -1,9 +1,7 @@
 //! The forms of typed Python a later release gives: each refusal names the release and the
 //! requirement that plan it (ADR-0090 to ADR-0097).
 
-use typy_source::PythonFloor;
-
-use crate::common::{messages, messages_at};
+use crate::common::messages;
 
 fn planned(name: &str, release: &str, rule: &str) -> (String, String, String) {
     (
@@ -80,16 +78,6 @@ fn any_as_a_type_is_planned_for_0_13() {
             "TYP-25".to_owned(),
         )]
     );
-}
-
-#[test]
-fn frozendict_is_planned_from_the_floor_3_15() {
-    assert_eq!(
-        messages_at("value = frozendict()\n", PythonFloor::V3_15),
-        [planned("frozendict", "0.12", "DAT-18")]
-    );
-    // Below 3.15 CPython has none, so TyPy says what CPython says.
-    assert_eq!(messages("value = frozendict()\n")[0].0, "E0205");
 }
 
 #[test]

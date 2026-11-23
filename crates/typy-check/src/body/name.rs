@@ -208,15 +208,10 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn unknown_name(&mut self, id: &str, span: Span) -> TypedExpr {
-        // `frozendict` is a builtin from Python 3.15 (PEP 814), planned for 0.12.
-        if id == "frozendict" && self.program.floor >= 15 {
-            let diagnostic = Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "`frozendict` is planned for TyPy 0.12 (DAT-18)",
-            )
-            .with_rule(RuleId::DAT_18);
-            return self.error(diagnostic, span);
+        // `frozendict` is a builtin from Python 3.15 (PEP 814). A module of that floor imports
+        // the class that writes it, so a read reaches here only below it (DAT-18).
+        if id == "frozendict" {
+            return self.error(frozendict_below_floor(span), span);
         }
         let diagnostic = match unprovided(id) {
             Some(Unprovided::Planned { release, rule }) => Diagnostic::new(
@@ -345,4 +340,17 @@ impl BodyChecker<'_> {
             span,
         ))
     }
+}
+
+/// Returns the error for `frozendict` read under a Python floor below 3.15, which has no
+/// such builtin; a module of that floor imports it, so only a lower floor reaches here
+/// (DAT-18).
+pub(crate) fn frozendict_below_floor(span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(425),
+        span,
+        "`frozendict` is a builtin from Python 3.15",
+    )
+    .with_rule(RuleId::DAT_18)
+    .with_help("set `python-floor = \"3.15\"` in typy.toml to use it")
 }

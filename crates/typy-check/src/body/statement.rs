@@ -252,6 +252,14 @@ impl BodyChecker<'_> {
             } => {
                 let checked_value = self.expression(value);
                 let current = self.expression(target);
+                // A `frozendict` merged into a dict is the dict it holds (DAT-18).
+                let checked_value = if *operator == typy_source::syntax::BinaryOperator::BitOr
+                    && matches!(current.ty, Type::Dict(..))
+                {
+                    self.frozendict_items(checked_value)
+                } else {
+                    checked_value
+                };
                 // A number held as a variable of a union of numbers, such as an `int | bool`
                 // an `isinstance` test gave, is combined member by member, as `x = x + y` is
                 // (TYP-14, DAT-19).

@@ -128,3 +128,4 @@ supersedes it.
 | [ADR-0120](0120-check-a-comparison-of-a-type-parameter-in-each-copy.md) | Check a comparison of a type parameter in each copy | Accepted | 2026-11-23 |
 | [ADR-0121](0121-give-copy-from-the-compiler-in-0-13.md) | Give copy from the compiler in 0.13 | Accepted | 2026-11-23 |
 | [ADR-0122](0122-give-hash-as-the-hash-a-dict-keeps-a-key-by.md) | Give hash as the hash a dict keeps a key by | Accepted | 2026-11-23 |
+| [ADR-0123](0123-write-frozendict-as-a-class-every-module-of-the-floor-imports.md) | Write frozendict as a class every module of the floor imports | Accepted | 2026-11-24 |

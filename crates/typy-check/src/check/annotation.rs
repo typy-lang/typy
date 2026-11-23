@@ -888,6 +888,12 @@ pub(crate) fn annotation_type(
             }
             Type::Set(Box::new(item))
         }
+        // A module of the Python floor 3.15 imports `frozendict` (DAT-18).
+        Expr::Subscript { value, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "frozendict") =>
+        {
+            diagnostics.push(crate::body::frozendict_below_floor(value.span()));
+            Type::Error
+        }
         other => {
             diagnostics.push(
                 Diagnostic::new(
@@ -1026,6 +1032,11 @@ fn named_type(
         }
         _ if let Some(class) = BuiltinException::named(id) => {
             Type::Exception(ExceptionClass::Builtin(class))
+        }
+        // A module of the Python floor 3.15 imports `frozendict` (DAT-18).
+        "frozendict" => {
+            diagnostics.push(crate::body::frozendict_below_floor(span));
+            Type::Error
         }
         _ => {
             diagnostics.push(

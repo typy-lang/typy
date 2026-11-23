@@ -26,6 +26,7 @@ the same exceptions.
 | `range` as a value: `len`, indexing, slicing, `in`, `==` and its text | DAT-17 |
 | `dict.keys()` and `dict.items()` as sets: `\|`, `&`, `-`, `^` and comparisons | DAT-16 |
 | `reversed` of a dict, `dict(name=value)` and `dict.fromkeys` | DAT-16 |
+| `frozendict[K, V]`, from the Python floor 3.15; see [Frozen dicts](#frozen-dicts) | DAT-18 |
 
 A slice without a step, or with a step of 1, takes any number of items,
 and the list grows or shrinks to fit: `xs[:0] = items` inserts at the
@@ -118,9 +119,32 @@ itself, so every name bound to it sees the change, as for a list. A
 method of either takes the other where it takes bytes. A `bytearray` has
 no hash, so it cannot be a member of a set or a key of a dict (ADR-0108).
 
-`frozendict`, a builtin from Python 3.15, is E0201 at the Python floor
-3.15, planned for 0.12 (DAT-18); below that floor it is not defined, as
-in CPython.
+## Frozen dicts
+
+From the Python floor 3.15, `frozendict[K, V]` is the immutable mapping
+of PEP 814 (DAT-18, ADR-0123). `frozendict(...)` takes what `dict(...)`
+takes: a dict or a `frozendict`, `(key, value)` pairs, keywords, or
+nothing where an annotation gives the types, as in
+`empty: frozendict[str, int] = frozendict()`. It has `len`, `in`,
+iteration, `fd[key]`, `get`, `keys`, `values`, `items`, and `copy`, which
+returns the frozendict itself. `fd | other` merges a dict or a frozendict
+into a new frozendict, and `==` compares it with either. It prints as
+`frozendict({'tea': 3})`, and hashes as CPython 3.15 hashes it, so it can
+be a key of a dict; hashing one whose values have no hash, such as lists,
+raises `TypeError`.
+
+Where CPython reads any mapping, a frozendict reads as a dict: in
+`dict(fd)`, `d.update(fd)`, `{**fd}`, `f(**fd)`, `d | fd`, `d |= fd`,
+`reversed(fd)` and a `for` loop. It has no `fd[key] = value` and no
+method that changes it, as CPython raises `TypeError` or
+`AttributeError` for them. Below the floor 3.15 the name is E0425, as
+CPython 3.12 raises `NameError`:
+
+<!-- typy-expect: rejected E0425 at 1:10 -->
+```python
+prices = frozendict({"tea": 3})
+print(prices)
+```
 
 ## Example
 

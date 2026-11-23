@@ -103,7 +103,9 @@ impl BodyChecker<'_> {
                 }
                 DictPart::Entry(key, value)
             } else {
+                // A `frozendict` unpacks as the dict it holds (DAT-18).
                 let merged = self.expression(value);
+                let merged = self.frozendict_items(merged);
                 match &merged.ty {
                     Type::Dict(key, value) => {
                         let key_type = key_type.get_or_insert_with(|| key.as_ref().clone());

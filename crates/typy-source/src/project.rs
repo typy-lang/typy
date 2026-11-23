@@ -8,6 +8,7 @@ use typy_diagnostics::{
     TextOffset,
 };
 
+use crate::built_in_import::add_built_in_imports;
 use crate::loader::{
     Import, Location, embedded, imports, initialisation_order, is_standard, locate, not_found,
 };
@@ -237,7 +238,14 @@ impl Loader<'_> {
                 for warning in parsed.warnings {
                     self.diagnostics.push(warning);
                 }
-                let syntax = parsed.tree;
+                let mut syntax = parsed.tree;
+                // A module that names `frozendict` imports the class that writes it (DAT-18).
+                add_built_in_imports(
+                    &mut syntax.body,
+                    file.text(),
+                    self.settings.python_floor,
+                    id,
+                );
                 self.modules.insert(
                     name.clone(),
                     Module {

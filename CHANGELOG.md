@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `frozendict` from the Python floor 3.15: an immutable mapping made
+  from what `dict` takes, with `get`, `keys`, `values`, `items`,
+  `copy`, `|`, `==`, CPython's text and hash, and read as a dict by
+  `dict()`, `**`, `update` and `|` (DAT-18, ADR-0123).
 - The builtin `hash`: the hash a set or a dict keeps a value by,
   CPython's for numbers, `None` and tuples of them, and what `__hash__`
   returns for an instance (LIB-34, ADR-0122).

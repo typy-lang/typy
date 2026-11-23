@@ -292,7 +292,9 @@ impl BodyChecker<'_> {
         value: &Expr,
         entries: &mut Option<Type>,
     ) -> Option<Argument> {
+        // A `frozendict` unpacks as the dict it holds (DAT-18).
         let value = self.expression(value);
+        let value = self.frozendict_items(value);
         let item = match &value.ty {
             Type::Dict(key, item) if **key == Type::Str => item.as_ref().clone(),
             Type::Error => return None,

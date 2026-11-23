@@ -66,6 +66,10 @@ impl BodyChecker<'_> {
             _ => None,
         };
         let target = member.as_ref().or(target);
+        // `frozendict(...)` takes the item types of the `frozendict` expected (DAT-18).
+        if let Some(made) = self.frozendict_expecting(expression, target) {
+            return Self::converted(made, expected);
+        }
         let value = match (expression, target) {
             // A `lambda`, and a built-in function, takes its parameter and result types from
             // the `Callable` expected (FUN-08).

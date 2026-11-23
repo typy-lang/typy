@@ -21,6 +21,7 @@ mod exception_parts;
 mod exports;
 mod final_names;
 mod first_add;
+mod frozendicts;
 mod function_values;
 mod generator_types;
 mod generators;

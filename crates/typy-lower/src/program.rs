@@ -402,12 +402,15 @@ fn tyir_class(
         };
         (equal, takes)
     });
+    // A class written for `map` or `filter` is the built-in of that name (ADR-0089), and so is
+    // `frozendict` (ADR-0123).
+    let built_in = typy_check::built_in_class(&class.name).is_some()
+        || typy_check::is_built_in_module(&class.module);
     TyirClass {
-        // A class written for `map` or `filter` is the built-in of that name (ADR-0089).
         name: typy_check::built_in_class(&class.name)
             .unwrap_or(&class.name)
             .to_owned(),
-        module: if typy_check::built_in_class(&class.name).is_some() {
+        module: if built_in {
             String::new()
         } else {
             class.module.clone()
