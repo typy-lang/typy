@@ -288,7 +288,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     }
 
     /// Returns whether the word holds an inline value: its lowest bit is set.
-    fn is_inline(&self, value: IntValue<'ctx>) -> Result<IntValue<'ctx>, CodegenError> {
+    pub(super) fn is_inline(&self, value: IntValue<'ctx>) -> Result<IntValue<'ctx>, CodegenError> {
         let word = self.shared.context.i64_type();
         let bit = self
             .builder
@@ -299,7 +299,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     }
 
     /// Returns whether both words hold inline values.
-    fn both_inline(
+    pub(super) fn both_inline(
         &self,
         left: IntValue<'ctx>,
         right: IntValue<'ctx>,
@@ -309,7 +309,10 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     }
 
     /// Returns `condition`, marked as almost always true, so the inline path is laid out first.
-    fn expect_true(&self, condition: IntValue<'ctx>) -> Result<IntValue<'ctx>, CodegenError> {
+    pub(super) fn expect_true(
+        &self,
+        condition: IntValue<'ctx>,
+    ) -> Result<IntValue<'ctx>, CodegenError> {
         let flag = self.shared.context.bool_type();
         let declaration = Intrinsic::find("llvm.expect")
             .and_then(|intrinsic| intrinsic.get_declaration(self.shared.module, &[flag.into()]))
@@ -329,7 +332,7 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     }
 
     /// Returns the block the builder writes into.
-    fn current_block(&self) -> Result<BasicBlock<'ctx>, CodegenError> {
+    pub(super) fn current_block(&self) -> Result<BasicBlock<'ctx>, CodegenError> {
         self.builder
             .get_insert_block()
             .ok_or_else(|| CodegenError("no current block".to_owned()))

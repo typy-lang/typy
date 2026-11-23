@@ -41,6 +41,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `list[i]` and `list[i] = x` on lists of `int`, `float`, `bool`, `str`
+  and other objects, `//` and `%` of integers that fit in 63 bits,
+  `float()` of one, and `/` of two floats run in place in the generated
+  code, and the runtime is called only where they may raise or where an
+  item needs a reference count. The benchmark suite's geometric mean
+  falls from 5.1 to 3.9 times C's time, inside NFR-22: spectralnorm runs
+  2.2 times faster and fannkuchredux 3.6 times (ADR-0107).
 - With `--deny-warnings`, each warning is reported as an error, such as
   `error[W0101]`, with `"severity":"error"` in JSON, so the output says
   why the command failed. A tool that read `"severity":"warning"` to find

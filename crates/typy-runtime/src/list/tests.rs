@@ -453,3 +453,27 @@ fn nfr_21_an_object_item_hashes_and_compares_as_its_type_does() {
         assert!(!object.equal(address(first.cast()), address(boxed)));
     }
 }
+
+#[test]
+fn the_list_layout_is_the_one_generated_code_reads() {
+    // typy-codegen's `list_item.rs` reads the length, the kind and the items at these offsets,
+    // and holds the kinds below 5 as one word each, the kinds below 3 without a count of
+    // their own for an inline value (ADR-0107).
+    use std::mem::offset_of;
+    assert_eq!(
+        (
+            offset_of!(super::ListObject, length),
+            offset_of!(super::ListObject, kind),
+            offset_of!(super::ListObject, items),
+        ),
+        (8, 24, 32)
+    );
+    let words = [
+        ItemKind::Int,
+        ItemKind::Float,
+        ItemKind::Bool,
+        ItemKind::Object,
+        ItemKind::NoneValue,
+    ];
+    assert_eq!(words.map(|kind| kind as u32), [0, 1, 2, 3, 4]);
+}

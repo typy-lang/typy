@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.111 |
+| Version | 2.112 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -3334,14 +3334,15 @@ file names and lines of traceback entries. Every error is internal, E9001.
 The crate has one module per responsibility: the target, the optimisation
 level, the shared layout, static objects, the calling convention, runtime
 declarations, function setup, operation dispatch, constants, arithmetic,
-comparisons, operations on inline ints in place, calls and counting,
-terminators, and emission.
+comparisons, operations on inline ints in place, list items, division and
+conversion in place, calls and counting, terminators, and emission.
 
 ### 10.2 Contract with the runtime
 
 | Item | Form |
 | --- | --- |
-| `int` | A 64-bit word. An inline value has its lowest bit set and holds the number shifted left by one; any other word is the address of a large integer. Every `int` argument of a runtime function is such a word. The generated code does `+`, `-`, `*`, unary `-`, `~`, `&`, `\|`, `^` and the comparisons of two inline words in place, with LLVM's overflow intrinsics, and calls the runtime for a large integer or a result outside the inline range; a reference count of an `int` word calls the runtime only for a large integer (ADR-0102) |
+| `int` | A 64-bit word. An inline value has its lowest bit set and holds the number shifted left by one; any other word is the address of a large integer. Every `int` argument of a runtime function is such a word. The generated code does `+`, `-`, `*`, unary `-`, `~`, `&`, `\|`, `^` and the comparisons of two inline words in place, with LLVM's overflow intrinsics, and calls the runtime for a large integer or a result outside the inline range; a reference count of an `int` word calls the runtime only for a large integer (ADR-0102). `//` and `%` of two inline words, with a divisor other than zero and other than `-2**62 // -1`, and `float()` of an inline word, are done in place too, and so is `/` of two floats whose divisor is not zero; the runtime takes every other case and raises (ADR-0107) |
+| List items | `ListObject` is `#[repr(C)]`: `length` at offset 8, `kind` at 24 and `items` at 32, which a runtime test pins. `list[i]` with an inline `i` inside the list, counted from the end when negative, loads the slot in place when the kind is below 5, a word item; `list[i] = x` stores in place when the kind is below 3 and, for `int` items, both the new and the replaced word are inline. Every other read and write calls `typy_rt_list_get`, `typy_rt_list_set` or `typy_rt_list_set_moved` (ADR-0107) |
 | `float`, `bool`, objects | A double, an `i1`, a pointer. A `bool` returned by the runtime is one byte, and a `bool` argument is declared `zeroext i1`, as Rust declares it (ADR-0053) |
 | Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
 | Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5, a `bytes` is 6, a set is 7, a dict is 8, a view of a dict is 9, a type object is 10 and an instance of a class is 11 |

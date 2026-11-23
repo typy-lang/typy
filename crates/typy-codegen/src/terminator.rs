@@ -2,10 +2,11 @@
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::values::{BasicValue, BasicValueEnum, CallSiteValue, ValueKind};
-use typy_tyir::{Callee, Terminator, TyirType, ValueId};
+use typy_tyir::{Callee, RuntimeFunction, Terminator, TyirType, ValueId};
 
 use crate::error::CodegenError;
 use crate::function::FunctionEmitter;
+use crate::in_place_call::Raised;
 use crate::runtime::{Internal, internal_function, runtime_function};
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
@@ -89,34 +90,23 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         _current: BasicBlock<'ctx>,
     ) -> Result<(), CodegenError> {
         let context = self.shared.context;
-        let (call, result_type) = self.call_of(callee, arguments, normal)?;
-        let returned = match call.try_as_basic_value() {
-            ValueKind::Basic(value) => value,
-            ValueKind::Instruction(_) => {
-                return Err(CodegenError(
-                    "a raising call returns its exception".to_owned(),
-                ));
+        // A list item of one word, and arithmetic on inline words and floats, is done in place
+        // where it cannot raise (ADR-0107).
+        let (result, exception) = match callee {
+            Callee::Runtime(RuntimeFunction::ListGet) => self.list_get_in_place(arguments)?,
+            Callee::Runtime(
+                function @ (RuntimeFunction::ListSet | RuntimeFunction::ListSetMoved),
+            ) => self.list_set_in_place(function, arguments)?,
+            Callee::Runtime(
+                function @ (RuntimeFunction::IntFloorDivide | RuntimeFunction::IntModulo),
+            ) => self.int_division_in_place(function, arguments)?,
+            Callee::Runtime(RuntimeFunction::IntToFloat) => {
+                self.int_to_float_in_place(arguments)?
             }
-        };
-        let (result, exception) = if crate::abi::value_type(
-            context,
-            &self.shared.tyir.tuple_types,
-            result_type,
-        )
-        .is_some()
-        {
-            let pair = returned.into_struct_value();
-            let mut result: BasicValueEnum<'ctx> = self.builder.build_extract_value(pair, 0, "")?;
-            if matches!(callee, Callee::Runtime(_)) {
-                result = self.runtime_result(result_type, result)?;
+            Callee::Runtime(RuntimeFunction::FloatDivide) => {
+                self.float_divide_in_place(arguments)?
             }
-            let exception = self
-                .builder
-                .build_extract_value(pair, 1, "")?
-                .into_pointer_value();
-            (Some(result), exception)
-        } else {
-            (None, returned.into_pointer_value())
+            _ => self.called(callee, arguments, normal)?,
         };
         let raised = self.builder.build_is_not_null(exception, "")?;
         let traceback = context.append_basic_block(self.llvm_function, "traceback");
@@ -167,6 +157,44 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     /// Emits the call of `callee` with `arguments`, and returns it with the type of its result:
     /// a direct call of a runtime or program function, or an indirect call of a method
     /// table's entry or of a function value's code, whose result `normal` takes.
+    /// Calls `callee`, which may raise, and returns its result, if it has one, and its
+    /// exception.
+    fn called(
+        &mut self,
+        callee: Callee,
+        arguments: &[ValueId],
+        normal: typy_tyir::BlockId,
+    ) -> Result<Raised<'ctx>, CodegenError> {
+        let (call, result_type) = self.call_of(callee, arguments, normal)?;
+        let returned = match call.try_as_basic_value() {
+            ValueKind::Basic(value) => value,
+            ValueKind::Instruction(_) => {
+                return Err(CodegenError(
+                    "a raising call returns its exception".to_owned(),
+                ));
+            }
+        };
+        if crate::abi::value_type(
+            self.shared.context,
+            &self.shared.tyir.tuple_types,
+            result_type,
+        )
+        .is_none()
+        {
+            return Ok((None, returned.into_pointer_value()));
+        }
+        let pair = returned.into_struct_value();
+        let mut result: BasicValueEnum<'ctx> = self.builder.build_extract_value(pair, 0, "")?;
+        if matches!(callee, Callee::Runtime(_)) {
+            result = self.runtime_result(result_type, result)?;
+        }
+        let exception = self
+            .builder
+            .build_extract_value(pair, 1, "")?
+            .into_pointer_value();
+        Ok((Some(result), exception))
+    }
+
     fn call_of(
         &mut self,
         callee: Callee,

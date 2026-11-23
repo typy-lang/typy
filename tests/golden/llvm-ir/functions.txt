@@ -27,12 +27,12 @@ b0:
   %2 = and i64 %0, 1
   %3 = icmp ne i64 %2, 0
   %4 = call i1 @llvm.expect.i1(i1 %3, i1 true)
-  br i1 %4, label %29, label %large_int
+  br i1 %4, label %36, label %large_int
 
-b1:                                               ; preds = %33
+b1:                                               ; preds = %40
   br label %b2
 
-b2:                                               ; preds = %59, %b1
+b2:                                               ; preds = %85, %b1
   %5 = load i64, ptr %s1, align 8
   %6 = and i64 %5, 1
   %7 = and i64 %6, 1
@@ -43,165 +43,199 @@ b2:                                               ; preds = %59, %b1
 b3:                                               ; preds = %b6
   %10 = load i64, ptr %s0, align 8
   %11 = load i64, ptr %s1, align 8
-  %12 = call { i64, ptr } @typy_rt_int_modulo(i64 %10, i64 %11)
-  %13 = extractvalue { i64, ptr } %12, 0
-  %14 = extractvalue { i64, ptr } %12, 1
-  %15 = icmp ne ptr %14, null
-  br i1 %15, label %traceback, label %b7
+  %12 = and i64 %10, %11
+  %13 = and i64 %12, 1
+  %14 = icmp ne i64 %13, 0
+  %15 = icmp ne i64 %11, 1
+  %16 = icmp eq i64 %10, -9223372036854775807
+  %17 = icmp eq i64 %11, -1
+  %18 = and i1 %16, %17
+  %19 = xor i1 %18, true
+  %20 = and i1 %14, %15
+  %21 = and i1 %20, %19
+  %22 = call i1 @llvm.expect.i1(i1 %21, i1 true)
+  br i1 %22, label %in_place, label %call
 
 b4:                                               ; preds = %b6
   br label %b5
 
 b5:                                               ; preds = %b4
-  %16 = load i64, ptr %s0, align 8
-  %17 = load i64, ptr %s1, align 8
-  %18 = and i64 %17, 1
-  %19 = icmp ne i64 %18, 0
-  %20 = call i1 @llvm.expect.i1(i1 %19, i1 true)
-  br i1 %20, label %39, label %large_int3
+  %23 = load i64, ptr %s0, align 8
+  %24 = load i64, ptr %s1, align 8
+  %25 = and i64 %24, 1
+  %26 = icmp ne i64 %25, 0
+  %27 = call i1 @llvm.expect.i1(i1 %26, i1 true)
+  br i1 %27, label %65, label %large_int3
 
-b6:                                               ; preds = %37
-  %v2 = phi i1 [ %38, %37 ]
+b6:                                               ; preds = %44
+  %v2 = phi i1 [ %45, %44 ]
   br i1 %v2, label %b3, label %b4
 
-b7:                                               ; preds = %b3
-  %v8 = phi i64 [ %13, %b3 ]
-  %21 = load i64, ptr %s2, align 8
+b7:                                               ; preds = %61
+  %v8 = phi i64 [ %62, %61 ]
+  %28 = load i64, ptr %s2, align 8
   store i64 %v8, ptr %s2, align 8
-  %22 = and i64 %21, 1
-  %23 = icmp ne i64 %22, 0
-  %24 = call i1 @llvm.expect.i1(i1 %23, i1 true)
-  br i1 %24, label %47, label %large_int5
+  %29 = and i64 %28, 1
+  %30 = icmp ne i64 %29, 0
+  %31 = call i1 @llvm.expect.i1(i1 %30, i1 true)
+  br i1 %31, label %73, label %large_int5
 
 b8:                                               ; preds = %traceback
-  %v9 = phi ptr [ %14, %traceback ]
-  %25 = load i64, ptr %s0, align 8
-  %26 = and i64 %25, 1
-  %27 = icmp ne i64 %26, 0
-  %28 = call i1 @llvm.expect.i1(i1 %27, i1 true)
-  br i1 %28, label %60, label %large_int8
+  %v9 = phi ptr [ %63, %traceback ]
+  %32 = load i64, ptr %s0, align 8
+  %33 = and i64 %32, 1
+  %34 = icmp ne i64 %33, 0
+  %35 = call i1 @llvm.expect.i1(i1 %34, i1 true)
+  br i1 %35, label %86, label %large_int8
 
 large_int:                                        ; preds = %b0
   call void @typy_rt_int_increment(i64 %0)
-  br label %29
+  br label %36
 
-29:                                               ; preds = %large_int, %b0
+36:                                               ; preds = %large_int, %b0
   store i64 %0, ptr %s0, align 8
-  %30 = and i64 %1, 1
-  %31 = icmp ne i64 %30, 0
-  %32 = call i1 @llvm.expect.i1(i1 %31, i1 true)
-  br i1 %32, label %33, label %large_int1
+  %37 = and i64 %1, 1
+  %38 = icmp ne i64 %37, 0
+  %39 = call i1 @llvm.expect.i1(i1 %38, i1 true)
+  br i1 %39, label %40, label %large_int1
 
-large_int1:                                       ; preds = %29
+large_int1:                                       ; preds = %36
   call void @typy_rt_int_increment(i64 %1)
-  br label %33
+  br label %40
 
-33:                                               ; preds = %large_int1, %29
+40:                                               ; preds = %large_int1, %36
   store i64 %1, ptr %s1, align 8
   store i64 1, ptr %s2, align 8
   br label %b1
 
 inline_int:                                       ; preds = %b2
-  %34 = icmp ne i64 %5, 1
-  br label %37
+  %41 = icmp ne i64 %5, 1
+  br label %44
 
 large_int2:                                       ; preds = %b2
-  %35 = call i8 @typy_rt_int_compare(i64 %5, i64 1, i64 3)
-  %36 = icmp ne i8 %35, 0
-  br label %37
+  %42 = call i8 @typy_rt_int_compare(i64 %5, i64 1, i64 3)
+  %43 = icmp ne i8 %42, 0
+  br label %44
 
-37:                                               ; preds = %large_int2, %inline_int
-  %38 = phi i1 [ %34, %inline_int ], [ %36, %large_int2 ]
+44:                                               ; preds = %large_int2, %inline_int
+  %45 = phi i1 [ %41, %inline_int ], [ %43, %large_int2 ]
   br label %b6
 
-traceback:                                        ; preds = %b3
-  call void @typy_rt_traceback_add(ptr %14, ptr @typy.cstr.0, ptr @typy.cstr.1, i32 3)
+in_place:                                         ; preds = %b3
+  %46 = ashr i64 %10, 1
+  %47 = ashr i64 %11, 1
+  %48 = sdiv i64 %46, %47
+  %49 = srem i64 %46, %47
+  %50 = icmp ne i64 %49, 0
+  %51 = xor i64 %49, %47
+  %52 = icmp slt i64 %51, 0
+  %53 = and i1 %50, %52
+  %54 = select i1 %53, i64 %47, i64 0
+  %55 = add i64 %49, %54
+  %56 = shl i64 %55, 1
+  %57 = or i64 %56, 1
+  br label %61
+
+call:                                             ; preds = %b3
+  %58 = call { i64, ptr } @typy_rt_int_modulo(i64 %10, i64 %11)
+  %59 = extractvalue { i64, ptr } %58, 0
+  %60 = extractvalue { i64, ptr } %58, 1
+  br label %61
+
+61:                                               ; preds = %call, %in_place
+  %62 = phi i64 [ %57, %in_place ], [ %59, %call ]
+  %63 = phi ptr [ null, %in_place ], [ %60, %call ]
+  %64 = icmp ne ptr %63, null
+  br i1 %64, label %traceback, label %b7
+
+traceback:                                        ; preds = %61
+  call void @typy_rt_traceback_add(ptr %63, ptr @typy.cstr.0, ptr @typy.cstr.1, i32 3)
   br label %b8
 
 large_int3:                                       ; preds = %b5
-  call void @typy_rt_int_decrement(i64 %17)
-  br label %39
-
-39:                                               ; preds = %large_int3, %b5
-  %40 = load i64, ptr %s2, align 8
-  %41 = and i64 %40, 1
-  %42 = icmp ne i64 %41, 0
-  %43 = call i1 @llvm.expect.i1(i1 %42, i1 true)
-  br i1 %43, label %44, label %large_int4
-
-large_int4:                                       ; preds = %39
-  call void @typy_rt_int_decrement(i64 %40)
-  br label %44
-
-44:                                               ; preds = %large_int4, %39
-  %45 = insertvalue { i64, ptr } undef, i64 %16, 0
-  %46 = insertvalue { i64, ptr } %45, ptr null, 1
-  ret { i64, ptr } %46
-
-large_int5:                                       ; preds = %b7
-  call void @typy_rt_int_decrement(i64 %21)
-  br label %47
-
-47:                                               ; preds = %large_int5, %b7
-  %48 = load i64, ptr %s1, align 8
-  store i64 1, ptr %s1, align 8
-  %49 = load i64, ptr %s0, align 8
-  store i64 %48, ptr %s0, align 8
-  %50 = and i64 %49, 1
-  %51 = icmp ne i64 %50, 0
-  %52 = call i1 @llvm.expect.i1(i1 %51, i1 true)
-  br i1 %52, label %53, label %large_int6
-
-large_int6:                                       ; preds = %47
-  call void @typy_rt_int_decrement(i64 %49)
-  br label %53
-
-53:                                               ; preds = %large_int6, %47
-  %54 = load i64, ptr %s2, align 8
-  store i64 1, ptr %s2, align 8
-  %55 = load i64, ptr %s1, align 8
-  store i64 %54, ptr %s1, align 8
-  %56 = and i64 %55, 1
-  %57 = icmp ne i64 %56, 0
-  %58 = call i1 @llvm.expect.i1(i1 %57, i1 true)
-  br i1 %58, label %59, label %large_int7
-
-large_int7:                                       ; preds = %53
-  call void @typy_rt_int_decrement(i64 %55)
-  br label %59
-
-59:                                               ; preds = %large_int7, %53
-  br label %b2
-
-large_int8:                                       ; preds = %b8
-  call void @typy_rt_int_decrement(i64 %25)
-  br label %60
-
-60:                                               ; preds = %large_int8, %b8
-  %61 = load i64, ptr %s1, align 8
-  %62 = and i64 %61, 1
-  %63 = icmp ne i64 %62, 0
-  %64 = call i1 @llvm.expect.i1(i1 %63, i1 true)
-  br i1 %64, label %65, label %large_int9
-
-large_int9:                                       ; preds = %60
-  call void @typy_rt_int_decrement(i64 %61)
+  call void @typy_rt_int_decrement(i64 %24)
   br label %65
 
-65:                                               ; preds = %large_int9, %60
+65:                                               ; preds = %large_int3, %b5
   %66 = load i64, ptr %s2, align 8
   %67 = and i64 %66, 1
   %68 = icmp ne i64 %67, 0
   %69 = call i1 @llvm.expect.i1(i1 %68, i1 true)
-  br i1 %69, label %70, label %large_int10
+  br i1 %69, label %70, label %large_int4
 
-large_int10:                                      ; preds = %65
+large_int4:                                       ; preds = %65
   call void @typy_rt_int_decrement(i64 %66)
   br label %70
 
-70:                                               ; preds = %large_int10, %65
-  %71 = insertvalue { i64, ptr } { i64 0, ptr undef }, ptr %v9, 1
-  ret { i64, ptr } %71
+70:                                               ; preds = %large_int4, %65
+  %71 = insertvalue { i64, ptr } undef, i64 %23, 0
+  %72 = insertvalue { i64, ptr } %71, ptr null, 1
+  ret { i64, ptr } %72
+
+large_int5:                                       ; preds = %b7
+  call void @typy_rt_int_decrement(i64 %28)
+  br label %73
+
+73:                                               ; preds = %large_int5, %b7
+  %74 = load i64, ptr %s1, align 8
+  store i64 1, ptr %s1, align 8
+  %75 = load i64, ptr %s0, align 8
+  store i64 %74, ptr %s0, align 8
+  %76 = and i64 %75, 1
+  %77 = icmp ne i64 %76, 0
+  %78 = call i1 @llvm.expect.i1(i1 %77, i1 true)
+  br i1 %78, label %79, label %large_int6
+
+large_int6:                                       ; preds = %73
+  call void @typy_rt_int_decrement(i64 %75)
+  br label %79
+
+79:                                               ; preds = %large_int6, %73
+  %80 = load i64, ptr %s2, align 8
+  store i64 1, ptr %s2, align 8
+  %81 = load i64, ptr %s1, align 8
+  store i64 %80, ptr %s1, align 8
+  %82 = and i64 %81, 1
+  %83 = icmp ne i64 %82, 0
+  %84 = call i1 @llvm.expect.i1(i1 %83, i1 true)
+  br i1 %84, label %85, label %large_int7
+
+large_int7:                                       ; preds = %79
+  call void @typy_rt_int_decrement(i64 %81)
+  br label %85
+
+85:                                               ; preds = %large_int7, %79
+  br label %b2
+
+large_int8:                                       ; preds = %b8
+  call void @typy_rt_int_decrement(i64 %32)
+  br label %86
+
+86:                                               ; preds = %large_int8, %b8
+  %87 = load i64, ptr %s1, align 8
+  %88 = and i64 %87, 1
+  %89 = icmp ne i64 %88, 0
+  %90 = call i1 @llvm.expect.i1(i1 %89, i1 true)
+  br i1 %90, label %91, label %large_int9
+
+large_int9:                                       ; preds = %86
+  call void @typy_rt_int_decrement(i64 %87)
+  br label %91
+
+91:                                               ; preds = %large_int9, %86
+  %92 = load i64, ptr %s2, align 8
+  %93 = and i64 %92, 1
+  %94 = icmp ne i64 %93, 0
+  %95 = call i1 @llvm.expect.i1(i1 %94, i1 true)
+  br i1 %95, label %96, label %large_int10
+
+large_int10:                                      ; preds = %91
+  call void @typy_rt_int_decrement(i64 %92)
+  br label %96
+
+96:                                               ; preds = %large_int10, %91
+  %97 = insertvalue { i64, ptr } { i64 0, ptr undef }, ptr %v9, 1
+  ret { i64, ptr } %97
 }
 
 define internal { ptr, ptr } @_TY8__main__8describe(i64 %0) {
@@ -379,7 +413,7 @@ b1:                                               ; preds = %b0
   %0 = call i1 @llvm.expect.i1(i1 true, i1 true)
   br i1 %0, label %inline_int, label %large_int
 
-b2:                                               ; preds = %133, %99
+b2:                                               ; preds = %138, %104
   %1 = load i64, ptr %s0, align 8
   %2 = load i64, ptr %s1, align 8
   %3 = and i64 %1, %2
@@ -388,14 +422,14 @@ b2:                                               ; preds = %133, %99
   %6 = call i1 @llvm.expect.i1(i1 %5, i1 true)
   br i1 %6, label %inline_int6, label %large_int7
 
-b3:                                               ; preds = %103
+b3:                                               ; preds = %108
   %7 = load i64, ptr %s0, align 8
   %8 = and i64 %7, 1
   %9 = icmp ne i64 %8, 0
   %10 = call i1 @llvm.expect.i1(i1 %9, i1 true)
-  br i1 %10, label %105, label %large_int8
+  br i1 %10, label %110, label %large_int8
 
-b4:                                               ; preds = %215
+b4:                                               ; preds = %220
   %11 = load i64, ptr %s0, align 8
   %12 = load i64, ptr %s2, align 8
   %13 = and i64 %11, %12
@@ -404,7 +438,7 @@ b4:                                               ; preds = %215
   %16 = call i1 @llvm.expect.i1(i1 %15, i1 true)
   br i1 %16, label %inline_int11, label %large_int12
 
-b5:                                               ; preds = %103
+b5:                                               ; preds = %108
   br label %b6
 
 b6:                                               ; preds = %b5
@@ -414,279 +448,284 @@ b6:                                               ; preds = %b5
   %20 = icmp ne ptr %19, null
   br i1 %20, label %traceback14, label %b15
 
-b7:                                               ; preds = %115
-  %v14 = phi ptr [ %117, %115 ]
-  %21 = and i64 %111, 1
+b7:                                               ; preds = %120
+  %v14 = phi ptr [ %122, %120 ]
+  %21 = and i64 %116, 1
   %22 = icmp ne i64 %21, 0
   %23 = call i1 @llvm.expect.i1(i1 %22, i1 true)
-  br i1 %23, label %134, label %large_int15
+  br i1 %23, label %139, label %large_int15
 
 b8:                                               ; preds = %traceback
-  %v15 = phi ptr [ %118, %traceback ]
-  %24 = and i64 %111, 1
+  %v15 = phi ptr [ %123, %traceback ]
+  %24 = and i64 %116, 1
   %25 = icmp ne i64 %24, 0
   %26 = call i1 @llvm.expect.i1(i1 %25, i1 true)
-  br i1 %26, label %154, label %large_int19
+  br i1 %26, label %159, label %large_int19
 
-b9:                                               ; preds = %148
-  %v23 = phi i64 [ %151, %148 ]
-  %27 = and i64 %149, 1
+b9:                                               ; preds = %153
+  %v23 = phi i64 [ %156, %153 ]
+  %27 = and i64 %154, 1
   %28 = icmp ne i64 %27, 0
   %29 = call i1 @llvm.expect.i1(i1 %28, i1 true)
-  br i1 %29, label %170, label %large_int23
+  br i1 %29, label %175, label %large_int23
 
 b10:                                              ; preds = %traceback18
-  %v24 = phi ptr [ %152, %traceback18 ]
+  %v24 = phi ptr [ %157, %traceback18 ]
   call void @typy_rt_decrement(ptr %v14)
-  %30 = and i64 %149, 1
+  %30 = and i64 %154, 1
   %31 = icmp ne i64 %30, 0
   %32 = call i1 @llvm.expect.i1(i1 %31, i1 true)
-  br i1 %32, label %175, label %large_int25
+  br i1 %32, label %180, label %large_int25
 
-b11:                                              ; preds = %170
-  %v31 = phi ptr [ %172, %170 ]
+b11:                                              ; preds = %175
+  %v31 = phi ptr [ %177, %175 ]
   call void @typy_rt_write_stdout(ptr %v31)
   call void @typy_rt_decrement(ptr %v31)
   call void @typy_rt_write_stdout(ptr @typy.str.5)
   %33 = and i64 %v23, 1
   %34 = icmp ne i64 %33, 0
   %35 = call i1 @llvm.expect.i1(i1 %34, i1 true)
-  br i1 %35, label %191, label %large_int29
+  br i1 %35, label %196, label %large_int29
 
 b12:                                              ; preds = %traceback24
-  %v32 = phi ptr [ %173, %traceback24 ]
+  %v32 = phi ptr [ %178, %traceback24 ]
   call void @typy_rt_decrement(ptr %v14)
   %36 = and i64 %v23, 1
   %37 = icmp ne i64 %36, 0
   %38 = call i1 @llvm.expect.i1(i1 %37, i1 true)
-  br i1 %38, label %199, label %large_int32
+  br i1 %38, label %204, label %large_int32
 
-b13:                                              ; preds = %196
-  %39 = and i64 %192, 1
+b13:                                              ; preds = %201
+  %39 = and i64 %197, 1
   %40 = icmp ne i64 %39, 0
   %41 = call i1 @llvm.expect.i1(i1 %40, i1 true)
-  br i1 %41, label %215, label %large_int36
+  br i1 %41, label %220, label %large_int36
 
 b14:                                              ; preds = %traceback31
-  %v42 = phi ptr [ %197, %traceback31 ]
-  %42 = and i64 %192, 1
+  %v42 = phi ptr [ %202, %traceback31 ]
+  %42 = and i64 %197, 1
   %43 = icmp ne i64 %42, 0
   %44 = call i1 @llvm.expect.i1(i1 %43, i1 true)
-  br i1 %44, label %216, label %large_int37
+  br i1 %44, label %221, label %large_int37
 
 b15:                                              ; preds = %b6
   %v52 = phi i64 [ %18, %b6 ]
-  %45 = call { i64, ptr } @typy_rt_int_floor_divide(i64 %v52, i64 7)
-  %46 = extractvalue { i64, ptr } %45, 0
-  %47 = extractvalue { i64, ptr } %45, 1
-  %48 = icmp ne ptr %47, null
-  br i1 %48, label %traceback41, label %b17
+  %45 = and i64 %v52, 7
+  %46 = and i64 %45, 1
+  %47 = icmp ne i64 %46, 0
+  %48 = icmp eq i64 %v52, -9223372036854775807
+  %49 = and i1 %48, false
+  %50 = xor i1 %49, true
+  %51 = and i1 %47, true
+  %52 = and i1 %51, %50
+  %53 = call i1 @llvm.expect.i1(i1 %52, i1 true)
+  br i1 %53, label %in_place, label %call
 
 b16:                                              ; preds = %traceback14
   %v53 = phi ptr [ %19, %traceback14 ]
-  %49 = load i64, ptr %s0, align 8
-  %50 = and i64 %49, 1
-  %51 = icmp ne i64 %50, 0
-  %52 = call i1 @llvm.expect.i1(i1 %51, i1 true)
-  br i1 %52, label %232, label %large_int42
+  %54 = load i64, ptr %s0, align 8
+  %55 = and i64 %54, 1
+  %56 = icmp ne i64 %55, 0
+  %57 = call i1 @llvm.expect.i1(i1 %56, i1 true)
+  br i1 %57, label %255, label %large_int42
 
-b17:                                              ; preds = %b15
-  %v58 = phi i64 [ %46, %b15 ]
-  %53 = and i64 %v52, 1
-  %54 = icmp ne i64 %53, 0
-  %55 = call i1 @llvm.expect.i1(i1 %54, i1 true)
-  br i1 %55, label %243, label %large_int45
+b17:                                              ; preds = %251
+  %v58 = phi i64 [ %252, %251 ]
+  %58 = and i64 %v52, 1
+  %59 = icmp ne i64 %58, 0
+  %60 = call i1 @llvm.expect.i1(i1 %59, i1 true)
+  br i1 %60, label %266, label %large_int45
 
 b18:                                              ; preds = %traceback41
-  %v59 = phi ptr [ %47, %traceback41 ]
-  %56 = and i64 %v52, 1
-  %57 = icmp ne i64 %56, 0
-  %58 = call i1 @llvm.expect.i1(i1 %57, i1 true)
-  br i1 %58, label %249, label %large_int47
+  %v59 = phi ptr [ %253, %traceback41 ]
+  %61 = and i64 %v52, 1
+  %62 = icmp ne i64 %61, 0
+  %63 = call i1 @llvm.expect.i1(i1 %62, i1 true)
+  br i1 %63, label %272, label %large_int47
 
-b19:                                              ; preds = %243
-  %v65 = phi double [ %246, %243 ]
-  %59 = call { ptr, ptr } @typy_rt_int_to_str(i64 %v58)
-  %60 = extractvalue { ptr, ptr } %59, 0
-  %61 = extractvalue { ptr, ptr } %59, 1
-  %62 = icmp ne ptr %61, null
-  br i1 %62, label %traceback51, label %b21
+b19:                                              ; preds = %266
+  %v65 = phi double [ %269, %266 ]
+  %64 = call { ptr, ptr } @typy_rt_int_to_str(i64 %v58)
+  %65 = extractvalue { ptr, ptr } %64, 0
+  %66 = extractvalue { ptr, ptr } %64, 1
+  %67 = icmp ne ptr %66, null
+  br i1 %67, label %traceback51, label %b21
 
 b20:                                              ; preds = %traceback46
-  %v66 = phi ptr [ %247, %traceback46 ]
-  %63 = and i64 %v58, 1
-  %64 = icmp ne i64 %63, 0
-  %65 = call i1 @llvm.expect.i1(i1 %64, i1 true)
-  br i1 %65, label %265, label %large_int52
+  %v66 = phi ptr [ %270, %traceback46 ]
+  %68 = and i64 %v58, 1
+  %69 = icmp ne i64 %68, 0
+  %70 = call i1 @llvm.expect.i1(i1 %69, i1 true)
+  br i1 %70, label %288, label %large_int52
 
 b21:                                              ; preds = %b19
-  %v71 = phi ptr [ %60, %b19 ]
+  %v71 = phi ptr [ %65, %b19 ]
   call void @typy_rt_write_stdout(ptr %v71)
   call void @typy_rt_decrement(ptr %v71)
   call void @typy_rt_write_stdout(ptr @typy.str.4)
-  %66 = call ptr @typy_rt_float_to_str(double %v65)
-  call void @typy_rt_write_stdout(ptr %66)
-  call void @typy_rt_decrement(ptr %66)
+  %71 = call ptr @typy_rt_float_to_str(double %v65)
+  call void @typy_rt_write_stdout(ptr %71)
+  call void @typy_rt_decrement(ptr %71)
   call void @typy_rt_write_stdout(ptr @typy.str.5)
-  %67 = and i64 %v58, 1
-  %68 = icmp ne i64 %67, 0
-  %69 = call i1 @llvm.expect.i1(i1 %68, i1 true)
-  br i1 %69, label %281, label %large_int56
+  %72 = and i64 %v58, 1
+  %73 = icmp ne i64 %72, 0
+  %74 = call i1 @llvm.expect.i1(i1 %73, i1 true)
+  br i1 %74, label %304, label %large_int56
 
 b22:                                              ; preds = %traceback51
-  %v72 = phi ptr [ %61, %traceback51 ]
-  %70 = and i64 %v58, 1
-  %71 = icmp ne i64 %70, 0
-  %72 = call i1 @llvm.expect.i1(i1 %71, i1 true)
-  br i1 %72, label %297, label %large_int60
+  %v72 = phi ptr [ %66, %traceback51 ]
+  %75 = and i64 %v58, 1
+  %76 = icmp ne i64 %75, 0
+  %77 = call i1 @llvm.expect.i1(i1 %76, i1 true)
+  br i1 %77, label %320, label %large_int60
 
 inline_int:                                       ; preds = %b1
-  %73 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 2, i64 3)
-  %74 = extractvalue { i64, i1 } %73, 0
-  %75 = extractvalue { i64, i1 } %73, 1
-  %76 = xor i1 %75, true
-  %77 = call i1 @llvm.expect.i1(i1 %76, i1 true)
-  br i1 %77, label %79, label %large_int
+  %78 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 2, i64 3)
+  %79 = extractvalue { i64, i1 } %78, 0
+  %80 = extractvalue { i64, i1 } %78, 1
+  %81 = xor i1 %80, true
+  %82 = call i1 @llvm.expect.i1(i1 %81, i1 true)
+  br i1 %82, label %84, label %large_int
 
 large_int:                                        ; preds = %inline_int, %b1
-  %78 = call i64 @typy_rt_int_negate(i64 3)
-  br label %79
+  %83 = call i64 @typy_rt_int_negate(i64 3)
+  br label %84
 
-79:                                               ; preds = %large_int, %inline_int
-  %80 = phi i64 [ %74, %inline_int ], [ %78, %large_int ]
-  %81 = load i64, ptr %s0, align 8
-  store i64 %80, ptr %s0, align 8
-  %82 = and i64 %81, 1
-  %83 = icmp ne i64 %82, 0
-  %84 = call i1 @llvm.expect.i1(i1 %83, i1 true)
-  br i1 %84, label %85, label %large_int1
+84:                                               ; preds = %large_int, %inline_int
+  %85 = phi i64 [ %79, %inline_int ], [ %83, %large_int ]
+  %86 = load i64, ptr %s0, align 8
+  store i64 %85, ptr %s0, align 8
+  %87 = and i64 %86, 1
+  %88 = icmp ne i64 %87, 0
+  %89 = call i1 @llvm.expect.i1(i1 %88, i1 true)
+  br i1 %89, label %90, label %large_int1
 
-large_int1:                                       ; preds = %79
-  call void @typy_rt_int_decrement(i64 %81)
-  br label %85
+large_int1:                                       ; preds = %84
+  call void @typy_rt_int_decrement(i64 %86)
+  br label %90
 
-85:                                               ; preds = %large_int1, %79
-  %86 = call i1 @llvm.expect.i1(i1 true, i1 true)
-  br i1 %86, label %87, label %large_int2
+90:                                               ; preds = %large_int1, %84
+  %91 = call i1 @llvm.expect.i1(i1 true, i1 true)
+  br i1 %91, label %92, label %large_int2
 
-large_int2:                                       ; preds = %85
+large_int2:                                       ; preds = %90
   call void @typy_rt_int_increment(i64 7)
-  br label %87
-
-87:                                               ; preds = %large_int2, %85
-  %88 = load i64, ptr %s1, align 8
-  store i64 7, ptr %s1, align 8
-  %89 = and i64 %88, 1
-  %90 = icmp ne i64 %89, 0
-  %91 = call i1 @llvm.expect.i1(i1 %90, i1 true)
-  br i1 %91, label %92, label %large_int3
-
-large_int3:                                       ; preds = %87
-  call void @typy_rt_int_decrement(i64 %88)
   br label %92
 
-92:                                               ; preds = %large_int3, %87
-  %93 = call i1 @llvm.expect.i1(i1 true, i1 true)
-  br i1 %93, label %94, label %large_int4
+92:                                               ; preds = %large_int2, %90
+  %93 = load i64, ptr %s1, align 8
+  store i64 7, ptr %s1, align 8
+  %94 = and i64 %93, 1
+  %95 = icmp ne i64 %94, 0
+  %96 = call i1 @llvm.expect.i1(i1 %95, i1 true)
+  br i1 %96, label %97, label %large_int3
 
-large_int4:                                       ; preds = %92
+large_int3:                                       ; preds = %92
+  call void @typy_rt_int_decrement(i64 %93)
+  br label %97
+
+97:                                               ; preds = %large_int3, %92
+  %98 = call i1 @llvm.expect.i1(i1 true, i1 true)
+  br i1 %98, label %99, label %large_int4
+
+large_int4:                                       ; preds = %97
   call void @typy_rt_int_increment(i64 3)
-  br label %94
-
-94:                                               ; preds = %large_int4, %92
-  %95 = load i64, ptr %s2, align 8
-  store i64 3, ptr %s2, align 8
-  %96 = and i64 %95, 1
-  %97 = icmp ne i64 %96, 0
-  %98 = call i1 @llvm.expect.i1(i1 %97, i1 true)
-  br i1 %98, label %99, label %large_int5
-
-large_int5:                                       ; preds = %94
-  call void @typy_rt_int_decrement(i64 %95)
   br label %99
 
-99:                                               ; preds = %large_int5, %94
+99:                                               ; preds = %large_int4, %97
+  %100 = load i64, ptr %s2, align 8
+  store i64 3, ptr %s2, align 8
+  %101 = and i64 %100, 1
+  %102 = icmp ne i64 %101, 0
+  %103 = call i1 @llvm.expect.i1(i1 %102, i1 true)
+  br i1 %103, label %104, label %large_int5
+
+large_int5:                                       ; preds = %99
+  call void @typy_rt_int_decrement(i64 %100)
+  br label %104
+
+104:                                              ; preds = %large_int5, %99
   br label %b2
 
 inline_int6:                                      ; preds = %b2
-  %100 = icmp slt i64 %1, %2
-  br label %103
+  %105 = icmp slt i64 %1, %2
+  br label %108
 
 large_int7:                                       ; preds = %b2
-  %101 = call i8 @typy_rt_int_compare(i64 %1, i64 %2, i64 5)
-  %102 = icmp ne i8 %101, 0
-  br label %103
+  %106 = call i8 @typy_rt_int_compare(i64 %1, i64 %2, i64 5)
+  %107 = icmp ne i8 %106, 0
+  br label %108
 
-103:                                              ; preds = %large_int7, %inline_int6
-  %104 = phi i1 [ %100, %inline_int6 ], [ %102, %large_int7 ]
-  br i1 %104, label %b3, label %b5
+108:                                              ; preds = %large_int7, %inline_int6
+  %109 = phi i1 [ %105, %inline_int6 ], [ %107, %large_int7 ]
+  br i1 %109, label %b3, label %b5
 
 large_int8:                                       ; preds = %b3
   call void @typy_rt_int_increment(i64 %7)
-  br label %105
-
-105:                                              ; preds = %large_int8, %b3
-  %106 = load i64, ptr @typy.global.0, align 8
-  store i64 %7, ptr @typy.global.0, align 8
-  %107 = and i64 %106, 1
-  %108 = icmp ne i64 %107, 0
-  %109 = call i1 @llvm.expect.i1(i1 %108, i1 true)
-  br i1 %109, label %110, label %large_int9
-
-large_int9:                                       ; preds = %105
-  call void @typy_rt_int_decrement(i64 %106)
   br label %110
 
-110:                                              ; preds = %large_int9, %105
-  store i1 true, ptr @typy.global.1, align 1
+110:                                              ; preds = %large_int8, %b3
   %111 = load i64, ptr @typy.global.0, align 8
+  store i64 %7, ptr @typy.global.0, align 8
   %112 = and i64 %111, 1
   %113 = icmp ne i64 %112, 0
   %114 = call i1 @llvm.expect.i1(i1 %113, i1 true)
-  br i1 %114, label %115, label %large_int10
+  br i1 %114, label %115, label %large_int9
 
-large_int10:                                      ; preds = %110
-  call void @typy_rt_int_increment(i64 %111)
+large_int9:                                       ; preds = %110
+  call void @typy_rt_int_decrement(i64 %111)
   br label %115
 
-115:                                              ; preds = %large_int10, %110
-  %116 = call { ptr, ptr } @_TY8__main__8describe(i64 %111)
-  %117 = extractvalue { ptr, ptr } %116, 0
-  %118 = extractvalue { ptr, ptr } %116, 1
-  %119 = icmp ne ptr %118, null
-  br i1 %119, label %traceback, label %b7
+115:                                              ; preds = %large_int9, %110
+  store i1 true, ptr @typy.global.1, align 1
+  %116 = load i64, ptr @typy.global.0, align 8
+  %117 = and i64 %116, 1
+  %118 = icmp ne i64 %117, 0
+  %119 = call i1 @llvm.expect.i1(i1 %118, i1 true)
+  br i1 %119, label %120, label %large_int10
 
-traceback:                                        ; preds = %115
-  call void @typy_rt_traceback_add(ptr %118, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
+large_int10:                                      ; preds = %115
+  call void @typy_rt_int_increment(i64 %116)
+  br label %120
+
+120:                                              ; preds = %large_int10, %115
+  %121 = call { ptr, ptr } @_TY8__main__8describe(i64 %116)
+  %122 = extractvalue { ptr, ptr } %121, 0
+  %123 = extractvalue { ptr, ptr } %121, 1
+  %124 = icmp ne ptr %123, null
+  br i1 %124, label %traceback, label %b7
+
+traceback:                                        ; preds = %120
+  call void @typy_rt_traceback_add(ptr %123, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
   br label %b8
 
 inline_int11:                                     ; preds = %b4
-  %120 = sub i64 %12, 1
-  %121 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %11, i64 %120)
-  %122 = extractvalue { i64, i1 } %121, 0
-  %123 = extractvalue { i64, i1 } %121, 1
-  %124 = xor i1 %123, true
-  %125 = call i1 @llvm.expect.i1(i1 %124, i1 true)
-  br i1 %125, label %127, label %large_int12
+  %125 = sub i64 %12, 1
+  %126 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %11, i64 %125)
+  %127 = extractvalue { i64, i1 } %126, 0
+  %128 = extractvalue { i64, i1 } %126, 1
+  %129 = xor i1 %128, true
+  %130 = call i1 @llvm.expect.i1(i1 %129, i1 true)
+  br i1 %130, label %132, label %large_int12
 
 large_int12:                                      ; preds = %inline_int11, %b4
-  %126 = call i64 @typy_rt_int_add(i64 %11, i64 %12)
-  br label %127
+  %131 = call i64 @typy_rt_int_add(i64 %11, i64 %12)
+  br label %132
 
-127:                                              ; preds = %large_int12, %inline_int11
-  %128 = phi i64 [ %122, %inline_int11 ], [ %126, %large_int12 ]
-  %129 = load i64, ptr %s0, align 8
-  store i64 %128, ptr %s0, align 8
-  %130 = and i64 %129, 1
-  %131 = icmp ne i64 %130, 0
-  %132 = call i1 @llvm.expect.i1(i1 %131, i1 true)
-  br i1 %132, label %133, label %large_int13
+132:                                              ; preds = %large_int12, %inline_int11
+  %133 = phi i64 [ %127, %inline_int11 ], [ %131, %large_int12 ]
+  %134 = load i64, ptr %s0, align 8
+  store i64 %133, ptr %s0, align 8
+  %135 = and i64 %134, 1
+  %136 = icmp ne i64 %135, 0
+  %137 = call i1 @llvm.expect.i1(i1 %136, i1 true)
+  br i1 %137, label %138, label %large_int13
 
-large_int13:                                      ; preds = %127
-  call void @typy_rt_int_decrement(i64 %129)
-  br label %133
+large_int13:                                      ; preds = %132
+  call void @typy_rt_int_decrement(i64 %134)
+  br label %138
 
-133:                                              ; preds = %large_int13, %127
+138:                                              ; preds = %large_int13, %132
   br label %b2
 
 traceback14:                                      ; preds = %b6
@@ -694,463 +733,489 @@ traceback14:                                      ; preds = %b6
   br label %b16
 
 large_int15:                                      ; preds = %b7
-  call void @typy_rt_int_decrement(i64 %111)
-  br label %134
+  call void @typy_rt_int_decrement(i64 %116)
+  br label %139
 
-134:                                              ; preds = %large_int15, %b7
-  %135 = load i64, ptr @typy.global.0, align 8
-  %136 = and i64 %135, 37
-  %137 = and i64 %136, 1
-  %138 = icmp ne i64 %137, 0
-  %139 = call i1 @llvm.expect.i1(i1 %138, i1 true)
-  br i1 %139, label %inline_int16, label %large_int17
+139:                                              ; preds = %large_int15, %b7
+  %140 = load i64, ptr @typy.global.0, align 8
+  %141 = and i64 %140, 37
+  %142 = and i64 %141, 1
+  %143 = icmp ne i64 %142, 0
+  %144 = call i1 @llvm.expect.i1(i1 %143, i1 true)
+  br i1 %144, label %inline_int16, label %large_int17
 
-inline_int16:                                     ; preds = %134
-  %140 = ashr i64 %135, 1
-  %141 = call { i64, i1 } @llvm.smul.with.overflow.i64(i64 %140, i64 36)
-  %142 = extractvalue { i64, i1 } %141, 0
-  %143 = extractvalue { i64, i1 } %141, 1
-  %144 = or i64 %142, 1
-  %145 = xor i1 %143, true
-  %146 = call i1 @llvm.expect.i1(i1 %145, i1 true)
-  br i1 %146, label %148, label %large_int17
+inline_int16:                                     ; preds = %139
+  %145 = ashr i64 %140, 1
+  %146 = call { i64, i1 } @llvm.smul.with.overflow.i64(i64 %145, i64 36)
+  %147 = extractvalue { i64, i1 } %146, 0
+  %148 = extractvalue { i64, i1 } %146, 1
+  %149 = or i64 %147, 1
+  %150 = xor i1 %148, true
+  %151 = call i1 @llvm.expect.i1(i1 %150, i1 true)
+  br i1 %151, label %153, label %large_int17
 
-large_int17:                                      ; preds = %inline_int16, %134
-  %147 = call i64 @typy_rt_int_multiply(i64 %135, i64 37)
-  br label %148
+large_int17:                                      ; preds = %inline_int16, %139
+  %152 = call i64 @typy_rt_int_multiply(i64 %140, i64 37)
+  br label %153
 
-148:                                              ; preds = %large_int17, %inline_int16
-  %149 = phi i64 [ %144, %inline_int16 ], [ %147, %large_int17 ]
-  %150 = call { i64, ptr } @_TY8__main__3gcd(i64 %149, i64 25)
-  %151 = extractvalue { i64, ptr } %150, 0
-  %152 = extractvalue { i64, ptr } %150, 1
-  %153 = icmp ne ptr %152, null
-  br i1 %153, label %traceback18, label %b9
+153:                                              ; preds = %large_int17, %inline_int16
+  %154 = phi i64 [ %149, %inline_int16 ], [ %152, %large_int17 ]
+  %155 = call { i64, ptr } @_TY8__main__3gcd(i64 %154, i64 25)
+  %156 = extractvalue { i64, ptr } %155, 0
+  %157 = extractvalue { i64, ptr } %155, 1
+  %158 = icmp ne ptr %157, null
+  br i1 %158, label %traceback18, label %b9
 
-traceback18:                                      ; preds = %148
-  call void @typy_rt_traceback_add(ptr %152, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
+traceback18:                                      ; preds = %153
+  call void @typy_rt_traceback_add(ptr %157, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
   br label %b10
 
 large_int19:                                      ; preds = %b8
-  call void @typy_rt_int_decrement(i64 %111)
-  br label %154
-
-154:                                              ; preds = %large_int19, %b8
-  %155 = load i64, ptr %s0, align 8
-  %156 = and i64 %155, 1
-  %157 = icmp ne i64 %156, 0
-  %158 = call i1 @llvm.expect.i1(i1 %157, i1 true)
-  br i1 %158, label %159, label %large_int20
-
-large_int20:                                      ; preds = %154
-  call void @typy_rt_int_decrement(i64 %155)
+  call void @typy_rt_int_decrement(i64 %116)
   br label %159
 
-159:                                              ; preds = %large_int20, %154
-  %160 = load i64, ptr %s1, align 8
+159:                                              ; preds = %large_int19, %b8
+  %160 = load i64, ptr %s0, align 8
   %161 = and i64 %160, 1
   %162 = icmp ne i64 %161, 0
   %163 = call i1 @llvm.expect.i1(i1 %162, i1 true)
-  br i1 %163, label %164, label %large_int21
+  br i1 %163, label %164, label %large_int20
 
-large_int21:                                      ; preds = %159
+large_int20:                                      ; preds = %159
   call void @typy_rt_int_decrement(i64 %160)
   br label %164
 
-164:                                              ; preds = %large_int21, %159
-  %165 = load i64, ptr %s2, align 8
+164:                                              ; preds = %large_int20, %159
+  %165 = load i64, ptr %s1, align 8
   %166 = and i64 %165, 1
   %167 = icmp ne i64 %166, 0
   %168 = call i1 @llvm.expect.i1(i1 %167, i1 true)
-  br i1 %168, label %169, label %large_int22
+  br i1 %168, label %169, label %large_int21
 
-large_int22:                                      ; preds = %164
+large_int21:                                      ; preds = %164
   call void @typy_rt_int_decrement(i64 %165)
   br label %169
 
-169:                                              ; preds = %large_int22, %164
+169:                                              ; preds = %large_int21, %164
+  %170 = load i64, ptr %s2, align 8
+  %171 = and i64 %170, 1
+  %172 = icmp ne i64 %171, 0
+  %173 = call i1 @llvm.expect.i1(i1 %172, i1 true)
+  br i1 %173, label %174, label %large_int22
+
+large_int22:                                      ; preds = %169
+  call void @typy_rt_int_decrement(i64 %170)
+  br label %174
+
+174:                                              ; preds = %large_int22, %169
   ret ptr %v15
 
 large_int23:                                      ; preds = %b9
-  call void @typy_rt_int_decrement(i64 %149)
-  br label %170
+  call void @typy_rt_int_decrement(i64 %154)
+  br label %175
 
-170:                                              ; preds = %large_int23, %b9
+175:                                              ; preds = %large_int23, %b9
   call void @typy_rt_write_stdout(ptr %v14)
   call void @typy_rt_write_stdout(ptr @typy.str.6)
-  %171 = call { ptr, ptr } @typy_rt_int_to_str(i64 %v23)
-  %172 = extractvalue { ptr, ptr } %171, 0
-  %173 = extractvalue { ptr, ptr } %171, 1
-  %174 = icmp ne ptr %173, null
-  br i1 %174, label %traceback24, label %b11
+  %176 = call { ptr, ptr } @typy_rt_int_to_str(i64 %v23)
+  %177 = extractvalue { ptr, ptr } %176, 0
+  %178 = extractvalue { ptr, ptr } %176, 1
+  %179 = icmp ne ptr %178, null
+  br i1 %179, label %traceback24, label %b11
 
-traceback24:                                      ; preds = %170
-  call void @typy_rt_traceback_add(ptr %173, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
+traceback24:                                      ; preds = %175
+  call void @typy_rt_traceback_add(ptr %178, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 24)
   br label %b12
 
 large_int25:                                      ; preds = %b10
-  call void @typy_rt_int_decrement(i64 %149)
-  br label %175
-
-175:                                              ; preds = %large_int25, %b10
-  %176 = load i64, ptr %s0, align 8
-  %177 = and i64 %176, 1
-  %178 = icmp ne i64 %177, 0
-  %179 = call i1 @llvm.expect.i1(i1 %178, i1 true)
-  br i1 %179, label %180, label %large_int26
-
-large_int26:                                      ; preds = %175
-  call void @typy_rt_int_decrement(i64 %176)
+  call void @typy_rt_int_decrement(i64 %154)
   br label %180
 
-180:                                              ; preds = %large_int26, %175
-  %181 = load i64, ptr %s1, align 8
+180:                                              ; preds = %large_int25, %b10
+  %181 = load i64, ptr %s0, align 8
   %182 = and i64 %181, 1
   %183 = icmp ne i64 %182, 0
   %184 = call i1 @llvm.expect.i1(i1 %183, i1 true)
-  br i1 %184, label %185, label %large_int27
+  br i1 %184, label %185, label %large_int26
 
-large_int27:                                      ; preds = %180
+large_int26:                                      ; preds = %180
   call void @typy_rt_int_decrement(i64 %181)
   br label %185
 
-185:                                              ; preds = %large_int27, %180
-  %186 = load i64, ptr %s2, align 8
+185:                                              ; preds = %large_int26, %180
+  %186 = load i64, ptr %s1, align 8
   %187 = and i64 %186, 1
   %188 = icmp ne i64 %187, 0
   %189 = call i1 @llvm.expect.i1(i1 %188, i1 true)
-  br i1 %189, label %190, label %large_int28
+  br i1 %189, label %190, label %large_int27
 
-large_int28:                                      ; preds = %185
+large_int27:                                      ; preds = %185
   call void @typy_rt_int_decrement(i64 %186)
   br label %190
 
-190:                                              ; preds = %large_int28, %185
+190:                                              ; preds = %large_int27, %185
+  %191 = load i64, ptr %s2, align 8
+  %192 = and i64 %191, 1
+  %193 = icmp ne i64 %192, 0
+  %194 = call i1 @llvm.expect.i1(i1 %193, i1 true)
+  br i1 %194, label %195, label %large_int28
+
+large_int28:                                      ; preds = %190
+  call void @typy_rt_int_decrement(i64 %191)
+  br label %195
+
+195:                                              ; preds = %large_int28, %190
   ret ptr %v24
 
 large_int29:                                      ; preds = %b11
   call void @typy_rt_int_decrement(i64 %v23)
-  br label %191
-
-191:                                              ; preds = %large_int29, %b11
-  call void @typy_rt_decrement(ptr %v14)
-  %192 = load i64, ptr @typy.global.0, align 8
-  %193 = and i64 %192, 1
-  %194 = icmp ne i64 %193, 0
-  %195 = call i1 @llvm.expect.i1(i1 %194, i1 true)
-  br i1 %195, label %196, label %large_int30
-
-large_int30:                                      ; preds = %191
-  call void @typy_rt_int_increment(i64 %192)
   br label %196
 
-196:                                              ; preds = %large_int30, %191
-  %197 = call ptr @_TY8__main__6report(i64 %192)
-  %198 = icmp ne ptr %197, null
-  br i1 %198, label %traceback31, label %b13
+196:                                              ; preds = %large_int29, %b11
+  call void @typy_rt_decrement(ptr %v14)
+  %197 = load i64, ptr @typy.global.0, align 8
+  %198 = and i64 %197, 1
+  %199 = icmp ne i64 %198, 0
+  %200 = call i1 @llvm.expect.i1(i1 %199, i1 true)
+  br i1 %200, label %201, label %large_int30
 
-traceback31:                                      ; preds = %196
-  call void @typy_rt_traceback_add(ptr %197, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 25)
+large_int30:                                      ; preds = %196
+  call void @typy_rt_int_increment(i64 %197)
+  br label %201
+
+201:                                              ; preds = %large_int30, %196
+  %202 = call ptr @_TY8__main__6report(i64 %197)
+  %203 = icmp ne ptr %202, null
+  br i1 %203, label %traceback31, label %b13
+
+traceback31:                                      ; preds = %201
+  call void @typy_rt_traceback_add(ptr %202, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 25)
   br label %b14
 
 large_int32:                                      ; preds = %b12
   call void @typy_rt_int_decrement(i64 %v23)
-  br label %199
-
-199:                                              ; preds = %large_int32, %b12
-  %200 = load i64, ptr %s0, align 8
-  %201 = and i64 %200, 1
-  %202 = icmp ne i64 %201, 0
-  %203 = call i1 @llvm.expect.i1(i1 %202, i1 true)
-  br i1 %203, label %204, label %large_int33
-
-large_int33:                                      ; preds = %199
-  call void @typy_rt_int_decrement(i64 %200)
   br label %204
 
-204:                                              ; preds = %large_int33, %199
-  %205 = load i64, ptr %s1, align 8
+204:                                              ; preds = %large_int32, %b12
+  %205 = load i64, ptr %s0, align 8
   %206 = and i64 %205, 1
   %207 = icmp ne i64 %206, 0
   %208 = call i1 @llvm.expect.i1(i1 %207, i1 true)
-  br i1 %208, label %209, label %large_int34
+  br i1 %208, label %209, label %large_int33
 
-large_int34:                                      ; preds = %204
+large_int33:                                      ; preds = %204
   call void @typy_rt_int_decrement(i64 %205)
   br label %209
 
-209:                                              ; preds = %large_int34, %204
-  %210 = load i64, ptr %s2, align 8
+209:                                              ; preds = %large_int33, %204
+  %210 = load i64, ptr %s1, align 8
   %211 = and i64 %210, 1
   %212 = icmp ne i64 %211, 0
   %213 = call i1 @llvm.expect.i1(i1 %212, i1 true)
-  br i1 %213, label %214, label %large_int35
+  br i1 %213, label %214, label %large_int34
 
-large_int35:                                      ; preds = %209
+large_int34:                                      ; preds = %209
   call void @typy_rt_int_decrement(i64 %210)
   br label %214
 
-214:                                              ; preds = %large_int35, %209
+214:                                              ; preds = %large_int34, %209
+  %215 = load i64, ptr %s2, align 8
+  %216 = and i64 %215, 1
+  %217 = icmp ne i64 %216, 0
+  %218 = call i1 @llvm.expect.i1(i1 %217, i1 true)
+  br i1 %218, label %219, label %large_int35
+
+large_int35:                                      ; preds = %214
+  call void @typy_rt_int_decrement(i64 %215)
+  br label %219
+
+219:                                              ; preds = %large_int35, %214
   ret ptr %v32
 
 large_int36:                                      ; preds = %b13
-  call void @typy_rt_int_decrement(i64 %192)
-  br label %215
+  call void @typy_rt_int_decrement(i64 %197)
+  br label %220
 
-215:                                              ; preds = %large_int36, %b13
+220:                                              ; preds = %large_int36, %b13
   br label %b4
 
 large_int37:                                      ; preds = %b14
-  call void @typy_rt_int_decrement(i64 %192)
-  br label %216
-
-216:                                              ; preds = %large_int37, %b14
-  %217 = load i64, ptr %s0, align 8
-  %218 = and i64 %217, 1
-  %219 = icmp ne i64 %218, 0
-  %220 = call i1 @llvm.expect.i1(i1 %219, i1 true)
-  br i1 %220, label %221, label %large_int38
-
-large_int38:                                      ; preds = %216
-  call void @typy_rt_int_decrement(i64 %217)
+  call void @typy_rt_int_decrement(i64 %197)
   br label %221
 
-221:                                              ; preds = %large_int38, %216
-  %222 = load i64, ptr %s1, align 8
+221:                                              ; preds = %large_int37, %b14
+  %222 = load i64, ptr %s0, align 8
   %223 = and i64 %222, 1
   %224 = icmp ne i64 %223, 0
   %225 = call i1 @llvm.expect.i1(i1 %224, i1 true)
-  br i1 %225, label %226, label %large_int39
+  br i1 %225, label %226, label %large_int38
 
-large_int39:                                      ; preds = %221
+large_int38:                                      ; preds = %221
   call void @typy_rt_int_decrement(i64 %222)
   br label %226
 
-226:                                              ; preds = %large_int39, %221
-  %227 = load i64, ptr %s2, align 8
+226:                                              ; preds = %large_int38, %221
+  %227 = load i64, ptr %s1, align 8
   %228 = and i64 %227, 1
   %229 = icmp ne i64 %228, 0
   %230 = call i1 @llvm.expect.i1(i1 %229, i1 true)
-  br i1 %230, label %231, label %large_int40
+  br i1 %230, label %231, label %large_int39
 
-large_int40:                                      ; preds = %226
+large_int39:                                      ; preds = %226
   call void @typy_rt_int_decrement(i64 %227)
   br label %231
 
-231:                                              ; preds = %large_int40, %226
+231:                                              ; preds = %large_int39, %226
+  %232 = load i64, ptr %s2, align 8
+  %233 = and i64 %232, 1
+  %234 = icmp ne i64 %233, 0
+  %235 = call i1 @llvm.expect.i1(i1 %234, i1 true)
+  br i1 %235, label %236, label %large_int40
+
+large_int40:                                      ; preds = %231
+  call void @typy_rt_int_decrement(i64 %232)
+  br label %236
+
+236:                                              ; preds = %large_int40, %231
   ret ptr %v42
 
-traceback41:                                      ; preds = %b15
-  call void @typy_rt_traceback_add(ptr %47, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
+in_place:                                         ; preds = %b15
+  %237 = ashr i64 %v52, 1
+  %238 = sdiv i64 %237, 3
+  %239 = srem i64 %237, 3
+  %240 = icmp ne i64 %239, 0
+  %241 = xor i64 %239, 3
+  %242 = icmp slt i64 %241, 0
+  %243 = and i1 %240, %242
+  %244 = zext i1 %243 to i64
+  %245 = sub i64 %238, %244
+  %246 = shl i64 %245, 1
+  %247 = or i64 %246, 1
+  br label %251
+
+call:                                             ; preds = %b15
+  %248 = call { i64, ptr } @typy_rt_int_floor_divide(i64 %v52, i64 7)
+  %249 = extractvalue { i64, ptr } %248, 0
+  %250 = extractvalue { i64, ptr } %248, 1
+  br label %251
+
+251:                                              ; preds = %call, %in_place
+  %252 = phi i64 [ %247, %in_place ], [ %249, %call ]
+  %253 = phi ptr [ null, %in_place ], [ %250, %call ]
+  %254 = icmp ne ptr %253, null
+  br i1 %254, label %traceback41, label %b17
+
+traceback41:                                      ; preds = %251
+  call void @typy_rt_traceback_add(ptr %253, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
   br label %b18
 
 large_int42:                                      ; preds = %b16
-  call void @typy_rt_int_decrement(i64 %49)
-  br label %232
+  call void @typy_rt_int_decrement(i64 %54)
+  br label %255
 
-232:                                              ; preds = %large_int42, %b16
-  %233 = load i64, ptr %s1, align 8
-  %234 = and i64 %233, 1
-  %235 = icmp ne i64 %234, 0
-  %236 = call i1 @llvm.expect.i1(i1 %235, i1 true)
-  br i1 %236, label %237, label %large_int43
+255:                                              ; preds = %large_int42, %b16
+  %256 = load i64, ptr %s1, align 8
+  %257 = and i64 %256, 1
+  %258 = icmp ne i64 %257, 0
+  %259 = call i1 @llvm.expect.i1(i1 %258, i1 true)
+  br i1 %259, label %260, label %large_int43
 
-large_int43:                                      ; preds = %232
-  call void @typy_rt_int_decrement(i64 %233)
-  br label %237
+large_int43:                                      ; preds = %255
+  call void @typy_rt_int_decrement(i64 %256)
+  br label %260
 
-237:                                              ; preds = %large_int43, %232
-  %238 = load i64, ptr %s2, align 8
-  %239 = and i64 %238, 1
-  %240 = icmp ne i64 %239, 0
-  %241 = call i1 @llvm.expect.i1(i1 %240, i1 true)
-  br i1 %241, label %242, label %large_int44
+260:                                              ; preds = %large_int43, %255
+  %261 = load i64, ptr %s2, align 8
+  %262 = and i64 %261, 1
+  %263 = icmp ne i64 %262, 0
+  %264 = call i1 @llvm.expect.i1(i1 %263, i1 true)
+  br i1 %264, label %265, label %large_int44
 
-large_int44:                                      ; preds = %237
-  call void @typy_rt_int_decrement(i64 %238)
-  br label %242
+large_int44:                                      ; preds = %260
+  call void @typy_rt_int_decrement(i64 %261)
+  br label %265
 
-242:                                              ; preds = %large_int44, %237
+265:                                              ; preds = %large_int44, %260
   ret ptr %v53
 
 large_int45:                                      ; preds = %b17
   call void @typy_rt_int_decrement(i64 %v52)
-  br label %243
+  br label %266
 
-243:                                              ; preds = %large_int45, %b17
-  %244 = call { i64, ptr } @typy_rt_int_true_divide(i64 15, i64 5)
-  %245 = extractvalue { i64, ptr } %244, 0
-  %246 = bitcast i64 %245 to double
-  %247 = extractvalue { i64, ptr } %244, 1
-  %248 = icmp ne ptr %247, null
-  br i1 %248, label %traceback46, label %b19
+266:                                              ; preds = %large_int45, %b17
+  %267 = call { i64, ptr } @typy_rt_int_true_divide(i64 15, i64 5)
+  %268 = extractvalue { i64, ptr } %267, 0
+  %269 = bitcast i64 %268 to double
+  %270 = extractvalue { i64, ptr } %267, 1
+  %271 = icmp ne ptr %270, null
+  br i1 %271, label %traceback46, label %b19
 
-traceback46:                                      ; preds = %243
-  call void @typy_rt_traceback_add(ptr %247, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
+traceback46:                                      ; preds = %266
+  call void @typy_rt_traceback_add(ptr %270, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
   br label %b20
 
 large_int47:                                      ; preds = %b18
   call void @typy_rt_int_decrement(i64 %v52)
-  br label %249
+  br label %272
 
-249:                                              ; preds = %large_int47, %b18
-  %250 = load i64, ptr %s0, align 8
-  %251 = and i64 %250, 1
-  %252 = icmp ne i64 %251, 0
-  %253 = call i1 @llvm.expect.i1(i1 %252, i1 true)
-  br i1 %253, label %254, label %large_int48
+272:                                              ; preds = %large_int47, %b18
+  %273 = load i64, ptr %s0, align 8
+  %274 = and i64 %273, 1
+  %275 = icmp ne i64 %274, 0
+  %276 = call i1 @llvm.expect.i1(i1 %275, i1 true)
+  br i1 %276, label %277, label %large_int48
 
-large_int48:                                      ; preds = %249
-  call void @typy_rt_int_decrement(i64 %250)
-  br label %254
+large_int48:                                      ; preds = %272
+  call void @typy_rt_int_decrement(i64 %273)
+  br label %277
 
-254:                                              ; preds = %large_int48, %249
-  %255 = load i64, ptr %s1, align 8
-  %256 = and i64 %255, 1
-  %257 = icmp ne i64 %256, 0
-  %258 = call i1 @llvm.expect.i1(i1 %257, i1 true)
-  br i1 %258, label %259, label %large_int49
+277:                                              ; preds = %large_int48, %272
+  %278 = load i64, ptr %s1, align 8
+  %279 = and i64 %278, 1
+  %280 = icmp ne i64 %279, 0
+  %281 = call i1 @llvm.expect.i1(i1 %280, i1 true)
+  br i1 %281, label %282, label %large_int49
 
-large_int49:                                      ; preds = %254
-  call void @typy_rt_int_decrement(i64 %255)
-  br label %259
+large_int49:                                      ; preds = %277
+  call void @typy_rt_int_decrement(i64 %278)
+  br label %282
 
-259:                                              ; preds = %large_int49, %254
-  %260 = load i64, ptr %s2, align 8
-  %261 = and i64 %260, 1
-  %262 = icmp ne i64 %261, 0
-  %263 = call i1 @llvm.expect.i1(i1 %262, i1 true)
-  br i1 %263, label %264, label %large_int50
+282:                                              ; preds = %large_int49, %277
+  %283 = load i64, ptr %s2, align 8
+  %284 = and i64 %283, 1
+  %285 = icmp ne i64 %284, 0
+  %286 = call i1 @llvm.expect.i1(i1 %285, i1 true)
+  br i1 %286, label %287, label %large_int50
 
-large_int50:                                      ; preds = %259
-  call void @typy_rt_int_decrement(i64 %260)
-  br label %264
+large_int50:                                      ; preds = %282
+  call void @typy_rt_int_decrement(i64 %283)
+  br label %287
 
-264:                                              ; preds = %large_int50, %259
+287:                                              ; preds = %large_int50, %282
   ret ptr %v59
 
 traceback51:                                      ; preds = %b19
-  call void @typy_rt_traceback_add(ptr %61, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
+  call void @typy_rt_traceback_add(ptr %66, ptr @typy.cstr.4, ptr @typy.cstr.1, i32 26)
   br label %b22
 
 large_int52:                                      ; preds = %b20
   call void @typy_rt_int_decrement(i64 %v58)
-  br label %265
+  br label %288
 
-265:                                              ; preds = %large_int52, %b20
-  %266 = load i64, ptr %s0, align 8
-  %267 = and i64 %266, 1
-  %268 = icmp ne i64 %267, 0
-  %269 = call i1 @llvm.expect.i1(i1 %268, i1 true)
-  br i1 %269, label %270, label %large_int53
+288:                                              ; preds = %large_int52, %b20
+  %289 = load i64, ptr %s0, align 8
+  %290 = and i64 %289, 1
+  %291 = icmp ne i64 %290, 0
+  %292 = call i1 @llvm.expect.i1(i1 %291, i1 true)
+  br i1 %292, label %293, label %large_int53
 
-large_int53:                                      ; preds = %265
-  call void @typy_rt_int_decrement(i64 %266)
-  br label %270
+large_int53:                                      ; preds = %288
+  call void @typy_rt_int_decrement(i64 %289)
+  br label %293
 
-270:                                              ; preds = %large_int53, %265
-  %271 = load i64, ptr %s1, align 8
-  %272 = and i64 %271, 1
-  %273 = icmp ne i64 %272, 0
-  %274 = call i1 @llvm.expect.i1(i1 %273, i1 true)
-  br i1 %274, label %275, label %large_int54
+293:                                              ; preds = %large_int53, %288
+  %294 = load i64, ptr %s1, align 8
+  %295 = and i64 %294, 1
+  %296 = icmp ne i64 %295, 0
+  %297 = call i1 @llvm.expect.i1(i1 %296, i1 true)
+  br i1 %297, label %298, label %large_int54
 
-large_int54:                                      ; preds = %270
-  call void @typy_rt_int_decrement(i64 %271)
-  br label %275
+large_int54:                                      ; preds = %293
+  call void @typy_rt_int_decrement(i64 %294)
+  br label %298
 
-275:                                              ; preds = %large_int54, %270
-  %276 = load i64, ptr %s2, align 8
-  %277 = and i64 %276, 1
-  %278 = icmp ne i64 %277, 0
-  %279 = call i1 @llvm.expect.i1(i1 %278, i1 true)
-  br i1 %279, label %280, label %large_int55
+298:                                              ; preds = %large_int54, %293
+  %299 = load i64, ptr %s2, align 8
+  %300 = and i64 %299, 1
+  %301 = icmp ne i64 %300, 0
+  %302 = call i1 @llvm.expect.i1(i1 %301, i1 true)
+  br i1 %302, label %303, label %large_int55
 
-large_int55:                                      ; preds = %275
-  call void @typy_rt_int_decrement(i64 %276)
-  br label %280
+large_int55:                                      ; preds = %298
+  call void @typy_rt_int_decrement(i64 %299)
+  br label %303
 
-280:                                              ; preds = %large_int55, %275
+303:                                              ; preds = %large_int55, %298
   ret ptr %v66
 
 large_int56:                                      ; preds = %b21
   call void @typy_rt_int_decrement(i64 %v58)
-  br label %281
+  br label %304
 
-281:                                              ; preds = %large_int56, %b21
-  %282 = load i64, ptr %s0, align 8
-  %283 = and i64 %282, 1
-  %284 = icmp ne i64 %283, 0
-  %285 = call i1 @llvm.expect.i1(i1 %284, i1 true)
-  br i1 %285, label %286, label %large_int57
+304:                                              ; preds = %large_int56, %b21
+  %305 = load i64, ptr %s0, align 8
+  %306 = and i64 %305, 1
+  %307 = icmp ne i64 %306, 0
+  %308 = call i1 @llvm.expect.i1(i1 %307, i1 true)
+  br i1 %308, label %309, label %large_int57
 
-large_int57:                                      ; preds = %281
-  call void @typy_rt_int_decrement(i64 %282)
-  br label %286
+large_int57:                                      ; preds = %304
+  call void @typy_rt_int_decrement(i64 %305)
+  br label %309
 
-286:                                              ; preds = %large_int57, %281
-  %287 = load i64, ptr %s1, align 8
-  %288 = and i64 %287, 1
-  %289 = icmp ne i64 %288, 0
-  %290 = call i1 @llvm.expect.i1(i1 %289, i1 true)
-  br i1 %290, label %291, label %large_int58
+309:                                              ; preds = %large_int57, %304
+  %310 = load i64, ptr %s1, align 8
+  %311 = and i64 %310, 1
+  %312 = icmp ne i64 %311, 0
+  %313 = call i1 @llvm.expect.i1(i1 %312, i1 true)
+  br i1 %313, label %314, label %large_int58
 
-large_int58:                                      ; preds = %286
-  call void @typy_rt_int_decrement(i64 %287)
-  br label %291
+large_int58:                                      ; preds = %309
+  call void @typy_rt_int_decrement(i64 %310)
+  br label %314
 
-291:                                              ; preds = %large_int58, %286
-  %292 = load i64, ptr %s2, align 8
-  %293 = and i64 %292, 1
-  %294 = icmp ne i64 %293, 0
-  %295 = call i1 @llvm.expect.i1(i1 %294, i1 true)
-  br i1 %295, label %296, label %large_int59
+314:                                              ; preds = %large_int58, %309
+  %315 = load i64, ptr %s2, align 8
+  %316 = and i64 %315, 1
+  %317 = icmp ne i64 %316, 0
+  %318 = call i1 @llvm.expect.i1(i1 %317, i1 true)
+  br i1 %318, label %319, label %large_int59
 
-large_int59:                                      ; preds = %291
-  call void @typy_rt_int_decrement(i64 %292)
-  br label %296
+large_int59:                                      ; preds = %314
+  call void @typy_rt_int_decrement(i64 %315)
+  br label %319
 
-296:                                              ; preds = %large_int59, %291
+319:                                              ; preds = %large_int59, %314
   ret ptr null
 
 large_int60:                                      ; preds = %b22
   call void @typy_rt_int_decrement(i64 %v58)
-  br label %297
+  br label %320
 
-297:                                              ; preds = %large_int60, %b22
-  %298 = load i64, ptr %s0, align 8
-  %299 = and i64 %298, 1
-  %300 = icmp ne i64 %299, 0
-  %301 = call i1 @llvm.expect.i1(i1 %300, i1 true)
-  br i1 %301, label %302, label %large_int61
+320:                                              ; preds = %large_int60, %b22
+  %321 = load i64, ptr %s0, align 8
+  %322 = and i64 %321, 1
+  %323 = icmp ne i64 %322, 0
+  %324 = call i1 @llvm.expect.i1(i1 %323, i1 true)
+  br i1 %324, label %325, label %large_int61
 
-large_int61:                                      ; preds = %297
-  call void @typy_rt_int_decrement(i64 %298)
-  br label %302
+large_int61:                                      ; preds = %320
+  call void @typy_rt_int_decrement(i64 %321)
+  br label %325
 
-302:                                              ; preds = %large_int61, %297
-  %303 = load i64, ptr %s1, align 8
-  %304 = and i64 %303, 1
-  %305 = icmp ne i64 %304, 0
-  %306 = call i1 @llvm.expect.i1(i1 %305, i1 true)
-  br i1 %306, label %307, label %large_int62
+325:                                              ; preds = %large_int61, %320
+  %326 = load i64, ptr %s1, align 8
+  %327 = and i64 %326, 1
+  %328 = icmp ne i64 %327, 0
+  %329 = call i1 @llvm.expect.i1(i1 %328, i1 true)
+  br i1 %329, label %330, label %large_int62
 
-large_int62:                                      ; preds = %302
-  call void @typy_rt_int_decrement(i64 %303)
-  br label %307
+large_int62:                                      ; preds = %325
+  call void @typy_rt_int_decrement(i64 %326)
+  br label %330
 
-307:                                              ; preds = %large_int62, %302
-  %308 = load i64, ptr %s2, align 8
-  %309 = and i64 %308, 1
-  %310 = icmp ne i64 %309, 0
-  %311 = call i1 @llvm.expect.i1(i1 %310, i1 true)
-  br i1 %311, label %312, label %large_int63
+330:                                              ; preds = %large_int62, %325
+  %331 = load i64, ptr %s2, align 8
+  %332 = and i64 %331, 1
+  %333 = icmp ne i64 %332, 0
+  %334 = call i1 @llvm.expect.i1(i1 %333, i1 true)
+  br i1 %334, label %335, label %large_int63
 
-large_int63:                                      ; preds = %307
-  call void @typy_rt_int_decrement(i64 %308)
-  br label %312
+large_int63:                                      ; preds = %330
+  call void @typy_rt_int_decrement(i64 %331)
+  br label %335
 
-312:                                              ; preds = %large_int63, %307
+335:                                              ; preds = %large_int63, %330
   ret ptr %v72
 }
 
