@@ -113,8 +113,8 @@ fn exp_24_star_star_of_a_dict_in_a_call_of_a_builtin_is_planned() {
 fn exp_22_a_callee_refused_itself_is_reported_and_not_the_unpacking() {
     for (call, code) in [
         ("print(undefined_name(*[1, 2]))\n", "E0205"),
-        ("print(bytearray(*[7, 2]))\n", "E0201"),
-        ("print(bytearray(*(7, 2)))\n", "E0201"),
+        ("print(property(*[7, 2]))\n", "E0201"),
+        ("print(property(*(7, 2)))\n", "E0201"),
     ] {
         let found = messages(call);
         assert!(

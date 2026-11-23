@@ -82,14 +82,6 @@ fn doctest_is_planned_for_after_1_0() {
 }
 
 #[test]
-fn bytearray_is_planned_for_0_12() {
-    assert_eq!(
-        messages("value = bytearray\n"),
-        [planned("bytearray", "0.12", "LIB-28")]
-    );
-}
-
-#[test]
 fn any_as_a_type_is_planned_for_0_13() {
     let found = messages("def show(value: Any) -> None:\n    pass\n");
     assert_eq!(

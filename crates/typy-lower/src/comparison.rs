@@ -92,12 +92,22 @@ impl FunctionLowerer<'_> {
                 )
                 .value
             }
-            TyirType::BYTES => {
+            TyirType::BYTEARRAY if item.ty == TyirType::Int => {
+                self.call_runtime(
+                    RuntimeFunction::BytearrayContainsByte,
+                    vec![container.value, item.value],
+                    span,
+                )
+                .value
+            }
+            TyirType::BYTES | TyirType::BYTEARRAY => {
+                let container = self.bytes_view(container, span);
                 let function = if item.ty == TyirType::Int {
                     RuntimeFunction::BytesContainsByte
                 } else {
                     RuntimeFunction::BytesContains
                 };
+                let item = self.bytes_view(item, span);
                 self.call_runtime(function, vec![container.value, item.value], span)
                     .value
             }
@@ -387,15 +397,8 @@ impl FunctionLowerer<'_> {
             (TyirType::Int, _) => ScalarKind::Int,
             (TyirType::Float, _) => ScalarKind::Float,
             (TyirType::Bool, _) => ScalarKind::Bool,
-            (TyirType::BYTES, _) => {
-                let code = self.constant(Constant::Int(comparison.code().to_string()), span);
-                return self
-                    .call_runtime(
-                        RuntimeFunction::BytesCompare,
-                        vec![left.value, right.value, code],
-                        span,
-                    )
-                    .value;
+            (TyirType::BYTES | TyirType::BYTEARRAY, _) => {
+                return self.compare_bytes(left, right, comparison, span);
             }
             (TyirType::Object(_), _) => ScalarKind::Str,
             (TyirType::Unit, _) => {
@@ -511,6 +514,27 @@ fn equal_by_type(left: TyirType, right: TyirType, comparison: Comparison) -> boo
         |ty: TyirType| matches!(ty, TyirType::UNION | TyirType::CDATA | TyirType::FUNCTION);
     matches!(comparison, Comparison::Equal | Comparison::NotEqual)
         && (by_type(left) || by_type(right))
+}
+
+impl FunctionLowerer<'_> {
+    /// Compares two bytes-like values, `bytes` or bytearrays, by their bytes (LIB-28).
+    fn compare_bytes(
+        &mut self,
+        left: Lowered,
+        right: Lowered,
+        comparison: Comparison,
+        span: Span,
+    ) -> ValueId {
+        let left = self.bytes_view(left, span);
+        let right = self.bytes_view(right, span);
+        let code = self.constant(Constant::Int(comparison.code().to_string()), span);
+        self.call_runtime(
+            RuntimeFunction::BytesCompare,
+            vec![left.value, right.value, code],
+            span,
+        )
+        .value
+    }
 }
 
 #[cfg(test)]

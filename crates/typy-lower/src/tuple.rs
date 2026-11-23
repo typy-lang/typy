@@ -165,6 +165,9 @@ impl FunctionLowerer<'_> {
                 self.run_lazy_import(*reify, span);
                 self.assign_target(target, value, span);
             }
+            AssignTarget::Item { list, index } if list.ty == typy_check::Type::Bytearray => {
+                self.assign_byte(list, index, value, span);
+            }
             AssignTarget::Item { list, index } => self.assign_item(list, index, value, span),
             AssignTarget::Slice {
                 list,
@@ -174,13 +177,13 @@ impl FunctionLowerer<'_> {
             } => {
                 // The value is evaluated first; the list and the bounds after it (DAT-13).
                 let bounds = [lower.as_deref(), upper.as_deref(), step.as_deref()];
-                self.call_with_slice(
-                    RuntimeFunction::ListAssignSlice,
-                    list,
-                    bounds,
-                    vec![value.value],
-                    span,
-                );
+                let (function, given) = if list.ty == typy_check::Type::Bytearray {
+                    let bytes = self.bytes_view(value, span);
+                    (RuntimeFunction::BytearraySetSlice, bytes.value)
+                } else {
+                    (RuntimeFunction::ListAssignSlice, value.value)
+                };
+                self.call_with_slice(function, list, bounds, vec![given], span);
                 self.release(value, span);
             }
             AssignTarget::Entry { dict, key } => self.assign_entry(dict, key, value, span),
@@ -371,12 +374,13 @@ impl FunctionLowerer<'_> {
                 self.constant(Constant::PlaceholderDict, span)
             }
             TyirType::Object(typy_tyir::TypeId::BYTES) => self.bytes_constant(&[], span),
-            // An instance, exception, iterator, generator, range, view or function slot starts
-            // as null, which counting passes over. Nothing is allocated, so a `return` lowered
+            // An instance, exception, iterator, generator, range, view, bytearray or function
+            // slot starts as null, which counting passes over. Nothing is allocated, so a `return` lowered
             // before a later loop adds its hidden slot has nothing of that slot to release.
             TyirType::Object(id)
                 if id.class_index().is_some()
                     || id == typy_tyir::TypeId::DICT_VIEW
+                    || id == typy_tyir::TypeId::BYTEARRAY
                     || id == typy_tyir::TypeId::EXCEPTION
                     || id == typy_tyir::TypeId::ITERATOR
                     || id == typy_tyir::TypeId::GENERATOR

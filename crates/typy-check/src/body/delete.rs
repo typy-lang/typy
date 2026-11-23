@@ -61,9 +61,13 @@ impl BodyChecker<'_> {
         let value = self.expression(target);
         let removable = match &value.kind {
             TypedExprKind::ListItem { list, .. } => matches!(list.ty, Type::List(_)),
+            // A bytearray deletes a byte or a slice as a list does (LIB-28).
+            TypedExprKind::Index {
+                value: sequence, ..
+            } => sequence.ty == Type::Bytearray,
             TypedExprKind::Slice {
                 value: sequence, ..
-            } => matches!(sequence.ty, Type::List(_)),
+            } => matches!(sequence.ty, Type::List(_) | Type::Bytearray),
             TypedExprKind::DictItem { .. } => true,
             _ => value.ty.has_error(),
         };

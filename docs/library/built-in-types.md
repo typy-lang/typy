@@ -13,6 +13,7 @@ the same exceptions.
 | `None` | DAT-04 |
 | `str`, a sequence of Unicode code points | DAT-05 |
 | `bytes`, a sequence of integers from 0 to 255 | DAT-06 |
+| `bytearray`, a `bytes` that changes in place; see [Bytearrays](#bytearrays) | LIB-28 |
 | `list[T]`, shared by every name bound to it | DAT-07 |
 | `tuple[A, B]` with a fixed number of items, and `tuple[T, ...]` | DAT-08, DAT-14 |
 | `dict[K, V]`, in insertion order | DAT-09 |
@@ -88,6 +89,34 @@ defaults = {"color": "red", "size": "m"}
 print(dict(defaults, size="l"), list(reversed(defaults)))
 print(dict.fromkeys(["ada", "alan"], 0), dict.fromkeys("ab"))
 ```
+
+## Bytearrays
+
+A `bytearray` holds bytes that change in place. It has every method of
+`bytes`, each giving a `bytearray` where the method of `bytes` gives
+`bytes`, and the methods of a list that change it, `append`, `extend`,
+`insert`, `pop`, `remove`, `reverse`, `clear` and `copy`, with `int`
+items:
+
+<!-- typy-expect: accepted -->
+```python
+buffer = bytearray(b"hello")
+buffer[0] = ord("H")
+buffer += b", world"
+buffer.extend([33, 33])
+del buffer[-1]
+print(buffer, buffer.upper(), buffer.split(b", "), buffer[:5] == b"Hello")
+```
+
+`bytearray(n)` makes `n` zero bytes, `bytearray(values)` one of a list of
+`int`s, `bytearray(data)` a copy of a `bytes` or a `bytearray`, and
+`bytearray(text, encoding)` the encoded text. An item is an `int` from 0
+to 255, and assigning any other raises `ValueError`. A slice takes the
+bytes of any `bytes` or `bytearray`. `+=` and `*=` change the bytearray
+itself, so every name bound to it sees the change, as for a list. A
+`bytes` and a `bytearray` compare, combine and search each other, and a
+method of either takes the other where it takes bytes. A `bytearray` has
+no hash, so it cannot be a member of a set or a key of a dict (ADR-0108).
 
 `frozendict`, a builtin from Python 3.15, is E0201 at the Python floor
 3.15, planned for 0.12 (DAT-18); below that floor it is not defined, as

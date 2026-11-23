@@ -677,6 +677,7 @@ pub(super) fn receiver_of(class: &TypeObjectOf) -> Option<Type> {
     Some(match class {
         TypeObjectOf::Str => Type::Str,
         TypeObjectOf::Bytes => Type::Bytes,
+        TypeObjectOf::Bytearray => Type::Bytearray,
         TypeObjectOf::List => Type::List(Box::new(Type::Int)),
         TypeObjectOf::Set => Type::Set(Box::new(Type::Int)),
         TypeObjectOf::Dict => Type::Dict(Box::new(Type::Int), Box::new(Type::Int)),

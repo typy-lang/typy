@@ -480,11 +480,13 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::LIST) => return self.list_truth(lowered, span),
             TyirType::Object(
                 typy_tyir::TypeId::BYTES
+                | typy_tyir::TypeId::BYTEARRAY
                 | typy_tyir::TypeId::SET
                 | typy_tyir::TypeId::DICT
                 | typy_tyir::TypeId::DICT_VIEW,
             ) => {
                 let function = match lowered.ty {
+                    TyirType::BYTEARRAY => RuntimeFunction::BytearrayLength,
                     TyirType::SET => RuntimeFunction::SetLength,
                     TyirType::DICT => RuntimeFunction::DictLength,
                     TyirType::VIEW => RuntimeFunction::DictViewLength,

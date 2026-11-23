@@ -11,6 +11,9 @@ All notable changes to TyPy are recorded here. The format follows
 - The builtins `divmod`, `pow`, also with a modulus, `bin`, `hex`, `oct`
   and `format`, as CPython gives them; `bin`, `hex` and `oct` are values
   of their own too, as `key=hex` (LIB-28).
+- `bytearray`, a `bytes` that changes in place, with every method of
+  `bytes`, the list methods that change it, item and slice assignment,
+  `del`, `+=` and `*=` (LIB-28, ADR-0108).
 - `from __future__ import annotations` is accepted and defers the module's
   annotations, so an annotation may name a class defined further down
   under any Python floor; the other features of `__future__` that Python

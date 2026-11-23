@@ -220,6 +220,7 @@ impl BodyChecker<'_> {
                         | Type::TupleOf(_)
                         | Type::Str
                         | Type::Bytes
+                        | Type::Bytearray
                         | Type::Range
                         | Type::Dict(..)
                         | Type::DictView(..)

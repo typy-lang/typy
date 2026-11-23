@@ -160,6 +160,42 @@ impl BodyChecker<'_> {
         )
     }
 
+    /// Checks `bytearray(source)` as `bytes(source)` is checked, with `bytes` and `bytearray`
+    /// sources and no source at all: a new bytearray of the bytes the same call of `bytes`
+    /// gives (LIB-28, ADR-0108).
+    pub(super) fn call_bytearray(
+        &mut self,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
+        let source = if arguments.is_empty() && keywords.is_empty() {
+            Self::typed(
+                TypedExprKind::Constant(TypedConstant::Bytes(Vec::new())),
+                Type::Bytes,
+                span,
+            )
+        } else if arguments.len() > 1 || !keywords.is_empty() {
+            self.bytes_of_text(arguments, keywords, span)
+        } else {
+            match self.bytes_argument(&arguments[0]) {
+                Some(value) => value,
+                None => return Self::invalid_call(span),
+            }
+        };
+        if source.ty.has_error() {
+            return Self::invalid_call(span);
+        }
+        Self::typed(
+            TypedExprKind::Builtin {
+                builtin: Builtin::Bytearray,
+                arguments: vec![source],
+            },
+            Type::Bytearray,
+            span,
+        )
+    }
+
     /// Checks `bytes(text, encoding, errors)`, which is `text.encode(encoding, errors)`; the
     /// encoding and the errors may be given by keyword, and the encoding must be given.
     fn bytes_of_text(&mut self, arguments: &[Expr], keywords: &[Keyword], span: Span) -> TypedExpr {
@@ -239,7 +275,7 @@ impl BodyChecker<'_> {
             Self::converted(value, Some(&ints))
         };
         match &value.ty {
-            Type::Int | Type::Bytes | Type::Error => Some(value),
+            Type::Int | Type::Bytes | Type::Bytearray | Type::Error => Some(value),
             Type::Str => {
                 self.diagnostics.push(
                     Diagnostic::new(

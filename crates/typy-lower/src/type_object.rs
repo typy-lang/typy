@@ -16,6 +16,7 @@ fn reference(of: &TypeObjectOf) -> TypeObjectRef {
         TypeObjectOf::Bool => RuntimeType::Bool,
         TypeObjectOf::Str => RuntimeType::Str,
         TypeObjectOf::Bytes => RuntimeType::Bytes,
+        TypeObjectOf::Bytearray => RuntimeType::Bytearray,
         TypeObjectOf::NoneType => RuntimeType::NoneType,
         TypeObjectOf::List => RuntimeType::List,
         TypeObjectOf::Tuple => RuntimeType::Tuple,

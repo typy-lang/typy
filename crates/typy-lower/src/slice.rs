@@ -24,6 +24,7 @@ impl FunctionLowerer<'_> {
         let position = self.expression(index);
         let function = match text.ty {
             TyirType::BYTES => RuntimeFunction::BytesGet,
+            TyirType::BYTEARRAY => RuntimeFunction::BytearrayGet,
             TyirType::RANGE => RuntimeFunction::RangeGet,
             _ => RuntimeFunction::StrIndex,
         };
@@ -45,6 +46,7 @@ impl FunctionLowerer<'_> {
         let function = match ty {
             TyirType::STR => RuntimeFunction::StrSlice,
             TyirType::BYTES => RuntimeFunction::BytesSlice,
+            TyirType::BYTEARRAY => RuntimeFunction::BytearraySlice,
             TyirType::RANGE => RuntimeFunction::RangeSlice,
             _ => RuntimeFunction::ListSlice,
         };
@@ -118,6 +120,18 @@ impl FunctionLowerer<'_> {
                 self.release(index, span);
                 self.release(list, span);
             }
+            // A bytearray deletes a byte as a list deletes an item (LIB-28).
+            TypedExprKind::Index { value, index } => {
+                let array = self.operand_before(value, &[index], span);
+                let index = self.expression(index);
+                self.call_runtime(
+                    RuntimeFunction::BytearrayDelete,
+                    vec![array.value, index.value],
+                    span,
+                );
+                self.release(index, span);
+                self.release(array, span);
+            }
             TypedExprKind::Slice {
                 value,
                 lower,
@@ -125,13 +139,12 @@ impl FunctionLowerer<'_> {
                 step,
             } => {
                 let bounds = [lower.as_deref(), upper.as_deref(), step.as_deref()];
-                self.call_with_slice(
-                    RuntimeFunction::ListDeleteSlice,
-                    value,
-                    bounds,
-                    Vec::new(),
-                    span,
-                );
+                let function = if value.ty == typy_check::Type::Bytearray {
+                    RuntimeFunction::BytearrayDeleteSlice
+                } else {
+                    RuntimeFunction::ListDeleteSlice
+                };
+                self.call_with_slice(function, value, bounds, Vec::new(), span);
             }
             TypedExprKind::DictItem { dict, key } => {
                 let dict = self.operand_before(dict, &[key], span);

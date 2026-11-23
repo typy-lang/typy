@@ -253,6 +253,28 @@ pub unsafe extern "C" fn typy_rt_bytearray_adopt(data: *mut StrObject) -> *mut B
     }
 }
 
+/// Turns each `bytes` item of `list`, a list a function of `bytes` made, into a bytearray of
+/// its bytes, which the list holds in its place, as `bytearray.split` and `partition` give
+/// bytearrays (ADR-0108).
+///
+/// # Safety
+///
+/// `list` points to a live list of `bytes` items, each with a reference the list holds.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_bytearray_convert_list(list: *mut crate::ListObject) {
+    // SAFETY: the caller's guarantee; each slot holds the address of a `bytes`, whose
+    // reference `typy_rt_bytearray_adopt` takes over for the bytearray that replaces it.
+    unsafe {
+        for index in 0..(*list).length {
+            let slot = (*list).slot(index);
+            let data = core::ptr::with_exposed_provenance_mut::<StrObject>(
+                usize::try_from(*slot).unwrap_or(0),
+            );
+            *slot = typy_rt_bytearray_adopt(data).expose_provenance() as u64;
+        }
+    }
+}
+
 /// Returns the buffer of `array`, borrowed: a `bytes` that the functions of `bytes` read.
 ///
 /// # Safety

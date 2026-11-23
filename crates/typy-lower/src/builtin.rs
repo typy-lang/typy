@@ -17,6 +17,7 @@ impl FunctionLowerer<'_> {
     fn length_function(ty: TyirType) -> Option<RuntimeFunction> {
         Some(match ty {
             TyirType::BYTES => RuntimeFunction::BytesLength,
+            TyirType::BYTEARRAY => RuntimeFunction::BytearrayLength,
             TyirType::SET => RuntimeFunction::SetLength,
             TyirType::DICT => RuntimeFunction::DictLength,
             TyirType::VIEW => RuntimeFunction::DictViewLength,
@@ -119,13 +120,8 @@ impl FunctionLowerer<'_> {
             (Builtin::Len, [sized]) if let Some(function) = Self::length_function(sized.ty) => {
                 self.call_runtime(function, vec![sized.value], span)
             }
-            (Builtin::Bytes, [count]) if count.ty == TyirType::Int => {
-                self.call_runtime(RuntimeFunction::BytesZeros, vec![count.value], span)
-            }
-            (Builtin::Bytes, [values]) if values.ty == TyirType::LIST => {
-                self.call_runtime(RuntimeFunction::BytesFromList, vec![values.value], span)
-            }
-            (Builtin::Bytes, [data]) => self.keep_or_copy(*data, span, |_, data| data),
+            (Builtin::Bytes, [source]) => self.bytes_value(*source, span),
+            (Builtin::Bytearray, [source]) => self.bytearray_value(*source, span),
             (Builtin::Len, [text]) => {
                 self.call_runtime(RuntimeFunction::StrLength, vec![text.value], span)
             }
@@ -175,6 +171,18 @@ impl FunctionLowerer<'_> {
             self.release(value, span);
         }
         result
+    }
+
+    /// Returns `bytes(source)`: zeros for a count, the bytes of a list of `int`s, a copy of a
+    /// bytearray, or the `bytes` itself. The source is released by the caller.
+    fn bytes_value(&mut self, source: Lowered, span: Span) -> Lowered {
+        let function = match source.ty {
+            TyirType::Int => RuntimeFunction::BytesZeros,
+            TyirType::LIST => RuntimeFunction::BytesFromList,
+            TyirType::BYTEARRAY => RuntimeFunction::BytearrayToBytes,
+            _ => return self.keep_or_copy(source, span, |_, data| data),
+        };
+        self.call_runtime(function, vec![source.value], span)
     }
 
     /// Runs a conversion; when it returns the argument itself, the result is counted again, because the argument is released afterwards.

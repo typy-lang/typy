@@ -20,6 +20,8 @@ pub enum Type {
     Str,
     /// `bytes`, an immutable sequence of integers from 0 to 255 (DAT-06).
     Bytes,
+    /// `bytearray`, a mutable sequence of integers from 0 to 255 (LIB-28, ADR-0108).
+    Bytearray,
     /// The type of `None` (DAT-04).
     NoneType,
     /// `tuple[A, B, ...]`: a fixed number of items, each with its own type (DAT-08).
@@ -145,6 +147,8 @@ pub enum TypeObjectOf {
     Str,
     /// `bytes`.
     Bytes,
+    /// `bytearray`.
+    Bytearray,
     /// The type of `None`, `NoneType`.
     NoneType,
     /// `list`, whatever its items.
@@ -231,6 +235,7 @@ impl TypeObjectOf {
             Type::Bool => Self::Bool,
             Type::Str => Self::Str,
             Type::Bytes => Self::Bytes,
+            Type::Bytearray => Self::Bytearray,
             Type::NoneType => Self::NoneType,
             Type::List(_) => Self::List,
             Type::Tuple(_) | Type::TupleOf(_) => Self::Tuple,
@@ -288,6 +293,7 @@ impl TypeObjectOf {
             "bool" => Self::Bool,
             "str" => Self::Str,
             "bytes" => Self::Bytes,
+            "bytearray" => Self::Bytearray,
             "list" => Self::List,
             "tuple" => Self::Tuple,
             "set" => Self::Set,
@@ -309,6 +315,7 @@ impl TypeObjectOf {
             Self::Bool => "bool",
             Self::Str => "str",
             Self::Bytes => "bytes",
+            Self::Bytearray => "bytearray",
             Self::NoneType => "NoneType",
             Self::List => "list",
             Self::Tuple => "tuple",
@@ -635,8 +642,30 @@ impl Type {
         }
     }
 
+    /// Returns the type with each `bytes` in it read as a bytearray: the result of a method of
+    /// `bytes` called on a bytearray, such as `split`, which gives a list of bytearrays.
+    #[must_use]
+    pub fn bytes_as_bytearray(self) -> Self {
+        match self {
+            Self::Bytes => Self::Bytearray,
+            Self::List(item) => Self::List(Box::new(item.bytes_as_bytearray())),
+            Self::Tuple(items) => {
+                Self::Tuple(items.into_iter().map(Self::bytes_as_bytearray).collect())
+            }
+            other => other,
+        }
+    }
+
+    /// Returns true for `bytes` and `bytearray`, which compare and combine with each other,
+    /// and which a function of `bytes` reads alike (LIB-28).
+    #[must_use]
+    pub const fn is_bytes_like(&self) -> bool {
+        matches!(self, Self::Bytes | Self::Bytearray)
+    }
+
     /// Returns true when `==` and `!=` accept a value of this type against one of `other`: the
-    /// same type, two numbers, or tuples whose items accept each other (EXP-06).
+    /// same type, two numbers, two bytes-like values, or tuples whose items accept each other
+    /// (EXP-06).
     #[must_use]
     pub fn can_test_equality(&self, other: &Self) -> bool {
         match (self, other) {
@@ -655,6 +684,7 @@ impl Type {
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Dict(..), Self::Dict(..)) => self == other,
+            (left, right) if left.is_bytes_like() && right.is_bytes_like() => true,
             // An instance is equal only to itself, so a class compares with its bases and its
             // subclasses, whose instances it may be (CLS-04).
             (Self::Instance(left), Self::Instance(right)) => {
@@ -715,6 +745,7 @@ impl Type {
     pub fn can_order(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
+            (left, right) if left.is_bytes_like() && right.is_bytes_like() => true,
             // Two lists or tuples of any length order item by item, so their items must order.
             (Self::TupleOf(left), Self::TupleOf(right)) | (Self::List(left), Self::List(right)) => {
                 left == right && left.can_order(right)
@@ -818,8 +849,8 @@ impl Type {
     }
 
     /// Returns true when a value of this type has a hash, so it may be an item of a set or a key
-    /// of a dict: not a list, a set, a dict or a view, which change, and not a tuple that holds
-    /// one (DAT-09, DAT-10).
+    /// of a dict: not a list, a set, a dict, a view or a bytearray, which change, and not a tuple
+    /// that holds one (DAT-09, DAT-10, ADR-0108).
     #[must_use]
     pub fn is_hashable(&self) -> bool {
         match self {
@@ -829,6 +860,7 @@ impl Type {
             | Self::Set(_)
             | Self::Dict(..)
             | Self::DictView(..)
+            | Self::Bytearray
             | Self::Iterable(_)
             | Self::CData(_)
             | Self::CDataClass(_) => false,
@@ -877,7 +909,7 @@ impl Type {
             }
             Self::DictView(view, key, value) => Some(view.item(key, value)),
             Self::Str => Some(Self::Str),
-            Self::Bytes | Self::Range => Some(Self::Int),
+            Self::Bytes | Self::Bytearray | Self::Range => Some(Self::Int),
             // A fixed tuple whose items have one type is held as a `tuple[T, ...]` first.
             Self::Tuple(items) => {
                 let (first, rest) = items.split_first()?;
@@ -988,6 +1020,7 @@ impl fmt::Display for Type {
             Self::Bool => formatter.write_str("bool"),
             Self::Str => formatter.write_str("str"),
             Self::Bytes => formatter.write_str("bytes"),
+            Self::Bytearray => formatter.write_str("bytearray"),
             Self::NoneType => formatter.write_str("None"),
             Self::Tuple(items) if items.is_empty() => formatter.write_str("tuple[()]"),
             Self::Tuple(items) => {

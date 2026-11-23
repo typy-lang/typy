@@ -113,6 +113,7 @@ fn arity(builtin: Builtin) -> Option<Arity> {
         B::Int => Arity::new(0, 2, "", "int expected at most 2 arguments, got {}"),
         B::Str => Arity::new(0, 3, "", "str expected at most 3 arguments, got {}"),
         B::Bytes => Arity::new(0, 3, "", "bytes() takes at most 3 arguments ({} given)"),
+        B::Bytearray => Arity::new(0, 3, "", "bytearray() takes at most 3 arguments ({} given)"),
         B::Enumerate => Arity::new(
             1,
             2,

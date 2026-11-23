@@ -568,6 +568,8 @@ impl BodyChecker<'_> {
     ) -> Option<AssignTarget> {
         let item = match &list.ty {
             Type::List(item) => item.as_ref().clone(),
+            // A bytearray's items are bytes, `int`s from 0 to 255 (LIB-28).
+            Type::Bytearray => Type::Int,
             Type::Error => return None,
             other => {
                 let other = other.clone();
@@ -650,6 +652,15 @@ impl BodyChecker<'_> {
         match &list.ty {
             Type::List(_) => {}
             Type::Error => return None,
+            // A bytearray's slice takes the bytes of any bytes-like value (LIB-28).
+            Type::Bytearray if ty.is_bytes_like() => {
+                return Some(AssignTarget::Slice {
+                    list: Box::new(list),
+                    lower,
+                    upper,
+                    step,
+                });
+            }
             other => {
                 let other = other.clone();
                 self.unassignable_item(&other, span);

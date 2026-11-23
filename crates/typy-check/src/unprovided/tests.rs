@@ -9,7 +9,6 @@ fn later_builtins_name_their_release_and_rule() {
         ("super", "0.14", RuleId::CLS_36),
         ("property", "1.0", RuleId::FUN_17),
         ("map", "1.0", RuleId::LIB_25),
-        ("bytearray", "0.12", RuleId::LIB_28),
     ];
     for (name, release, rule) in cases {
         assert_eq!(

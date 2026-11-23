@@ -51,6 +51,13 @@ impl BodyChecker<'_> {
             Op::Mult if (l == Type::Bytes && r == Int) || (l == Int && r == Type::Bytes) => {
                 Type::Bytes
             }
+            // `+` of two bytes-like values gives the type of the left one, as in CPython.
+            Op::Add if l.is_bytes_like() && r.is_bytes_like() => l,
+            Op::Mult
+                if (l == Type::Bytearray && r == Int) || (l == Int && r == Type::Bytearray) =>
+            {
+                Type::Bytearray
+            }
             // A list joins only a list of its own type, because the runtime stores each item by
             // the kind of the item type (DAT-07).
             Op::Add if l.sequence_item().is_some() && l == r => l,
@@ -221,8 +228,9 @@ impl BodyChecker<'_> {
                 Type::Str if l == Type::Str => {}
                 // `in` on a range tests an `int` without stepping (DAT-17).
                 Type::Range if l == Type::Int => {}
-                // `in` on `bytes` looks for a byte, an `int`, or for `bytes` within them.
-                Type::Bytes if matches!(l, Type::Int | Type::Bytes) => {}
+                // `in` on `bytes` or a bytearray looks for a byte, an `int`, or for bytes-like
+                // values within them.
+                Type::Bytes | Type::Bytearray if l == Type::Int || l.is_bytes_like() => {}
                 // A tuple compares the value with each item for equality, so each item has to
                 // compare with it.
                 Type::Tuple(items) if items.iter().all(|item| l.can_test_equality(item)) => {}
@@ -391,7 +399,8 @@ impl BodyChecker<'_> {
         let takes_int = |other: &Type| {
             other.is_numeric_or_bool()
                 || (operator == BinaryOperator::Mult && other.sequence_item().is_some())
-                || (operator == BinaryOperator::Mult && matches!(other, Type::Str | Type::Bytes))
+                || (operator == BinaryOperator::Mult
+                    && matches!(other, Type::Str | Type::Bytes | Type::Bytearray))
         };
         let left_takes = takes_int(&right.ty);
         let right_takes = takes_int(&left.ty);

@@ -235,7 +235,7 @@ impl LoopSource {
             Self::Range { .. } => Type::Int,
             Self::Protocol { item, .. } => item.clone(),
             Self::Items(sequence) | Self::Reversed(sequence) => match &sequence.ty {
-                Type::Bytes | Type::Range => Type::Int,
+                Type::Bytes | Type::Bytearray | Type::Range => Type::Int,
                 file if file.is_file() => file.file_line().unwrap_or(Type::Error),
                 Type::Set(item)
                 | Type::Dict(item, _)

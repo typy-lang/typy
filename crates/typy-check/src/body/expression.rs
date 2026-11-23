@@ -321,7 +321,12 @@ impl BodyChecker<'_> {
                 // A slice object slices a built-in sequence as its bounds do (CLS-23).
                 let typed_index = if matches!(
                     value.ty,
-                    Type::Str | Type::Bytes | Type::List(_) | Type::TupleOf(_) | Type::Range
+                    Type::Str
+                        | Type::Bytes
+                        | Type::Bytearray
+                        | Type::List(_)
+                        | Type::TupleOf(_)
+                        | Type::Range
                 ) {
                     let index = self.expression(index);
                     if index.ty == Type::Slice {
@@ -348,7 +353,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                if matches!(value.ty, Type::Bytes | Type::Range) {
+                if matches!(value.ty, Type::Bytes | Type::Bytearray | Type::Range) {
                     self.expect(&index, Type::Int, "an index");
                     return Self::typed(
                         TypedExprKind::Index {

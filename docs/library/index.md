@@ -29,4 +29,3 @@ release: `enum` and `abc` (CLS-44, CLS-45), `textwrap`, `base64`,
 (LIB-27) in 0.12;
 `math.integer` (LIB-26) in 0.12 from the Python floor 3.15; `os` (LIB-07)
 in 1.0; and `doctest` in a release after 1.0. Each other module is E0206.
-The builtin `bytearray` is planned for 0.12 (LIB-28).

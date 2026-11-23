@@ -6,6 +6,7 @@ mod augmented;
 mod borrow;
 mod bound_call;
 mod builtin;
+mod bytearray;
 mod call_graph;
 mod cdata;
 mod cell;

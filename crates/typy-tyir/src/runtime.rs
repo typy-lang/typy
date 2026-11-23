@@ -111,6 +111,34 @@ pub enum RuntimeFunction {
     BytesZeros,
     BytesFromList,
     BytesRepr,
+    BytearrayNew,
+    BytearrayFromBytes,
+    BytearrayFromList,
+    BytearrayAdopt,
+    BytearrayBuffer,
+    BytearrayToBytes,
+    BytearrayLength,
+    BytearrayGet,
+    BytearraySet,
+    BytearrayDelete,
+    BytearraySlice,
+    BytearraySetSlice,
+    BytearrayDeleteSlice,
+    BytearrayAppend,
+    BytearrayExtend,
+    BytearrayExtendList,
+    BytearrayInsert,
+    BytearrayPop,
+    BytearrayRemove,
+    BytearrayReverse,
+    BytearrayClear,
+    BytearrayCopy,
+    BytearrayConcat,
+    BytearrayRepeat,
+    BytearrayRepeatInPlace,
+    BytearrayContainsByte,
+    BytearrayRepr,
+    BytearrayConvertList,
     StrEncode,
     BytesDecode,
     BytesSearch,
@@ -541,9 +569,10 @@ const fn signature(
 /// file objects.
 fn holds_items(ty: TyirType) -> bool {
     use crate::types::{OptionalBase, TypeId};
-    const OWN: [TypeId; 13] = [
+    const OWN: [TypeId; 14] = [
         TypeId::STR,
         TypeId::BYTES,
+        TypeId::BYTEARRAY,
         TypeId::EXCEPTION,
         TypeId::TYPE,
         TypeId::TRACEBACK,
@@ -568,7 +597,7 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 404] = [
+    pub const ALL: [Self; 432] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
@@ -668,6 +697,34 @@ impl RuntimeFunction {
         Self::BytesZeros,
         Self::BytesFromList,
         Self::BytesRepr,
+        Self::BytearrayNew,
+        Self::BytearrayFromBytes,
+        Self::BytearrayFromList,
+        Self::BytearrayAdopt,
+        Self::BytearrayBuffer,
+        Self::BytearrayToBytes,
+        Self::BytearrayLength,
+        Self::BytearrayGet,
+        Self::BytearraySet,
+        Self::BytearrayDelete,
+        Self::BytearraySlice,
+        Self::BytearraySetSlice,
+        Self::BytearrayDeleteSlice,
+        Self::BytearrayAppend,
+        Self::BytearrayExtend,
+        Self::BytearrayExtendList,
+        Self::BytearrayInsert,
+        Self::BytearrayPop,
+        Self::BytearrayRemove,
+        Self::BytearrayReverse,
+        Self::BytearrayClear,
+        Self::BytearrayCopy,
+        Self::BytearrayConcat,
+        Self::BytearrayRepeat,
+        Self::BytearrayRepeatInPlace,
+        Self::BytearrayContainsByte,
+        Self::BytearrayRepr,
+        Self::BytearrayConvertList,
         Self::StrEncode,
         Self::BytesDecode,
         Self::BytesSearch,
@@ -1000,6 +1057,7 @@ impl RuntimeFunction {
         ));
         const LIST: TyirType = TyirType::LIST;
         const BYTES: TyirType = TyirType::BYTES;
+        const BYTEARRAY: TyirType = TyirType::BYTEARRAY;
         const SET: TyirType = TyirType::SET;
         const DICT: TyirType = TyirType::DICT;
         const VIEW: TyirType = TyirType::VIEW;
@@ -1158,6 +1216,36 @@ impl RuntimeFunction {
             Self::BytesZeros => signature(&[Int], BYTES, true),
             Self::BytesFromList => signature(&[LIST], BYTES, true),
             Self::BytesRepr | Self::BytesHex => signature(&[BYTES], STR, false),
+            Self::BytearrayNew => signature(&[Int], BYTEARRAY, true),
+            Self::BytearrayFromBytes | Self::BytearrayAdopt => {
+                signature(&[BYTES], BYTEARRAY, false)
+            }
+            Self::BytearrayFromList => signature(&[LIST], BYTEARRAY, true),
+            Self::BytearrayBuffer => signature(&[BYTEARRAY], Bits, false),
+            Self::BytearrayToBytes => signature(&[BYTEARRAY], BYTES, false),
+            Self::BytearrayLength => signature(&[BYTEARRAY], Int, false),
+            Self::BytearrayGet | Self::BytearrayPop => signature(&[BYTEARRAY, Int], Int, true),
+            Self::BytearraySet | Self::BytearrayInsert => {
+                signature(&[BYTEARRAY, Int, Int], Unit, true)
+            }
+            Self::BytearrayDelete
+            | Self::BytearrayAppend
+            | Self::BytearrayRemove
+            | Self::BytearrayRepeatInPlace => signature(&[BYTEARRAY, Int], Unit, true),
+            Self::BytearraySlice => signature(&[BYTEARRAY, Int, Int, Int, Int], BYTEARRAY, true),
+            Self::BytearraySetSlice => {
+                signature(&[BYTEARRAY, Int, Int, Int, Int, BYTES], Unit, true)
+            }
+            Self::BytearrayDeleteSlice => signature(&[BYTEARRAY, Int, Int, Int, Int], Unit, true),
+            Self::BytearrayExtend => signature(&[BYTEARRAY, BYTES], Unit, false),
+            Self::BytearrayExtendList => signature(&[BYTEARRAY, LIST], Unit, true),
+            Self::BytearrayReverse | Self::BytearrayClear => signature(&[BYTEARRAY], Unit, false),
+            Self::BytearrayCopy => signature(&[BYTEARRAY], BYTEARRAY, false),
+            Self::BytearrayConcat => signature(&[BYTEARRAY, BYTES], BYTEARRAY, false),
+            Self::BytearrayRepeat => signature(&[BYTEARRAY, Int], BYTEARRAY, true),
+            Self::BytearrayContainsByte => signature(&[BYTEARRAY, Int], Bool, true),
+            Self::BytearrayRepr => signature(&[BYTEARRAY], STR, false),
+            Self::BytearrayConvertList => signature(&[LIST], Unit, false),
             Self::SetNew => signature(&[Int, Bits], SET, false),
             Self::SetAdd
             | Self::SetAddMoved
@@ -1534,6 +1622,34 @@ impl RuntimeFunction {
             Self::BytesZeros => "bytes_zeros",
             Self::BytesFromList => "bytes_from_list",
             Self::BytesRepr => "bytes_repr",
+            Self::BytearrayNew => "bytearray_new",
+            Self::BytearrayFromBytes => "bytearray_from_bytes",
+            Self::BytearrayFromList => "bytearray_from_list",
+            Self::BytearrayAdopt => "bytearray_adopt",
+            Self::BytearrayBuffer => "bytearray_buffer",
+            Self::BytearrayToBytes => "bytearray_to_bytes",
+            Self::BytearrayLength => "bytearray_length",
+            Self::BytearrayGet => "bytearray_get",
+            Self::BytearraySet => "bytearray_set",
+            Self::BytearrayDelete => "bytearray_delete",
+            Self::BytearraySlice => "bytearray_slice",
+            Self::BytearraySetSlice => "bytearray_set_slice",
+            Self::BytearrayDeleteSlice => "bytearray_delete_slice",
+            Self::BytearrayAppend => "bytearray_append",
+            Self::BytearrayExtend => "bytearray_extend",
+            Self::BytearrayExtendList => "bytearray_extend_list",
+            Self::BytearrayInsert => "bytearray_insert",
+            Self::BytearrayPop => "bytearray_pop",
+            Self::BytearrayRemove => "bytearray_remove",
+            Self::BytearrayReverse => "bytearray_reverse",
+            Self::BytearrayClear => "bytearray_clear",
+            Self::BytearrayCopy => "bytearray_copy",
+            Self::BytearrayConcat => "bytearray_concat",
+            Self::BytearrayRepeat => "bytearray_repeat",
+            Self::BytearrayRepeatInPlace => "bytearray_repeat_in_place",
+            Self::BytearrayContainsByte => "bytearray_contains_byte",
+            Self::BytearrayRepr => "bytearray_repr",
+            Self::BytearrayConvertList => "bytearray_convert_list",
             Self::StrEncode => "str_encode",
             Self::BytesDecode => "bytes_decode",
             Self::BytesSearch => "bytes_search",

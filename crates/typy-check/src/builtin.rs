@@ -12,6 +12,7 @@ pub enum Builtin {
     Any,
     Bin,
     Bool,
+    Bytearray,
     Bytes,
     /// `callable(x)`, whether `x` is a function value or a class (LIB-23).
     Callable,
@@ -63,6 +64,7 @@ impl Builtin {
             "any" => Self::Any,
             "bin" => Self::Bin,
             "bool" => Self::Bool,
+            "bytearray" => Self::Bytearray,
             "bytes" => Self::Bytes,
             "callable" => Self::Callable,
             "chr" => Self::Chr,
@@ -165,6 +167,7 @@ impl Builtin {
             Self::Any => "any",
             Self::Bin => "bin",
             Self::Bool => "bool",
+            Self::Bytearray => "bytearray",
             Self::Bytes => "bytes",
             Self::Callable => "callable",
             Self::Chr => "chr",

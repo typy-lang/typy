@@ -14,6 +14,7 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Bool => TyirType::Bool,
         Type::Str => TyirType::STR,
         Type::Bytes => TyirType::BYTES,
+        Type::Bytearray => TyirType::BYTEARRAY,
         // A library is linked when the program is built and holds no value (FFI-01), and a
         // `ctypes` class is known from its type (FFI-03).
         Type::NoneType | Type::Error | Type::ForeignLibrary(_) | Type::CDataClass(_) => {

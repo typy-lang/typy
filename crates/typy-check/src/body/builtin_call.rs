@@ -27,6 +27,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Bytes {
             return self.call_bytes(arguments, keywords, span);
         }
+        if builtin == Builtin::Bytearray {
+            return self.call_bytearray(arguments, keywords, span);
+        }
         if builtin == Builtin::Tuple {
             return self.call_tuple(arguments, keywords, None, span);
         }
@@ -192,6 +195,7 @@ impl BodyChecker<'_> {
         let result = match builtin {
             Builtin::Print
             | Builtin::Bytes
+            | Builtin::Bytearray
             | Builtin::List
             | Builtin::Tuple
             | Builtin::Set
@@ -278,6 +282,7 @@ impl BodyChecker<'_> {
                         | Type::Dict(..)
                         | Type::DictView(..)
                         | Type::Bytes
+                        | Type::Bytearray
                 ) {
                     self.expect(&values[0], Type::Str, "the argument of `len`");
                 }

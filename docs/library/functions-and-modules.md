@@ -133,7 +133,8 @@ print(format(1234567.891, ",.2f"), format("id", ">6"), format(42))
 `bin`, `hex` and `oct` write an `int` with the prefix `0b`, `0x` or `0o`,
 and `format(value, spec)` formats a value as the f-string `f"{value:spec}"`
 does. A modulus of zero, or a negative exponent whose base has no inverse,
-raises `ValueError`. `bytearray` is planned for 0.12 (LIB-28).
+raises `ValueError`. `bytearray` is described in
+[Built-in types](built-in-types.md#bytearrays).
 
 ## Formatting with `%`
 

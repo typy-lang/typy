@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.115 |
+| Version | 2.116 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -683,6 +683,22 @@ f-string formatter of their argument with the specification `#b`, `#x` or
 `pow(a, b, m)` calls `typy_rt_int_power_modulo`, which reduces each step
 modulo `m`, gives the result the sign of `m` and inverts the base by the
 extended Euclidean algorithm for a negative exponent.
+
+`bytearray` is the type `Type::Bytearray`, `TyirType::BYTEARRAY` in TyIR
+(ADR-0108). `Method::of` gives it the list methods that change a list,
+with `int` items, and every method of `bytes`, whose signature
+`bytearray_signature` takes from `bytes` with each `bytes` of the result
+read as a bytearray; `extend` takes `ParameterType::ByteValues`. A
+parameter of type `bytes` takes a bytearray too, and `is_bytes_like`
+lets the two compare, combine with `+` and test `in`. `typy-lower`'s
+`bytearray.rs` passes a bytearray to a function of `bytes` as its buffer,
+`bytes_view`, which `typy_rt_bytearray_buffer` lends, and gives a `bytes`
+result to `typy_rt_bytearray_adopt` when it owns it, so the result becomes
+the buffer of the new bytearray, or to `_from_bytes` otherwise; the lists
+of `split` and `partition` are turned into bytearrays in place by
+`typy_rt_bytearray_convert_list`. A loop reads a bytearray by position,
+with its length read at each step, and a variable of the type starts as
+null.
 
 ## 7. typy-check
 

@@ -855,6 +855,7 @@ fn named_type(
         "bool" => Type::Bool,
         "str" => Type::Str,
         "bytes" => Type::Bytes,
+        "bytearray" => Type::Bytearray,
         "range" => Type::Range,
         "slice" => Type::Slice,
         // A value of any type, narrowed before use, as Java holds `Object` (TYP-23, ADR-0090).

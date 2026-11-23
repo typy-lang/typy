@@ -74,6 +74,9 @@ impl FunctionLowerer<'_> {
                 vec![right.value, left.value],
                 span,
             ),
+            (TyirType::BYTEARRAY, _) | (_, TyirType::BYTEARRAY) => {
+                self.bytearray_binary(left, right, span)
+            }
             (TyirType::BYTES, TyirType::BYTES) => self.call_runtime(
                 RuntimeFunction::BytesConcat,
                 vec![left.value, right.value],

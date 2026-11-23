@@ -154,7 +154,7 @@ impl FunctionLowerer<'_> {
     }
 
     /// Calls `function`, or its `bytes` twin when the text is a `bytes`.
-    fn text_call(
+    pub(crate) fn text_call(
         &mut self,
         bytes: bool,
         function: RuntimeFunction,
@@ -327,7 +327,7 @@ impl FunctionLowerer<'_> {
 
     /// Returns a tuple of three parts, strings or `bytes`, from the new list of three the
     /// runtime gives, and releases the list.
-    fn three_parts(&mut self, parts: Lowered, result: TyirType, span: Span) -> Lowered {
+    pub(crate) fn three_parts(&mut self, parts: Lowered, result: TyirType, span: Span) -> Lowered {
         let TyirType::Tuple(id) = result else {
             unreachable!("`partition` gives a tuple")
         };

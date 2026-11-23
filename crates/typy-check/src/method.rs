@@ -359,6 +359,22 @@ impl Method {
                 .find(|(each, _)| *each == name)
                 .map(|(_, method)| *method);
         }
+        // A bytearray has the methods of a list that change it, of `int` items, and every
+        // method of `bytes` (LIB-28, ADR-0108).
+        if *receiver == Type::Bytearray {
+            let changes = match name {
+                "append" => Some(Self::ListAppend),
+                "extend" => Some(Self::ListExtend),
+                "insert" => Some(Self::ListInsert),
+                "pop" => Some(Self::ListPop),
+                "remove" => Some(Self::ListRemove),
+                "reverse" => Some(Self::ListReverse),
+                "clear" => Some(Self::ListClear),
+                "copy" => Some(Self::ListCopy),
+                _ => None,
+            };
+            return changes.or_else(|| Self::of(&Type::Bytes, name));
+        }
         if *receiver == Type::Bytes {
             return match name {
                 "decode" => Some(Self::BytesDecode),
