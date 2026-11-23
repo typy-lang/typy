@@ -372,7 +372,7 @@ impl RuleId {
     pub const LIB_25: Self = Self("LIB-25");
     /// `math.integer` (PEP 791) shall be available with `comb`, `factorial`, `gcd`, `isqrt`, `lcm` and `perm`, under a Python floor of 3.15 or later.
     pub const LIB_26: Self = Self("LIB-26");
-    /// `textwrap`, `base64` with the `binascii` functions it uses, `heapq`, `bisect`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097, ADR-0119).
+    /// `textwrap`, `base64` with the `binascii` functions it uses, `heapq`, `bisect` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097, ADR-0119, ADR-0121).
     pub const LIB_27: Self = Self("LIB-27");
     /// The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` shall be available, as CPython gives them.
     pub const LIB_28: Self = Self("LIB-28");
@@ -380,6 +380,8 @@ impl RuleId {
     pub const LIB_29: Self = Self("LIB-29");
     /// `statistics`, `time` and `random` shall be available, written in typed Python that CPython also runs, with the operating system reached through the private module `_typy` and signatures a test compares with typeshed's (ADR-0007, ADR-0119).
     pub const LIB_30: Self = Self("LIB-30");
+    /// `copy.copy` and `copy.deepcopy` shall be available for a value of any type, with the `memo` of `deepcopy` and a class's own `__copy__` and `__deepcopy__`, given by the compiler since they read each object's class (ADR-0121).
+    pub const LIB_33: Self = Self("LIB-33");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -680,6 +682,7 @@ impl RuleId {
         Self::LIB_28,
         Self::LIB_29,
         Self::LIB_30,
+        Self::LIB_33,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,

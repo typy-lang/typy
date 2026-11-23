@@ -141,6 +141,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `copy` is planned for 0.13 rather than 0.12, given by the compiler, as
+  `copy.copy` and `copy.deepcopy` read each object's class (LIB-33,
+  ADR-0121).
 - `statistics`, `time` and `random` are planned for 0.13 rather than 0.12,
   as they reach the operating system through the private module `_typy`
   (LIB-30, ADR-0119).

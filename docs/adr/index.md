@@ -124,5 +124,6 @@ supersedes it.
 | [ADR-0116](0116-make-enum-members-class-variables-and-the-class-calls-hidden-methods.md) | Make enum members class variables, and the class's calls hidden methods | Accepted | 2026-11-23 |
 | [ADR-0117](0117-read-an-int-or-str-enum-member-as-its-value-where-the-value-is-wanted.md) | Read an int or str enum member as its value where the value is wanted | Accepted | 2026-11-23 |
 | [ADR-0118](0118-make-each-flag-composite-once-and-keep-it-by-its-value.md) | Make each flag composite once and keep it by its value | Accepted | 2026-11-23 |
-| [ADR-0119](0119-provide-the-standard-library-modules-that-need-no-operating-system-first.md) | Provide the standard library modules that need no operating system first | Accepted | 2026-11-23 |
+| [ADR-0119](0119-provide-the-standard-library-modules-that-need-no-operating-system-first.md) | Provide the standard library modules that need no operating system first | Superseded by ADR-0121 | 2026-11-23 |
 | [ADR-0120](0120-check-a-comparison-of-a-type-parameter-in-each-copy.md) | Check a comparison of a type parameter in each copy | Accepted | 2026-11-23 |
+| [ADR-0121](0121-give-copy-from-the-compiler-in-0-13.md) | Give copy from the compiler in 0.13 | Accepted | 2026-11-23 |
