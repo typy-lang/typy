@@ -116,8 +116,16 @@ fn forms_of_a_later_release_are_planned() {
         ),
         ("from enum import unique\n", "CLS-47"),
         (
-            "from enum import Flag\nclass C(Flag):\n    X = 1\n",
-            "CLS-44",
+            "from enum import Flag\nclass C(Flag):\n    X = 3\n",
+            "CLS-47",
+        ),
+        (
+            "from enum import IntFlag\nclass C(IntFlag):\n    X = 0\n",
+            "CLS-47",
+        ),
+        (
+            "from enum import Flag\nclass C(Flag):\n    X = 'x'\n",
+            "CLS-47",
         ),
         (
             "from enum import IntEnum\nclass C(IntEnum):\n    X = 'x'\n",
@@ -204,4 +212,75 @@ fn a_member_of_another_type_where_a_value_is_wanted_is_still_refused() {
         messages("from enum import StrEnum\nclass C(StrEnum):\n    X = 1\n")[0].1,
         "1 is not a string, as CPython raises `TypeError` when the class statement runs"
     );
+}
+
+const PERM: &str = "from enum import Flag, IntFlag, auto\nclass Perm(Flag):\n    R = auto()\n    W = auto()\n    X = 8\n    READ = 1\nclass Bits(IntFlag):\n    A = 1\n    B = 2\n";
+
+#[test]
+fn flags_combine_and_hold_their_bits() {
+    let cases = [
+        "rw = Perm.R | Perm.W\nprint(repr(rw), str(rw), rw.name, rw.value, list(rw), len(rw), Perm.R in rw)\n",
+        "print(repr(~Perm.R), repr(Perm.R & Perm.W), repr(Perm.R ^ Perm.X), bool(Perm(0)), Perm(3))\n",
+        "print((Perm.R | Perm.W) is Perm(3), Perm.READ is Perm.R, list(Perm), len(Perm), Perm['READ'])\n",
+        "for bit in Perm.R | Perm.X:\n    print(bit)\nprint([p.name for p in Perm])\n",
+        "print(repr(Bits.A | 4), repr(4 | Bits.A), repr(~Bits.A), Bits.A + 1, int(Bits.B), Bits.B == 2)\n",
+        "print(repr(Bits(9)), str(Bits(9)), len(Bits(9)), list(Bits(9)), f'{Bits.B:03}', Bits.A < Bits.B)\n",
+        "try:\n    Perm(4)\nexcept ValueError as error:\n    print(error)\n",
+    ];
+    for source in cases {
+        assert_eq!(
+            app(&format!("{PERM}{source}")),
+            Vec::<String>::new(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_flag_combines_only_with_its_own_kind() {
+    let cases = [
+        // A `Flag` member is no `int`.
+        ("print(Perm.R | 1)\n", "E0401"),
+        ("print(Perm.R + 1)\n", "E0401"),
+        ("print(Perm.R.name.lower())\n", "E0412"),
+    ];
+    for (source, code) in cases {
+        let found = app(&format!("{PERM}{source}"));
+        assert!(found.contains(&code.to_owned()), "{source}: {found:?}");
+    }
+}
+
+#[test]
+fn rare_forms_of_members_have_their_answers() {
+    // A flag with no members has no bits; any value but `0` raises when the program runs.
+    assert_eq!(
+        app(
+            "from enum import Flag\nclass Empty(Flag):\n    pass\nprint(repr(Empty(0)), len(Empty))\n"
+        ),
+        Vec::<String>::new()
+    );
+    // A flag of the 128th bit is one, and `auto()` past 128 bits is planned with the values
+    // it would need.
+    assert_eq!(
+        app(
+            "from enum import Flag\nclass Top(Flag):\n    A = 170141183460469231731687303715884105728\nprint(Top.A)\n"
+        ),
+        Vec::<String>::new()
+    );
+    let huge = "170141183460469231731687303715884105727";
+    for (kind, value) in [
+        ("Enum", huge),
+        ("Flag", "170141183460469231731687303715884105728"),
+    ] {
+        let source = format!(
+            "from enum import {kind}, auto\nclass Big({kind}):\n    A = {value}\n    B = auto()\n"
+        );
+        let found = messages(&source);
+        assert!(
+            found
+                .iter()
+                .any(|(code, _, rule)| code == "E0201" && rule == "CLS-47"),
+            "{source}\n{found:?}"
+        );
+    }
 }

@@ -93,8 +93,14 @@ impl BodyChecker<'_> {
                         | Builtin::Bool
                         | Builtin::Chr
                         | Builtin::Ord
-                ) {
-                    let value = self.enum_members(value);
+                ) && !(builtin == Builtin::Len && self.flag_bits(&value).is_some())
+                {
+                    // `len` of a flag counts its bits through `__len__`, unknown ones too.
+                    let value = if builtin == Builtin::Len {
+                        self.enum_members(value)
+                    } else {
+                        value
+                    };
                     self.enum_value(value)
                 } else {
                     value

@@ -54,6 +54,27 @@ pub(crate) const ENUM_MEMBERS: &str = " (members)";
 /// is wanted.
 pub(crate) const ENUM_VALUE: &str = " (value)";
 
+/// The hidden static method of a `Flag` or an `IntFlag` that returns the member or composite
+/// of a value, made once and kept, or raises CPython's `ValueError` (CLS-44, ADR-0118).
+pub(crate) const ENUM_FLAG: &str = " (flag)";
+
+/// The hidden method of a flag that returns a new list of the members whose bits it holds, in
+/// definition order, which a loop over it, `len` and `in` read; it also marks the class as a
+/// flag.
+pub(crate) const ENUM_BITS: &str = " (bits)";
+
+/// The hidden static method of a flag that returns how many bits a value has, as
+/// `int.bit_length` does.
+pub(crate) const ENUM_FLAG_WIDTH: &str = " (width)";
+
+/// The hidden static method of a flag that writes a value in CPython's two's complement binary
+/// form, as its `ValueError` shows it.
+pub(crate) const ENUM_FLAG_BINARY: &str = " (binary)";
+
+/// The start of the hidden module variable, followed by the class's name, that keeps the
+/// composites of a flag by value.
+pub(crate) const ENUM_FLAGS: &str = " (flags) ";
+
 /// The start of the hidden name an enum class's member variables call to make each member,
 /// followed by the class's name: a new instance through `__init__`, where `Color(...)` finds a
 /// member instead.

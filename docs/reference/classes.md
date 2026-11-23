@@ -20,7 +20,7 @@ class body or assigned in `__init__`, and has one type.
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | A class derived from `typing.NamedTuple`, whose instances are tuples of its fields | CLS-27 |
 | A class derived from `abc.ABC`, with `@abstractmethod`; see [Abstract classes](#abstract-classes) | CLS-45 |
-| A class derived from `enum.Enum`, `IntEnum` or `StrEnum`, with its members; see [Enum classes](#enum-classes) | CLS-44 |
+| A class derived from `enum.Enum`, `IntEnum`, `StrEnum`, `Flag` or `IntFlag`, with its members; see [Enum classes](#enum-classes) | CLS-44 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -991,15 +991,50 @@ A list of members is not a list of their values, so
 `", ".join(list(Mode))` is E0404; `[m.value for m in Mode]` gives the
 values.
 
+The members of a `Flag` or an `IntFlag` are bits, each one bit or
+`auto()`, which gives the bit above the highest one before it. `|`, `&`,
+`^` and `~` give a member, or a composite named by the members whose bits
+it holds; each composite is made once, so `is` holds between two of the
+same value, as in CPython (ADR-0118). A loop over a flag, `in` and `len`
+read its bits. A `Flag` of a value with bits no member has raises
+CPython's `ValueError`, and an `IntFlag` keeps them, and is also its
+`int` value as an `IntEnum` is:
+
+<!-- typy-expect: accepted -->
+```python
+from enum import Flag, IntFlag, auto
+
+
+class Perm(Flag):
+    READ = auto()
+    WRITE = auto()
+    RUN = auto()
+
+
+class Bits(IntFlag):
+    LOW = 1
+    HIGH = 2
+
+
+both = Perm.READ | Perm.WRITE
+print(repr(both), both, both.name, list(both), Perm.RUN in both)
+print(repr(~Perm.READ), both is Perm(3), repr(Perm(0)), len(both))
+print(repr(Bits.LOW | 8), Bits.HIGH + 1, repr(~Bits.LOW))
+try:
+    Perm(8)
+except ValueError as error:
+    print(error)
+```
+
 What CPython refuses when the class statement runs is E0404, such as a
 member defined twice, a class derived from an enum class with members,
 or a `StrEnum` member whose value is not a `str`. `auto()` after a value
 that is not an `int` is E0202, as CPython 3.12 gives `1` with a warning
-and 3.13 raises `TypeError`. `Flag` and `IntFlag` are planned for 0.12
-(CLS-44). Members
+and 3.13 raises `TypeError`. Members
 of other values, annotated members, `__init__`, `__new__`, `_missing_`,
-other bases, decorators such as `@unique`, and classes derived from an
-enum class without members are planned for 0.13 (CLS-47).
+other bases, decorators such as `@unique`, flag members of other than
+one bit, and classes derived from an enum class without members are
+planned for 0.13 (CLS-47).
 
 ## Attributes are declared
 

@@ -7,7 +7,9 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{CompareOperator, Expr, Identifier, Keyword};
 
 use super::{BodyChecker, Program};
-use crate::class_type::{ENUM_LOOKUP, ENUM_MEMBER, ENUM_MEMBERS, ENUM_NAMED, ENUM_VALUE};
+use crate::class_type::{
+    ENUM_BITS, ENUM_LOOKUP, ENUM_MEMBER, ENUM_MEMBERS, ENUM_NAMED, ENUM_VALUE,
+};
 use crate::typed::{ClassId, FunctionId, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
@@ -97,9 +99,26 @@ impl BodyChecker<'_> {
         Some(self.static_call(named, class, &name, std::slice::from_ref(index), &[], span))
     }
 
-    /// Returns `value`, or the list of its members when it is an enum class, which a loop,
-    /// `len` and `in` read.
+    /// Returns `value`, or the list of its members when it is an enum class or a flag, which a
+    /// loop, `len` and `in` read.
     pub(super) fn enum_members(&mut self, value: TypedExpr) -> TypedExpr {
+        if let Some(bits) = self.flag_bits(&value) {
+            let span = value.span;
+            let ty = self.program.signatures[bits.0 as usize].returns.clone();
+            return Self::typed(
+                TypedExprKind::Call {
+                    function: bits,
+                    arguments: vec![crate::typed::Argument {
+                        parameter: 0,
+                        passed: crate::typed::Passed::Position,
+                        value,
+                    }],
+                    dispatch: false,
+                },
+                ty,
+                span,
+            );
+        }
         let Some(class) = enum_class(self.program, &value.ty) else {
             return value;
         };
@@ -141,6 +160,35 @@ impl BodyChecker<'_> {
 }
 
 impl BodyChecker<'_> {
+    /// Returns the hidden method that lists the members a flag holds, when `value` is a member
+    /// or a composite of a `Flag` or an `IntFlag`.
+    pub(super) fn flag_bits(&self, value: &TypedExpr) -> Option<FunctionId> {
+        let Type::Instance(instance) = &value.ty else {
+            return None;
+        };
+        self.program.enum_method(instance.id, ENUM_BITS)
+    }
+
+    /// Returns the operands of a binary operator with each member of an `IntEnum` or a
+    /// `StrEnum` read as its value, but for `|`, `&` and `^` of a flag, whose methods make a
+    /// flag: the flag stays, and the other operand of an `IntFlag` is its value.
+    pub(super) fn enum_operands(
+        &mut self,
+        operator: typy_source::syntax::BinaryOperator,
+        (left, right): (TypedExpr, TypedExpr),
+    ) -> (TypedExpr, TypedExpr) {
+        use typy_source::syntax::BinaryOperator::{BitAnd, BitOr, BitXor};
+        if matches!(operator, BitOr | BitAnd | BitXor) {
+            if self.flag_bits(&left).is_some() {
+                return (left, self.enum_value(right));
+            }
+            if self.flag_bits(&right).is_some() {
+                return (self.enum_value(left), right);
+            }
+        }
+        (self.enum_value(left), self.enum_value(right))
+    }
+
     /// Returns `value`, or the value of the member it is when it is a member of an `IntEnum`
     /// or a `StrEnum`, which CPython reads as its `int` or `str` in arithmetic, in comparisons
     /// and where one is wanted.

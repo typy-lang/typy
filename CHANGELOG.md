@@ -8,6 +8,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `enum.Flag` and `enum.IntFlag`: members of one bit each combine with
+  `|`, `&`, `^` and `~` into composites made once, named, iterated and
+  refused as CPython 3.12 to 3.15 do (CLS-44, ADR-0118).
 - `enum.IntEnum` and `enum.StrEnum`, whose members are also their `int`
   or `str` values in arithmetic, comparisons, indexes, f-string formats,
   `str` methods and where an `int` or a `str` is declared, and show

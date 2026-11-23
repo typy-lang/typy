@@ -18,16 +18,20 @@ use super::{DataclassInfo, Dataclasses, Names};
 use crate::class_type::{ENUM_LOOKUP, ENUM_MEMBER, ENUM_MEMBERS, ENUM_NAMED, ENUM_VALUE};
 use crate::literal_type::LiteralValue;
 
+mod flag;
+
 /// The names of the methods the expansion writes, which a member may not take.
 const WRITTEN: [&str; 5] = ["name", "value", "_name_", "_value_", "__init__"];
 
-/// The kinds of enum class TyPy gives: `Enum`, and `IntEnum` and `StrEnum`, whose members are
-/// also their `int` or `str` values.
+/// The kinds of enum class TyPy gives: `Enum`; `IntEnum` and `StrEnum`, whose members are also
+/// their `int` or `str` values; and `Flag` and `IntFlag`, whose members are bits that combine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     Plain,
     Int,
     Str,
+    Flag,
+    IntFlag,
 }
 
 impl Kind {
@@ -36,8 +40,14 @@ impl Kind {
             "Enum" => Some(Self::Plain),
             "IntEnum" => Some(Self::Int),
             "StrEnum" => Some(Self::Str),
+            "Flag" => Some(Self::Flag),
+            "IntFlag" => Some(Self::IntFlag),
             _ => None,
         }
+    }
+
+    fn is_flag(self) -> bool {
+        matches!(self, Self::Flag | Self::IntFlag)
     }
 }
 
@@ -134,6 +144,10 @@ impl Dataclasses {
         expanded.append(body);
         expanded.extend(methods(&class, (&members, kind), at));
         *body = expanded;
+        // A flag keeps its composites in a module variable the class statement leaves empty.
+        if kind.is_flag() {
+            self.following.push(flag::composites(&class, at));
+        }
         Some((class, DataclassInfo::default()))
     }
 }
@@ -206,6 +220,8 @@ fn member(
     let (value, written) = if is_auto && kind == Kind::Str {
         // `StrEnum`'s `auto()` gives the member's name in lower case.
         (LiteralValue::Str(name.name.to_lowercase()), None)
+    } else if is_auto && kind.is_flag() {
+        (next_bit(before, name.span)?, None)
     } else if is_auto {
         (next_value(before, name.span)?, None)
     } else {
@@ -222,6 +238,14 @@ fn member(
         (Kind::Int, LiteralValue::Int(_))
         | (Kind::Str, LiteralValue::Str(_) | LiteralValue::StrPoints(_))
         | (Kind::Plain, _) => {}
+        (Kind::Flag | Kind::IntFlag, LiteralValue::Int(digits))
+            if digits.parse::<u128>().is_ok_and(u128::is_power_of_two) => {}
+        (Kind::Flag | Kind::IntFlag, _) => {
+            return Err(Box::new(planned(
+                name.span,
+                "a flag member whose value is not one bit, such as `0` or `3`,",
+            )));
+        }
         (Kind::Str, other) => {
             return Err(Box::new(class_error(
                 name.span,
@@ -275,6 +299,24 @@ fn next_value(before: &[Member], span: Span) -> Result<LiteralValue, Box<Diagnos
         largest = Some(largest.map_or(number, |largest| largest.max(number)));
     }
     let next = largest.map_or(Some(1), |largest| largest.checked_add(1));
+    next.map(|next| LiteralValue::Int(next.to_string()))
+        .ok_or_else(|| Box::new(planned(span, "`auto()` after a value beyond 128 bits")))
+}
+
+/// Returns the value `auto()` gives a flag after the members `before`: the bit above the
+/// highest bit they use, or `1` for the first.
+fn next_bit(before: &[Member], span: Span) -> Result<LiteralValue, Box<Diagnostic>> {
+    let highest = before
+        .iter()
+        .filter_map(|member| match &member.value {
+            LiteralValue::Int(digits) => digits.parse::<u128>().ok(),
+            _ => None,
+        })
+        .max();
+    let next = match highest {
+        None => Some(1u128),
+        Some(highest) => 1u128.checked_shl(128 - highest.leading_zeros()),
+    };
     next.map(|next| LiteralValue::Int(next.to_string()))
         .ok_or_else(|| Box::new(planned(span, "`auto()` after a value beyond 128 bits")))
 }
@@ -394,41 +436,18 @@ fn value_annotation(members: &[Member]) -> String {
 /// of an `IntEnum` or a `StrEnum` shows, hashes and tests true as its value, and has the
 /// hidden method `ENUM_VALUE` that marks it as one the checker reads as its value.
 fn methods(class: &str, (members, kind): (&[Member], Kind), at: Span) -> Vec<Stmt> {
-    let value = match kind {
-        Kind::Plain => value_annotation(members),
-        Kind::Int => "int".to_owned(),
-        Kind::Str => "str".to_owned(),
-    };
-    let shown = match kind {
-        Kind::Plain => format!("'{class}.' + self._name_"),
-        Kind::Int => "str(self._value_)".to_owned(),
-        Kind::Str => "self._value_".to_owned(),
-    };
-    let mut source = format!(
-        "def __init__(self, _name_: str, _value_: {value}) -> None:\n    \
-         self._name_ = _name_\n    self._value_ = _value_\n\
-         @property\ndef name(self) -> str:\n    return self._name_\n\
-         @property\ndef value(self) -> {value}:\n    return self._value_\n\
-         def __repr__(self) -> str:\n    \
-         return '<{class}.' + self._name_ + ': ' + repr(self._value_) + '>'\n\
-         def __str__(self) -> str:\n    return {shown}\n\
-         @staticmethod\ndef _lookup_(value: {value}) -> '{class}':\n"
-    );
     let canonical: Vec<&Member> = members
         .iter()
         .filter(|member| member.alias_of.is_none())
         .collect();
-    for member in &canonical {
-        let _ = write!(
-            source,
-            "    if value == {}:\n        return {class}.{}\n",
-            member.value, member.name.name
-        );
-    }
+    let mut source = if kind.is_flag() {
+        flag::source(class, &canonical, kind == Kind::IntFlag)
+    } else {
+        enum_source(class, (members, &canonical), kind)
+    };
     let _ = write!(
         source,
-        "    raise ValueError(repr(value) + ' is not a valid {class}')\n\
-         @staticmethod\ndef _named_(name: str) -> '{class}':\n"
+        "@staticmethod\ndef _named_(name: str) -> '{class}':\n"
     );
     for member in members {
         let _ = write!(
@@ -447,18 +466,6 @@ fn methods(class: &str, (members, kind): (&[Member], Kind), at: Span) -> Vec<Stm
          @staticmethod\ndef _members_() -> 'list[{class}]':\n    return [{}]\n",
         listed.join(", ")
     );
-    if kind != Kind::Plain {
-        let _ = write!(
-            source,
-            "def __lt__(self, other: '{class}') -> bool:\n    return self._value_ < other._value_\n\
-             def __le__(self, other: '{class}') -> bool:\n    return self._value_ <= other._value_\n\
-             def __gt__(self, other: '{class}') -> bool:\n    return self._value_ > other._value_\n\
-             def __ge__(self, other: '{class}') -> bool:\n    return self._value_ >= other._value_\n\
-             def __hash__(self) -> int:\n    return hash(self._value_)\n\
-             def __bool__(self) -> bool:\n    return bool(self._value_)\n\
-             def _value_of_(self) -> {value}:\n    return self._value_\n"
-        );
-    }
     let file = SourceFile::from_text(FileId(u32::MAX), Utf8PathBuf::from("<enum>"), &source);
     // The source is written above and always parses.
     let mut methods = parse(&file, PythonFloor::default())
@@ -481,7 +488,66 @@ fn methods(class: &str, (members, kind): (&[Member], Kind), at: Span) -> Vec<Stm
             hidden.clone_into(&mut name.name);
         }
     }
+    if kind.is_flag() {
+        flag::rename_hidden(&mut methods, class);
+    }
     methods
+}
+
+/// Returns the source of the methods of an enum class that is no flag: `__init__`, `name`,
+/// `value`, `__repr__`, `__str__` and the lookup by value, with those of an `IntEnum` or a
+/// `StrEnum`.
+fn enum_source(class: &str, (members, canonical): (&[Member], &[&Member]), kind: Kind) -> String {
+    let value = match kind {
+        Kind::Int => "int".to_owned(),
+        Kind::Str => "str".to_owned(),
+        _ => value_annotation(members),
+    };
+    let shown = match kind {
+        Kind::Int => "str(self._value_)".to_owned(),
+        Kind::Str => "self._value_".to_owned(),
+        _ => format!("'{class}.' + self._name_"),
+    };
+    let mut source = format!(
+        "def __init__(self, _name_: str, _value_: {value}) -> None:\n    \
+         self._name_ = _name_\n    self._value_ = _value_\n\
+         @property\ndef name(self) -> str:\n    return self._name_\n\
+         @property\ndef value(self) -> {value}:\n    return self._value_\n\
+         def __repr__(self) -> str:\n    \
+         return '<{class}.' + self._name_ + ': ' + repr(self._value_) + '>'\n\
+         def __str__(self) -> str:\n    return {shown}\n\
+         @staticmethod\ndef _lookup_(value: {value}) -> '{class}':\n"
+    );
+    for member in canonical {
+        let _ = write!(
+            source,
+            "    if value == {}:\n        return {class}.{}\n",
+            member.value, member.name.name
+        );
+    }
+    // An enum class with no members refuses every call, as `EnumType.__call__` does.
+    let refusal = if canonical.is_empty() {
+        format!(
+            "TypeError(\"<enum '{class}'> has no members; specify `names=()` if you meant to \
+             create a new, empty, enum\")"
+        )
+    } else {
+        format!("ValueError(repr(value) + ' is not a valid {class}')")
+    };
+    let _ = writeln!(source, "    raise {refusal}");
+    if kind != Kind::Plain {
+        let _ = write!(
+            source,
+            "def __lt__(self, other: '{class}') -> bool:\n    return self._value_ < other._value_\n\
+             def __le__(self, other: '{class}') -> bool:\n    return self._value_ <= other._value_\n\
+             def __gt__(self, other: '{class}') -> bool:\n    return self._value_ > other._value_\n\
+             def __ge__(self, other: '{class}') -> bool:\n    return self._value_ >= other._value_\n\
+             def __hash__(self) -> int:\n    return hash(self._value_)\n\
+             def __bool__(self) -> bool:\n    return bool(self._value_)\n\
+             def _value_of_(self) -> {value}:\n    return self._value_\n"
+        );
+    }
+    source
 }
 
 /// Makes `__hash__` call the hash a set and a dict take of the value; no program names that

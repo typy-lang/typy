@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.129 |
+| Version | 2.130 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -1285,6 +1285,18 @@ builtins of numbers and text, `range`, `round` and `call_number_builtin`,
 an f-string field with a format specification, `enum_value_for` in
 `expression_expecting` where the expected type takes the value and not
 the member, and `enum_receiver` for a method its class does not have.
+A `Flag` or an `IntFlag` takes its methods from `enum_class/flag.rs`
+(ADR-0118): `source` writes the operators, `__contains__`, `__len__`,
+`__repr__`, `__str__` and the hidden methods `ENUM_FLAG`, which follows
+CPython's `Flag._missing_` for members of one bit each and keeps each
+composite in the module variable `composites` writes after the class,
+`ENUM_BITS`, which lists the members a flag holds, and
+`ENUM_FLAG_WIDTH` and `ENUM_FLAG_BINARY`, which write the bits of its
+`ValueError`; `rename_hidden` gives the names the source writes their
+hidden forms, and `Dataclasses::following` places the variable after the
+class. `enum_members` reads a flag as its `ENUM_BITS` list, and
+`enum_operands` keeps a flag the operand of `|`, `&` and `^`, as the
+unary arm does for `~`.
 `BodyChecker::statements` stops at the first statement no path reaches,
 `assigned` being `None` there, so a statement that cannot run is neither
 checked nor compiled (TYP-34, ADR-0111). `flow::test_reach` says whether a

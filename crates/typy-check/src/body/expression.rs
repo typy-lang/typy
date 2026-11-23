@@ -115,8 +115,7 @@ impl BodyChecker<'_> {
                 let left = Self::version_tuple(left);
                 let right = Self::version_tuple(right);
                 // A member of an `IntEnum` or a `StrEnum` is its value here (CLS-44).
-                let left = self.enum_value(left);
-                let right = self.enum_value(right);
+                let (left, right) = self.enum_operands(*operator, (left, right));
                 // An instance's class may define the operator's method (CLS-07).
                 let (left, right) = match self.operator_binary(*operator, left, right, span) {
                     super::operator_method::Comparison::Called(call) => return call,
@@ -144,8 +143,14 @@ impl BodyChecker<'_> {
                 operator, operand, ..
             } => {
                 let operand = self.expression(operand);
+                // `~` of a flag makes a flag (CLS-44).
                 let operand = match operator {
                     typy_source::syntax::UnaryOperator::Not => operand,
+                    typy_source::syntax::UnaryOperator::Invert
+                        if self.flag_bits(&operand).is_some() =>
+                    {
+                        operand
+                    }
                     _ => self.enum_value(operand),
                 };
                 if let Some(call) = super::operator_method::unary_name(*operator)

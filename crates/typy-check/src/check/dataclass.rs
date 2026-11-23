@@ -62,6 +62,9 @@ pub(crate) struct Dataclasses {
     named_tuples: BTreeMap<(String, String), Vec<Field>>,
     /// Whether each enum class has members, by module and class (CLS-44).
     enums: BTreeMap<(String, String), bool>,
+    /// The statements of the module being expanded that follow the class just expanded, such
+    /// as the variable of a flag's composites.
+    following: Vec<Stmt>,
 }
 
 /// The names a module binds to the `dataclasses` module and its `dataclass` and `field`.
@@ -131,6 +134,7 @@ impl Dataclasses {
             }
             body.extend(self.factories.drain(..).map(|(_, function)| function));
             body.push(statement);
+            body.append(&mut self.following);
         }
         expanded.syntax.body = body;
         self.info.insert(module_name, info);

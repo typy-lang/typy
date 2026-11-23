@@ -123,3 +123,4 @@ supersedes it.
 | [ADR-0115](0115-refuse-a-direct-call-of-an-abstract-method-that-gives-no-value.md) | Refuse a direct call of an abstract method that gives no value | Accepted | 2026-11-23 |
 | [ADR-0116](0116-make-enum-members-class-variables-and-the-class-calls-hidden-methods.md) | Make enum members class variables, and the class's calls hidden methods | Accepted | 2026-11-23 |
 | [ADR-0117](0117-read-an-int-or-str-enum-member-as-its-value-where-the-value-is-wanted.md) | Read an int or str enum member as its value where the value is wanted | Accepted | 2026-11-23 |
+| [ADR-0118](0118-make-each-flag-composite-once-and-keep-it-by-its-value.md) | Make each flag composite once and keep it by its value | Accepted | 2026-11-23 |
