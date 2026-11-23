@@ -292,6 +292,11 @@ pub const CODES: &[CodeInfo] = &[
         "`match` that leaves members of the subject's type unmatched",
         RuleId::CST_07,
     ),
+    warning(
+        402,
+        "pattern that never matches its subject's type, whose case never runs",
+        RuleId::CST_06,
+    ),
 ];
 
 /// Returns what the registry knows about `code`, or `None` for an unknown code.

@@ -1,33 +1,7 @@
 //! Tests of checking `match` statements through the public API (CST-06): what a pattern
 //! narrows, which cases always match, and the one error each mistake gives.
 
-use crate::common::app;
-use camino::Utf8PathBuf;
-use typy_check::TypeChecker;
-use typy_source::{Project, ProjectSettings};
-
-/// Returns each warning of the accepted one-module program `source`, as its code and message.
-fn warnings(source: &str) -> Vec<String> {
-    use std::sync::atomic::{AtomicU32, Ordering};
-    static NEXT: AtomicU32 = AtomicU32::new(0);
-    let base = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
-    let root = base.join(format!(
-        "typy-check-warnings-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(root.join("app.py"), source).unwrap();
-    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
-    let checked = TypeChecker::check(&project);
-    let _ = std::fs::remove_dir_all(&root);
-    checked
-        .expect("the program is accepted")
-        .warnings
-        .iter()
-        .map(|warning| format!("{}: {}", warning.code(), warning.message()))
-        .collect()
-}
+use crate::common::{app, warnings};
 
 #[test]
 fn patterns_narrow_their_subject_and_parts() {
@@ -55,14 +29,6 @@ fn each_mistake_in_a_pattern_gives_one_error() {
         (
             "match missing:\n    case [a, *b]:\n        print(a, b)\n",
             &["E0205"],
-        ),
-        (
-            "match 1:\n    case {'k': a, **b}:\n        print(a, b)\n",
-            &["E0407"],
-        ),
-        (
-            "match (1, 2):\n    case (a, b, c):\n        print(a, b, c)\n",
-            &["E0407"],
         ),
         (
             "def f(v: list[int] | tuple[int, int]) -> None:\n    match v:\n        case [a, b]:\n            print(a, b)\n",

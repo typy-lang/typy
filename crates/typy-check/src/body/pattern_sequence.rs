@@ -61,19 +61,11 @@ impl BodyChecker<'_> {
         match known_length {
             Some(length) if length == fixed || (star.is_some() && length > fixed) => {}
             Some(_) => {
-                let error = self.error(
-                    Diagnostic::new(
-                        DiagnosticCode::error(407),
-                        span,
-                        format!(
-                            "a sequence pattern of {fixed} items never matches {}",
-                            value.ty.with_article()
-                        ),
-                    )
-                    .with_rule(RuleId::CST_06),
-                    span,
+                let message = format!(
+                    "a sequence pattern of {fixed} items never matches {}",
+                    value.ty.with_article()
                 );
-                self.bind_after_error(whole, &error);
+                steps.push(self.never_matches(message, span));
                 return TypedPattern::All(steps);
             }
             // Every length is at least zero, so `[*rest]` needs no test.
@@ -125,9 +117,27 @@ impl BodyChecker<'_> {
         TypedPattern::All(steps)
     }
 
+    /// Returns the test of a pattern its subject's type never matches, `False`, which leaves
+    /// its case unreached, so the case is neither checked nor compiled, with W0402 (TYP-34,
+    /// ADR-0111).
+    fn never_matches(&mut self, message: String, span: Span) -> TypedPattern {
+        self.diagnostics.push(
+            Diagnostic::new(DiagnosticCode::warning(402), span, message)
+                .with_rule(RuleId::CST_06)
+                .with_help(
+                    "its case never runs; remove it, or write a pattern of the subject's type",
+                ),
+        );
+        TypedPattern::Test(Self::typed(
+            TypedExprKind::Constant(TypedConstant::Bool(false)),
+            Type::Bool,
+            span,
+        ))
+    }
+
     /// Adds the test that `subject` is an instance of one of `classes` to `steps`, unless its
-    /// type says it always is, and narrows the subject. Returns false, after reporting it,
-    /// when no value of the subject's type is.
+    /// type says it always is, and narrows the subject. Returns false when no value of the
+    /// subject's type is, after adding the test that never holds.
     pub(super) fn subject_class_test(
         &mut self,
         whole: &Pattern,
@@ -150,16 +160,8 @@ impl BodyChecker<'_> {
             TypedExprKind::IsInstance(test) if !test.always && test.checks.is_empty()
                 && test.members.iter().all(|(always, checks)| !always && checks.is_empty()));
         if never {
-            let error = self.error(
-                Diagnostic::new(
-                    DiagnosticCode::error(407),
-                    span,
-                    format!("{what} never matches {}", ty.with_article()),
-                )
-                .with_rule(RuleId::CST_06),
-                span,
-            );
-            self.bind_after_error(whole, &error);
+            let message = format!("{what} never matches {}", ty.with_article());
+            steps.push(self.never_matches(message, span));
             return false;
         }
         if !always || matches!(ty, Type::Optional(_)) {

@@ -1489,6 +1489,36 @@ Its cases cover every value, so the function needs no `return` after the
 and a set of cases that covers a member only together, such as `case []:`
 and `case [first, *rest]:` for a list, needs `case _:` as well.
 
+## W0402: pattern that never matches its subject's type
+
+No value of the subject's type matches the pattern, such as `int()` for a
+`str` or a sequence pattern of two items for a `tuple[int]`, so the case
+never runs (CST-06, TYP-34). TyPy neither checks nor compiles the case,
+as CPython runs the program. Remove the case, or write a pattern of the
+subject's type.
+
+This program gives W0402 and still runs:
+
+<!-- typy-expect: accepted -->
+```python
+word = "text"
+match word:
+    case int(number):
+        print(number + 1)
+    case str():
+        print("a str")
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+word = "text"
+match word:
+    case str():
+        print("a str")
+```
+
 ## W0301: assertion that is always true
 
 `assert (test, "message")` asserts a tuple with two items, which is always

@@ -40,6 +40,6 @@ fn the_refusal_lists_the_warnings_that_can_be_named() {
     let error = WarningSelector::parse("E0101").unwrap_err();
     assert_eq!(
         error.to_string(),
-        "`E0101` names no warning; give `warnings` or one of W0101, W0301, W0401"
+        "`E0101` names no warning; give `warnings` or one of W0101, W0301, W0401, W0402"
     );
 }

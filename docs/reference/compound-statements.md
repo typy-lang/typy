@@ -50,9 +50,10 @@ A statement after `return`, `raise`, `break` or `continue` in its block
 cannot run, and neither can a branch that a test of `True` or `False`, an
 `isinstance` test, an `assert` or a class pattern rules out by the types
 (TYP-34, ADR-0111). TyPy checks none of it and compiles none of it, as
-CPython runs such a program; a mistake there is not reported. The
-branches of a conditional expression and the operands of `and` and `or`
-are always checked.
+CPython runs such a program; a mistake there is not reported. A pattern
+the subject's type never matches leaves its case unreached, with the
+warning W0402. The branches of a conditional expression and the operands
+of `and` and `or` are always checked.
 
 <!-- typy-expect: accepted -->
 ```python

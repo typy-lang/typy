@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.122 |
+| Version | 2.123 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -366,6 +366,7 @@ it enforces and its status. `typy explain` reads the same table.
 | W0101 | Invalid escape sequence | DIA-08 |
 | W0301 | Assertion that is always true, of a tuple with items | DIA-08 |
 | W0401 | `match` that leaves members of the subject's type unmatched | CST-07 |
+| W0402 | Pattern that never matches its subject's type, whose case never runs | CST-06, TYP-34 |
 
 ## 5. typy-source
 
@@ -1194,7 +1195,10 @@ test may hold and may fail: a constant `bool`, and an `IsInstanceTest`
 whose `always`, `none_matches`, `checks` and `held` show the outcome, with
 `not`, `and` and `or` combined. An `if` starts a branch its test rules
 out unreachable, an `assert` whose test never holds leaves what follows
-unreachable, and `flow::pattern_reach` does the same for a `case`.
+unreachable, and `flow::pattern_reach` does the same for a `case`. A
+class, sequence or mapping pattern no value of the subject's type matches
+is the test `False` from `never_matches`, with W0402, so its case is
+unreached.
 `Literal[...]` names `AnnotationName::Literal`, which
 `check/literal_annotation.rs` reads as the union of `Type::Literal` of a
 `LiteralValue` each, an `int` as canonical decimal digits, or `None`

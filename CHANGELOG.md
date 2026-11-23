@@ -77,6 +77,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- A class, sequence or mapping pattern the subject's type never matches is
+  the warning W0402 instead of the error E0407, and its case is neither
+  checked nor compiled, as CPython runs it (CST-06, TYP-34).
 - `list[i]` and `list[i] = x` on lists of `int`, `float`, `bool`, `str`
   and other objects, `//` and `%` of integers that fit in 63 bits,
   `float()` of one, and `/` of two floats run in place in the generated

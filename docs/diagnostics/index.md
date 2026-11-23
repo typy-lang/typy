@@ -16,6 +16,7 @@ TyPy reports every problem it finds in one run, each as a diagnostic.
 | `--color` colours diagnostics written as text; by default only on a terminal | CLI-26 |
 | A warning where CPython warns while compiling: W0101, W0301 | DIA-08 |
 | A warning for a `match` that leaves members of its subject's type unmatched: W0401 | CST-07 |
+| A warning for a pattern its subject's type never matches, whose case never runs: W0402 | CST-06, TYP-34 |
 | A code is never reused | DIA-06 |
 
 [Troubleshooting](troubleshooting.md) explains every code.
@@ -27,7 +28,8 @@ probably not what you meant. TyPy warns where CPython 3.12 to 3.15 give a
 `SyntaxWarning` while compiling: an invalid escape sequence, W0101, and an
 assertion that is always true, W0301. It also warns, as type checkers do,
 about a `match` that leaves members of its subject's type unmatched,
-W0401 (ADR-0033). This program builds,
+W0401 (ADR-0033), and about a pattern its subject's type never matches,
+W0402 (TYP-34). This program builds,
 runs and prints `\d`, with a warning that shows `"\\d"` as the fix:
 
 <!-- typy-expect: accepted -->

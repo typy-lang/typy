@@ -2,7 +2,7 @@
 //! its block, and a branch an `isinstance` test, a class pattern, or the constant `True` or
 //! `False` rules out (TYP-34, ADR-0111).
 
-use crate::common::{app, messages};
+use crate::common::{app, messages, warnings};
 
 #[test]
 fn typ_34_code_that_cannot_run_is_not_checked() {
@@ -49,4 +49,37 @@ fn typ_34_code_that_can_run_is_still_checked() {
             "{source}\n{found:?}"
         );
     }
+}
+
+#[test]
+fn typ_34_a_pattern_that_never_matches_warns_and_its_case_is_not_checked() {
+    let cases = [
+        (
+            "def f(t: tuple[int]) -> None:\n    match t:\n        case (a, *rest, b):\n            \
+             print(a.upper(), rest, b)\n        case _:\n            pass\n",
+            "a sequence pattern of 2 items never matches a tuple[int]",
+        ),
+        (
+            "def f(x: int | str) -> None:\n    match x:\n        case [a]:\n            \
+             print(a)\n        case _:\n            pass\n",
+            "a sequence pattern never matches an int | str",
+        ),
+        (
+            "word = 'text'\nmatch word:\n    case int(number):\n        print(number.upper())\n",
+            "the class pattern `int()` never matches a str",
+        ),
+    ];
+    for (source, message) in cases {
+        assert_eq!(warnings(source), [format!("W0402: {message}")], "{source}");
+    }
+    let mapping = "match 1:\n    case {'k': a, **b}:\n        print(a, b)\n";
+    assert_eq!(
+        warnings(mapping),
+        ["W0402: a mapping pattern never matches an int"]
+    );
+    let length = "match (1, 2):\n    case (a, b, c):\n        print(a, b, c)\n";
+    assert_eq!(
+        warnings(length),
+        ["W0402: a sequence pattern of 3 items never matches a tuple[int, int]"]
+    );
 }
