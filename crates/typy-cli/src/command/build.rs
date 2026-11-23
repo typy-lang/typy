@@ -1,4 +1,4 @@
-//! `typy build FILE` (CLI-01, CLI-04, CLI-05, CLI-09, UC-02, UC-05).
+//! `typy build FILE` (CLI-01, CLI-04, CLI-05, CLI-09, CLI-29, UC-02, UC-05).
 
 use camino::Utf8PathBuf;
 use typy_build::{BuildRequest, EmitStage, LibraryKind};
@@ -10,8 +10,8 @@ use crate::output::Reporter;
 
 /// What the flags of `typy build` ask for.
 pub(super) struct Flags {
-    /// The stage to write instead of an executable.
-    pub(super) emit: Option<EmitStage>,
+    /// The stages to write instead of an executable.
+    pub(super) emit: Vec<EmitStage>,
     /// Where to write the executable, the library or the stage.
     pub(super) output: Option<Utf8PathBuf>,
     /// How the build generates code: its mode, processor and features.
@@ -23,7 +23,7 @@ pub(super) struct Flags {
 }
 
 /// Builds the executable, or the library of the flags' kind, or writes the output of the
-/// stage they name.
+/// stages they name: one to `-o` or standard output, several each beside the output (CLI-29).
 pub(super) fn build(
     pipeline: &Pipeline,
     file: Utf8PathBuf,
@@ -40,8 +40,8 @@ pub(super) fn build(
     if let Some(triple) = flags.target {
         request = request.with_target(Target { triple });
     }
-    if let Some(stage) = flags.emit {
-        request = request.with_emit(stage);
+    for stage in &flags.emit {
+        request = request.with_emit(*stage);
     }
     if let Some(kind) = flags.library {
         request = request.with_library(kind);
@@ -54,8 +54,18 @@ pub(super) fn build(
         Err(failure) => return reporter.report(failure),
     };
     reporter.warnings(success.warnings);
-    match success.outcome {
-        Outcome::Emitted(emission) => reporter.emission(&emission, flags.output.as_deref()),
-        Outcome::Executable(_) | Outcome::Checked(_) => ExitStatus::Success,
+    let Outcome::Emitted(emitted) = success.outcome else {
+        return ExitStatus::Success;
+    };
+    if let [(_, emission)] = emitted.as_slice() {
+        return reporter.emission(emission, flags.output.as_deref());
     }
+    let output = request.output_path();
+    for (stage, emission) in &emitted {
+        let status = reporter.emission(emission, Some(&stage.path_beside(&output)));
+        if status != ExitStatus::Success {
+            return status;
+        }
+    }
+    ExitStatus::Success
 }

@@ -8,7 +8,7 @@ use typy_build::{
     Artifact, BuildRequest, EmitStage, LibraryKind, LibraryLayout, Linker, RuntimeArchive,
 };
 use typy_check::{TypeChecker, TypedProgram};
-use typy_codegen::{Target, assembly, llvm_ir, object};
+use typy_codegen::{Target, object, outputs};
 use typy_diagnostics::{Diagnostics, WarningLevels};
 use typy_source::{
     MainSource, Platform, Project, ProjectSettings, SETTINGS_FILE, SettingOverrides,
@@ -172,23 +172,24 @@ impl Pipeline {
 
     /// Runs the build `request` asks for: the output of one stage, or a linked executable.
     pub fn run(&self, request: &BuildRequest) -> Result<Success, Failure> {
-        let (outcome, warnings) = if let Some(stage) = request.emit() {
-            let (emission, warnings) = self.emit(stage, request)?;
-            (Outcome::Emitted(emission), warnings)
-        } else {
+        let (outcome, warnings) = if request.emit().is_empty() {
             let (artifact, warnings) = self.build(request)?;
             (Outcome::Executable(artifact), warnings)
+        } else {
+            let (emitted, warnings) = self.emit(request.emit(), request)?;
+            (Outcome::Emitted(emitted), warnings)
         };
         Ok(Success { outcome, warnings })
     }
 
-    /// Runs the stages up to `stage` and returns its output; each stage runs only when the
-    /// stages before it found no errors.
+    /// Runs the stages up to the last of `stages`, which are in pipeline order, and returns
+    /// the output of each; each stage runs only when the stages before it found no errors,
+    /// and code generation builds the LLVM module once for all of its stages (CLI-29).
     fn emit(
         &self,
-        stage: EmitStage,
+        stages: &[EmitStage],
         request: &BuildRequest,
-    ) -> Result<(Emission, Warnings), Failure> {
+    ) -> Result<(Vec<(EmitStage, Emission)>, Warnings), Failure> {
         let project = self.timed("load", || {
             self.load(
                 request.main(),
@@ -196,39 +197,64 @@ impl Pipeline {
                 request.target(),
             )
         })?;
-        if stage == EmitStage::Ast {
+        let wants = |stage: EmitStage| stages.contains(&stage);
+        let last = stages.last().copied().unwrap_or(EmitStage::Obj);
+        let mut emitted = Vec::new();
+        if wants(EmitStage::Ast) {
+            emitted.push((EmitStage::Ast, syntax_text(&project)));
+        }
+        if last == EmitStage::Ast {
             let warnings = self.warnings(project.warnings(), &project)?;
-            return Ok((syntax_text(&project), warnings));
+            return Ok((emitted, warnings));
         }
         let (program, warnings) = self.timed("check", || self.check_program(&project))?;
-        if stage == EmitStage::TypedAst {
+        if wants(EmitStage::TypedAst) {
             let text = typy_check::dump(&program, &project);
-            return Ok((Emission::Text(text), warnings));
+            emitted.push((EmitStage::TypedAst, Emission::Text(text)));
+        }
+        if last == EmitStage::TypedAst {
+            return Ok((emitted, warnings));
         }
         let module = self.timed("lower", || lower(&program, &project))?;
-        let target = request.target();
-        let options = request.codegen_options();
-        let failed = |diagnostics| with_project(diagnostics, &project);
-        let emission = self.timed("generate", || -> Result<Emission, Failure> {
-            Ok(match stage {
-                EmitStage::Ast => syntax_text(&project),
-                EmitStage::TypedAst => Emission::Text(typy_check::dump(&program, &project)),
-                EmitStage::Tyir => Emission::Text(typy_tyir::print_without_counting(&module)),
-                EmitStage::TyirMem => Emission::Text(typy_tyir::print(&module)),
-                EmitStage::LlvmIr => {
-                    Emission::Text(llvm_ir(&module, target, &options, &project).map_err(failed)?)
-                }
-                EmitStage::Asm => {
-                    Emission::Text(assembly(&module, target, &options, &project).map_err(failed)?)
-                }
-                EmitStage::Obj => Emission::Bytes(
-                    object(&module, target, &options, &project)
-                        .map_err(failed)?
-                        .bytes,
-                ),
+        if wants(EmitStage::Tyir) {
+            let text = typy_tyir::print_without_counting(&module);
+            emitted.push((EmitStage::Tyir, Emission::Text(text)));
+        }
+        if wants(EmitStage::TyirMem) {
+            emitted.push((
+                EmitStage::TyirMem,
+                Emission::Text(typy_tyir::print(&module)),
+            ));
+        }
+        let generated: Vec<(EmitStage, typy_codegen::CodegenOutput)> = stages
+            .iter()
+            .filter_map(|stage| Some((*stage, stage.codegen_output()?)))
+            .collect();
+        if generated.is_empty() {
+            return Ok((emitted, warnings));
+        }
+        let wanted: Vec<typy_codegen::CodegenOutput> =
+            generated.iter().map(|(_, output)| *output).collect();
+        let written = self
+            .timed("generate", || {
+                outputs(
+                    &module,
+                    request.target(),
+                    &request.codegen_options(),
+                    &project,
+                    &wanted,
+                )
             })
-        })?;
-        Ok((emission, warnings))
+            .map_err(|diagnostics| with_project(diagnostics, &project))?;
+        for ((stage, _), bytes) in generated.into_iter().zip(written) {
+            let emission = if stage.is_binary() {
+                Emission::Bytes(bytes)
+            } else {
+                Emission::Text(String::from_utf8_lossy(&bytes).into_owned())
+            };
+            emitted.push((stage, emission));
+        }
+        Ok((emitted, warnings))
     }
 
     /// Builds and links the executable. The runtime archive is opened first, so a broken
@@ -473,13 +499,7 @@ fn linker(
 /// Writes the object file of a build beside its output, named after the output's name up to
 /// its first dot: `app.o` for `app`, `libtools.o` for `libtools.so.1` (CLI-24).
 fn keep_object(bytes: &[u8], output: &Utf8Path) -> Result<(), Diagnostics> {
-    let name = output.file_name().unwrap_or("output");
-    let stem = name
-        .split('.')
-        .next()
-        .filter(|stem| !stem.is_empty())
-        .unwrap_or(name);
-    let path = output.with_file_name(format!("{stem}.o"));
+    let path = EmitStage::Obj.path_beside(output);
     std::fs::write(&path, bytes).map_err(|error| {
         Diagnostics::from(
             typy_diagnostics::Diagnostic::without_location(

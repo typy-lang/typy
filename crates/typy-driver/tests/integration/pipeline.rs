@@ -36,9 +36,15 @@ fn codes(failure: &Failure) -> Vec<String> {
 pub(crate) fn emit(main: &Utf8Path, stage: EmitStage) -> Emission {
     let request = BuildRequest::new(main).unwrap().with_emit(stage);
     match pipeline().run(&request).map(|success| success.outcome) {
-        Ok(Outcome::Emitted(emission)) => emission,
+        Ok(Outcome::Emitted(emitted)) => only(emitted),
         other => panic!("{other:?}"),
     }
+}
+
+/// Returns the output of the one stage a build wrote.
+pub(crate) fn only(emitted: Vec<(EmitStage, Emission)>) -> Emission {
+    let [(_, emission)] = <[_; 1]>::try_from(emitted).unwrap();
+    emission
 }
 
 pub(crate) fn text(emission: Emission) -> String {
@@ -213,7 +219,7 @@ fn lib_22_sys_platform_names_the_operating_system_of_each_target() {
             .with_emit(EmitStage::Tyir)
             .with_target(Target { triple });
         let tyir = match pipeline().run(&request).map(|success| success.outcome) {
-            Ok(Outcome::Emitted(emission)) => text(emission),
+            Ok(Outcome::Emitted(emitted)) => text(only(emitted)),
             other => panic!("{triple}: {other:?}"),
         };
         let platform = if triple.is_macos() { "darwin" } else { "linux" };
@@ -222,4 +228,23 @@ fn lib_22_sys_platform_names_the_operating_system_of_each_target() {
             "{triple}: {tyir}"
         );
     }
+}
+
+#[test]
+fn cli_29_several_stages_come_from_one_run_in_pipeline_order() {
+    let (_guard, main) = program(SOURCE);
+    let request = BuildRequest::new(&main)
+        .unwrap()
+        .with_emit(EmitStage::Obj)
+        .with_emit(EmitStage::Tyir)
+        .with_emit(EmitStage::LlvmBc);
+    let Ok(Outcome::Emitted(emitted)) = pipeline().run(&request).map(|success| success.outcome)
+    else {
+        panic!("no stages were written");
+    };
+    let stages: Vec<EmitStage> = emitted.iter().map(|(stage, _)| *stage).collect();
+    assert_eq!(stages, [EmitStage::Tyir, EmitStage::LlvmBc, EmitStage::Obj]);
+    assert!(matches!(&emitted[0].1, Emission::Text(text) if text.contains("fn ")));
+    assert!(matches!(&emitted[1].1, Emission::Bytes(bytes) if bytes.starts_with(b"BC")));
+    assert!(matches!(&emitted[2].1, Emission::Bytes(bytes) if !bytes.is_empty()));
 }

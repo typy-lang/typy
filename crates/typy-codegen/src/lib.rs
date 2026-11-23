@@ -28,6 +28,7 @@ mod operation;
 mod optimization;
 mod optional;
 mod options;
+mod output;
 mod runtime;
 mod small_int;
 mod statics;
@@ -48,9 +49,10 @@ pub use layout::{
 pub use object::ObjectFile;
 pub use optimization::Optimization;
 pub use options::CodegenOptions;
+pub use output::CodegenOutput;
 pub use target::{Target, TargetTriple};
 
-use emit::{Output, generate};
+use emit::generate;
 use error::CodegenError;
 
 fn internal(error: &CodegenError) -> Diagnostics {
@@ -64,6 +66,31 @@ fn internal(error: &CodegenError) -> Diagnostics {
     )
 }
 
+/// Returns the bytes of each of `wanted` for a verified module for `target`, in their order,
+/// building the LLVM module once (CLI-29); `lookup` gives the file names and lines of
+/// traceback entries.
+pub fn outputs(
+    module: &TyirModule,
+    target: Target,
+    options: &CodegenOptions,
+    lookup: &dyn SourceLookup,
+    wanted: &[CodegenOutput],
+) -> Result<Vec<Vec<u8>>, Diagnostics> {
+    generate(module, target, options, lookup, wanted).map_err(|error| internal(&error))
+}
+
+/// Returns the bytes of one output.
+fn one(
+    module: &TyirModule,
+    target: Target,
+    options: &CodegenOptions,
+    lookup: &dyn SourceLookup,
+    output: CodegenOutput,
+) -> Result<Vec<u8>, Diagnostics> {
+    let mut written = outputs(module, target, options, lookup, &[output])?;
+    Ok(written.pop().unwrap_or_default())
+}
+
 /// Returns the object file of a verified module for `target`; `lookup` gives the file names and lines of traceback entries.
 pub fn object(
     module: &TyirModule,
@@ -71,8 +98,7 @@ pub fn object(
     options: &CodegenOptions,
     lookup: &dyn SourceLookup,
 ) -> Result<ObjectFile, Diagnostics> {
-    let bytes = generate(module, target, options, lookup, Output::Object)
-        .map_err(|error| internal(&error))?;
+    let bytes = one(module, target, options, lookup, CodegenOutput::Object)?;
     Ok(ObjectFile { target, bytes })
 }
 
@@ -83,8 +109,7 @@ pub fn llvm_ir(
     options: &CodegenOptions,
     lookup: &dyn SourceLookup,
 ) -> Result<String, Diagnostics> {
-    let bytes = generate(module, target, options, lookup, Output::LlvmIr)
-        .map_err(|error| internal(&error))?;
+    let bytes = one(module, target, options, lookup, CodegenOutput::LlvmIr)?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
@@ -95,8 +120,7 @@ pub fn assembly(
     options: &CodegenOptions,
     lookup: &dyn SourceLookup,
 ) -> Result<String, Diagnostics> {
-    let bytes = generate(module, target, options, lookup, Output::Assembly)
-        .map_err(|error| internal(&error))?;
+    let bytes = one(module, target, options, lookup, CodegenOutput::Assembly)?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 

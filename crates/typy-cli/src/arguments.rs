@@ -167,10 +167,11 @@ pub(crate) enum Command {
         file: Utf8PathBuf,
         #[command(flatten)]
         levels: Levels,
-        /// Write this stage instead of an executable: ast, typed-ast, tyir, tyir-mem,
-        /// llvm-ir, asm or obj.
-        #[arg(long, value_name = "STAGE", value_parser = parse_stage)]
-        emit: Option<EmitStage>,
+        /// Write these stages, separated by commas, instead of an executable: ast, typed-ast,
+        /// tyir, tyir-mem, llvm-ir-unoptimised, llvm-ir, llvm-bc, asm or obj. One stage goes to
+        /// standard output or -o; several go beside the output, as app.ll and app.s.
+        #[arg(long, value_name = "STAGES", value_delimiter = ',', value_parser = parse_stage)]
+        emit: Vec<EmitStage>,
         /// Where to write the executable or the stage; standard output for a stage when absent.
         #[arg(short, long, value_name = "PATH")]
         output: Option<Utf8PathBuf>,

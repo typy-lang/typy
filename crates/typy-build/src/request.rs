@@ -34,7 +34,8 @@ pub struct BuildRequest {
     main: MainSource,
     mode: BuildMode,
     target: Target,
-    emit: Option<EmitStage>,
+    /// The stages to write instead of an executable, in pipeline order, each once (CLI-29).
+    emit: Vec<EmitStage>,
     output: Option<Utf8PathBuf>,
     library: Option<LibraryKind>,
     /// The processor code is generated for; `None` for the target's baseline (CLI-21).
@@ -61,7 +62,7 @@ impl BuildRequest {
             main,
             mode: BuildMode::DEBUG,
             target: Target::host(),
-            emit: None,
+            emit: Vec::new(),
             output: None,
             library: None,
             processor: None,
@@ -83,10 +84,13 @@ impl BuildRequest {
         self
     }
 
-    /// Stops the build after `stage` and writes its output instead of an executable.
+    /// Writes the output of `stage` instead of an executable, beside the stages asked for
+    /// before (CLI-04, CLI-29).
     #[must_use]
-    pub const fn with_emit(mut self, stage: EmitStage) -> Self {
-        self.emit = Some(stage);
+    pub fn with_emit(mut self, stage: EmitStage) -> Self {
+        if let Err(index) = self.emit.binary_search(&stage) {
+            self.emit.insert(index, stage);
+        }
         self
     }
 
@@ -158,10 +162,11 @@ impl BuildRequest {
         self.target
     }
 
-    /// Returns the stage the build stops after, if any.
+    /// Returns the stages whose output the build writes, in pipeline order; none for an
+    /// executable.
     #[must_use]
-    pub const fn emit(&self) -> Option<EmitStage> {
-        self.emit
+    pub fn emit(&self) -> &[EmitStage] {
+        &self.emit
     }
 
     /// Returns the output path given, if any.

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.110 |
+| Version | 2.111 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -3304,9 +3304,15 @@ a triple's processors on standard error.
 | `object(module, target, options, lookup)` | The `ObjectFile`: its target and its bytes |
 | `llvm_ir(module, target, options, lookup)` | The optimised LLVM IR as text, for `--emit=llvm-ir` |
 | `assembly(module, target, options, lookup)` | Assembly text, for `--emit=asm` |
+| `outputs(module, target, options, lookup, wanted)` | The bytes of each `CodegenOutput` in `wanted`, in its order, from one LLVM module (CLI-29) |
 
 Each declares every function first, emits each one, verifies the LLVM
-module, runs the pipeline and writes the output. A tuple is an LLVM struct
+module, runs the pipeline and writes the output. `CodegenOutput` is
+`UnoptimisedIr`, written before the pipeline runs, `LlvmIr` and `Bitcode`,
+written after it, and `Assembly` and `Object`. LLVM's code generator
+changes the module it writes, so each machine code output but the last is
+written from a copy of the module, and `object`, `llvm_ir` and `assembly`
+each give the bytes `outputs` gives for the same output. A tuple is an LLVM struct
 of its items that have a value, so an item of type `None` takes no field and
 the empty tuple is `{}`. `abi::storage_order` orders the fields by
 decreasing `alignment`, 8 bytes for an `int`, a `float` and an object, 1 for
@@ -3516,8 +3522,15 @@ escapes `"`, the backslash and control characters.
 keeps debug information, `runtime_directory` names `typy-small` for `-Os`
 and `-Oz`, and `name` gives `debug`, `release`, `release-small`, `O1`, `O3`
 or `Os` for the cache key.
-`EmitStage` is `Ast`, `TypedAst`, `Tyir`, `TyirMem`, `LlvmIr`, `Asm` or
-`Obj`; `EmitStage::parse` accepts the lower-case names of CLI-04.
+`EmitStage` is `Ast`, `TypedAst`, `Tyir`, `TyirMem`, `LlvmIrUnoptimised`,
+`LlvmIr`, `LlvmBc`, `Asm` or `Obj`, ordered as the pipeline runs them;
+`EmitStage::parse` accepts the lower-case names of CLI-04 and CLI-29, and
+`codegen_output` gives the `CodegenOutput` of each stage from
+`llvm-ir-unoptimised` on. `path_beside(output)` names a stage's file
+beside the output, its name up to the first dot with the stage's
+extension: `ll`, `unoptimised.ll`, `bc`, `s` and `o`, as `rustc --emit`
+names them, and the stage's name for the others. `--save-temps` names its
+object file the same way.
 
 `BuildRequest`
 
@@ -3526,7 +3539,7 @@ or `Os` for the cache key.
 | `main` | `MainSource` | none | A file ends in `.py`, or `BuildRequest::new` and `of_main` return `RequestError::NotPython`; that the file exists is checked when it is loaded (E0105). `directory()` is the file's directory, empty for a module or code |
 | `mode` | `BuildMode` | `DEBUG` | Two flags that give two levels are wrong usage (CLI-30) |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
-| `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
+| `emit` | `Vec<EmitStage>` | empty | In pipeline order, each stage once; `with_emit` adds one. When any is set, no executable is written (CLI-29) |
 | `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it, or to the program's name for a module or code; a library's files are named by `LibraryLayout` |
 | `library` | `Option<LibraryKind>` | `None` | `Static` or `Shared` builds a C library instead of an executable (CLI-09) |
 | `processor` | `Option<String>` | `None` | A processor of the target, checked by the command line; `None` for the baseline (CLI-21) |
@@ -3642,7 +3655,7 @@ suite runs many in one process. Each method returns a `Success`, the
 | Method | Behaviour |
 | --- | --- |
 | `check(main, target)` | Loads and checks the program whose `MainSource` is `main` for the target, whose operating system `ProjectSettings::platform` takes, and returns `Outcome::Checked` with its `Sources` (CLI-03, LIB-22) |
-| `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
+| `run(request)` with `emit` set | Runs the stages up to the last stage asked for and returns `Outcome::Emitted` with each stage and its `Emission`, in pipeline order: `Bytes` for `llvm-bc` and `obj`, `Text` for the others (CLI-04, CLI-29). Code generation runs once, through `typy_codegen::outputs`, for every stage from `llvm-ir-unoptimised` on. `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
 | `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes beside the library the C header `NAME.h`, and the binding `NAME_binding.py` and its stub `NAME_binding.pyi`, which load the soname of the shared library of the build's release, also for a static build (CLI-09, CLI-13, FFI-05, FFI-08) |
 
@@ -3669,7 +3682,7 @@ copies nothing.
 | Item | Design |
 | --- | --- |
 | Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. `build` and `check` take `--lib static` or `--lib shared`, which sets `SettingOverrides::library` and the request's `library` (CLI-09). A main file that is not a `.py` file is wrong usage |
-| Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text`, or `render_coloured` when the global `--color` asks for colour, and written to standard error with a blank line between two of them, or with `render_json` one per line. `output::colours` decides: `always`, `never`, or for `auto` when standard error is a terminal and `NO_COLOR` is not set or is empty (CLI-26). The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
+| Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text`, or `render_coloured` when the global `--color` asks for colour, and written to standard error with a blank line between two of them, or with `render_json` one per line. `output::colours` decides: `always`, `never`, or for `auto` when standard error is a terminal and `NO_COLOR` is not set or is empty (CLI-26). The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` takes stages separated by commas, and may be given again. The output of one stage goes to `-o`, or to standard output without it; several stages go each to `EmitStage::path_beside` the output path, `-o` or the main file without `.py` (CLI-29). A file that cannot be written gives E0106 |
 | `typy explain CODE` | Prints the section of `docs/diagnostics/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text, and E0429, which only a library build gives, shows modules that are correct as programs |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |

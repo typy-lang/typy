@@ -83,9 +83,12 @@ fn every_text_stage_of_every_program_matches_its_golden_file() {
                 .with_target(Target {
                     triple: TargetTriple::X86_64LinuxGnu,
                 });
-            let text = match pipeline().run(&request).map(|success| success.outcome) {
-                Ok(Outcome::Emitted(Emission::Text(text))) => text,
+            let emitted = match pipeline().run(&request).map(|success| success.outcome) {
+                Ok(Outcome::Emitted(emitted)) => emitted,
                 other => panic!("{program} --emit={}: {other:?}", stage.name()),
+            };
+            let Ok([(_, Emission::Text(text))]) = <[_; 1]>::try_from(emitted) else {
+                panic!("{program} --emit={} wrote no text", stage.name());
             };
             let expected = golden().join(stage.name()).join(format!("{name}.txt"));
             problems.extend(compare(&expected, &text));

@@ -1,11 +1,11 @@
-//! The output of the stage `--emit` stops at.
+//! The output of one stage `--emit` names.
 
-/// What `--emit` produced: text for every stage but `obj`, whose object file is bytes.
+/// What `--emit` produced for one stage: text, or bytes for `llvm-bc` and `obj`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Emission {
     /// Deterministic text (CLI-04).
     Text(String),
-    /// An object file.
+    /// LLVM bitcode or an object file.
     Bytes(Vec<u8>),
 }
 

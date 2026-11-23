@@ -2,7 +2,10 @@
 
 use camino::Utf8PathBuf;
 use typy_check::TypeChecker;
-use typy_codegen::{CodegenOptions, Optimization, Target, TargetTriple, assembly, llvm_ir, object};
+use typy_codegen::{
+    CodegenOptions, CodegenOutput, Optimization, Target, TargetTriple, assembly, llvm_ir, object,
+    outputs,
+};
 use typy_source::{Project, ProjectSettings};
 use typy_tyir::TyirModule;
 
@@ -78,6 +81,56 @@ fn every_program_generates_valid_llvm_ir_at_every_level() {
             );
         }
     }
+}
+
+#[test]
+fn cli_29_outputs_from_one_module_match_the_outputs_generated_alone() {
+    let (project, module) = compile(PROGRAMS[1]);
+    let options = CodegenOptions::new(Optimization::Speed);
+    let host = Target::host();
+    let [unoptimised, ir, bitcode, asm, obj]: [Vec<u8>; 5] = outputs(
+        &module,
+        host,
+        &options,
+        &project,
+        &[
+            CodegenOutput::UnoptimisedIr,
+            CodegenOutput::LlvmIr,
+            CodegenOutput::Bitcode,
+            CodegenOutput::Assembly,
+            CodegenOutput::Object,
+        ],
+    )
+    .unwrap()
+    .try_into()
+    .unwrap();
+    // Writing the assembly first must leave the module the object is written from unchanged.
+    assert_eq!(
+        obj,
+        object(&module, host, &options, &project).unwrap().bytes
+    );
+    assert_eq!(
+        asm,
+        assembly(&module, host, &options, &project)
+            .unwrap()
+            .into_bytes()
+    );
+    assert_eq!(
+        ir,
+        llvm_ir(&module, host, &options, &project)
+            .unwrap()
+            .into_bytes()
+    );
+    assert_eq!(&bitcode[..4], b"BC\xc0\xde");
+    assert_ne!(unoptimised, ir);
+    let only_unoptimised = outputs(
+        &module,
+        host,
+        &options,
+        &project,
+        &[CodegenOutput::UnoptimisedIr],
+    );
+    assert_eq!(only_unoptimised.unwrap(), [unoptimised]);
 }
 
 #[test]

@@ -29,7 +29,7 @@ fn build_takes_a_stage_an_output_and_a_mode() {
         }) => (file, emit, output, generation),
         other => panic!("not a build: {other:?}"),
     };
-    assert_eq!((file.as_str(), emit), ("app.py", Some(EmitStage::Tyir)));
+    assert_eq!((file.as_str(), emit), ("app.py", vec![EmitStage::Tyir]));
     assert_eq!(
         output.as_deref().map(camino::Utf8Path::as_str),
         Some("out.txt")
@@ -266,4 +266,18 @@ fn a_warning_level_names_a_warning_or_every_warning() {
             "{line:?}"
         );
     }
+}
+
+#[test]
+fn emit_takes_several_stages_separated_by_commas_or_given_again() {
+    let emit = |line: &[&str]| match parse(line) {
+        Ok(Command::Build { emit, .. }) => emit,
+        other => panic!("not a build: {other:?}"),
+    };
+    assert_eq!(
+        emit(&["build", "app.py", "--emit=llvm-ir,asm", "--emit", "llvm-bc"]),
+        [EmitStage::LlvmIr, EmitStage::Asm, EmitStage::LlvmBc]
+    );
+    assert_eq!(emit(&["build", "app.py"]), []);
+    assert!(parse(&["build", "app.py", "--emit=llvm-ir,exe"]).is_err());
 }

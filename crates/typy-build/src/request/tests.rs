@@ -12,7 +12,7 @@ fn a_new_request_is_a_debug_build_of_an_executable_for_the_host() {
     assert_eq!(request.directory(), "src");
     assert_eq!(request.mode(), BuildMode::DEBUG);
     assert_eq!(request.target(), Target::host());
-    assert_eq!((request.emit(), request.output()), (None, None));
+    assert_eq!((request.emit(), request.output()), (&[][..], None));
     assert_eq!(request.output_path(), "src/app");
 }
 
@@ -29,7 +29,7 @@ fn every_setting_can_be_changed() {
         .with_output("out/app");
     assert_eq!(request.mode(), BuildMode::RELEASE_SMALL);
     assert_eq!(request.target(), musl);
-    assert_eq!(request.emit(), Some(EmitStage::Tyir));
+    assert_eq!(request.emit(), [EmitStage::Tyir]);
     assert_eq!(request.output_path(), "out/app");
 }
 
@@ -62,5 +62,19 @@ fn a_module_or_code_is_built_under_the_programs_name() {
     assert_eq!(
         (code.directory(), code.output_path()),
         (camino::Utf8Path::new(""), "c".into())
+    );
+}
+
+#[test]
+fn several_stages_are_kept_once_each_in_pipeline_order() {
+    let request = BuildRequest::new("app.py")
+        .unwrap()
+        .with_emit(EmitStage::Obj)
+        .with_emit(EmitStage::Ast)
+        .with_emit(EmitStage::LlvmIr)
+        .with_emit(EmitStage::Obj);
+    assert_eq!(
+        request.emit(),
+        [EmitStage::Ast, EmitStage::LlvmIr, EmitStage::Obj]
     );
 }

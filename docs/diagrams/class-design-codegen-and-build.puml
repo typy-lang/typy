@@ -27,7 +27,7 @@ package "typy_build" as BuildCrate {
         +main : MainSource
         +mode : BuildMode
         +target : Target
-        +emit : Option<EmitStage>
+        +emit : Vec<EmitStage>
         +output : Option<Utf8PathBuf>
         +library : Option<LibraryKind>
         +processor : Option<String>

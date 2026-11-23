@@ -1,4 +1,5 @@
-//! Builds the LLVM module for a TyIR module, runs LLVM's pipeline, and writes object code, assembly or IR.
+//! Builds the LLVM module for a TyIR module, runs LLVM's pipeline, and writes object code,
+//! assembly, IR or bitcode.
 
 use inkwell::attributes::{Attribute, AttributeLoc};
 use inkwell::context::Context;
@@ -19,16 +20,9 @@ use crate::heap::emit_heap_hooks;
 use crate::library::LibraryEmitter;
 use crate::optimization::Optimization;
 use crate::options::CodegenOptions;
+use crate::output::CodegenOutput;
 use crate::statics::Statics;
 use crate::target::Target;
-
-/// What to write: object code, assembly text or LLVM IR text.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Output {
-    Object,
-    Assembly,
-    LlvmIr,
-}
 
 /// Returns the processor of the machine `typy` runs on, as LLVM names it, such as `skylake`.
 pub(crate) fn host_processor() -> String {
@@ -102,14 +96,14 @@ fn declare_globals<'ctx>(
         .collect()
 }
 
-/// Returns the bytes of the requested output for `module`.
+/// Returns the bytes of each of `outputs` for `module`, in their order, from one LLVM module.
 pub(crate) fn generate(
     module: &TyirModule,
     target: Target,
     options: &CodegenOptions,
     lookup: &dyn SourceLookup,
-    output: Output,
-) -> Result<Vec<u8>, CodegenError> {
+    outputs: &[CodegenOutput],
+) -> Result<Vec<Vec<u8>>, CodegenError> {
     let optimization = options.optimization;
     let machine = target_machine(target, options)?;
     let context = Context::create();
@@ -158,6 +152,19 @@ pub(crate) fn generate(
     llvm_module
         .verify()
         .map_err(|error| CodegenError(format!("LLVM rejected the module: {error}")))?;
+    let text = |module: &Module<'_>| module.print_to_string().to_bytes().to_vec();
+    let mut written = vec![Vec::new(); outputs.len()];
+    for (index, output) in outputs.iter().enumerate() {
+        if *output == CodegenOutput::UnoptimisedIr {
+            written[index] = text(&llvm_module);
+        }
+    }
+    if outputs
+        .iter()
+        .all(|output| *output == CodegenOutput::UnoptimisedIr)
+    {
+        return Ok(written);
+    }
     llvm_module
         .run_passes(
             optimization.pipeline(),
@@ -165,20 +172,35 @@ pub(crate) fn generate(
             PassBuilderOptions::create(),
         )
         .map_err(|error| CodegenError(format!("LLVM passes: {error}")))?;
-    match output {
-        Output::LlvmIr => Ok(llvm_module.print_to_string().to_bytes().to_vec()),
-        Output::Object | Output::Assembly => {
-            let file_type = if output == Output::Object {
-                FileType::Object
-            } else {
-                FileType::Assembly
-            };
-            let buffer = machine
-                .write_to_memory_buffer(&llvm_module, file_type)
-                .map_err(|error| CodegenError(format!("LLVM code generation: {error}")))?;
-            Ok(buffer.as_slice().to_vec())
-        }
+    let last_machine_code = outputs.iter().rposition(|output| output.is_machine_code());
+    for (index, output) in outputs.iter().enumerate() {
+        written[index] = match output {
+            CodegenOutput::UnoptimisedIr => continue,
+            CodegenOutput::LlvmIr => text(&llvm_module),
+            CodegenOutput::Bitcode => llvm_module.write_bitcode_to_memory().as_slice().to_vec(),
+            CodegenOutput::Assembly | CodegenOutput::Object => {
+                let file_type = if *output == CodegenOutput::Object {
+                    FileType::Object
+                } else {
+                    FileType::Assembly
+                };
+                // LLVM's code generator changes the module it writes, so every output but the
+                // last is written from a copy.
+                let copy;
+                let source = if Some(index) == last_machine_code {
+                    &llvm_module
+                } else {
+                    copy = llvm_module.clone();
+                    &copy
+                };
+                let buffer = machine
+                    .write_to_memory_buffer(source, file_type)
+                    .map_err(|error| CodegenError(format!("LLVM code generation: {error}")))?;
+                buffer.as_slice().to_vec()
+            }
+        };
     }
+    Ok(written)
 }
 
 /// Marks each function `optsize` for `-Os`, and `minsize` too for `-Oz`.

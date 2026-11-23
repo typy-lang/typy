@@ -34,6 +34,10 @@ All notable changes to TyPy are recorded here. The format follows
 - `typy run -c CODE` builds and runs code, and `typy run -m MODULE` a module
   of the project in the current directory, after the packages that hold
   it, as `python -c` and `python -m` run them (CLI-28).
+- `--emit` takes several stages separated by commas, each written beside
+  the output as `app.ll`, `app.s` or `app.o`, from one compilation; the
+  new stages `llvm-ir-unoptimised` and `llvm-bc` give the LLVM IR before
+  optimisation and the optimised bitcode (CLI-29).
 
 ### Changed
 

@@ -15,7 +15,8 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy NAME [ARGS]` | Runs the program `typy-NAME` found on `PATH`, for a NAME that is not a command of `typy`; see [Commands of other tools](#commands-of-other-tools) | CLI-32 |
 | `typy build --lib KIND FILE` | Writes a `static` or `shared` C library of the functions the module's `__all__` lists, and its C header; see [C interoperability](../extending/c-interop.md) | CLI-09 |
 | `typy build --target TRIPLE FILE` | Builds for another target the host builds for, with that target's C toolchain: on Linux `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-gnu`, and on macOS `aarch64-apple-darwin`; `typy check` takes `--target` too | CLI-08, CLI-14 |
-| `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
+| `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir-unoptimised`, `llvm-ir` or `asm`, or as bytes: `llvm-bc` or `obj` | CLI-04, CLI-29 |
+| `typy build --emit=STAGE,STAGE FILE` | Writes several stages, each beside the output; see [Writing the stages of a build](#writing-the-stages-of-a-build) | CLI-29 |
 | `--release`, `--release-small` | Optimise for speed or for size, without debug information; the default is a debug build, which keeps it | CLI-05 |
 | `-O0`, `-O1`, `-O2`, `-O3`, `-Os`, `-Oz` | The optimisation level of `build` and `run`; `--release` is `-O2` and `--release-small` is `-Oz`, and `-Os` and `-Oz` link the runtime built for size | CLI-20 |
 | `--target-cpu NAME` | Generates code for the processor NAME, or `native` for this machine; without it a build runs on every machine of its target | CLI-21 |
@@ -147,6 +148,35 @@ when standard error goes to a file or a pipe; `--color never` leaves them
 plain. The default, `auto`, colours them on a terminal unless the
 `NO_COLOR` environment variable is set to a value. JSON diagnostics are
 never coloured.
+
+## Writing the stages of a build
+
+`--emit` writes what a stage of the compiler made instead of an
+executable. One stage goes to standard output, or to the file `-o` names:
+
+```sh
+typy build app.py --emit=tyir
+typy build app.py -O2 --emit=asm -o app.s
+```
+
+Several stages, separated by commas or given in several `--emit` options,
+go each to a file beside the output, named after it up to its first dot,
+as `rustc --emit` names its files:
+
+```sh
+typy build app.py -O2 --emit=llvm-ir-unoptimised,llvm-ir,asm
+typy build app.py --emit=llvm-bc,obj -o out/prog
+```
+
+The first command writes `app.unoptimised.ll`, `app.ll` and `app.s`, and
+the second `out/prog.bc` and `out/prog.o`. The other stages take their
+names as extensions: `app.ast`, `app.typed-ast`, `app.tyir` and
+`app.tyir-mem`. `llvm-ir-unoptimised` is the LLVM IR before the
+optimisation pipeline runs, and `llvm-ir` the IR after it, so the two show
+what the optimiser did. `llvm-bc` is the optimised IR as LLVM bitcode,
+which LLVM's tools read. The program is checked and compiled once for all
+the stages, and the stages written together are the same bytes as each
+written alone.
 
 ## Commands of other tools
 

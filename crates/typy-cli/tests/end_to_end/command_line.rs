@@ -1,5 +1,6 @@
 //! The commands and options of ADR-0104 and ADR-0105, run as a user runs `typy`: `typy print`,
-//! external commands, code generation, colour, warning levels, and `run -c` and `-m`.
+//! external commands, code generation, colour, warning levels, `run -c` and `-m`, and several
+//! stages of `--emit`.
 
 use std::process::{Command, Output};
 
@@ -676,4 +677,67 @@ fn cli_28_a_module_that_cannot_run_is_an_error_and_two_mains_are_wrong_usage() {
         assert_eq!(status(&output), expected_status, "{arguments:?}: {text}");
         assert!(text.contains(expected_text), "{arguments:?}: {text}");
     }
+}
+
+#[test]
+fn cli_29_several_stages_are_written_beside_the_output_and_one_goes_to_standard_output() {
+    let project = Project::new();
+    let all = project.typy(
+        &[
+            "build",
+            "app.py",
+            "-O2",
+            "--emit=ast,typed-ast,tyir,tyir-mem,llvm-ir-unoptimised,llvm-ir",
+            "--emit=llvm-bc,asm,obj",
+        ],
+        None,
+    );
+    assert_eq!(
+        (status(&all), stdout(&all).as_str()),
+        (0, ""),
+        "{}",
+        stderr(&all)
+    );
+    for extension in [
+        "ast",
+        "typed-ast",
+        "tyir",
+        "tyir-mem",
+        "unoptimised.ll",
+        "ll",
+        "bc",
+        "s",
+        "o",
+    ] {
+        assert!(
+            project.root.join(format!("app.{extension}")).is_file(),
+            "app.{extension}"
+        );
+    }
+    assert!(!project.root.join("app").exists());
+    let read = |name: &str| std::fs::read(project.root.join(name)).unwrap();
+    assert!(read("app.bc").starts_with(b"BC"));
+    assert_ne!(read("app.unoptimised.ll"), read("app.ll"));
+    let named = project.typy(
+        &["build", "app.py", "--emit=llvm-ir,obj", "-o", "out/prog"],
+        None,
+    );
+    std::fs::create_dir_all(project.root.join("out")).unwrap();
+    assert_eq!(status(&named), 1, "the directory of -o does not exist yet");
+    let named = project.typy(
+        &["build", "app.py", "--emit=llvm-ir,obj", "-o", "out/prog"],
+        None,
+    );
+    assert_eq!(status(&named), 0, "{}", stderr(&named));
+    assert!(project.root.join("out/prog.ll").is_file());
+    assert!(project.root.join("out/prog.o").is_file());
+    let one = project.typy(&["build", "app.py", "--emit=llvm-ir-unoptimised"], None);
+    assert_eq!(status(&one), 0, "{}", stderr(&one));
+    assert!(
+        stdout(&one).starts_with("; ModuleID = 'typy'"),
+        "{}",
+        stdout(&one)
+    );
+    let wrong = project.typy(&["build", "app.py", "--emit=llvm-ir,exe"], None);
+    assert_eq!(status(&wrong), 2, "{}", stderr(&wrong));
 }

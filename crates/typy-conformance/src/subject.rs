@@ -122,15 +122,18 @@ pub(crate) fn judge_sanitized(
         Ok(request) => request.with_emit(EmitStage::Obj),
         Err(error) => return Verdict::Invalid(error.to_string()),
     };
-    let object = match pipeline.run(&request).map(|success| success.outcome) {
-        Ok(Outcome::Emitted(Emission::Bytes(bytes))) => bytes,
-        Ok(_) => return Verdict::Fail("no object file was emitted".to_owned()),
+    let emitted = match pipeline.run(&request).map(|success| success.outcome) {
+        Ok(Outcome::Emitted(emitted)) => emitted,
+        Ok(_) => Vec::new(),
         Err(failure) => {
             return Verdict::Fail(format!(
                 "TyPy rejected the program: {}",
                 describe(&failure).join("; ")
             ));
         }
+    };
+    let Some((_, Emission::Bytes(object))) = emitted.into_iter().next() else {
+        return Verdict::Fail("no object file was emitted".to_owned());
     };
     let object_path = root.join("program.o");
     let executable = root.join("sanitized");
