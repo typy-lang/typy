@@ -79,6 +79,7 @@ impl BodyChecker<'_> {
             otherwise: None,
             members,
             held: Vec::new(),
+            guard: None,
         };
         Self::typed(TypedExprKind::IsInstance(Box::new(test)), Type::Bool, span)
     }
@@ -279,6 +280,7 @@ impl BodyChecker<'_> {
                 otherwise,
                 members,
                 held: Vec::new(),
+                guard: None,
             })),
             Type::Bool,
             span,
@@ -535,6 +537,7 @@ impl BodyChecker<'_> {
                 otherwise: None,
                 members: Vec::new(),
                 held: Vec::new(),
+                guard: None,
             })),
             Type::Bool,
             span,

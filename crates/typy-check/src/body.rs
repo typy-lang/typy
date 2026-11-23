@@ -34,6 +34,7 @@ mod generator;
 mod generator_expression;
 mod generic_call;
 mod generic_copy;
+mod guard_call;
 mod override_adapter;
 mod override_copy;
 mod protocol_method_value;
@@ -696,7 +697,11 @@ impl<'program> BodyChecker<'program> {
         // A value of a declared abstract collection is the built-in collection it holds
         // (LIB-20, ADR-0086), a value of a literal type a value of its base type (TYP-28,
         // ADR-0110), and a value of `Self` an instance of the method's class (TYP-30).
-        let ty = if ty.has_abstract() || ty.has_literal() || ty.has_self() {
+        let ty = if ty.has_abstract()
+            || ty.has_literal()
+            || ty.has_self()
+            || matches!(ty, Type::Guard(_))
+        {
             ty.value_type()
         } else {
             ty

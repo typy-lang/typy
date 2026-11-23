@@ -128,6 +128,46 @@ types of two base types, such as `Literal['r', 1]`, is narrowed by
 `list[Literal['r']]`, is tested for each item a display writes; a `list`
 declared otherwise passes for it, since its items are held alike.
 
+## Type guards
+
+A module function whose result is `TypeGuard[T]` or `TypeIs[T]` returns a
+`bool`, and a test of a call of it narrows its first argument, when that
+is a variable, to `T` where the call is true (TYP-31, ADR-0114). For
+`TypeIs` the variable narrows to the rest of its type where the call is
+false; a false `TypeGuard` call shows nothing.
+
+<!-- typy-expect: accepted -->
+```python
+from typing import TypeGuard
+
+
+def is_text(value: object) -> TypeGuard[str]:
+    return isinstance(value, str)
+
+
+def shown(value: int | str) -> str:
+    if is_text(value):
+        return value.upper()
+    return "not text"
+
+
+print(shown("a"), shown(2))
+```
+
+`TypeIs` is in `typing` from Python 3.13, so it needs the Python floor
+3.13 or later, set with `python-floor = "3.13"` in `typy.toml`; below it,
+importing it is E0425, as CPython 3.12 raises `ImportError`.
+
+TyPy reads a narrowed variable as a value of `T`, so the call also tests
+the argument as `isinstance` would: a `TypeGuard` call that returns
+`True` for a value that is not a `T`, and a `TypeIs` call whose result
+differs from the test, raise `TypeError` that names the function, where
+CPython goes on with the value. `T` is a type a test of the value's class
+tells apart: a number, `str`, `bytes`, `None`, a range, a slice, an
+instance of a class that is neither generic nor a protocol, or a union of
+these. A guard of another type, such as `list[int]`, and a method whose
+result is a guard are planned for 0.13 (TYP-37).
+
 ## Casts
 
 `typing.cast(T, value)` gives `value` as a `T` (TYP-24, ADR-0091). A value
@@ -324,7 +364,6 @@ These forms are planned, and each is E0201 until its release:
 
 | Form | Release | Requirement |
 | --- | --- | --- |
-| `TypeGuard` and `TypeIs` | 0.12 | TYP-31 |
 | `typing.Any`, bound when the program runs | 0.13 | TYP-25 |
 | `TypedDict`, `Required`, `NotRequired` and `ReadOnly` | 0.13 | TYP-32 |
 

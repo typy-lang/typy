@@ -91,7 +91,9 @@ pub(super) fn test_reach(test: &TypedExpr, literals: bool) -> (bool, bool) {
                 || !isinstance.checks.is_empty()
                 || !isinstance.held.is_empty();
             let may_fail = !(isinstance.always && (!optional || isinstance.none_matches));
-            (may_hold, may_fail)
+            // A `TypeGuard` call may be false for a value of its type (TYP-31).
+            let inexact = isinstance.guard.as_ref().is_some_and(|guard| !guard.exact);
+            (may_hold, may_fail || inexact)
         }
         TypedExprKind::Unary {
             operator: UnaryOperator::Not,
@@ -194,10 +196,17 @@ pub(super) fn test_facts(test: &TypedExpr) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
                     holds.insert(Fact::NotNone(symbol));
                 }
             }
-            let fails = isinstance
+            let mut fails: BTreeSet<Fact> = isinstance
                 .otherwise
                 .map(|otherwise| BTreeSet::from([Fact::Narrowed(symbol, otherwise)]))
                 .unwrap_or_default();
+            // A test that `None` passes shows an optional is not `None` where it fails; a
+            // `TypeGuard` call that fails shows nothing (TYP-31).
+            let exact = isinstance.guard.as_ref().is_none_or(|guard| guard.exact);
+            if exact && isinstance.none_matches && matches!(isinstance.value.ty, Type::Optional(_))
+            {
+                fails.insert(Fact::NotNone(symbol));
+            }
             (holds, fails)
         }
         TypedExprKind::Unary {

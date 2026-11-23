@@ -55,6 +55,43 @@ pub unsafe extern "C" fn typy_rt_operands_unsupported(
     message.raise(ExceptionKind::TypeError)
 }
 
+/// Returns the `TypeError` of a call of a `TypeGuard` or `TypeIs` function whose result the
+/// value it tests does not bear out: `the TypeIs[int] function is_int returned True for a
+/// str`, after the function's text, its result and the value's class (TYP-31, ADR-0114).
+///
+/// # Safety
+///
+/// `function` points to a live `str`, and `found` to a live type object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn typy_rt_guard_failed(
+    function: *const StrObject,
+    found: *const TypeObject,
+    returned: bool,
+) -> *mut ExceptionObject {
+    let mut message = MessageBuffer::new();
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        message.push_text(function);
+        message.push_str(if returned {
+            " returned True for "
+        } else {
+            " returned False for "
+        });
+        message.push_str(article((*found).name()));
+        message.push_str((*found).name());
+    }
+    message.raise(ExceptionKind::TypeError)
+}
+
+/// Returns the article of a class's name, `an ` before a vowel and `a ` before any other.
+fn article(name: &str) -> &'static str {
+    if name.starts_with(['a', 'e', 'i', 'o', 'u', 'A', 'E', 'I', 'O', 'U']) {
+        "an "
+    } else {
+        "a "
+    }
+}
+
 /// Returns the `TypeError` of a checked `cast` whose value is not of its type:
 /// `cast to int found str`, named by the cast's type as TyPy writes it and the value's class
 /// (TYP-24, ADR-0091).

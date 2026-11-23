@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `typing.TypeGuard[T]` and `typing.TypeIs[T]` as a module function's
+  result: a test of a call narrows its first argument, a variable, to `T`,
+  and for `TypeIs` to the rest where it is false. A result the argument's
+  class does not bear out raises `TypeError`. Other guards are planned for
+  0.13 (TYP-31, TYP-37, ADR-0114).
 - `typing.Self` in the parameters and the result of an instance or a class
   method, as the class the method is called through: a method a derived
   class inherits returns that class's instances through it. Another
@@ -88,6 +93,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- An `isinstance` test that `None` passes shows an optional is not `None`
+  where the test fails (TYP-07).
 - A class, sequence or mapping pattern the subject's type never matches is
   the warning W0402 instead of the error E0407, and its case is neither
   checked nor compiled, as CPython runs it (CST-06, TYP-34).
@@ -116,6 +123,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Fixed
 
+- Passing a value of a union such as `int | str` where an `object` is
+  declared stopped the compiler with an internal error; the value is now
+  held as an object of its member's type (TYP-23).
 - `typing.cast(T, value)` of a `T | None` value that holds an `int`, a
   `float` or a `bool` ended the program with a crash; it now tests only
   that the value is not `None` (TYP-24).

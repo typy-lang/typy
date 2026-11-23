@@ -381,6 +381,13 @@ pub(super) fn definition<'tree>(
             .as_ref()
             .filter(|_| default_call.is_none())
             .and_then(|default| default_value(default, &ty, diagnostics));
+        // A guard is a function's result, not a parameter's type (TYP-31).
+        let ty = if let Type::Guard(guard) = &ty {
+            diagnostics.push(misplaced_guard(guard.kind, parameter.name.span));
+            Type::Error
+        } else {
+            ty
+        };
         signature_parameters.push(SignatureParameter {
             name: parameter.name.name.clone(),
             ty,
@@ -552,4 +559,17 @@ pub(super) fn missing_result(
             .with_help(help),
     );
     Type::Error
+}
+
+/// Returns E0408 for `TypeGuard[T]` or `TypeIs[T]` written other than as a function's result.
+fn misplaced_guard(kind: crate::guard_type::GuardKind, span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(408),
+        span,
+        format!(
+            "`{}[...]` is written as a function's result, which narrows its first argument",
+            kind.name()
+        ),
+    )
+    .with_rule(RuleId::TYP_31)
 }

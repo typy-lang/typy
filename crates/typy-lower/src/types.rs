@@ -15,7 +15,8 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::SelfType(own) => tyir_type(own, tuples),
         Type::Int => TyirType::Int,
         Type::Float => TyirType::Float,
-        Type::Bool => TyirType::Bool,
+        // A guard's value is a `bool` (TYP-31, ADR-0114).
+        Type::Bool | Type::Guard(_) => TyirType::Bool,
         Type::Str => TyirType::STR,
         Type::Bytes => TyirType::BYTES,
         Type::Bytearray => TyirType::BYTEARRAY,

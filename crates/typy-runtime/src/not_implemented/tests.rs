@@ -75,3 +75,21 @@ fn typ_24_a_wrong_cast_raises_type_error_naming_the_type_and_the_class() {
         crate::refcount::typy_rt_decrement(target.cast());
     }
 }
+
+#[test]
+fn typ_31_a_guard_that_does_not_fit_its_value_raises_type_error() {
+    use crate::type_object::{INT, STR};
+    let function = crate::string::from_str("the TypeIs[int] function is_int");
+    // SAFETY: the string is live, and the type objects are the runtime's statics.
+    unsafe {
+        assert_eq!(
+            shown(super::typy_rt_guard_failed(function, &raw const STR, true)),
+            "the TypeIs[int] function is_int returned True for a str"
+        );
+        assert_eq!(
+            shown(super::typy_rt_guard_failed(function, &raw const INT, false)),
+            "the TypeIs[int] function is_int returned False for an int"
+        );
+        crate::refcount::typy_rt_decrement(function.cast());
+    }
+}

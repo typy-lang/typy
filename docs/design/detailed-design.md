@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.125 |
+| Version | 2.126 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -1190,6 +1190,15 @@ its keys does not read (LIB-20, ADR-0086). Only declared types are
 abstract: `BodyChecker::typed` gives every expression the type
 `without_abstract` makes, a variable's current type is its members while
 `declared` keeps the collection, and lowering maps it to its members.
+`TypeGuard[T]` and `TypeIs[T]` name `AnnotationName::Guard`, read as
+`Type::Guard` of a `GuardType` when `guard_type::tested_by_class` takes `T`
+(TYP-31, ADR-0114); it stands in declared results only, a `bool` as a value.
+`guarded_call`, from `call_function`, makes a call of a guard whose first
+argument is a variable the `isinstance` test of that variable against `T`,
+with the call as its `GuardCall`, and drops the test's `otherwise` for
+`TypeGuard`. Lowering runs the call, then the test, and calls
+`typy_rt_guard_failed` when a `TypeGuard` call is true and the test false,
+or a `TypeIs` call and the test differ; the call's result is the test's.
 `typing.Self` names `AnnotationName::SelfType`, which reads the type
 `self_type::SELF_PARAMETER` gives in the annotation scope (TYP-30,
 ADR-0113): `method_definition` gives an instance method of a class that is

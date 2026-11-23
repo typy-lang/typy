@@ -61,13 +61,13 @@ impl TypedFunction {
     #[must_use]
     pub(crate) fn without_literals(mut self) -> Self {
         for parameter in &mut self.signature.parameters {
-            parameter.ty = parameter.ty.without_literal().with_self(None);
+            parameter.ty = parameter.ty.without_declared_forms();
         }
-        self.signature.returns = self.signature.returns.without_literal().with_self(None);
+        self.signature.returns = self.signature.returns.without_declared_forms();
         if let Some(generator) = &mut self.generator {
-            generator.yields = generator.yields.without_literal().with_self(None);
-            generator.sends = generator.sends.without_literal().with_self(None);
-            generator.returns = generator.returns.without_literal().with_self(None);
+            generator.yields = generator.yields.without_declared_forms();
+            generator.sends = generator.sends.without_declared_forms();
+            generator.returns = generator.returns.without_declared_forms();
         }
         self
     }

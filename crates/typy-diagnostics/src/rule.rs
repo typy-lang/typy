@@ -474,7 +474,7 @@ impl RuleId {
     pub const TYP_29: Self = Self("TYP-29");
     /// `typing.Self` shall be accepted in the parameters and the result of an instance or a class method as the class the method is called through (ADR-0113).
     pub const TYP_30: Self = Self("TYP-30");
-    /// A function annotated to return `typing.TypeGuard[T]` or `typing.TypeIs[T]` shall narrow its argument where a call of it is tested, as CPython's type system reads them.
+    /// A module function annotated to return `typing.TypeGuard[T]` or `typing.TypeIs[T]`, of a `T` a test of the value's class tells apart, shall narrow its first argument, a variable, where a call of it is tested, as CPython's type system reads them, and a result the argument's class does not bear out shall raise `TypeError`; `TypeIs` from the Python floor 3.13 (ADR-0114).
     pub const TYP_31: Self = Self("TYP-31");
     /// A class derived from `typing.TypedDict` shall be accepted, its instances being dicts whose keys it names and whose values it types, with `total`, `Required`, `NotRequired` and `ReadOnly`.
     pub const TYP_32: Self = Self("TYP-32");
@@ -484,6 +484,8 @@ impl RuleId {
     pub const TYP_35: Self = Self("TYP-35");
     /// `typing.Self` shall be accepted in a static method, in a generic or a protocol class, in an attribute's annotation, and inside another type such as `list[Self]` (ADR-0113).
     pub const TYP_36: Self = Self("TYP-36");
+    /// `TypeGuard[T]` and `TypeIs[T]` shall be accepted of a `T` a test of the value's class does not tell apart, such as `list[int]`, and as a method's result (ADR-0114).
+    pub const TYP_37: Self = Self("TYP-37");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -724,6 +726,7 @@ impl RuleId {
         Self::TYP_34,
         Self::TYP_35,
         Self::TYP_36,
+        Self::TYP_37,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

@@ -274,15 +274,20 @@ impl BodyChecker<'_> {
             };
         }
         match self.bind_arguments(function, 0, name, arguments, keywords, span) {
-            Ok(bound) => Self::typed(
-                TypedExprKind::Call {
-                    function,
-                    arguments: bound,
-                    dispatch: false,
-                },
-                self.program.signatures[function.0 as usize].returns.clone(),
-                span,
-            ),
+            Ok(bound) => {
+                let returns = self.program.signatures[function.0 as usize].returns.clone();
+                let call = Self::typed(
+                    TypedExprKind::Call {
+                        function,
+                        arguments: bound,
+                        dispatch: false,
+                    },
+                    returns.clone(),
+                    span,
+                );
+                // A guard's call narrows its first argument where it is tested (TYP-31).
+                self.guarded_call(call, name, &returns)
+            }
             Err(error) => error,
         }
     }

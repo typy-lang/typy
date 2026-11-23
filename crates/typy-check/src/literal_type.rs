@@ -221,7 +221,7 @@ impl Type {
     /// `Self` as the method's class (TYP-30).
     #[must_use]
     pub fn value_type(&self) -> Self {
-        self.without_abstract().without_literal().with_self(None)
+        self.without_abstract().without_declared_forms()
     }
 
     /// Returns the literal values of a type made of literal types, with whether `None` is

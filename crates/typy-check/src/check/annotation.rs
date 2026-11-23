@@ -8,6 +8,7 @@ use typy_source::syntax::{Constant, Expr};
 
 use crate::abstract_type::AbstractCollection;
 use crate::exception::{BuiltinException, ExceptionClass};
+use crate::guard_type::GuardKind;
 use crate::typed::ClassId;
 use crate::types::Type;
 
@@ -104,6 +105,9 @@ pub(crate) enum AnnotationName {
     Overload,
     /// `typing.Self`, the class a method is called through (TYP-30).
     SelfType,
+    /// `typing.TypeGuard` and `typing.TypeIs`, a function's result that narrows its
+    /// argument (TYP-31).
+    Guard(crate::guard_type::GuardKind),
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -141,6 +145,8 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "cast") => Some(AnnotationName::Cast),
         ("typing", "overload") => Some(AnnotationName::Overload),
         ("typing", "Self") => Some(AnnotationName::SelfType),
+        ("typing", "TypeGuard") => Some(AnnotationName::Guard(GuardKind::TypeGuard)),
+        ("typing", "TypeIs") => Some(AnnotationName::Guard(GuardKind::TypeIs)),
         ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
@@ -285,6 +291,11 @@ fn standard_annotation(
         {
             super::literal_annotation::literal_annotation(index, scope, diagnostics)
         }
+        Expr::Subscript { value, index, .. }
+            if let Some(AnnotationName::Guard(kind)) = standard_name(value, scope) =>
+        {
+            guard_annotation(kind, index, scope, diagnostics)
+        }
         Expr::Subscript { value, .. }
             if standard_name(value, scope) == Some(AnnotationName::ClassVar) =>
         {
@@ -399,7 +410,58 @@ fn bare_standard(
             Type::Error
         }
         AnnotationName::SelfType => self_annotation(annotation, scope, diagnostics),
+        AnnotationName::Guard(kind) => guard_form(kind, annotation, diagnostics),
     }
+}
+
+/// Returns the error type after reporting `TypeGuard` or `TypeIs` without the type it
+/// narrows to.
+fn guard_form(kind: GuardKind, annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(408),
+            annotation.span(),
+            format!(
+                "a `{}` annotation names the type it narrows to, such as `{}[int]`",
+                kind.name(),
+                kind.name()
+            ),
+        )
+        .with_rule(RuleId::TYP_31),
+    );
+    Type::Error
+}
+
+/// Returns the type `TypeGuard[T]` or `TypeIs[T]` names, or the error type, reported, for a
+/// `T` whose values no test of their class tells apart, such as `list[int]`, which TyPy
+/// gives in 0.13 (TYP-37).
+fn guard_annotation(
+    kind: GuardKind,
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let target = annotation_type(index, scope, diagnostics);
+    if target.has_error() {
+        return Type::Error;
+    }
+    if !crate::guard_type::tested_by_class(&target) {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                index.span(),
+                format!(
+                    "`{}` of {}, whose values a test of their class does not tell apart, is \
+                     planned for TyPy 0.13 (TYP-37)",
+                    kind.name(),
+                    target.with_article()
+                ),
+            )
+            .with_rule(RuleId::TYP_37),
+        );
+        return Type::Error;
+    }
+    Type::guard(kind, target)
 }
 
 /// Returns the type `Self` names: the class a method is called through, in the parameters

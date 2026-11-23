@@ -128,6 +128,10 @@ pub enum Type {
     /// parameters and result; a value of it is held as one of those instances, which an
     /// expression's type is in its place (TYP-30, ADR-0113).
     SelfType(Box<Type>),
+    /// `TypeGuard[T]` or `TypeIs[T]` as a function's result, a `bool` whose call narrows its
+    /// first argument where it is tested; an expression's type is `bool` in its place
+    /// (TYP-31, ADR-0114).
+    Guard(Box<crate::guard_type::GuardType>),
     /// `object`: a value of any type, held as an object whose header says what it is, a value
     /// held by value boxed, and narrowed before any operation `object` does not define
     /// (TYP-23, ADR-0090).
@@ -241,7 +245,7 @@ impl TypeObjectOf {
             Type::SelfType(own) => return Self::of(own),
             Type::Int => Self::Int,
             Type::Float => Self::Float,
-            Type::Bool => Self::Bool,
+            Type::Bool | Type::Guard(_) => Self::Bool,
             Type::Str => Self::Str,
             Type::Bytes => Self::Bytes,
             Type::Bytearray => Self::Bytearray,
@@ -503,6 +507,10 @@ impl Type {
             // A value of `Self` is an instance of the method's class; a value meets a
             // declared `Self` where the checker tests it (TYP-30, ADR-0113).
             (Self::SelfType(own), Self::SelfType(other)) => own.is_assignable_to(other),
+            // A guard's value is a `bool` (TYP-31).
+            (Self::Guard(own), Self::Guard(other)) => own == other,
+            (Self::Guard(_), _) => Self::Bool.is_assignable_to(target),
+            (_, Self::Guard(_)) => self.is_assignable_to(&Self::Bool),
             (Self::SelfType(own), _) => own.is_assignable_to(target),
             (_, Self::SelfType(other)) => self.is_assignable_to(other),
             // A typing value written alike from an older floor may stand where one written
@@ -584,6 +592,9 @@ impl Type {
             (Self::Error, _) | (_, Self::Error) => true,
             (Self::Literal(own), Self::Literal(literal)) => own == literal,
             (Self::SelfType(own), _) => own.matches(other),
+            (Self::Guard(own), Self::Guard(guard)) => own == guard,
+            (Self::Guard(_), _) => Self::Bool.matches(other),
+            (_, Self::Guard(_)) => self.matches(&Self::Bool),
             (_, Self::SelfType(own)) => self.matches(own),
             // A value of literal types is held as a value of their base types (TYP-28).
             _ if self.has_literal() || other.has_literal() => {
@@ -1049,6 +1060,7 @@ impl fmt::Display for Type {
                 crate::literal_type::write_literal(formatter, &[value.as_ref()])
             }
             Self::SelfType(_) => formatter.write_str("Self"),
+            Self::Guard(guard) => write!(formatter, "{guard}"),
             Self::Object => formatter.write_str("object"),
             Self::Int => formatter.write_str("int"),
             Self::Float => formatter.write_str("float"),

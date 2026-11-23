@@ -18,9 +18,9 @@ pub use constant::TypedConstant;
 pub use dump::dump;
 pub use expression::{
     Argument, CastCheck, Conversion, DictPart, EachMember, ExceptionPart, ExceptionValues,
-    FStringPart, FileAttribute, FormattedValue, InitCall, IsInstanceTest, KeyedOperation,
-    LiteralOutcome, LiteralTest, MemberTest, OpenOptions, OperatorCall, OperatorKind,
-    PartOperation, Passed, PrintCall, RuntimeKind, SpreadKind, SpreadPart, TypedExpr,
+    FStringPart, FileAttribute, FormattedValue, GuardCall, InitCall, IsInstanceTest,
+    KeyedOperation, LiteralOutcome, LiteralTest, MemberTest, OpenOptions, OperatorCall,
+    OperatorKind, PartOperation, Passed, PrintCall, RuntimeKind, SpreadKind, SpreadPart, TypedExpr,
     TypedExprKind, UnpackedException,
 };
 pub use function::{FunctionId, GeneratorTypes, TypedFunction};

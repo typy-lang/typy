@@ -137,6 +137,9 @@ impl Program {
                     for alias in names {
                         let found = annotation_name(base.as_str(), &alias.name.name)
                             .ok_or_else(|| Box::new(not_given(&base, alias)))?;
+                        if let Some(refused) = self.newer_than_floor(&base, alias) {
+                            return Err(Box::new(refused));
+                        }
                         let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
                         resolved.names.push((
                             bound.name.clone(),
@@ -191,9 +194,35 @@ impl Program {
         }
         names
             .iter()
-            .filter(|alias| annotation_name(base.as_str(), &alias.name.name).is_none())
-            .map(|alias| not_given(&base, alias))
+            .filter_map(|alias| {
+                if annotation_name(base.as_str(), &alias.name.name).is_none() {
+                    return Some(not_given(&base, alias));
+                }
+                self.newer_than_floor(&base, alias)
+            })
             .collect()
+    }
+
+    /// Returns the error for a name of `typing` newer than the program's Python floor:
+    /// `TypeIs` is there from Python 3.13 (TYP-31).
+    fn newer_than_floor(&self, module: &ModuleName, alias: &Alias) -> Option<Diagnostic> {
+        let name = &alias.name.name;
+        if module.as_str() != "typing" || name != "TypeIs" || self.floor >= 13 {
+            return None;
+        }
+        Some(
+            Diagnostic::new(
+                DiagnosticCode::error(425),
+                alias.name.span,
+                format!("module `typing` has no name `{name}` before Python 3.13"),
+            )
+            .with_rule(RuleId::TYP_31)
+            .with_help(format!(
+                "the program's Python floor is 3.{}; set `python-floor = \"3.13\"` in typy.toml \
+                 to use it, or use `TypeGuard`",
+                self.floor
+            )),
+        )
     }
 
     /// Returns the type alias `name` of a module, as an importing module reads it.
@@ -441,7 +470,6 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let typing = module.as_str() == "typing";
     let planned = match name.as_str() {
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
-        "TypeGuard" | "TypeIs" if typing => Some(("0.12", RuleId::TYP_31)),
         "Any" if typing => Some(("0.13", RuleId::TYP_25)),
         "TypedDict" | "Required" | "NotRequired" | "ReadOnly" if typing => {
             Some(("0.13", RuleId::TYP_32))
@@ -509,6 +537,8 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "Literal",
             "overload",
             "Self",
+            "TypeGuard",
+            "TypeIs",
             "Sequence",
             "MutableSequence",
             "Mapping",

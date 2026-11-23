@@ -1062,6 +1062,30 @@ fn class_method_definition<'tree>(
     method
 }
 
+/// Reports a method whose result is `TypeGuard[T]` or `TypeIs[T]`, which TyPy gives in 0.13
+/// (TYP-37), and gives it a `bool` result.
+fn refuse_method_guard(
+    method: &mut Definition<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let Type::Guard(guard) = &method.signature.returns else {
+        return;
+    };
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            name.span,
+            format!(
+                "a method whose result is `{}` is planned for TyPy 0.13 (TYP-37)",
+                guard.kind.name()
+            ),
+        )
+        .with_rule(RuleId::TYP_37),
+    );
+    method.signature.returns = Type::Bool;
+}
+
 /// Reports `Self` inside another type in a method's parameters or result, such as
 /// `list[Self]`, which TyPy gives in 0.13 (TYP-36), and gives that parameter or result the
 /// error type.
@@ -1205,6 +1229,7 @@ fn method_definition<'tree>(
     }
     method.type_parameters = type_parameters;
     refuse_nested_self(&mut method, parts.name, diagnostics);
+    refuse_method_guard(&mut method, parts.name, diagnostics);
     // A parameter that names a protocol makes the method generic; a special method or a
     // property has one body, so its parameter takes protocol values (ADR-0041).
     super::protocol::protocol_parameters(&mut method, special || !plain, diagnostics);

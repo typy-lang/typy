@@ -348,6 +348,9 @@ fn expression(expression_value: &TypedExpr, callees: &mut BTreeSet<FunctionId>) 
         }
         TypedExprKind::Cast(cast) => expression(&cast.test.value, callees),
         TypedExprKind::IsInstance(test) => {
+            if let Some(guard) = &test.guard {
+                expression(&guard.call, callees);
+            }
             expression(&test.value, callees);
             for class in &test.held {
                 expression(class, callees);

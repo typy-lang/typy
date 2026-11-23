@@ -96,6 +96,7 @@ impl BodyChecker<'_> {
             narrowed: None,
             otherwise: None,
             held: Vec::new(),
+            guard: None,
             value,
         };
         Self::typed(

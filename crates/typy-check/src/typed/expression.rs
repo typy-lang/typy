@@ -759,6 +759,19 @@ pub struct LiteralOutcome {
     pub reached: bool,
 }
 
+/// A call of a `TypeGuard` or `TypeIs` function tested as the `isinstance` test of its first
+/// argument (TYP-31, ADR-0114).
+#[derive(Clone, Debug, PartialEq)]
+pub struct GuardCall {
+    /// The call, which gives the test's result.
+    pub call: TypedExpr,
+    /// Whether the function is a `TypeIs` one, whose result is the test's exactly; a
+    /// `TypeGuard` one's true result alone narrows.
+    pub exact: bool,
+    /// The function as a message names it, such as `the TypeIs[int] function is_int`.
+    pub shown: String,
+}
+
 /// `isinstance(value, classes)`, with what the checker could decide when the program is
 /// compiled (CLS-09).
 #[derive(Clone, Debug, PartialEq)]
@@ -783,6 +796,9 @@ pub struct IsInstanceTest {
     /// For a union, each member in order: whether every value of it is an instance of one of
     /// the classes, and the tests its value's class decides (TYP-14).
     pub members: Vec<(bool, Vec<MemberTest>)>,
+    /// For a call of a `TypeGuard` or `TypeIs` function, the call, whose result the test is,
+    /// with the test showing it borne out when the program runs (TYP-31).
+    pub guard: Option<Box<GuardCall>>,
     /// The classes held in values, each a type object evaluated after `value`, which the
     /// value's class is tested against when the program runs (CLS-18, ADR-0084).
     pub held: Vec<TypedExpr>,
@@ -976,9 +992,14 @@ impl TypedExpr {
                 .flat_map(|(key, value)| [key, value])
                 .collect(),
             TypedExprKind::DictItem { dict, key } => vec![dict, key],
-            TypedExprKind::IsInstance(test) => {
-                std::iter::once(&test.value).chain(&test.held).collect()
-            }
+            // A guard's call runs before the test reads its value (TYP-31).
+            TypedExprKind::IsInstance(test) => test
+                .guard
+                .iter()
+                .map(|guard| &guard.call)
+                .chain(std::iter::once(&test.value))
+                .chain(&test.held)
+                .collect(),
             TypedExprKind::Cast(cast) => vec![&cast.test.value],
             TypedExprKind::IsSubclass { class, bases } => {
                 std::iter::once(class.as_ref()).chain(bases).collect()

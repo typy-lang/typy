@@ -1055,7 +1055,7 @@ impl Program {
                                 ty: self
                                     .attribute_ty(class.id, position)
                                     .map_or(crate::types::Type::Error, |ty| {
-                                        ty.without_literal().with_self(None)
+                                        ty.without_declared_forms()
                                     }),
                             })
                             .collect()
@@ -1110,7 +1110,7 @@ impl Program {
         // A literal type is a refinement the checker reads; a value of one is a value of its
         // base type, which is all the program holds (TYP-28, ADR-0110).
         for symbol in &mut self.symbols {
-            symbol.ty = symbol.ty.without_literal().with_self(None);
+            symbol.ty = symbol.ty.without_declared_forms();
         }
         let functions: Vec<crate::typed::TypedFunction> = self
             .functions
