@@ -92,6 +92,8 @@ unsafe fn destroy(object: *mut ObjectHeader, type_id: u32) {
         }
         // SAFETY: an object with the exception type ID is an `ExceptionObject`.
         EXCEPTION_TYPE_ID => unsafe { crate::exception::destroy(object.cast()) },
+        // SAFETY: an object with the bytearray type ID is a `BytearrayObject`.
+        crate::header::BYTEARRAY_TYPE_ID => unsafe { crate::bytearray::destroy(object.cast()) },
         // SAFETY: an object with the list or tuple type ID is a `ListObject`.
         LIST_TYPE_ID | TUPLE_TYPE_ID => unsafe { crate::list::destroy(object.cast()) },
         // SAFETY: an object with the set type ID is a `SetObject`.

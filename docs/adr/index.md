@@ -113,3 +113,4 @@ supersedes it.
 | [ADR-0105](0105-extend-typy-through-external-typy-name-commands.md) | Extend `typy` through external `typy-NAME` commands | Accepted | 2026-11-23 |
 | [ADR-0106](0106-pass-nothing-to-llvms-global-command-line.md) | Pass nothing to LLVM's global command line | Accepted | 2026-11-23 |
 | [ADR-0107](0107-read-list-items-and-divide-inline-values-in-place.md) | Read list items and divide inline values in place | Accepted | 2026-11-23 |
+| [ADR-0108](0108-hold-a-bytearray-in-a-growable-bytes-buffer.md) | Hold a bytearray in a growable bytes buffer it owns | Accepted | 2026-11-23 |

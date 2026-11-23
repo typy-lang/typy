@@ -221,6 +221,33 @@ pub(crate) unsafe fn ascii_bytes<'a>(string: *const StrObject) -> Option<&'a [u8
     }
 }
 
+/// Returns the address of the first byte of a string of one byte per code point.
+///
+/// # Safety
+///
+/// `string` points to a live `Latin1` string.
+pub(crate) unsafe fn latin1_data(string: *const StrObject) -> *mut u8 {
+    // SAFETY: the data follows the fixed part.
+    unsafe { string.cast::<u8>().add(DATA_OFFSET).cast_mut() }
+}
+
+/// Returns the string moved to memory that holds `capacity` one-byte code points and a zero
+/// after them; its length and its first bytes are kept.
+///
+/// # Safety
+///
+/// `string` points to a live `Latin1` string that nothing else refers to, and `capacity` is
+/// at least its length.
+pub(crate) unsafe fn reserve_latin1(string: *mut StrObject, capacity: usize) -> *mut StrObject {
+    let size = array_size(capacity.saturating_add(1), 1, DATA_OFFSET);
+    #[allow(
+        clippy::cast_ptr_alignment,
+        reason = "realloc returns memory aligned for every type"
+    )]
+    let moved = crate::allocator::reallocate(string.cast(), size).cast::<StrObject>();
+    moved
+}
+
 /// Returns a new string of `length` ASCII characters, which `fill` writes.
 pub(crate) fn new_ascii(length: usize, fill: impl FnOnce(&mut [u8])) -> *mut StrObject {
     let string = new_string(length, StrKind::Latin1);

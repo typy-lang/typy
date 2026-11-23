@@ -40,6 +40,7 @@ pub(crate) use export_float;
 mod allocator;
 mod boxed;
 mod byte_buffer;
+mod bytearray;
 mod bytes;
 mod call;
 mod cdata;

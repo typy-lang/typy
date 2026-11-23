@@ -240,6 +240,7 @@ nav:
           - adr/0105-extend-typy-through-external-typy-name-commands.md
           - adr/0106-pass-nothing-to-llvms-global-command-line.md
           - adr/0107-read-list-items-and-divide-inline-values-in-place.md
+          - adr/0108-hold-a-bytearray-in-a-growable-bytes-buffer.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

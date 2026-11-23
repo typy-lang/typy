@@ -250,6 +250,62 @@ pub(crate) static STR: TypeObject = TypeObject {
     ..builtin("str")
 };
 
+/// Returns the buffer of a bytearray, which the functions of `bytes` read.
+///
+/// # Safety
+///
+/// `object` is a live bytearray.
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
+)]
+unsafe fn buffer_of(object: *mut ObjectHeader) -> *mut ObjectHeader {
+    // SAFETY: the caller's guarantee.
+    unsafe {
+        (*object.cast::<crate::bytearray::BytearrayObject>())
+            .buffer
+            .cast()
+    }
+}
+
+unsafe extern "C" fn bytearray_is_true(object: *mut ObjectHeader) -> bool {
+    // SAFETY: the type of the object says it is a bytearray.
+    unsafe { text_is_true(buffer_of(object)) }
+}
+
+unsafe extern "C" fn bytearray_equal(left: *mut ObjectHeader, right: *mut ObjectHeader) -> bool {
+    // SAFETY: the types of the objects say they are both bytearrays.
+    unsafe { text_equal(buffer_of(left), buffer_of(right)) }
+}
+
+unsafe extern "C" fn bytearray_order(
+    left: *mut ObjectHeader,
+    right: *mut ObjectHeader,
+    comparison: i64,
+) -> bool {
+    // SAFETY: the types of the objects say they are both bytearrays.
+    unsafe { text_order(buffer_of(left), buffer_of(right), comparison) }
+}
+
+#[allow(
+    clippy::cast_ptr_alignment,
+    reason = "every object comes from malloc, a frame block or a static, aligned for every type, and starts with its header"
+)]
+unsafe extern "C" fn bytearray_repr(object: *mut ObjectHeader) -> Raising<*mut StrObject> {
+    // SAFETY: the type of the object says it is a bytearray.
+    Raising::ok(unsafe { crate::bytearray::typy_rt_bytearray_repr(object.cast()) })
+}
+
+/// The type of a `bytearray`, which has no hash, since it can change (ADR-0108).
+#[unsafe(export_name = "typy_rt_type_bytearray")]
+pub(crate) static BYTEARRAY: TypeObject = TypeObject {
+    truth: Some(bytearray_is_true),
+    equal: Some(bytearray_equal),
+    order: Some(bytearray_order),
+    repr: Some(bytearray_repr),
+    ..builtin("bytearray")
+};
+
 /// The type of a `bytes`.
 #[unsafe(export_name = "typy_rt_type_bytes")]
 pub(crate) static BYTES: TypeObject = TypeObject {
