@@ -272,6 +272,11 @@ pub const CODES: &[CodeInfo] = &[
         "value that is not one of the constants its `Literal` type names",
         RuleId::TYP_28,
     ),
+    active(
+        432,
+        "`@overload` without an implementation, one its implementation does not accept, or a call no overload takes",
+        RuleId::TYP_29,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

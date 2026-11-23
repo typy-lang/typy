@@ -252,6 +252,27 @@ impl BodyChecker<'_> {
         if self.program.generic(function).is_some() {
             return self.generic_call(function, name, arguments, keywords, span);
         }
+        // A function with overloads takes the arguments the first that fits takes, and
+        // gives that overload's result (TYP-29).
+        if let Some(overloaded) =
+            self.overloaded_call(function, 0, name, (arguments, keywords), span)
+        {
+            return match overloaded {
+                Ok((bound, result)) => {
+                    let call = Self::typed(
+                        TypedExprKind::Call {
+                            function,
+                            arguments: bound,
+                            dispatch: false,
+                        },
+                        self.program.signatures[function.0 as usize].returns.clone(),
+                        span,
+                    );
+                    Self::overload_result(call, &result)
+                }
+                Err(error) => error,
+            };
+        }
         match self.bind_arguments(function, 0, name, arguments, keywords, span) {
             Ok(bound) => Self::typed(
                 TypedExprKind::Call {

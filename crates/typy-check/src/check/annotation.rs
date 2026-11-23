@@ -99,6 +99,9 @@ pub(crate) enum AnnotationName {
     Abstract(AbstractCollection, Origin),
     /// `typing.Literal`, whose values are constants (TYP-28).
     Literal,
+    /// `typing.overload`, the decorator of an overload, which the checker reads before
+    /// anything else (TYP-29).
+    Overload,
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -134,6 +137,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
         ("typing", "cast") => Some(AnnotationName::Cast),
+        ("typing", "overload") => Some(AnnotationName::Overload),
         ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
@@ -306,7 +310,7 @@ fn bare_standard(
     match name {
         AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
         AnnotationName::Final => final_elsewhere(annotation, diagnostics),
-        AnnotationName::Dataclasses | AnnotationName::Cast => {
+        AnnotationName::Dataclasses | AnnotationName::Cast | AnnotationName::Overload => {
             not_a_type(&name, annotation.span(), diagnostics)
         }
         AnnotationName::Protocol => {
@@ -1067,6 +1071,8 @@ fn not_a_type(
 ) -> Type {
     let (message, rule) = if *name == AnnotationName::Cast {
         ("`cast` is a function, not a type", RuleId::TYP_24)
+    } else if *name == AnnotationName::Overload {
+        ("`overload` is a decorator, not a type", RuleId::TYP_29)
     } else {
         ("`dataclass` and `field` are not types", RuleId::CLS_05)
     };

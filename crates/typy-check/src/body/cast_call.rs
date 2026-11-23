@@ -66,6 +66,12 @@ impl BodyChecker<'_> {
                 ),
             );
         }
+        Self::tested(value, target, checks, span)
+    }
+
+    /// Returns `value` read as `target`, tested when the program runs by `checks`, and for a
+    /// union member by member, raising `TypeError` when it is not one.
+    fn tested(value: TypedExpr, target: Type, checks: Vec<MemberTest>, span: Span) -> TypedExpr {
         // A union, also inside an optional, is tested member by member.
         let inner = match &value.ty {
             Type::Optional(inner) => inner.as_ref().clone(),
@@ -78,9 +84,13 @@ impl BodyChecker<'_> {
                 .collect(),
             _ => Vec::new(),
         };
+        // The value an optional holds, when it is a `target`, passes once it is not `None`,
+        // with no test of its class.
+        let always = !matches!(inner, Type::Union(_)) && inner.is_assignable_to(&target);
+        let checks = if always { Vec::new() } else { checks };
         let test = IsInstanceTest {
             none_matches: target_holds_none(&target),
-            always: false,
+            always,
             members,
             checks,
             narrowed: None,
@@ -96,6 +106,28 @@ impl BodyChecker<'_> {
             target,
             span,
         )
+    }
+
+    /// Returns `value`, of a union or an optional of members of `target` and others, read as
+    /// `target` with a test when the program runs, or `None` when no test tells them apart:
+    /// a member that is in part a `target` needs a test of its class, which a collection's
+    /// item types have none of (TYP-29).
+    pub(super) fn tested_as(value: TypedExpr, target: &Type, span: Span) -> Option<TypedExpr> {
+        if value.ty.is_assignable_to(target) {
+            return Some(Self::converted(value, Some(target)));
+        }
+        let checks = member_checks(target);
+        let inner = match &value.ty {
+            Type::Optional(inner) => inner.as_ref().clone(),
+            other => other.clone(),
+        };
+        let decided = members_decide(&inner, target);
+        let checks = match checks {
+            Some(checks) => checks,
+            None if decided => Vec::new(),
+            None => return None,
+        };
+        Some(Self::tested(value, target.clone(), checks, span))
     }
 
     fn cast_error(&mut self, span: Span, message: String) -> TypedExpr {
@@ -167,4 +199,36 @@ fn member_outcome(member: &Type, target: &Type, checks: &[MemberTest]) -> (bool,
         return (false, checks.to_vec());
     }
     (false, Vec::new())
+}
+
+/// Returns whether a value of `source` can be read as `target` with a test when the program
+/// runs: it is one already, or a test of its class, or of the members of its union, tells
+/// whether it is one (TYP-29).
+pub(crate) fn can_test(source: &Type, target: &Type) -> bool {
+    if source.is_assignable_to(target) || member_checks(target).is_some() {
+        return true;
+    }
+    let inner = match source {
+        Type::Optional(inner) => inner.as_ref(),
+        other => other,
+    };
+    members_decide(inner, target)
+}
+
+/// Returns whether a test of which member of the union `source` a value is decides whether
+/// it is a `target`: each member is one, or is of a class no member of `target` has, so a
+/// `list[str]` is never taken for a `list[int]`.
+fn members_decide(source: &Type, target: &Type) -> bool {
+    let Type::Union(members) = source else {
+        return false;
+    };
+    let wanted: Vec<Option<TypeObjectOf>> = target
+        .members()
+        .iter()
+        .map(crate::body::member_class)
+        .collect();
+    members.iter().all(|member| {
+        member.is_assignable_to(target)
+            || (!may_hold(member, target) && !wanted.contains(&crate::body::member_class(member)))
+    })
 }

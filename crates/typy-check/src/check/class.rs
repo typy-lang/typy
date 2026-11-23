@@ -451,18 +451,28 @@ pub(super) struct KnownClasses<'known> {
     pub(super) generics: &'known BTreeMap<FunctionId, crate::body::Generic>,
 }
 
+/// The classes of a module, their methods' definitions and the overloads of those that have
+/// them.
+pub(super) type Members<'tree> = (
+    Vec<ClassInfo>,
+    Vec<Definition<'tree>>,
+    super::overloads::Overloaded,
+);
+
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
-/// follow `first_function`.
+/// follow `first_function`. Returns with them the signatures of the overloads of each
+/// method that has them, by its ID (TYP-29).
 pub(super) fn collect_members<'tree>(
     known: &KnownClasses<'_>,
     classes: &[ClassStatement<'tree>],
-    names: &crate::check::ImportedNames,
+    (names, stubs): (&crate::check::ImportedNames, &super::overloads::Overloads),
     floor_defers: bool,
     (first_function, copies): (usize, &mut ClassMethodCopies<'tree>),
     diagnostics: &mut Diagnostics,
-) -> (Vec<ClassInfo>, Vec<Definition<'tree>>) {
+) -> Members<'tree> {
     let mut infos = Vec::new();
     let mut methods: Vec<Definition<'tree>> = Vec::new();
+    let mut overloads = Vec::new();
     for class in classes {
         let mut own_class_methods: Vec<&'tree Stmt> = Vec::new();
         let in_scope = super::generic_class::parameters_in_scope(known.copies, class.id);
@@ -480,6 +490,8 @@ pub(super) fn collect_members<'tree>(
             instance,
             takes_instance: true,
         };
+        let generic = !in_scope.is_empty() || is_protocol_class(&owner.instance);
+        let read = (&owner, &scope, generic, stubs, class.name.name.as_str());
         for statement in class.body {
             match (statement, FunctionParts::of(statement)) {
                 (Stmt::AnnAssign { .. } | Stmt::Assign { .. } | Stmt::TypeAlias { .. }, _) => {
@@ -525,44 +537,137 @@ pub(super) fn collect_members<'tree>(
                         parts.name,
                         diagnostics,
                     );
-                    let signatures = Signatures {
-                        earlier: known.signatures,
-                        local: &methods,
-                        first_function,
-                        generics: known.generics,
-                    };
-                    let override_of = (&method, kind == MethodKind::Static);
-                    match check_override(&info, classes, signatures, override_of, parts.name) {
-                        Err(diagnostic) => diagnostics.push(*diagnostic),
-                        // A call through the base reaches the override through an adapter.
-                        Ok(Some(base)) => info.adapted.push((name.clone(), base, id)),
-                        Ok(None) => {}
-                    }
+                    let local = (known, methods.as_slice(), first_function);
+                    let overriding = (&method, kind == MethodKind::Static, id);
+                    note_override(
+                        &mut info,
+                        classes,
+                        local,
+                        overriding,
+                        parts.name,
+                        diagnostics,
+                    );
                     check_special_method(&method, parts.name, diagnostics);
+                    overloads.extend(method_overloads(id, read, parts.name, diagnostics));
                     methods.push(method);
                 }
                 _ => {}
             }
         }
-        let mut collected = Collected {
-            methods: &mut methods,
+        let made = (
+            own_class_methods.as_slice(),
+            &mut methods,
             first_function,
-        };
-        copies.make(
-            &own_class_methods,
-            &mut info,
-            (known, &scope),
-            &mut collected,
-            diagnostics,
+            first_method,
         );
-        report_name_conflicts(&info, class.name.span, diagnostics);
-        super::protocol::check_values(&owner.instance, &info, class.name.span, diagnostics);
-        let own_methods = &mut methods[first_method..];
-        finish_generic_class(&info, own_methods, known.copies);
+        let at = (known, &scope, &owner, class.name.span);
+        finish_class(&mut info, at, copies, made, diagnostics);
         infos.push(info);
     }
     copies.end_module(known.ids, names);
-    (infos, methods)
+    (infos, methods, overloads)
+}
+
+/// Adds the copies of a class's own class methods to `methods`, then reports names its
+/// members give twice, checks its values against a protocol it is, and finishes a generic
+/// class's methods.
+fn finish_class<'tree>(
+    info: &mut ClassInfo,
+    (known, scope, owner, name): (&KnownClasses<'_>, &AnnotationScope<'_>, &Owner, Span),
+    copies: &mut ClassMethodCopies<'tree>,
+    (own_class_methods, methods, first_function, first_method): (
+        &[&'tree Stmt],
+        &mut Vec<Definition<'tree>>,
+        usize,
+        usize,
+    ),
+    diagnostics: &mut Diagnostics,
+) {
+    let mut collected = Collected {
+        methods: &mut *methods,
+        first_function,
+    };
+    copies.make(
+        own_class_methods,
+        info,
+        (known, scope),
+        &mut collected,
+        diagnostics,
+    );
+    report_name_conflicts(info, name, diagnostics);
+    super::protocol::check_values(&owner.instance, info, name, diagnostics);
+    finish_generic_class(info, &mut methods[first_method..], known.copies);
+}
+
+/// Reports a method that does not fit the base method it overrides, and notes the adapter a
+/// call through the base reaches the override by.
+fn note_override(
+    info: &mut ClassInfo,
+    classes: Classes<'_>,
+    (known, methods, first_function): (&KnownClasses<'_>, &[Definition<'_>], usize),
+    (method, is_static, id): (&Definition<'_>, bool, FunctionId),
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let signatures = Signatures {
+        earlier: known.signatures,
+        local: methods,
+        first_function,
+        generics: known.generics,
+    };
+    match check_override(info, classes, signatures, (method, is_static), name) {
+        Err(diagnostic) => diagnostics.push(*diagnostic),
+        // A call through the base reaches the override through an adapter.
+        Ok(Some(base)) => info.adapted.push((name.name.clone(), base, id)),
+        Ok(None) => {}
+    }
+}
+
+/// What the overloads of a class's methods are read with: the class as their owner, its
+/// annotation scope, whether it is generic or a protocol, the module's overloads and the
+/// class's name.
+type MethodScope<'scope> = (
+    &'scope Owner,
+    &'scope AnnotationScope<'scope>,
+    bool,
+    &'scope super::overloads::Overloads,
+    &'scope str,
+);
+
+/// Returns the signatures of a method's overloads by its ID, or nothing after reporting
+/// overloads in a generic or a protocol class, which TyPy gives in 0.13 (TYP-29, TYP-35).
+fn method_overloads(
+    id: FunctionId,
+    (owner, scope, generic, overloads, class): MethodScope<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) -> Option<(FunctionId, Vec<FunctionSignature>)> {
+    let stubs = overloads.of_method(class, &name.name);
+    if stubs.is_empty() {
+        return None;
+    }
+    if generic {
+        diagnostics.push(overload_in_generic_class(name));
+        return None;
+    }
+    let signatures = super::definition::overload_signatures(stubs, Some(owner), scope, diagnostics);
+    Some((id, signatures))
+}
+
+/// Returns whether the instances of a class are a protocol's.
+fn is_protocol_class(instance: &Type) -> bool {
+    super::protocol::is_protocol(instance)
+}
+
+/// Returns E0201 for the overloads of a method of a generic or a protocol class, which TyPy
+/// gives in 0.13 (TYP-35).
+fn overload_in_generic_class(name: &Identifier) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        name.span,
+        "`@overload` in a generic or a protocol class is planned for TyPy 0.13 (TYP-35)",
+    )
+    .with_rule(RuleId::TYP_35)
 }
 
 /// Returns the type of a class's instances, as the class types gave it.

@@ -734,21 +734,29 @@ pub enum OperatorKind {
     },
 }
 
-/// What a comparison of a variable with constants shows of the variable (TYP-28,
-/// ADR-0110): the positions, in the function's table of narrowed types, of the literal types
-/// it holds when the comparison holds and when it fails, and whether it is not `None` then.
+/// What a comparison of a variable with constants shows of the variable when it holds and
+/// when it fails (TYP-28, ADR-0110).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LiteralTest {
     /// The variable.
     pub variable: SymbolId,
-    /// Its narrowed type when the comparison holds.
-    pub holds: Option<u32>,
-    /// Its narrowed type when the comparison fails.
-    pub fails: Option<u32>,
-    /// Whether the variable, optional, is not `None` when the comparison holds.
-    pub not_none_when_holds: bool,
-    /// Whether it is not `None` when the comparison fails.
-    pub not_none_when_fails: bool,
+    /// What is known of it where the comparison holds.
+    pub holds: LiteralOutcome,
+    /// What is known of it where the comparison fails.
+    pub fails: LiteralOutcome,
+}
+
+/// What a comparison of a variable with constants shows of the variable where it holds, or
+/// where it fails.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LiteralOutcome {
+    /// The position of its narrowed type in the function's table of narrowed types.
+    pub narrowed: Option<u32>,
+    /// Whether the variable, optional, is not `None` there.
+    pub not_none: bool,
+    /// Whether the comparison may come out this way, as the literal types decide it; the
+    /// check of an overloaded function's body against an overload reads it (TYP-29).
+    pub reached: bool,
 }
 
 /// `isinstance(value, classes)`, with what the checker could decide when the program is

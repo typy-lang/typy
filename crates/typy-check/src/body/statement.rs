@@ -407,7 +407,7 @@ impl BodyChecker<'_> {
             } => {
                 let test = self.truth_test(test);
                 let (holds, fails) = test_facts(&test);
-                let (may_hold, may_fail) = test_reach(&test);
+                let (may_hold, may_fail) = test_reach(&test, self.program.overload_look);
                 let before = self.assigned.clone();
                 self.add_facts(holds);
                 if !may_hold {

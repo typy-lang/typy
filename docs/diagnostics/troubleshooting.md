@@ -1395,6 +1395,54 @@ def read(text: str) -> str:
 print(read("r"))
 ```
 
+## E0432: an overload that does not fit, or a call no overload takes
+
+A function with `@overload` signatures needs its implementation, the `def`
+of the same name without `@overload` after them; each overload's
+parameters are the implementation's of the same names, in the same order,
+with types the implementation's hold; and a call takes one of the
+overloads (TYP-29). The message names the overload and the reason.
+
+This program gives E0432, since no overload takes a `float`:
+
+<!-- typy-expect: rejected E0432 at 14:7 -->
+```python
+from typing import overload
+
+
+@overload
+def double(value: int) -> int: ...
+@overload
+def double(value: str) -> str: ...
+def double(value: int | str) -> int | str:
+    if isinstance(value, int):
+        return value * 2
+    return value + value
+
+
+print(double(1.5))
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import overload
+
+
+@overload
+def double(value: int) -> int: ...
+@overload
+def double(value: str) -> str: ...
+def double(value: int | str) -> int | str:
+    if isinstance(value, int):
+        return value * 2
+    return value + value
+
+
+print(double(21))
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

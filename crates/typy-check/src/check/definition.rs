@@ -128,16 +128,17 @@ pub(super) struct FunctionScope<'known> {
     pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
 }
 
-/// Collects the module's functions in source order, with their signatures (TYP-01). Each
-/// signature may name the classes whose `class` statements come before its `def`, and the
-/// classes of the modules checked before it, numbered below `first_class`.
+/// Collects the module's functions in source order, with their signatures (TYP-01), and the
+/// signatures of the overloads of each that has them, by its ID (TYP-29). Each signature may
+/// name the classes whose `class` statements come before its `def`, and the classes of the
+/// modules checked before it, numbered below `first_class`.
 pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
-    first_class: usize,
+    (first_class, first_function): (usize, usize),
     known: &FunctionScope<'_>,
-    floor_defers: bool,
+    (floor_defers, stubs): (bool, &super::overloads::Overloads),
     diagnostics: &mut Diagnostics,
-) -> Vec<Definition<'tree>> {
+) -> (Vec<Definition<'tree>>, super::overloads::Overloaded) {
     let FunctionScope {
         classes,
         instances,
@@ -145,6 +146,7 @@ pub(super) fn collect_functions<'tree>(
         copies,
     } = *known;
     let mut functions: Vec<Definition<'tree>> = Vec::new();
+    let mut overloads = Vec::new();
     let mut classes_before = u32::try_from(first_class).unwrap_or(u32::MAX);
     for statement in statements {
         if matches!(statement, Stmt::ClassDef { .. }) {
@@ -188,9 +190,44 @@ pub(super) fn collect_functions<'tree>(
         let mut made = definition(&parts, (None, true), &scope, diagnostics);
         made.type_parameters = type_parameters;
         super::protocol::protocol_parameters(&mut made, false, diagnostics);
+        let signatures =
+            overload_signatures(stubs.of_function(&made.name), None, &scope, diagnostics);
+        if !signatures.is_empty() {
+            let id =
+                FunctionId(u32::try_from(first_function + functions.len()).unwrap_or(u32::MAX));
+            overloads.push((id, signatures));
+        }
         functions.push(made);
     }
-    functions
+    (functions, overloads)
+}
+
+/// Returns the signature of each overload `stubs` defines, read in `scope`, of a method of
+/// `owner` when there is one (TYP-29).
+pub(super) fn overload_signatures(
+    stubs: &[Stmt],
+    owner: Option<&Owner>,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<FunctionSignature> {
+    stubs
+        .iter()
+        .filter_map(FunctionParts::of)
+        .map(|parts| {
+            let mut signature = definition(&parts, (owner, false), scope, diagnostics).signature;
+            // An overload's default, often `...`, only says a call may leave the parameter
+            // out; the implementation's default is the value.
+            for (parameter, written) in signature.parameters.iter_mut().zip(parts.parameters) {
+                if written.default.is_some()
+                    && parameter.default.is_none()
+                    && parameter.default_call.is_none()
+                {
+                    parameter.default = Some(TypedConstant::None);
+                }
+            }
+            signature
+        })
+        .collect()
 }
 
 /// Returns the type parameters of a generic function, each with its bound or its

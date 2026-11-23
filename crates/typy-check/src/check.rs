@@ -23,6 +23,8 @@ mod literal_annotation;
 mod module_imports;
 mod module_scope;
 pub(crate) mod not_implemented;
+pub(crate) mod overload_fit;
+mod overloads;
 mod overriding;
 mod protocol;
 pub(crate) mod subclass_variables;
@@ -103,10 +105,15 @@ impl TypeChecker {
         // each module once read (ADR-0047).
         let mut foreign = BTreeMap::new();
         let mut structures = Vec::new();
+        let mut overloads = BTreeMap::new();
         let expanded: Vec<(Module, BTreeMap<String, type_alias::Alias>)> = project
             .modules_in_order()
             .map(|module| {
                 let mut module = dataclasses.expand(module, &mut diagnostics);
+                // The overloads of a function leave the module, and the checker reads their
+                // signatures (TYP-29).
+                let gathered = overloads::gather(&mut module.syntax.body, &mut diagnostics);
+                overloads.insert(module.name.as_str().to_owned(), gathered);
                 // A decorated function binds what its decorators return (FUN-06, ADR-0082).
                 decorators::expand(&mut module.syntax.body);
                 // A module that calls `map` or `filter` gets their classes (LIB-23, ADR-0089).
@@ -141,6 +148,7 @@ impl TypeChecker {
             project,
             modules: &modules,
             aliases: &aliases,
+            overloads: &overloads,
             dataclasses: &dataclasses,
             foreign: &foreign,
             structures: &structures,
@@ -225,6 +233,8 @@ struct Checked<'project> {
     project: &'project Project,
     modules: &'project [Module],
     aliases: &'project [BTreeMap<String, type_alias::Alias>],
+    /// The overloads of each module's functions and methods, by the module's name (TYP-29).
+    overloads: &'project BTreeMap<String, overloads::Overloads>,
     dataclasses: &'project dataclass::Dataclasses,
     /// The `ctypes` declarations of each module, by its name.
     foreign: &'project BTreeMap<String, ctypes_declarations::ModuleDeclarations>,
@@ -287,9 +297,14 @@ impl Checked<'_> {
                 } else {
                     BTreeSet::new()
                 };
+            let stubs = self
+                .overloads
+                .get(module.name.as_str())
+                .cloned()
+                .unwrap_or_default();
             let (waiting, checked) = check_module(
                 &mut program,
-                (module, aliases, &mut copies, &exported),
+                (module, aliases, &mut copies, &exported, &stubs),
                 (&path, &definitions),
                 // `from __future__ import annotations` defers one module's annotations as the
                 // floor defers every module's (LIB-29).
@@ -407,11 +422,12 @@ fn known_classes<'known>(
 
 fn check_module<'tree>(
     program: &mut Program,
-    (module, aliases, copies, exported): (
+    (module, aliases, copies, exported, stubs): (
         &'tree Module,
         &BTreeMap<String, type_alias::Alias>,
         &mut class::ClassMethodCopies<'tree>,
         &BTreeSet<String>,
+        &overloads::Overloads,
     ),
     (path, earlier): (&str, &ModuleDefinitions<'tree>),
     floor_defers: bool,
@@ -434,26 +450,29 @@ fn check_module<'tree>(
         (&class_ids, &annotations),
         diagnostics,
     );
-    let mut definitions = collect_functions(
+    let (mut definitions, function_overloads) = collect_functions(
         &tree.body,
-        first_class,
+        (first_class, first_function),
         &FunctionScope {
             classes: &class_ids,
             instances: &instances,
             names: &annotations,
             copies: &program.class_copies,
         },
-        floor_defers,
+        (floor_defers, stubs),
         diagnostics,
     );
-    let (mut class_infos, methods) = collect_members(
+    let (mut class_infos, methods, method_overloads) = collect_members(
         &known_classes(program, &class_ids, &instances),
         &classes,
-        &annotations,
+        (&annotations, stubs),
         floor_defers,
         (first_function + definitions.len(), copies),
         diagnostics,
     );
+    program
+        .overloads
+        .extend(function_overloads.into_iter().chain(method_overloads));
     mark_dataclasses(&mut class_infos, dataclasses);
     let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
@@ -485,6 +504,8 @@ fn check_module<'tree>(
         instances,
     );
     program.make_class_copies();
+    // An overload its implementation does not take is reported once (TYP-29).
+    overloads::check_fits(program, &definitions, first_function, diagnostics);
     program.note_protocol_fits(None);
     program.note_iterator_classes(None);
     program.import_names(&imports.functions, annotations);

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.123 |
+| Version | 2.124 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -359,6 +359,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0429 | Module or export that a C library cannot have | FFI-05, CLI-09 |
 | E0430 | `ctypes` declaration TyPy cannot compile | FFI-01, FFI-02, FFI-03 |
 | E0431 | Value that is not one of the constants its `Literal` type names | TYP-28 |
+| E0432 | `@overload` without an implementation, one its implementation does not accept, or a call no overload takes | TYP-29 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -1188,6 +1189,25 @@ its keys does not read (LIB-20, ADR-0086). Only declared types are
 abstract: `BodyChecker::typed` gives every expression the type
 `without_abstract` makes, a variable's current type is its members while
 `declared` keeps the collection, and lowering maps it to its members.
+`check/overloads.rs` takes the `@overload` definitions out of a module and
+its classes before decorators are expanded, keeping them by the name of
+the implementation that follows, and refuses the forms TYP-35 plans with
+E0201 (TYP-29, ADR-0112). `collect_functions` and `collect_members` read
+their signatures in the scope of the implementation into
+`Program::overloads`, a parameter written with a default, often `...`,
+marked as one a call may leave out. `overloads::check_fits` reports with
+E0432 each overload `overload_fit::fit` refuses, one whose result
+`body::can_test` cannot tell from the implementation's others, and a
+derived class's override of an overloaded method. `overloaded_call`,
+from `call_function` and `instance_method_call`, binds the arguments to
+the view `fit` gives of each overload in turn, keeping the first binding
+with no error, retargets them to the implementation's parameters, and
+`overload_result` reads the call's result through `tested_as`, the checked
+cast of `typing.cast`. `check_against_overloads` checks the body once more
+for each overload as a look with `body_signature`, keeping the errors the
+check of the body did not report, labelled with the overload, while
+`Program::overload_look` lets `test_reach` decide code by a `LiteralTest`'s
+`may_hold` and `may_fail`.
 `BodyChecker::statements` stops at the first statement no path reaches,
 `assigned` being `None` there, so a statement that cannot run is neither
 checked nor compiled (TYP-34, ADR-0111). `flow::test_reach` says whether a

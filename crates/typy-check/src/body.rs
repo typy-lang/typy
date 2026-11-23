@@ -84,6 +84,7 @@ mod open_options;
 mod operator;
 mod operator_method;
 mod os_error;
+mod overload_call;
 mod pattern_class;
 mod pattern_coverage;
 mod pattern_held_class;
@@ -115,6 +116,7 @@ mod view_operator;
 mod yield_from;
 
 pub(crate) use builtin_module::ModuleFunction;
+pub(crate) use cast_call::can_test;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
 pub(crate) use generator::has_yield;
 pub(crate) use generic_copy::{Generic, GenericCopy};
@@ -125,7 +127,7 @@ pub(crate) use rebound::{Binding, Bound, binding_variable, rebound_planned};
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
+use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Severity, Span};
 use typy_source::syntax::Stmt;
 
 use crate::check::Definition;
@@ -316,6 +318,8 @@ impl<'program> BodyChecker<'program> {
         closure: Option<nested_function::Closure>,
         diagnostics: &mut Diagnostics,
     ) {
+        let overload_errors =
+            Self::check_against_overloads(program, function, definition, closure.as_ref());
         let first_adds = Self::look_for_adds(program, function, definition, closure.as_ref());
         let (pending, _) = Self::check_body_with(
             program,
@@ -325,6 +329,13 @@ impl<'program> BodyChecker<'program> {
             first_adds,
             diagnostics,
         );
+        // An error the check against an overload found, and the check of the body did not,
+        // is reported with the overload (TYP-29).
+        for (error, label) in overload_errors {
+            if !diagnostics.iter().any(|reported| *reported == error) {
+                diagnostics.push(error.with_label(definition.span, label));
+            }
+        }
         Self::check_nested(program, pending, diagnostics);
     }
 
@@ -425,6 +436,73 @@ impl<'program> BodyChecker<'program> {
             program.cells.insert(function, cells);
         }
         (pending, first_adds)
+    }
+
+    /// Checks the body of `function` once for each of its overloads, as a look: the
+    /// parameters the overload names have its types and the result is the overload's.
+    /// Returns each error the looks found, once, with the overload it was checked against
+    /// (TYP-29, ADR-0112). Code another overload's types rule out is not checked (TYP-34).
+    fn check_against_overloads(
+        program: &mut Program,
+        function: FunctionId,
+        definition: &Definition<'_>,
+        closure: Option<&nested_function::Closure>,
+    ) -> Vec<(typy_diagnostics::Diagnostic, String)> {
+        let mut errors = Vec::new();
+        let Some(overloads) = program.overloads.get(&function).cloned() else {
+            return errors;
+        };
+        let implementation = definition.signature.clone();
+        let checked = program.functions[function.0 as usize].take();
+        let cells = program.cells.remove(&function);
+        for (position, overload) in overloads.iter().enumerate() {
+            let Ok(view) = crate::check::overload_fit::fit(overload, &implementation) else {
+                continue;
+            };
+            let mut looked = definition.clone();
+            looked.signature = crate::check::overload_fit::body_signature(&view, &implementation);
+            let snapshot = program.snapshot(program.module_first_class());
+            let returned = program
+                .inferring
+                .as_mut()
+                .map(|(_, types)| std::mem::take(types));
+            let looking = std::mem::replace(&mut program.overload_look, true);
+            let first_adds = Self::look_for_adds(program, function, &looked, closure);
+            let mut found = Diagnostics::new();
+            Self::check_body_with(
+                program,
+                function,
+                &looked,
+                closure.cloned(),
+                first_adds,
+                &mut found,
+            );
+            program.overload_look = looking;
+            if let (Some((_, types)), Some(returned)) = (program.inferring.as_mut(), returned) {
+                *types = returned;
+            }
+            program.undo(snapshot);
+            program.forget_function(function);
+            program.cells.remove(&function);
+            let label = format!(
+                "checked as overload {}, returning {}",
+                position + 1,
+                overload.returns
+            );
+            for error in found
+                .iter()
+                .filter(|diagnostic| diagnostic.severity() == Severity::Error)
+            {
+                if !errors.iter().any(|(known, _)| known == error) {
+                    errors.push((error.clone(), label.clone()));
+                }
+            }
+        }
+        program.functions[function.0 as usize] = checked;
+        if let Some(cells) = cells {
+            program.cells.insert(function, cells);
+        }
+        errors
     }
 
     /// Binds the parameters of `definition` as variables of the body, assigned and of their

@@ -17,6 +17,7 @@
 | `send`, `throw` and `close` of a `Generator[Y, S, R]`, and `received = yield value` | SMT-11, FUN-07 |
 | `yield from` any iterable, and `return value` of a `Generator[Y, S, R]` | SMT-11, FUN-07 |
 | A generator freed while suspended closes, running its `finally` blocks | FUN-11 |
+| `@overload` signatures of a module function or an instance method; see [Overloads](#overloads) | TYP-29 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
@@ -90,6 +91,55 @@ through it passes its arguments by position: `increment(value=2)` is
 E0404. A generic function cannot be decorated, since it is no one value
 (E0202). Decorators of methods are planned for 0.14 (FUN-15), and class
 decorators other than `@dataclass` for 1.0 (CLS-38).
+
+## Overloads
+
+`@overload` of `typing` gives a function, or an instance method, several
+signatures and one body (TYP-29, ADR-0112). The `@overload` definitions
+come first, with `...` as their bodies, and the implementation, the `def`
+of the same name without `@overload`, follows them. A call takes the
+first overload whose parameters take its arguments, which gives the
+result's type; the implementation runs, and its result is tested to be of
+the overload's type. A call no overload takes is E0432.
+
+<!-- typy-expect: accepted -->
+```python
+from typing import overload
+
+
+@overload
+def double(value: int) -> int: ...
+@overload
+def double(value: str) -> str: ...
+def double(value: int | str) -> int | str:
+    if isinstance(value, int):
+        return value * 2
+    return value + value
+
+
+number: int = double(21)
+text: str = double("ab")
+print(number + 1, text.upper())
+```
+
+The body is checked once for each overload too, with the types the
+overload gives its parameters and its result; a branch those types rule
+out, such as the `str` branch for the `int` overload, is not checked
+(TYP-34). A parameter an overload leaves out is checked at the type the
+implementation declares.
+
+Each overload fits its implementation, or it is E0432: its parameters are
+the implementation's of the same names, in the same order and passed
+alike, with types the implementation's hold, and a parameter an overload
+leaves out, or that a call of it may leave out, has a default in the
+implementation. The implementation's result holds each overload's, in a
+form a test of the value's class tells apart; `list[int] | list[str]`
+gives no such test.
+
+Overloads of static, class and special methods, inside functions and
+blocks, with decorated or generic implementations, in generic and protocol
+classes, on a method a derived class overrides, and calls of an overloaded
+function that unpack with `*` or `**` are planned for 0.13 (TYP-35).
 
 ## Variable numbers of arguments
 

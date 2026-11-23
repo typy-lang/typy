@@ -470,7 +470,7 @@ impl RuleId {
     pub const TYP_27: Self = Self("TYP-27");
     /// `typing.Literal` of `int`, `str`, `bytes`, `bool` and `None` constants shall be accepted, a constant passing for its literal type and `==`, `in` and `match` narrowing to it.
     pub const TYP_28: Self = Self("TYP-28");
-    /// `typing.overload` shall be accepted on functions and methods, each call checked against the signature it matches and the body against every signature.
+    /// `typing.overload` shall be accepted on module functions and instance methods, each call checked against the first signature that takes its arguments and the body against every signature (ADR-0112).
     pub const TYP_29: Self = Self("TYP-29");
     /// `typing.Self` shall be accepted in a method's parameters and result as the class the method is called through.
     pub const TYP_30: Self = Self("TYP-30");
@@ -478,6 +478,10 @@ impl RuleId {
     pub const TYP_31: Self = Self("TYP-31");
     /// A class derived from `typing.TypedDict` shall be accepted, its instances being dicts whose keys it names and whose values it types, with `total`, `Required`, `NotRequired` and `ReadOnly`.
     pub const TYP_32: Self = Self("TYP-32");
+    /// A statement that cannot run, because one before it in its block leaves the block or because a test of `True`, `False`, `isinstance` or a class pattern that the static types decide rules it out, shall be neither checked nor compiled, as CPython runs the program (ADR-0111).
+    pub const TYP_34: Self = Self("TYP-34");
+    /// `typing.overload` shall be accepted on static, class and special methods, inside functions and blocks, with decorated or generic implementations, in generic and protocol classes, on a method a derived class overrides, and in calls that unpack with `*` or `**` (ADR-0112).
+    pub const TYP_35: Self = Self("TYP-35");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -715,6 +719,8 @@ impl RuleId {
         Self::TYP_30,
         Self::TYP_31,
         Self::TYP_32,
+        Self::TYP_34,
+        Self::TYP_35,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.

@@ -244,6 +244,7 @@ nav:
           - adr/0109-keep-the-result-annotation-where-a-class-offers-the-result.md
           - adr/0110-hold-a-literal-types-values-as-its-base-type.md
           - adr/0111-leave-code-that-cannot-run-unchecked-and-uncompiled.md
+          - adr/0112-check-a-call-against-the-first-overload-that-takes-it.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

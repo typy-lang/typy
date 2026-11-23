@@ -363,7 +363,7 @@ impl BodyChecker<'_> {
         );
         self.add_facts(holds);
         // An `assert` whose test never holds always raises (TYP-34).
-        if !super::flow::test_reach(&test).0 {
+        if !super::flow::test_reach(&test, self.program.overload_look).0 {
             self.assigned = None;
         }
         TypedStmt::Assert {

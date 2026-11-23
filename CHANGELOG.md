@@ -8,6 +8,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `typing.overload` on module functions and instance methods: a call
+  takes the first overload whose parameters take its arguments, which
+  gives its result, the body is checked against every overload, and an
+  overload its implementation does not fit, or a call no overload takes,
+  is E0432. Other forms of `@overload` are planned for 0.13 (TYP-29,
+  TYP-35, ADR-0112).
 - Code that cannot run is neither checked nor compiled: a statement after
   `return`, `raise`, `break` or `continue`, and a branch a test of
   `True`, `False`, `isinstance`, an `assert` or a class pattern rules out
@@ -102,6 +108,12 @@ All notable changes to TyPy are recorded here. The format follows
   from `malloc`, and division divides by a reciprocal rather than a 128-bit
   division: from 5.0 to 1.5 times CPython 3.15's time at 512 bits, and from
   5.3 to 1.8 times at 1024 bits (ADR-0103).
+
+### Fixed
+
+- `typing.cast(T, value)` of a `T | None` value that holds an `int`, a
+  `float` or a `bool` ended the program with a crash; it now tests only
+  that the value is not `None` (TYP-24).
 
 ## [0.11.0] - 2026-11-22
 

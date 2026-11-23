@@ -261,13 +261,16 @@ impl BodyChecker<'_> {
         self.program.annotation_names.get(id).copied()
     }
 
-    /// Returns E0202 for `cast`, `NamedTuple`, `dataclass` or `field` read as a value: each is
+    /// Returns E0202 for `cast`, `overload`, `NamedTuple`, `dataclass` or `field` read as a value: each is
     /// a function, which TyPy reads only where it is called or a class names it as its base.
     fn function_of_typing(&mut self, expression: &Expr) -> Option<TypedExpr> {
         let name = self.standard_name_of(expression)?;
         if !matches!(
             name,
-            AnnotationName::Cast | AnnotationName::NamedTuple | AnnotationName::Dataclasses
+            AnnotationName::Cast
+                | AnnotationName::NamedTuple
+                | AnnotationName::Dataclasses
+                | AnnotationName::Overload
         ) {
             return None;
         }
@@ -655,6 +658,7 @@ fn named_text(name: AnnotationName) -> Option<NamedText> {
         AnnotationName::Cast
         | AnnotationName::NamedTuple
         | AnnotationName::Dataclasses
+        | AnnotationName::Overload
         | AnnotationName::Rebound => return None,
     })
 }

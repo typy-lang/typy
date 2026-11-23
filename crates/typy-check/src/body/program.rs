@@ -14,10 +14,20 @@ use crate::types::Type;
 
 /// The program being built: symbols, finished functions, and what every body may refer to.
 #[derive(Clone)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each flag is a separate fact of the check, set and read alone"
+)]
 pub(crate) struct Program {
     /// The function whose result is being inferred from its `return` statements, and the
     /// types of the values they return, `None` for one that ends without a value (TYP-26).
     pub(crate) inferring: Option<(FunctionId, Vec<Type>)>,
+    /// The signatures of the `@overload` definitions of each function and method that has
+    /// them, in source order, which calls are checked against (TYP-29).
+    pub(crate) overloads: BTreeMap<FunctionId, Vec<FunctionSignature>>,
+    /// Whether a body is being checked against one of its function's overloads, where a
+    /// test of literal types decides which code runs (TYP-29).
+    pub(crate) overload_look: bool,
     /// The functions whose results were inferred, whose end may return `None`, which the
     /// result holds (TYP-26).
     pub(crate) inferred_results: BTreeSet<FunctionId>,
@@ -220,6 +230,8 @@ impl Program {
             final_variables: BTreeMap::new(),
             provisional: false,
             inferring: None,
+            overloads: BTreeMap::new(),
+            overload_look: false,
             inferred_results: BTreeSet::new(),
             classes: Vec::new(),
             class_modules: Vec::new(),
@@ -763,6 +775,13 @@ impl Program {
     }
 
     /// Returns the method `name` of a class, its own or the nearest base's.
+    /// Returns the method `name` a base of `class` defines, when it has overloads (TYP-29).
+    pub(crate) fn overloaded_base_method(&self, class: ClassId, name: &str) -> Option<FunctionId> {
+        let base = self.classes.get(class.0 as usize)?.base?;
+        self.method(base, name)
+            .filter(|method| self.overloads.contains_key(method))
+    }
+
     pub(super) fn method(&self, class: ClassId, name: &str) -> Option<FunctionId> {
         // A method of a protocol is reached through its dispatcher (ADR-0041).
         if self.is_protocol(class) && self.classes[class.0 as usize].method(name).is_some() {

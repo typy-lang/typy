@@ -9,7 +9,9 @@ use typy_source::syntax::{CompareOperator, UnaryOperator};
 use super::BodyChecker;
 use super::flow::narrowable_variable;
 use crate::literal_type::LiteralValue;
-use crate::typed::{LiteralTest, SymbolId, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{
+    LiteralOutcome, LiteralTest, SymbolId, TypedConstant, TypedExpr, TypedExprKind,
+};
 use crate::types::Type;
 
 impl BodyChecker<'_> {
@@ -169,27 +171,34 @@ impl BodyChecker<'_> {
             (!values.is_empty())
                 .then(|| Type::union(values.into_iter().map(Type::literal).collect()))
         };
+        // With the values known, a test that no value, or every value, passes is decided.
+        let some_equal = !equal_values.is_empty();
+        let some_other = known.is_none() || !other_values.is_empty() || optional;
         let equal_type = of(equal_values);
         // The values other than the constants are known only for a variable of literal types.
         let other_type = of(other_values).map(|ty| if optional { Type::optional(ty) } else { ty });
         let equal_position = equal_type.map(|ty| self.narrowing_index(ty));
         let other_position = other_type.map(|ty| self.narrowing_index(ty));
-        Some(if equal {
-            LiteralTest {
-                variable: symbol,
-                holds: equal_position,
-                fails: other_position,
-                not_none_when_holds: optional,
-                not_none_when_fails: false,
-            }
+        // Equal to a constant, an optional is not `None`.
+        let when_equal = LiteralOutcome {
+            narrowed: equal_position,
+            not_none: optional,
+            reached: some_equal,
+        };
+        let when_other = LiteralOutcome {
+            narrowed: other_position,
+            not_none: false,
+            reached: some_other,
+        };
+        let (holds, fails) = if equal {
+            (when_equal, when_other)
         } else {
-            LiteralTest {
-                variable: symbol,
-                holds: other_position,
-                fails: equal_position,
-                not_none_when_holds: false,
-                not_none_when_fails: optional,
-            }
+            (when_other, when_equal)
+        };
+        Some(LiteralTest {
+            variable: symbol,
+            holds,
+            fails,
         })
     }
 

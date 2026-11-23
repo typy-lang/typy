@@ -75,9 +75,14 @@ fn is_none(expression: &TypedExpr) -> bool {
 /// types decide it: `True` and `False` decide themselves, an `isinstance` test of a value no
 /// tested class takes never holds, and one every value passes never fails (TYP-34,
 /// ADR-0111). A value's static type holds for each of its values, so a branch the test rules
-/// out never runs.
-pub(super) fn test_reach(test: &TypedExpr) -> (bool, bool) {
+/// out never runs. With `literals`, a comparison of a variable of literal types with
+/// constants decides too, as the check of an overloaded function's body reads it (TYP-29).
+pub(super) fn test_reach(test: &TypedExpr, literals: bool) -> (bool, bool) {
     match &test.kind {
+        TypedExprKind::Compare {
+            narrowing: Some(narrowing),
+            ..
+        } if literals => (narrowing.holds.reached, narrowing.fails.reached),
         TypedExprKind::Constant(TypedConstant::Bool(value)) => (*value, !*value),
         TypedExprKind::IsInstance(isinstance) => {
             let optional = matches!(isinstance.value.ty, Type::Optional(_));
@@ -92,11 +97,14 @@ pub(super) fn test_reach(test: &TypedExpr) -> (bool, bool) {
             operator: UnaryOperator::Not,
             operand,
         } => {
-            let (may_hold, may_fail) = test_reach(operand);
+            let (may_hold, may_fail) = test_reach(operand, literals);
             (may_fail, may_hold)
         }
         TypedExprKind::BoolOp { operator, values } => {
-            let reach: Vec<(bool, bool)> = values.iter().map(test_reach).collect();
+            let reach: Vec<(bool, bool)> = values
+                .iter()
+                .map(|value| test_reach(value, literals))
+                .collect();
             match operator {
                 BoolOperator::And => (
                     reach.iter().all(|(may_hold, _)| *may_hold),
@@ -113,12 +121,14 @@ pub(super) fn test_reach(test: &TypedExpr) -> (bool, bool) {
 }
 
 /// Returns whether a pattern may match, as the types decide its tests (TYP-34).
-pub(super) fn pattern_reach(pattern: &TypedPattern) -> bool {
+pub(super) fn pattern_reach(pattern: &TypedPattern, literals: bool) -> bool {
     match pattern {
-        TypedPattern::Test(test) => test_reach(test).0,
+        TypedPattern::Test(test) => test_reach(test, literals).0,
         TypedPattern::Bind(..) => true,
-        TypedPattern::All(steps) => steps.iter().all(pattern_reach),
-        TypedPattern::Any(alternatives) => alternatives.iter().any(pattern_reach),
+        TypedPattern::All(steps) => steps.iter().all(|step| pattern_reach(step, literals)),
+        TypedPattern::Any(alternatives) => alternatives
+            .iter()
+            .any(|alternative| pattern_reach(alternative, literals)),
     }
 }
 
@@ -136,8 +146,8 @@ fn literal_facts(narrowing: &LiteralTest) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
         facts
     };
     (
-        facts(narrowing.holds, narrowing.not_none_when_holds),
-        facts(narrowing.fails, narrowing.not_none_when_fails),
+        facts(narrowing.holds.narrowed, narrowing.holds.not_none),
+        facts(narrowing.fails.narrowed, narrowing.fails.not_none),
     )
 }
 

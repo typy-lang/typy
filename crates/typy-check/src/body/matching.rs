@@ -48,7 +48,7 @@ impl BodyChecker<'_> {
             let entry = self.assigned.clone();
             let pattern = self.pattern(&case.pattern, &subject);
             // A case whose pattern the types rule out never runs (TYP-34).
-            if !super::flow::pattern_reach(&pattern) {
+            if !super::flow::pattern_reach(&pattern, self.program.overload_look) {
                 self.assigned = None;
             }
             let guard = case.guard.as_ref().map(|guard| {

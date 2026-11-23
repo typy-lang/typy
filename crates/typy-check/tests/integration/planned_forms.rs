@@ -24,14 +24,13 @@ fn planned_module(name: &str, release: &str, rule: &str) -> (String, String, Str
 #[test]
 fn each_typing_form_of_a_later_release_names_it() {
     let found = messages(
-        "from typing import Any, overload, Self, TypeGuard, TypeIs\n\
+        "from typing import Any, Self, TypeGuard, TypeIs\n\
          from typing import TypedDict, Required, NotRequired, ReadOnly\n",
     );
     assert_eq!(
         found,
         [
             planned("typing.Any", "0.13", "TYP-25"),
-            planned("typing.overload", "0.12", "TYP-29"),
             planned("typing.Self", "0.12", "TYP-30"),
             planned("typing.TypeGuard", "0.12", "TYP-31"),
             planned("typing.TypeIs", "0.12", "TYP-31"),
