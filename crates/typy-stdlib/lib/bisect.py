@@ -25,9 +25,9 @@ def bisect_right[T](a: Sequence[T], x: T, lo: int = 0, hi: int | None = None) ->
     Optional args lo (default 0) and hi (default len(a)) bound the
     slice of a to be searched.
     """
-    # CPython 3.12 to 3.14 give this text; 3.15 says "lo cannot be negative".
+    # The wording is CPython 3.15's; 3.12 to 3.14 say "lo must be non-negative" (STD-05).
     if lo < 0:
-        raise ValueError("lo must be non-negative")
+        raise ValueError("lo cannot be negative")
     end = len(a) if hi is None else hi
     while lo < end:
         mid = (lo + end) // 2
@@ -61,7 +61,7 @@ def bisect_left[T](a: Sequence[T], x: T, lo: int = 0, hi: int | None = None) -> 
     slice of a to be searched.
     """
     if lo < 0:
-        raise ValueError("lo must be non-negative")
+        raise ValueError("lo cannot be negative")
     end = len(a) if hi is None else hi
     while lo < end:
         mid = (lo + end) // 2
