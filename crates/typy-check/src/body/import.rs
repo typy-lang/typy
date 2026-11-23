@@ -5,7 +5,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Alias, Expr, Identifier, Stmt};
 use typy_source::{ModuleName, absolute_name};
 
-use super::builtin_module::{BuiltinName, ModuleFunction, is_builtin_module};
+use super::builtin_module::{BuiltinName, MATH_INTEGER, ModuleFunction, is_builtin_module};
 use crate::check::{ANNOTATION_MODULES, AnnotationName, annotation_name};
 
 use super::{BodyChecker, Program};
@@ -149,6 +149,10 @@ impl Program {
                     }
                     return Ok(resolved);
                 }
+                // `math.integer` is a submodule from Python 3.15; below, `math` is no package.
+                if base.as_str() == MATH_INTEGER && !self.has_math_integer() {
+                    return Err(Box::new(not_a_package(&base, *span)));
+                }
                 if is_builtin_module(base.as_str()) && !self.loaded.contains(base.as_str()) {
                     return self.builtin_names(base.as_str(), names, resolved);
                 }
@@ -283,16 +287,14 @@ impl Program {
         if !is_builtin_module(module.top().as_str()) || self.loaded.contains(module.as_str()) {
             return Ok(None);
         }
-        // `math.integer` is a submodule from Python 3.15 (PEP 791), planned for 0.12.
-        if module.as_str() == "math.integer" && self.floor >= 15 {
-            return Err(Box::new(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "the module `math.integer` is planned for TyPy 0.12 (LIB-26)",
-                )
-                .with_rule(RuleId::LIB_26),
-            ));
+        // `math.integer` is a submodule from Python 3.15 (PEP 791); `import math.integer`
+        // binds `math`, through which `math.integer` reads it (LIB-26).
+        if module.as_str() == MATH_INTEGER && self.has_math_integer() {
+            let (bound, value) = match &alias.as_name {
+                Some(as_name) => (as_name.name.clone(), module.clone()),
+                None => ("math".to_owned(), module.top()),
+            };
+            return Ok(Some((bound, Imported::Module(value), alias.name.span)));
         }
         if module.parent().is_some() {
             return Err(Box::new(not_a_package(module, span)));
@@ -979,7 +981,8 @@ impl BodyChecker<'_> {
                 value, attribute, ..
             } => {
                 let child = format!("{}.{}", self.module_of(value)?, attribute.name);
-                self.program.loaded.contains(&child).then_some(child)
+                let builtin = child == MATH_INTEGER && self.program.has_math_integer();
+                (builtin || self.program.loaded.contains(&child)).then_some(child)
             }
             _ => None,
         }

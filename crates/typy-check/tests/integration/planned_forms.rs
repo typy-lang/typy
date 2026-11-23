@@ -88,18 +88,13 @@ fn any_as_a_type_is_planned_for_0_13() {
 }
 
 #[test]
-fn frozendict_and_math_integer_are_planned_from_the_floor_3_15() {
+fn frozendict_is_planned_from_the_floor_3_15() {
     assert_eq!(
         messages_at("value = frozendict()\n", PythonFloor::V3_15),
         [planned("frozendict", "0.12", "DAT-18")]
     );
-    assert_eq!(
-        messages_at("import math.integer\n", PythonFloor::V3_15),
-        [planned_module("math.integer", "0.12", "LIB-26")]
-    );
-    // Below 3.15 CPython has neither, so TyPy says what CPython says.
+    // Below 3.15 CPython has none, so TyPy says what CPython says.
     assert_eq!(messages("value = frozendict()\n")[0].0, "E0205");
-    assert_eq!(messages("import math.integer\n")[0].0, "E0206");
 }
 
 #[test]

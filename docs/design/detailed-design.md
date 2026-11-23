@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.130 |
+| Version | 2.131 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -574,6 +574,12 @@ subset cannot declare. `crates/typy-check/src/math.rs` lists each name:
 a constant with its value, or a function with its `MathShape`, which
 gives the types of its arguments and its result, and the Python version
 that added it, so a name newer than the program's floor is E0425.
+From the Python floor 3.15, `MATH_INTEGER` names the built-in module
+`math.integer`, whose names are the six functions `INTEGER_FUNCTIONS`
+lists, each the function of `math` (LIB-26); `has_math_integer` decides
+`import math.integer`, which binds `math` without an alias, `from math
+import integer` and `from math.integer import ...`, and `module_of`
+reads `math.integer` through `math`.
 `import math` binds a built-in module object, which runs no code and
 prints as `<module 'math' (built-in)>`; `TypedProgram::builtin_modules`
 lists the ones a program imports, after its own modules. A call is

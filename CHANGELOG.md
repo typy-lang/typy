@@ -8,6 +8,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `math.integer` from the Python floor 3.15, with `comb`, `factorial`,
+  `gcd`, `isqrt`, `lcm` and `perm`, read as `math.integer`, through an
+  alias or by `from` (LIB-26).
 - `enum.Flag` and `enum.IntFlag`: members of one bit each combine with
   `|`, `&`, `^` and `~` into composites made once, named, iterated and
   refused as CPython 3.12 to 3.15 do (CLS-44, ADR-0118).

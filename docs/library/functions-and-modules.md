@@ -201,6 +201,13 @@ print(math.frexp(8.0), math.degrees(math.pi), math.log10(10**400))
 A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
+
+From the Python floor 3.15, the submodule `math.integer` gives the
+functions of `math` that take integers, `comb`, `factorial`, `gcd`,
+`isqrt`, `lcm` and `perm` (LIB-26): `import math.integer as mi` with
+`mi.gcd(12, 18)`, `from math.integer import isqrt`, or
+`math.integer.lcm(4, 6)` after `import math.integer`. Below that floor,
+`math` is no package and `math.integer` is E0206, as in CPython 3.14.
 A function of `math` or `sys` is a value where a `Callable` is expected,
 such as `sorted(values, key=math.fabs)` or `root: Callable[[float], float]
 = math.sqrt`, written `<built-in function sqrt>`; with no `Callable`
