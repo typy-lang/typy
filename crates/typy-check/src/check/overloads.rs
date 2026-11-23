@@ -234,8 +234,10 @@ fn check_implementation(statement: &Stmt, class: Option<&str>, diagnostics: &mut
 /// an `if`, which a later release gives.
 fn refuse_nested(body: &[Stmt], names: &OverloadNames, diagnostics: &mut Diagnostics) {
     for statement in body {
-        if names.decorates(statement)
-            && let Stmt::FunctionDef { name, .. } = statement
+        if let Stmt::FunctionDef {
+            name, decorators, ..
+        } = statement
+            && decorators.iter().any(|decorator| names.names(decorator))
         {
             diagnostics.push(planned_form(name.span, "inside a function or a block"));
         }
@@ -258,7 +260,9 @@ fn name_of(statement: &Stmt) -> &str {
 }
 
 fn is_special(name: &str) -> bool {
-    name.len() > 4 && name.starts_with("__") && name.ends_with("__")
+    name.strip_prefix("__")
+        .and_then(|rest| rest.strip_suffix("__"))
+        .is_some_and(|middle| !middle.is_empty())
 }
 
 /// Returns E0432 for overloads that no implementation follows.

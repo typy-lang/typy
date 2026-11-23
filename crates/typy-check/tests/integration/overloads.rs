@@ -36,6 +36,27 @@ fn typ_29_a_call_takes_the_result_of_the_overload_it_matches() {
          return 'text'\n    return b'data'\n\n\ntext: str = read('r')\ndata: bytes = read('rb')\n\
          print(text, data)\n"
             .to_owned(),
+        // An overload's default may be a constant, the implementation's default the value.
+        "from typing import overload\n\n\n@overload\ndef pad(text: str) -> str: ...\n\
+         @overload\ndef pad(text: str, width: int = 4) -> str: ...\n\
+         def pad(text: str, width: int = 2) -> str:\n    return text * width\n\n\n\
+         print(pad('a'), pad('b', 3))\n"
+            .to_owned(),
+        // A result of the implementation's union, a list among other types, is told apart.
+        "from typing import overload\n\n\n@overload\ndef parts(text: str) -> list[str]: ...\n\
+         @overload\ndef parts(text: int) -> int: ...\n\
+         def parts(text: str | int) -> list[str] | int:\n    if isinstance(text, str):\n        \
+         return text.split()\n    return text\n\n\nwords: list[str] = parts('a b')\n\
+         print(words, parts(3))\n"
+            .to_owned(),
+        // Other decorators of the module's classes are no overloads.
+        "import typing\n\n\nclass Box:\n    def __init__(self) -> None:\n        self._size = 0\n\n    \
+         @property\n    def size(self) -> int:\n        return self._size\n\n    \
+         @size.setter\n    def size(self, value: int) -> None:\n        self._size = value\n\n\n\
+         @typing.overload\ndef same(x: int) -> int: ...\n@typing.overload\n\
+         def same(x: str) -> str: ...\ndef same(x: int | str) -> int | str:\n    return x\n\n\n\
+         box = Box()\nbox.size = 3\nprint(box.size, same(1))\n"
+            .to_owned(),
         // `typing.overload` through the module, and an implementation whose result is
         // inferred.
         "import typing\n\n\n@typing.overload\ndef same(x: int) -> int: ...\n@typing.overload\n\
@@ -137,6 +158,8 @@ fn typ_29_overloads_without_an_implementation_are_e0432() {
         "from typing import overload\n\n\n@overload\ndef f(a: int) -> int: ...\nx = 1\n",
         "from typing import overload\n\n\n@overload\ndef f(a: int) -> int: ...\n@overload\n\
          def g(a: int) -> int: ...\ndef g(a: int) -> int:\n    return a\n",
+        "from typing import overload\n\n\n@overload\ndef f(a: int) -> int: ...\n\
+         def g(a: int) -> int:\n    return a\n",
     ];
     for source in cases {
         let found = messages(source);
@@ -187,4 +210,36 @@ fn typ_29_overload_is_no_value_and_no_type() {
     assert_eq!(found[0].0, "E0202", "{found:?}");
     let found = messages("from typing import overload\n\nx: overload = 1\n");
     assert_eq!(found[0].0, "E0408", "{found:?}");
+}
+
+#[test]
+fn typ_29_an_error_of_the_body_is_reported_once() {
+    let found = messages(
+        "from typing import overload\n\n\n@overload\ndef f(a: int) -> int: ...\n\
+         @overload\ndef f(a: str) -> str: ...\ndef f(a: int | str) -> int | str:\n    \
+         print(missing)\n    return a\n",
+    );
+    let codes: Vec<&str> = found.iter().map(|(code, ..)| code.as_str()).collect();
+    assert_eq!(codes, ["E0205"], "{found:?}");
+}
+
+#[test]
+fn typ_29_an_overloaded_body_may_hold_nested_functions() {
+    let source = "from typing import overload\n\n\n@overload\ndef twice(a: int) -> int: ...\n\
+                  @overload\ndef twice(a: str) -> str: ...\n\
+                  def twice(a: int | str) -> int | str:\n    def again() -> int | str:\n        \
+                  return a\n\n    if isinstance(a, int):\n        return a * 2\n    \
+                  return a + a\n\n\nprint(twice(2), twice('b'))\n";
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
+fn typ_29_a_call_skips_an_overload_that_does_not_fit() {
+    let found = messages(
+        "from typing import overload\n\n\n@overload\ndef f(a: str) -> int: ...\n\
+         @overload\ndef f(a: int) -> int: ...\ndef f(a: int) -> int:\n    return a\n\n\n\
+         print(f(1))\n",
+    );
+    let codes: Vec<&str> = found.iter().map(|(code, ..)| code.as_str()).collect();
+    assert_eq!(codes, ["E0432"], "{found:?}");
 }

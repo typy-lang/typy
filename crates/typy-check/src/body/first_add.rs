@@ -131,10 +131,9 @@ impl BodyChecker<'_> {
         let Expr::Name { id, .. } = target else {
             return None;
         };
-        if !self.in_function()
-            || self.global_names.contains(id)
-            || self.nonlocal_names.contains_key(id)
-        {
+        // A variable declared `global` or `nonlocal` has the type it was given, so an
+        // assignment to it has an expected type and never comes here.
+        if !self.in_function() {
             return None;
         }
         let kind = match self.called_builtin(value) {
