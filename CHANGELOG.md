@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- The standard library modules `base64` and `binascii`, written in typed
+  Python with the results and messages of CPython 3.15: the Base64,
+  Base32, Base16, Ascii85 and Base85 encoders and decoders, and the
+  `binascii` functions they use. The parameters and functions Python 3.13
+  to 3.15 add are planned for 0.13 (LIB-27, LIB-32).
 - The standard library modules `heapq` and `string`, written in typed
   Python: the heap functions, `merge`, `nlargest` and `nsmallest`, and
   the constants, `capwords` and `Template`; `key` of `heapq` and

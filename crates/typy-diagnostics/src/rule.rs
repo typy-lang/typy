@@ -372,7 +372,7 @@ impl RuleId {
     pub const LIB_25: Self = Self("LIB-25");
     /// `math.integer` (PEP 791) shall be available with `comb`, `factorial`, `gcd`, `isqrt`, `lcm` and `perm`, under a Python floor of 3.15 or later.
     pub const LIB_26: Self = Self("LIB-26");
-    /// `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097).
+    /// `textwrap`, `base64` with the `binascii` functions it uses, `heapq`, `bisect`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097, ADR-0119).
     pub const LIB_27: Self = Self("LIB-27");
     /// The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` shall be available, as CPython gives them.
     pub const LIB_28: Self = Self("LIB-28");

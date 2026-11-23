@@ -280,7 +280,7 @@ print(list(heapq.merge([1, 4, 7], [2, 5, 8])))
 ```
 
 `key` of `merge`, `nlargest` and `nsmallest` is planned for 0.13
-(TYP-35), as is the `heapify_max` family Python 3.14 adds.
+(TYP-35), as is the `heapify_max` family Python 3.14 adds (LIB-32).
 
 ## The string module
 
@@ -303,6 +303,57 @@ print(Template("$a $b").safe_substitute({"a": "x"}), Template("$a").get_identifi
 `Formatter`, and a `Template` subclass's own `idpattern`,
 `braceidpattern`, `flags` or `pattern`, which CPython compiles into a
 regular expression, are planned for 0.13 (TYP-25).
+
+## The base64 module
+
+`import base64` gives CPython's `base64` module in typed Python
+(LIB-27): `b64encode` and `b64decode`, with `altchars` and `validate`,
+their `standard_` and `urlsafe_` forms, `b32encode`, `b32decode`,
+`b32hexencode`, `b32hexdecode`, `b16encode`, `b16decode`, `a85encode`,
+`a85decode`, `b85encode`, `b85decode`, `encodebytes` and `decodebytes`.
+A decoder takes `bytes` or a `str` of ASCII characters. The results and
+messages are those of CPython 3.15, which reads malformed input
+otherwise than 3.12 did: `urlsafe_b64decode` needs no padding, and
+`binascii.Error`, a `ValueError`, says what is wrong with the input:
+
+<!-- typy-expect: accepted -->
+```python
+import base64
+import binascii
+
+token = base64.urlsafe_b64encode(b"\xfb\xff typed")
+print(token, base64.urlsafe_b64decode(token), base64.b32encode(b"ok"))
+try:
+    base64.b64decode("YQ")
+except binascii.Error as error:
+    print(error)
+```
+
+The parameters Python 3.13 to 3.15 add, such as `padded`, `wrapcol` and
+`ignorechars`, and `z85encode` and `z85decode` are planned for 0.13
+(LIB-32). `encode` and `decode`, which read and write binary files, need
+`typing.BinaryIO`, planned for 1.0 (LIB-19). CPython 3.15 also writes a
+`FutureWarning` when URL-safe data, or data decoded with `altchars`,
+holds `+` or `/`; TyPy decodes the same bytes and writes no warning.
+
+## The binascii module
+
+`import binascii` gives the functions of CPython's `binascii` module
+that `base64` uses, in typed Python (LIB-27): `b2a_base64` and
+`a2b_base64`, with `newline` and `strict_mode`, `hexlify` and `b2a_hex`,
+with `sep` and `bytes_per_sep`, `unhexlify` and `a2b_hex`, `crc32`, and
+the exceptions `Error` and `Incomplete`:
+
+<!-- typy-expect: accepted -->
+```python
+import binascii
+
+print(binascii.hexlify(b"\xb9\x01\xef", "-"), binascii.unhexlify("b901ef"))
+print(binascii.crc32(b"hello"), binascii.b2a_base64(b"hi", newline=False))
+```
+
+`a2b_uu`, `b2a_uu`, `a2b_qp`, `b2a_qp` and `crc_hqx` are planned for 0.13
+(LIB-31).
 
 ## The sys module
 

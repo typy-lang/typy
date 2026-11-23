@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.133 |
+| Version | 2.134 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -573,8 +573,10 @@ that is not a literal.
 `typy-stdlib` holds the Python sources of the standard library modules
 TyPy gives, in `crates/typy-stdlib/lib`, embedded in the `typy` binary
 with `include_str!` (ADR-0007, ADR-0119). `source(name)` gives a module's
-text and `names()` lists them; 0.12 gives `bisect`, `heapq` and `string`
-(LIB-27). The loader
+text and `names()` lists them; 0.12 gives `base64`, `binascii`,
+`bisect`, `heapq` and `string` (LIB-27). A module gives the results and
+messages of CPython 3.15, as ADR-0029 says, with the parameters Python
+3.12 has; what later versions add is planned for 0.13 (LIB-32). The loader
 looks for an imported module in the program's directories first, as
 CPython looks in the script's directory first, then asks `embedded`,
 which returns a `Location` holding the text under the path

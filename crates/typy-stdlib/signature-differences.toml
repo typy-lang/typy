@@ -19,3 +19,13 @@ reason = "A key function orders the items by values of another type, which needs
 module = "string"
 names = ["Formatter"]
 reason = "Formatter's methods take and give values of any type, which needs typing.Any, planned for 0.13 (TYP-25)."
+
+[[difference]]
+module = "base64"
+names = ["encode", "decode"]
+reason = "They read and write binary files of any kind, typed IO[bytes], which needs typing.BinaryIO, planned for 1.0 (LIB-19)."
+
+[[difference]]
+module = "binascii"
+names = ["a2b_uu", "b2a_uu", "a2b_qp", "b2a_qp", "crc_hqx"]
+reason = "The uuencode and quoted-printable codecs and crc_hqx are planned for 0.13 (LIB-31)."
