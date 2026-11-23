@@ -26,12 +26,13 @@ TyPy 0.11 provides these modules of the standard library:
 | `heapq` | The heap functions, `merge`, `nlargest` and `nsmallest` | [Built-in functions and modules](functions-and-modules.md#the-heapq-module) |
 | `string` | Its constants, `capwords` and `Template` | [Built-in functions and modules](functions-and-modules.md#the-string-module) |
 | `base64` | The Base64, Base32, Base16, Ascii85 and Base85 encoders and decoders | [Built-in functions and modules](functions-and-modules.md#the-base64-module) |
+| `textwrap` | `TextWrapper`, `wrap`, `fill`, `shorten`, `dedent` and `indent` | [Built-in functions and modules](functions-and-modules.md#the-textwrap-module) |
 | `binascii` | `a2b_base64`, `b2a_base64`, `hexlify`, `unhexlify`, `crc32`, their aliases and `Error` | [Built-in functions and modules](functions-and-modules.md#the-binascii-module) |
 | `typing`, `collections.abc` and `types` | Names for annotations, such as `Iterator`, `Final` and `Protocol` | [Modules](../reference/modules.md) |
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
 A module or name planned for a later release is refused with E0201,
-naming the release: `textwrap` and `copy` (LIB-27) in 0.12;
+naming the release: `copy` (LIB-27) in 0.12;
 `statistics`, `time` and `random` (LIB-30) in 0.13; `os` (LIB-07) in
 1.0; and `doctest` in a release after 1.0. Each other module is E0206.
 From the Python floor 3.15, `math` also gives `math.integer` (LIB-26).

@@ -5,12 +5,13 @@
 #![forbid(unsafe_code)]
 
 /// Each module TyPy gives, by its name, with its source.
-const MODULES: [(&str, &str); 5] = [
+const MODULES: [(&str, &str); 6] = [
     ("base64", include_str!("../lib/base64.py")),
     ("binascii", include_str!("../lib/binascii.py")),
     ("bisect", include_str!("../lib/bisect.py")),
     ("heapq", include_str!("../lib/heapq.py")),
     ("string", include_str!("../lib/string.py")),
+    ("textwrap", include_str!("../lib/textwrap.py")),
 ];
 
 /// Returns the source of the standard library module `name`, or `None` when TyPy gives no

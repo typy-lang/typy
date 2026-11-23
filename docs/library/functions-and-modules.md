@@ -304,6 +304,28 @@ print(Template("$a $b").safe_substitute({"a": "x"}), Template("$a").get_identifi
 `braceidpattern`, `flags` or `pattern`, which CPython compiles into a
 regular expression, are planned for 0.13 (TYP-25).
 
+## The textwrap module
+
+`import textwrap` gives CPython's `textwrap` module in typed Python
+(LIB-27): `TextWrapper` with each of its options, and `wrap`, `fill`,
+`shorten`, `dedent` and `indent`. Text is split into words, whitespace
+and the parts of hyphenated words as CPython 3.15 splits it with its
+regular expression:
+
+<!-- typy-expect: accepted -->
+```python
+import textwrap
+
+text = "The well-known rule: wrap at word boundaries, never mid-word."
+print(textwrap.wrap(text, 20))
+print(textwrap.shorten(text, 30), textwrap.dedent("  a\n    b"))
+print(textwrap.indent("one\ntwo", "> "), sep="")
+```
+
+The attributes `wordsep_re`, `wordsep_simple_re` and `sentence_end_re`
+of `TextWrapper`, which hold regular expressions, are not given, so a
+subclass changes how text is split by overriding `_split`.
+
 ## The base64 module
 
 `import base64` gives CPython's `base64` module in typed Python

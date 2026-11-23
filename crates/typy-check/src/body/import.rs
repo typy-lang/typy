@@ -396,7 +396,7 @@ impl Program {
         // The modules a later release gives (ADR-0093, ADR-0097).
         let planned = match top {
             "os" => Some(("1.0", RuleId::LIB_07)),
-            "textwrap" | "copy" => Some(("0.12", RuleId::LIB_27)),
+            "copy" => Some(("0.12", RuleId::LIB_27)),
             // These reach the operating system through `_typy` (ADR-0119).
             "statistics" | "time" | "random" => Some(("0.13", RuleId::LIB_30)),
             _ => None,

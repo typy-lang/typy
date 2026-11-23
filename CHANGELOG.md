@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- The standard library module `textwrap`, written in typed Python with
+  the results of CPython 3.15: `TextWrapper`, `wrap`, `fill`, `shorten`,
+  `dedent` and `indent`, splitting words and hyphenated words as
+  CPython's regular expression does (LIB-27).
 - The standard library modules `base64` and `binascii`, written in typed
   Python with the results and messages of CPython 3.15: the Base64,
   Base32, Base16, Ascii85 and Base85 encoders and decoders, and the
