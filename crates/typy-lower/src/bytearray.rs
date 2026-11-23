@@ -27,15 +27,14 @@ impl FunctionLowerer<'_> {
         Self::borrowed(buffer, TyirType::BYTES)
     }
 
-    /// Returns a new bytearray of `data`, a `bytes` a function of `bytes` gave: taken as the
-    /// buffer when it is owned here, copied when it is borrowed. `data` is used up.
+    /// Returns a new bytearray of `data`, the new `bytes` a function of `bytes` gave, whose
+    /// reference the runtime takes over: the `bytes` becomes the buffer, or is copied when
+    /// another reference to it exists (ADR-0108).
     pub(crate) fn bytearray_of_bytes(&mut self, data: Lowered, span: Span) -> Lowered {
-        if data.owned {
-            self.untrack(data.value);
-            self.handed_over.insert(data.value);
-            return self.call_runtime(RuntimeFunction::BytearrayAdopt, vec![data.value], span);
-        }
-        self.call_runtime(RuntimeFunction::BytearrayFromBytes, vec![data.value], span)
+        debug_assert!(data.owned, "a function of `bytes` gives a new `bytes`");
+        self.untrack(data.value);
+        self.handed_over.insert(data.value);
+        self.call_runtime(RuntimeFunction::BytearrayAdopt, vec![data.value], span)
     }
 
     /// Returns `bytearray(source)`: zeros for a count, the bytes of a list of `int`s, or a copy

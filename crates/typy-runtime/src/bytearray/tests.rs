@@ -274,3 +274,53 @@ fn the_text_is_bytearray_around_the_bytes_text() {
     assert_eq!(written(b"it's"), "bytearray(b\"it's\")");
     assert_eq!(written(b""), "bytearray(b'')");
 }
+
+#[test]
+fn a_large_int_as_a_value_or_a_position_is_refused() {
+    let large = crate::int::value::Integer::from_i128(1 << 70).into_word();
+    let array = from_data(b"ab");
+    // SAFETY: the bytearray is live and the words are `int` words.
+    unsafe {
+        assert_eq!(
+            raised(typy_rt_bytearray_append(array, large)),
+            "byte must be in range(0, 256)"
+        );
+        assert_eq!(
+            raised(typy_rt_bytearray_get(array, large).exception),
+            "cannot fit 'int' into an index-sized integer"
+        );
+    }
+}
+
+#[test]
+fn an_extended_slice_takes_as_many_bytes_as_it_selects() {
+    let array = from_data(b"abcdef");
+    let all = word(START | STOP | STEP);
+    // SAFETY: the arguments are live and the words are `int` words.
+    unsafe {
+        let three = crate::bytes::from_slice(b"XYZ");
+        assert!(
+            typy_rt_bytearray_set_slice(array, word(0), word(6), word(2), all, three).is_null()
+        );
+        assert_eq!(held(array), b"XbYdZf");
+    }
+}
+
+#[test]
+fn a_repeat_too_long_raises_and_leaves_the_bytearray_as_it_was() {
+    // Eight bytes repeated 2**62 - 1 times is more than a size holds.
+    let array = from_data(b"abcdefgh");
+    let huge = word((1 << 62) - 1);
+    // SAFETY: the bytearray is live and the words are `int` words.
+    unsafe {
+        assert_eq!(
+            raised(typy_rt_bytearray_repeat(array, huge).exception),
+            "repeated string is too long"
+        );
+        assert_eq!(
+            raised(typy_rt_bytearray_repeat_in_place(array, huge)),
+            "repeated string is too long"
+        );
+        assert_eq!(held(array), b"abcdefgh");
+    }
+}

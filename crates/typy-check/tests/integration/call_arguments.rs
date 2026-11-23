@@ -171,6 +171,16 @@ fn lib_28_numeric_builtins_take_what_cpython_takes() {
             "`divmod` takes 2 arguments, and 1 are given",
         ),
         (
+            "print(hex(undefined))\n",
+            "E0205",
+            "`undefined` is not defined",
+        ),
+        (
+            "print(pow(2, 3, undefined))\n",
+            "E0205",
+            "`undefined` is not defined",
+        ),
+        (
             "print(pow(2))\n",
             "E0404",
             "pow() missing required argument 'exp' (pos 2): CPython raises `TypeError`",

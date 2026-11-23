@@ -172,9 +172,9 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let Some(given) = given.into_iter().collect::<Option<Vec<&Expr>>>() else {
-            return self.pow_error(span, "pow() missing required argument 'exp' (pos 2)", span);
-        };
+        // The base and the exponent are given, and a keyword fills the position it names, so
+        // no position is left empty.
+        let given: Vec<&Expr> = given.into_iter().flatten().collect();
         if !self.arity(Builtin::Pow, given.len(), 2..=3, span) {
             return Self::invalid_call(span);
         }

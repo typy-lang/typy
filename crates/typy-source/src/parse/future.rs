@@ -50,29 +50,25 @@ impl Converter<'_> {
                 .count();
         let mut errors = Vec::new();
         let mut defers_annotations = false;
-        for statement in &body[start..end] {
-            let Some(import) = future(statement) else {
-                continue;
-            };
-            for alias in &import.names {
-                match alias.name.as_str() {
-                    "annotations" => defers_annotations = true,
-                    name if ACCEPTED.contains(&name) => {}
-                    "braces" => errors.push(self.syntax_error(alias.range(), "not a chance")),
-                    "barry_as_FLUFL" => errors.push(
-                        Diagnostic::new(
-                            DiagnosticCode::error(202),
-                            self.span(alias.range()),
-                            "the future feature `barry_as_FLUFL` makes `!=` a syntax error and \
-                             `<>` an operator, which TyPy does not parse",
-                        )
-                        .with_rule(RuleId::LIB_29),
-                    ),
-                    name => errors.push(self.syntax_error(
-                        alias.range(),
-                        &format!("future feature {name} is not defined"),
-                    )),
-                }
+        let imports = body[start..end].iter().filter_map(future);
+        for alias in imports.flat_map(|import| &import.names) {
+            match alias.name.as_str() {
+                "annotations" => defers_annotations = true,
+                name if ACCEPTED.contains(&name) => {}
+                "braces" => errors.push(self.syntax_error(alias.range(), "not a chance")),
+                "barry_as_FLUFL" => errors.push(
+                    Diagnostic::new(
+                        DiagnosticCode::error(202),
+                        self.span(alias.range()),
+                        "the future feature `barry_as_FLUFL` makes `!=` a syntax error and \
+                         `<>` an operator, which TyPy does not parse",
+                    )
+                    .with_rule(RuleId::LIB_29),
+                ),
+                name => errors.push(self.syntax_error(
+                    alias.range(),
+                    &format!("future feature {name} is not defined"),
+                )),
             }
         }
         let mut late = LateImports {

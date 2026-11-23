@@ -11,7 +11,7 @@ use crate::Raising;
 use crate::allocator::{allocate, free};
 use crate::bytes::{from_slice, new_bytes};
 use crate::exception::{ExceptionKind, ExceptionObject, raise};
-use crate::header::{BYTEARRAY_TYPE_ID, IMMORTAL, ObjectHeader};
+use crate::header::{BYTEARRAY_TYPE_ID, ObjectHeader};
 use crate::string::{StrObject, latin1_data, length, reserve_latin1};
 use crate::word::{inline, inline_value, is_inline};
 
@@ -243,8 +243,8 @@ pub unsafe extern "C" fn typy_rt_bytearray_from_list(
 pub unsafe extern "C" fn typy_rt_bytearray_adopt(data: *mut StrObject) -> *mut BytearrayObject {
     // SAFETY: the caller's guarantee.
     unsafe {
-        let count = (*data).header.reference_count;
-        if count == 1 && count != IMMORTAL {
+        // An immortal object's count is never 1, so it is copied.
+        if (*data).header.reference_count == 1 {
             return wrap(data, length(data));
         }
         let array = from_data(data_of(data));
