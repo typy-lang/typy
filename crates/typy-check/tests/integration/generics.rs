@@ -105,7 +105,8 @@ fn calls_that_give_no_fitting_type_are_refused() {
             "def f[T](x: T) -> T:\n    return x\ny: str = f(1)\n",
             "E0402",
         ),
-        ("def f[T](x: T) -> T:\n    return x < x\n", "E0407"),
+        // An operation other than a comparison of a type parameter stays refused (GEN-18).
+        ("def f[T](x: T) -> T:\n    return x + x\n", "E0401"),
         // A tuple of another length, a value that is not iterable, a union with two open
         // members, and a member that takes the argument itself solve nothing.
         (
@@ -488,4 +489,18 @@ fn fun_10_nested_code_of_a_generic_function_is_checked_in_each_copy() {
         "print(pair_with(1), pair_with('a'))\n",
     );
     assert_eq!(app(wrong), ["E0401"]);
+}
+
+#[test]
+fn gen_18_a_type_parameter_compares_in_each_copy() {
+    let source = "def first_over[T](items: list[T], limit: T) -> int:\n    \
+                  for index, item in enumerate(items):\n        if limit < item:\n            \
+                  return index\n    return len(items)\n\n\n\
+                  def largest[T](items: list[T]) -> T:\n    return max(sorted(items))\n\n\n\
+                  print(first_over([1, 5], 4), first_over([(1, 'a')], (0, 'b')), largest(['b', 'a']))\n";
+    assert_eq!(app(source), Vec::<String>::new());
+    // A copy whose types do not order is refused at the comparison.
+    let refused = "def first_over[T](items: list[T], limit: T) -> bool:\n    \
+                   return limit < items[0]\n\n\nprint(first_over([{'a': 1}], {'b': 2}))\n";
+    assert_eq!(app(refused), ["E0407"]);
 }

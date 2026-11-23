@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.132 |
+| Version | 2.133 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -41,6 +41,8 @@ crates/
                               syntax/ (tree, statement, expression,
                               operator, node_kind, dump),
                               parse/ (statement, expression, operator)
+  typy-stdlib/                lib/ (the modules in Python), src/ (lib),
+                              typeshed-revision, signature-differences.toml
   typy-check/src/             types, builtin, method, unprovided, check/
                               (definition, annotation, module_scope,
                               definition_order, visit), subset/ (feature,
@@ -569,9 +571,24 @@ that is not a literal.
 ## 6. typy-stdlib
 
 `typy-stdlib` holds the Python sources of the standard library modules
-TyPy implements (ADR-0007), embedded in the `typy` binary with
-`include_str!`, and the declarations of the private `_typy` module. It is
-created with the first module written in Python, `sys` and `math` in 0.3.
+TyPy gives, in `crates/typy-stdlib/lib`, embedded in the `typy` binary
+with `include_str!` (ADR-0007, ADR-0119). `source(name)` gives a module's
+text and `names()` lists them; 0.12 gives `bisect` (LIB-27). The loader
+looks for an imported module in the program's directories first, as
+CPython looks in the script's directory first, then asks `embedded`,
+which returns a `Location` holding the text under the path
+`<typy-stdlib>/name.py`; `ProjectLoader::read` reads it as any module
+of the program, so the checker, lowering and the build treat it alike. A
+module is typed Python that CPython also runs.
+`scripts/check-stdlib-signatures.py` compares each module with typeshed's
+stub of it at the revision `typeshed-revision` pins: the public names,
+following `from X import *`, `sys.version_info` blocks at the floor 3.12
+and plain aliases, and each function's parameters across the stub's
+overloads, by name, how each is passed and whether it may be left out,
+and its result where the stub writes a plain type; a difference kept on
+purpose is listed in `signature-differences.toml` with its reason
+(ADR-0097). The private module `_typy` comes with `statistics`, `time`
+and `random` in 0.13 (LIB-30).
 
 `math` is not written in Python either (ADR-0018): its functions take an
 `int` or a `float` and some any number of arguments, which the 0.3

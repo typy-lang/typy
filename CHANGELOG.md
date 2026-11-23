@@ -8,6 +8,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- The standard library module `bisect`, written in typed Python that
+  CPython also runs and given from the compiler, without `key`, which is
+  planned for 0.13; a test compares its signatures with typeshed's
+  (LIB-27, ADR-0119).
+- A generic function compares values of its type parameters with `<`,
+  `==` and the other comparisons, also through `sorted`, `min` and `max`;
+  each copy checks the comparison with its own types (GEN-18, ADR-0120).
 - From the Python floor 3.15, a comprehension element that unpacks:
   `[*row for row in rows]`, `{*row ...}`, `(*row ...)` and
   `{**table for table in tables}` (EXP-23).

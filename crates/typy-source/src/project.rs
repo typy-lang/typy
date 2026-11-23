@@ -9,7 +9,7 @@ use typy_diagnostics::{
 };
 
 use crate::loader::{
-    Import, Location, imports, initialisation_order, is_standard, locate, not_found,
+    Import, Location, embedded, imports, initialisation_order, is_standard, locate, not_found,
 };
 use crate::main_source::{CODE_PATH, MainSource};
 use crate::module::{Module, ModuleName};
@@ -211,8 +211,8 @@ impl Loader<'_> {
         let mut unreadable = false;
         let id = existing.unwrap_or_else(|| {
             let id = FileId(u32::try_from(self.files.len()).unwrap_or(u32::MAX));
-            let (file, read_error) = match (importer, self.main_code) {
-                (None, Some(code)) => {
+            let (file, read_error) = match (importer, self.main_code, location.embedded) {
+                (None, Some(code), _) | (_, _, Some(code)) => {
                     (SourceFile::from_text(id, location.path.clone(), code), None)
                 }
                 _ => SourceFile::read(id, &self.settings.root, &location.path),
@@ -284,7 +284,11 @@ impl Loader<'_> {
             if self.modules.contains_key(&import.module) || self.standard.contains(&import.module) {
                 continue;
             }
-            if let Some(location) = locate(self.settings, &import.module) {
+            // A module of the program comes first, as CPython's search finds the script's
+            // directory first; then a standard library module TyPy gives in Python (LIB-27).
+            if let Some(location) =
+                locate(self.settings, &import.module).or_else(|| embedded(&import.module))
+            {
                 self.read(import.module.clone(), &location, Some(import.span));
             } else if is_standard(&import.module) {
                 // The checker says whether TyPy provides it (LIB-08).
@@ -320,6 +324,7 @@ const fn file_location(path: camino::Utf8PathBuf) -> Location {
     Location {
         path,
         is_package: false,
+        embedded: None,
     }
 }
 

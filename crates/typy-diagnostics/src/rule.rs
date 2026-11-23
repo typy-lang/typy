@@ -306,6 +306,8 @@ impl RuleId {
     pub const GEN_16: Self = Self("GEN-16");
     /// A protocol shall be usable as the base of a class, with properties, static methods, class methods, class variables and defaults, and in the signatures of its own methods; an attribute shall be assignable through a protocol value, and a value of a built-in type shall be held as a protocol.
     pub const GEN_17: Self = Self("GEN-17");
+    /// A comparison of values whose type holds a type parameter without a bound shall be accepted in a generic function and checked in each copy the program makes of it (ADR-0120).
+    pub const GEN_18: Self = Self("GEN-18");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -641,6 +643,7 @@ impl RuleId {
         Self::GEN_15,
         Self::GEN_16,
         Self::GEN_17,
+        Self::GEN_18,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,

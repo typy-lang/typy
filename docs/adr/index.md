@@ -125,3 +125,4 @@ supersedes it.
 | [ADR-0117](0117-read-an-int-or-str-enum-member-as-its-value-where-the-value-is-wanted.md) | Read an int or str enum member as its value where the value is wanted | Accepted | 2026-11-23 |
 | [ADR-0118](0118-make-each-flag-composite-once-and-keep-it-by-its-value.md) | Make each flag composite once and keep it by its value | Accepted | 2026-11-23 |
 | [ADR-0119](0119-provide-the-standard-library-modules-that-need-no-operating-system-first.md) | Provide the standard library modules that need no operating system first | Accepted | 2026-11-23 |
+| [ADR-0120](0120-check-a-comparison-of-a-type-parameter-in-each-copy.md) | Check a comparison of a type parameter in each copy | Accepted | 2026-11-23 |

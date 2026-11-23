@@ -431,6 +431,12 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn comparison_error(&mut self, left: &Type, right: &Type, span: Span) {
+        // A generic function compiles once for each set of types, and each copy checks its
+        // comparisons with the types it has, so the body's own check leaves a comparison of a
+        // type parameter to them (GEN-18, ADR-0120).
+        if self.program.generic_pass.is_some() && (left.has_parameter() || right.has_parameter()) {
+            return;
+        }
         let diagnostic = Diagnostic::new(
             DiagnosticCode::error(407),
             span,

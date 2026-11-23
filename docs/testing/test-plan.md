@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.59 |
+| Version | 1.60 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -517,6 +517,7 @@ that the specification does not define.
 | GEN-15 | 0.13 | IT | `tests/conformance/gen/GEN-15_*.py` |
 | GEN-16 | 0.13 | IT | `tests/conformance/gen/GEN-16_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-17 | 0.13 | IT | `tests/conformance/gen/GEN-17_*.py`; `crates/typy-check/tests/integration/protocols.rs` |
+| GEN-18 | 0.12 | UT, IT | `crates/typy-check/tests/integration/generics.rs` for comparisons of a type parameter accepted and a copy of types that do not compare refused; `tests/conformance/gen/GEN-18_*.py` |
 | EXC-01 | 0.3 | IT | `tests/conformance/exc/EXC-01_*.py` |
 | EXC-02 | 0.3 | IT | `tests/conformance/exc/EXC-02_*.py` |
 | EXC-03 | 0.3 | Golden | `tests/golden/llvm-ir/`, where each call that may raise is followed by one compare of the exception against null and a branch |

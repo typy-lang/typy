@@ -66,3 +66,36 @@ fn unknown_file_ids_render_without_panicking() {
         1
     );
 }
+
+#[test]
+fn a_standard_library_module_typy_gives_in_python_loads_from_its_source() {
+    let (_directory, root) = project_with("import bisect\nprint(bisect.bisect([1, 3], 2))\n");
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
+    let module = project
+        .modules()
+        .find(|module| module.name.as_str() == "bisect")
+        .expect("the program gets `bisect`");
+    assert_eq!(project.path(module.file), "<typy-stdlib>/bisect.py");
+    assert!(
+        module.syntax.body.len() > 4,
+        "the module defines its functions"
+    );
+    // `bisect` is a module of the program now, though its own imports name standard ones.
+    assert!(
+        project
+            .standard_modules()
+            .all(|standard| standard.as_str() != "bisect")
+    );
+}
+
+#[test]
+fn a_module_of_the_program_hides_the_standard_library_module_of_its_name() {
+    let (directory, root) = project_with("import bisect\nprint(bisect.mine)\n");
+    std::fs::write(directory.path().join("bisect.py"), "mine = 1\n").unwrap();
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
+    let module = project
+        .modules()
+        .find(|module| module.name.as_str() == "bisect")
+        .expect("the program's own `bisect`");
+    assert_eq!(project.path(module.file), "bisect.py");
+}

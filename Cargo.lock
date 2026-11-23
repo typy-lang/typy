@@ -1261,7 +1261,12 @@ dependencies = [
  "tempfile",
  "toml_edit",
  "typy-diagnostics",
+ "typy-stdlib",
 ]
+
+[[package]]
+name = "typy-stdlib"
+version = "0.11.0"
 
 [[package]]
 name = "typy-tyir"

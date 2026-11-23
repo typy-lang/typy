@@ -22,12 +22,13 @@ TyPy 0.11 provides these modules of the standard library:
 | `dataclasses` | `dataclass` and `field` | [Classes](../reference/classes.md#dataclasses) |
 | `abc` | `ABC` and `abstractmethod` | [Classes](../reference/classes.md#abstract-classes) |
 | `enum` | `Enum`, `IntEnum`, `StrEnum`, `Flag`, `IntFlag` and `auto` | [Classes](../reference/classes.md#enum-classes) |
+| `bisect` | `bisect`, `bisect_left`, `bisect_right`, `insort`, `insort_left` and `insort_right` | [Built-in functions and modules](functions-and-modules.md#the-bisect-module) |
 | `typing`, `collections.abc` and `types` | Names for annotations, such as `Iterator`, `Final` and `Protocol` | [Modules](../reference/modules.md) |
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
 A module or name planned for a later release is refused with E0201,
-naming the release: `textwrap`, `base64`, `heapq`, `bisect`, `copy` and
-`string` (LIB-27) in 0.12; `statistics`, `time` and `random` (LIB-30) in
+naming the release: `textwrap`, `base64`, `heapq`, `copy` and `string`
+(LIB-27) in 0.12; `statistics`, `time` and `random` (LIB-30) in
 0.13; `os` (LIB-07) in 1.0; and `doctest` in a release after 1.0. Each
 other module is E0206. From the Python floor 3.15, `math` also gives
 `math.integer` (LIB-26).

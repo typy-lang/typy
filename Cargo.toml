@@ -13,6 +13,7 @@ members = [
     "crates/typy-lower",
     "crates/typy-runtime",
     "crates/typy-source",
+    "crates/typy-stdlib",
     "crates/typy-tyir",
 ]
 
@@ -35,6 +36,7 @@ tempfile = "3"
 toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
 typy-diagnostics = { path = "crates/typy-diagnostics" }
 typy-source = { path = "crates/typy-source" }
+typy-stdlib = { path = "crates/typy-stdlib" }
 typy-tyir = { path = "crates/typy-tyir" }
 typy-check = { path = "crates/typy-check" }
 typy-codegen = { path = "crates/typy-codegen" }

@@ -60,6 +60,23 @@ def twice[T](value: T) -> T:
     return value + value
 ```
 
+A comparison, `<`, `<=`, `>`, `>=`, `==` or `!=`, also through `sorted`,
+`min`, `max` and a sort key, is left to the copies (GEN-18, ADR-0120):
+each copy compares its values as its types do, and a copy whose types do
+not order, such as one of `dict`s, is E0407 at the comparison:
+
+<!-- typy-expect: accepted -->
+```python
+def first_over[T](items: list[T], limit: T) -> int:
+    for index, item in enumerate(items):
+        if limit < item:
+            return index
+    return len(items)
+
+
+print(first_over([1, 5, 9], 4), first_over([(1, "a"), (2, "b")], (1, "z")))
+```
+
 A parameter that no argument gives, such as the `T` of
 `def empty[T]() -> list[T]`, is E0404.
 

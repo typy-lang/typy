@@ -237,6 +237,30 @@ the exact `int` product until its first `float` item, and `prod([],
 start=True)` is `True`. `prod` of items that are not numbers, such as
 strings, is planned for 1.0 (LIB-21).
 
+## The bisect module
+
+`import bisect` gives CPython's `bisect` module, written in typed Python
+that CPython also runs (LIB-27): `bisect_left`, `bisect_right` and
+`bisect` find where a value goes in a sorted sequence, and `insort_left`,
+`insort_right` and `insort` put it there in a list, each with `lo` and
+`hi` bounds and CPython's `ValueError` for a negative `lo`. The items
+compare as their types do, so a list of tuples is sorted item by item
+(GEN-18):
+
+<!-- typy-expect: accepted -->
+```python
+import bisect
+
+grades = [60, 70, 80, 90]
+events = [(1, "start"), (5, "stop")]
+bisect.insort(events, (3, "pause"))
+print(bisect.bisect(grades, 75), bisect.bisect_left(grades, 80), events)
+```
+
+The `key` parameter, which makes the searched value of another type than
+the items, needs `@overload` with type parameters and is planned for
+0.13 (TYP-35).
+
 ## The sys module
 
 `import sys` gives these names of CPython's `sys` module (LIB-04,
