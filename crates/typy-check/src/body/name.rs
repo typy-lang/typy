@@ -84,6 +84,7 @@ impl BodyChecker<'_> {
             if let Some(refused) = self.refused_nested_value(symbol, id, span) {
                 return refused;
             }
+            self.read_before_add(symbol, span);
             let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
             let kind = self.read_kind(id, symbol);
             let read = Self::typed(kind, ty.clone(), span);

@@ -720,26 +720,40 @@ print(row)
 
 ## E0410: empty collection without an annotation
 
-`[]`, `{}`, `set()` and `dict()` need their item types from an annotation
-or from where the value goes (TYP-05). Annotate the variable, such as
+`[]`, `{}`, `set()` and `dict()` need their item types from an annotation,
+from where the value goes (TYP-05), or, for a variable of a function, from
+the first statement of the function that adds to it (TYP-27). A read of
+the variable before that statement, a collection no statement of the
+function adds to, and a module variable need the annotation, such as
 `names: list[str] = []`.
 
-This program gives E0410:
+This program gives E0410, since `names` is read before a statement adds
+to it:
 
-<!-- typy-expect: rejected E0410 at 1:9 -->
+<!-- typy-expect: rejected E0410 at 2:13 -->
 ```python
-names = []
-names.append("Ada")
-print(names)
+def greeted() -> list[str]:
+    names = []
+    print(len(names))
+    names.append("Ada")
+    return names
+
+
+print(greeted())
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-names: list[str] = []
-names.append("Ada")
-print(names)
+def greeted() -> list[str]:
+    names = []
+    names.append("Ada")
+    print(len(names))
+    return names
+
+
+print(greeted())
 ```
 
 ## E0411: `for` over a value that cannot be iterated

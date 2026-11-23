@@ -48,6 +48,7 @@ mod exception_creation;
 mod exception_part;
 mod exception_unpacking;
 mod expression;
+mod first_add;
 mod flow;
 mod fstring;
 mod import;
@@ -243,6 +244,8 @@ pub(crate) struct BodyChecker<'program> {
     used_cells: BTreeSet<SymbolId>,
     /// The calls with `*` or `**` that bound their arguments, by their spans (ADR-0073).
     unpacking_calls: Vec<Span>,
+    /// What the check knows and learns of the empty collections variables hold (TYP-27).
+    first_adds: first_add::FirstAdds,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -289,6 +292,7 @@ impl<'program> BodyChecker<'program> {
             reading_function: false,
             used_cells: BTreeSet::new(),
             unpacking_calls: Vec::new(),
+            first_adds: first_add::FirstAdds::default(),
         }
     }
 
@@ -311,6 +315,29 @@ impl<'program> BodyChecker<'program> {
         closure: Option<nested_function::Closure>,
         diagnostics: &mut Diagnostics,
     ) {
+        let first_adds = Self::look_for_adds(program, function, definition, closure.as_ref());
+        let (pending, _) = Self::check_body_with(
+            program,
+            function,
+            definition,
+            closure,
+            first_adds,
+            diagnostics,
+        );
+        Self::check_nested(program, pending, diagnostics);
+    }
+
+    /// Checks the body of `function` knowing `first_adds` of its empty collections, and
+    /// returns the nested functions it defines, whose bodies are checked next, with what the
+    /// check learnt of its empty collections (TYP-27).
+    fn check_body_with(
+        program: &mut Program,
+        function: FunctionId,
+        definition: &Definition<'_>,
+        closure: Option<nested_function::Closure>,
+        first_adds: first_add::FirstAdds,
+        diagnostics: &mut Diagnostics,
+    ) -> (Vec<nested_function::Pending>, first_add::FirstAdds) {
         // A result inferred after the definition was made is the program's (TYP-26).
         let mut signature = definition.signature.clone();
         if program.inferred_results.contains(&function) {
@@ -319,33 +346,8 @@ impl<'program> BodyChecker<'program> {
         let returns = signature.returns.clone();
         let mut checker = BodyChecker::new(program, diagnostics, Some(returns.clone()));
         checker.result = ResultSource::of(checker.program, function);
-        let mut parameters = Vec::new();
-        for ((name, span), parameter) in definition
-            .parameters
-            .iter()
-            .zip(&definition.signature.parameters)
-        {
-            let symbol = checker.program.add_symbol(
-                name,
-                SymbolKind::Parameter,
-                parameter.ty.clone(),
-                *span,
-            );
-            checker.locals.insert(name.clone(), symbol);
-            // A parameter of an abstract collection holds the built-in collection given, and
-            // takes another as its declared type says (LIB-20).
-            if parameter.ty.has_abstract() {
-                checker.declared.insert(symbol, parameter.ty.clone());
-            }
-            checker
-                .types
-                .insert(symbol, parameter.ty.without_abstract());
-            checker
-                .assigned
-                .get_or_insert_with(BTreeSet::new)
-                .insert(flow::Fact::Assigned(symbol));
-            parameters.push(symbol);
-        }
+        checker.first_adds = first_adds;
+        let parameters = checker.bind_parameters(definition);
         checker.class_parameter = checker.class_method_parameter(definition, parameters.first());
         if let (Some(class), true, Some(instance)) = (
             definition.class,
@@ -384,6 +386,7 @@ impl<'program> BodyChecker<'program> {
         let statements: Vec<&Stmt> = checked_body.iter().collect();
         checker.collect_locals(&statements);
         let body = checker.statements(&statements);
+        checker.finish_first_adds();
         checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
         if !protocol {
@@ -394,6 +397,7 @@ impl<'program> BodyChecker<'program> {
         checker.settle_closures();
         let pending = std::mem::take(&mut checker.pending);
         let cells = checker.cell_variables();
+        let first_adds = std::mem::take(&mut checker.first_adds);
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
@@ -419,7 +423,34 @@ impl<'program> BodyChecker<'program> {
         if !cells.is_empty() {
             program.cells.insert(function, cells);
         }
-        Self::check_nested(program, pending, diagnostics);
+        (pending, first_adds)
+    }
+
+    /// Binds the parameters of `definition` as variables of the body, assigned and of their
+    /// declared types, and returns them in order.
+    fn bind_parameters(&mut self, definition: &Definition<'_>) -> Vec<SymbolId> {
+        let mut parameters = Vec::new();
+        for ((name, span), parameter) in definition
+            .parameters
+            .iter()
+            .zip(&definition.signature.parameters)
+        {
+            let symbol =
+                self.program
+                    .add_symbol(name, SymbolKind::Parameter, parameter.ty.clone(), *span);
+            self.locals.insert(name.clone(), symbol);
+            // A parameter of an abstract collection holds the built-in collection given, and
+            // takes another as its declared type says (LIB-20).
+            if parameter.ty.has_abstract() {
+                self.declared.insert(symbol, parameter.ty.clone());
+            }
+            self.types.insert(symbol, parameter.ty.without_abstract());
+            self.assigned
+                .get_or_insert_with(BTreeSet::new)
+                .insert(flow::Fact::Assigned(symbol));
+            parameters.push(symbol);
+        }
+        parameters
     }
 
     /// Reports a function that can reach its end without returning the value its annotation

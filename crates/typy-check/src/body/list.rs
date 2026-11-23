@@ -369,8 +369,9 @@ impl BodyChecker<'_> {
                     )
                     .with_rule(RuleId::TYP_05)
                     .with_help(
-                        "annotate the variable, such as `items: list[int] = []`; the item type \
-                         inferred from its first use is planned for TyPy 0.12 (TYP-27)",
+                        "annotate the variable, such as `items: list[int] = []`; a variable \
+                         of a function takes it from the first statement that adds to it, such \
+                         as `items.append(1)` (TYP-27)",
                     ),
                     span,
                 );
@@ -499,7 +500,7 @@ impl BodyChecker<'_> {
 
     /// Returns which empty collection an expression makes without an annotation: an empty list
     /// display, or `set()`.
-    fn empty_collection(&self, expression: &Expr) -> Option<Empty> {
+    pub(super) fn empty_collection(&self, expression: &Expr) -> Option<Empty> {
         if is_empty_list(expression) {
             return Some(Empty::List);
         }
@@ -581,7 +582,7 @@ impl BodyChecker<'_> {
 
 /// An empty collection that takes its type from where it is used.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Empty {
+pub(super) enum Empty {
     /// `[]`.
     List,
     /// `set()`.

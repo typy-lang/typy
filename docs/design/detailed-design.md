@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.119 |
+| Version | 2.120 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -1316,6 +1316,20 @@ item of a display has the first item's type, or E0409. An empty display has
 a type only where the context gives one, through
 `expression_expecting(expr, expected)`: an annotated or already typed
 variable, a `return`, or an argument; anywhere else it is E0410 (TYP-05).
+A variable of a function assigned an empty display, `list()`, `set()` or
+`dict()` takes its types from the first statement that adds to it
+(TYP-27). `body/first_add.rs` does this with looks: `look_for_adds` checks
+a body that assigns one, found by a scan of its statements, as a look that
+`Program::undo` reverses, with `FirstAdds::looking` set. The assignment
+gives the variable a collection of the error type and notes it as
+waiting; `add_to_empty` and `set_in_empty` give it the type of what
+`append`, `insert`, `extend`, `add`, `update`, `setdefault` or
+`items[key] = value` adds, by the span of the empty collection; a read
+of a waiting variable, a type with an error, or no such statement notes
+E0410. A look that found a type is followed by another, since one
+collection's type may give another's. The check after the looks gives
+each empty collection the type found as its expected type, or the error
+type with the look's E0410, so the typed body needs no rewriting.
 `Method::of(receiver, name)` lists the methods of the built-in types; any
 other name is E0412 (LIB-03). On a list they are `append`, `pop`, `insert`,
 `extend`, `remove`, `index`, `count`, `clear`, `copy`, `reverse` and `sort`;

@@ -305,6 +305,15 @@ impl Program {
         self.classes.len()
     }
 
+    /// Returns the ID of the first class of the module being checked, from which a look at a
+    /// body undoes what it changed.
+    pub(crate) fn module_first_class(&self) -> usize {
+        self.class_modules
+            .iter()
+            .position(|module| *module == self.module)
+            .unwrap_or(self.classes.len())
+    }
+
     /// Returns how many functions the modules checked so far define, the first ID of the next.
     pub(crate) fn function_count(&self) -> usize {
         self.functions.len()

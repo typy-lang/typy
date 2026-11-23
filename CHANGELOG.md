@@ -8,6 +8,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- A variable of a function assigned an empty `[]`, `{}`, `set()`,
+  `list()` or `dict()` without an annotation takes its types from the
+  first statement of the function that adds to it: `append`, `insert` or
+  `extend` of a list, `add` or `update` of a set, and `items[key] = value`,
+  `setdefault` or `update` of a dict. A read before that statement is
+  E0410 (TYP-27, ADR-0092).
 - A function defined at module level, and an instance method, may leave
   out its return annotation: it returns what its `return` statements give,
   their union, with `None` when it can reach its end. A static, class or

@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.49 |
+| Version | 1.50 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -357,7 +357,7 @@ that the specification does not define.
 | TYP-24 | 0.11 | UT, IT | `typy-check` tests of the types a cast decides and refuses; `tests/conformance/typ/TYP-24_*.py` for a right cast and a wrong one that raises `TypeError` |
 | TYP-25 | 0.13 | UT, IT | `typy-check` tests of the refusal while it is planned; runtime tests of binding an attribute, an operator and a call by type, with the cache; `tests/conformance/typ/TYP-25_*.py` for each operation and each error CPython raises |
 | TYP-26 | 0.12 | IT | `crates/typy-check/tests/integration/result_inference.rs` for a result inferred from one `return`, from several, and from none, and each case that keeps the annotation; `tests/conformance/typ/TYP-26_*.py` |
-| TYP-27 | 0.12 | UT, IT | `typy-check` tests of each statement that fills an empty list, dict or set, and of a read before it; `tests/conformance/typ/TYP-27_*.py` |
+| TYP-27 | 0.12 | UT, IT | `crates/typy-check/src/body/first_add/tests.rs` for the scan of a body's assignments; `crates/typy-check/tests/integration/first_add.rs` for each statement that adds to an empty list, dict or set, a read before it, a value without a type, and no such statement; `tests/conformance/typ/TYP-27_*.py` |
 | TYP-28 | 0.12 | UT, IT | `typy-check` tests of each literal kind, of a constant that passes and one that does not, and of narrowing by `==`, `in` and `match`; `tests/conformance/typ/TYP-28_*.py` |
 | TYP-29 | 0.12 | UT, IT | `typy-check` tests of a call that matches each signature, one that matches none, and a body that breaks a signature; `tests/conformance/typ/TYP-29_*.py` |
 | TYP-30 | 0.12 | UT, IT | `typy-check` tests of `Self` through a base and a derived class; `tests/conformance/typ/TYP-30_*.py` |

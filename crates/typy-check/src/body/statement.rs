@@ -95,6 +95,17 @@ impl BodyChecker<'_> {
                 value,
                 span,
             } => {
+                // `items[key] = value` gives an empty dict its types (TYP-27).
+                if let [
+                    Expr::Subscript {
+                        value: object,
+                        index,
+                        ..
+                    },
+                ] = targets.as_slice()
+                {
+                    self.set_in_empty(object, index, value);
+                }
                 if let [
                     Expr::Attribute {
                         value: object,
@@ -121,6 +132,14 @@ impl BodyChecker<'_> {
                     [single] => self.known_type(single),
                     _ => None,
                 };
+                // An empty collection takes its type from the first statement that adds to it
+                // (TYP-27).
+                let empty = match (targets.as_slice(), &expected) {
+                    ([single], None) => self.empty_local(single, value),
+                    _ => None,
+                };
+                let expected =
+                    expected.or_else(|| empty.as_ref().map(super::first_add::EmptyLocal::ty));
                 // A name may be bound to a `ctypes` class, which the program then calls or
                 // names in a declaration (FFI-03).
                 self.class_allowed = targets
@@ -148,6 +167,9 @@ impl BodyChecker<'_> {
                     .iter()
                     .filter_map(|target| self.assign_target(target, value.ty.clone(), &value))
                     .collect();
+                if let Some(empty) = empty {
+                    self.wait_for_add(empty);
+                }
                 TypedStmt::Assign {
                     targets,
                     value,
