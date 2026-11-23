@@ -247,6 +247,7 @@ nav:
           - adr/0112-check-a-call-against-the-first-overload-that-takes-it.md
           - adr/0113-read-self-as-the-class-a-call-is-made-through.md
           - adr/0114-test-what-a-type-guard-narrows-when-the-program-runs.md
+          - adr/0115-refuse-a-direct-call-of-an-abstract-method-that-gives-no-value.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

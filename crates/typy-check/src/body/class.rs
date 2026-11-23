@@ -498,9 +498,8 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Checks `Class(arguments)`: the arguments of `__init__`, without the instance, or none
-    /// for a class without `__init__`. An exception class without `__init__` takes positional
-    /// arguments of any type, as its built-in base does.
+    /// Checks `Class(arguments)` of a class the call names: a protocol, and a class with
+    /// abstract methods without an override, have no instances (GEN-04, CLS-45).
     pub(super) fn new_instance(
         &mut self,
         class: ClassId,
@@ -511,6 +510,22 @@ impl BodyChecker<'_> {
         if let Some(refused) = self.protocol_called(class, arguments, span) {
             return refused;
         }
+        if let Some(refused) = self.abstract_called(class, arguments, span) {
+            return refused;
+        }
+        self.instance_made(class, arguments, keywords, span)
+    }
+
+    /// Checks `Class(arguments)`: the arguments of `__init__`, without the instance, or none
+    /// for a class without `__init__`. An exception class without `__init__` takes positional
+    /// arguments of any type, as its built-in base does.
+    pub(super) fn instance_made(
+        &mut self,
+        class: ClassId,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
         let class = match self.class_to_call(class, arguments, keywords, span) {
             Ok(class) => class,
             Err(error) => return error,

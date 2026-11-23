@@ -86,6 +86,15 @@ pub(crate) struct ClassInfo {
     /// The attributes `__init__` declares `Final`, each by its position with the statement
     /// that alone assigns it (TYP-08).
     pub(crate) final_attributes: Vec<(usize, Span)>,
+    /// Whether `abc.ABC` is the class's base or an ancestor's, so `@abstractmethod` makes the
+    /// methods it marks abstract (CLS-45).
+    pub(crate) abstract_base: bool,
+    /// The abstract methods the class has without an override, by name in sorted order; an
+    /// instance is made only of a class that has none (CLS-45).
+    pub(crate) abstract_methods: Vec<String>,
+    /// The class's own abstract methods that take the instance and whose bodies give no
+    /// value, so no call runs them directly (CLS-45).
+    pub(crate) empty_abstract: Vec<String>,
     pub(crate) span: Span,
 }
 
@@ -789,6 +798,9 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         match_args: None,
         init_uses_instance: false,
         final_attributes: Vec::new(),
+        abstract_base: false,
+        abstract_methods: Vec::new(),
+        empty_abstract: Vec::new(),
         span: class.span,
     }
 }

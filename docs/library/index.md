@@ -20,11 +20,12 @@ TyPy 0.11 provides these modules of the standard library:
 | `math` | Its constants and its functions of numbers | [Built-in functions and modules](functions-and-modules.md#the-math-module) |
 | `sys` | `argv`, `exit`, the standard streams, the version and the recursion limit | [Built-in functions and modules](functions-and-modules.md#the-sys-module) |
 | `dataclasses` | `dataclass` and `field` | [Classes](../reference/classes.md#dataclasses) |
+| `abc` | `ABC` and `abstractmethod` | [Classes](../reference/classes.md#abstract-classes) |
 | `typing`, `collections.abc` and `types` | Names for annotations, such as `Iterator`, `Final` and `Protocol` | [Modules](../reference/modules.md) |
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
 A module planned for a later release is refused with E0201, naming the
-release: `enum` and `abc` (CLS-44, CLS-45), `textwrap`, `base64`,
+release: `enum` (CLS-44), `textwrap`, `base64`,
 `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string`
 (LIB-27) in 0.12;
 `math.integer` (LIB-26) in 0.12 from the Python floor 3.15; `os` (LIB-07)

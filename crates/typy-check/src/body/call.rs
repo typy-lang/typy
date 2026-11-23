@@ -35,7 +35,12 @@ impl BodyChecker<'_> {
                     }
                     return Some(self.not_callable((None, span), &Type::TypeObject(None), span));
                 }
-                Some(self.new_instance(class, arguments, keywords, span))
+                if let Some(refused) = self.protocol_called(class, arguments, span) {
+                    return Some(refused);
+                }
+                // CPython tests for abstract methods when the program runs (CLS-45).
+                let made = self.instance_made(class, arguments, keywords, span);
+                Some(self.abstract_made(class, made))
             }
             Type::CDataClass(class) => Some(self.cdata_new(class, arguments, keywords, span)),
             _ => None,

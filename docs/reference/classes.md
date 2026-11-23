@@ -19,6 +19,7 @@ class body or assigned in `__init__`, and has one type.
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | A class derived from `typing.NamedTuple`, whose instances are tuples of its fields | CLS-27 |
+| A class derived from `abc.ABC`, with `@abstractmethod`; see [Abstract classes](#abstract-classes) | CLS-45 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -841,6 +842,69 @@ class derived from a named tuple with `__new__`, `__init__` or
 attributes of its own, and one that defines `__len__`, `__getitem__`,
 `__iter__` or `__contains__` are planned for 1.0 (CLS-41), and a named
 tuple where a plain tuple is expected also for 1.0 (CLS-42).
+
+## Abstract classes
+
+A class derived from `abc.ABC` marks a method `@abstractmethod`, and a
+class derived from it overrides the method (CLS-45). An instance is made
+only of a class that overrides every abstract method it has, so a call
+through an instance always runs an override:
+
+<!-- typy-expect: accepted -->
+```python
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float: ...
+
+    @property
+    @abstractmethod
+    def sides(self) -> int: ...
+
+    def describe(self) -> str:
+        return f"{self.area():.1f} with {self.sides} sides"
+
+    @classmethod
+    def make(cls) -> "Shape":
+        return cls()
+
+
+class Square(Shape):
+    def area(self) -> float:
+        return 4.0
+
+    @property
+    def sides(self) -> int:
+        return 4
+
+
+print(Square().describe(), Square.make().describe())
+try:
+    Shape.make()
+except TypeError as error:
+    print(error)
+```
+
+A call that names a class with an abstract method left, such as
+`Shape()`, is E0404. Through a value that holds the class, such as
+`cls()` in a class method called through `Shape`, it raises CPython's
+`TypeError` when the program runs. `@abstractmethod` comes last, just
+above `def`: above `@property`, `@staticmethod` or `@classmethod`
+CPython raises `AttributeError` when the class is defined, and TyPy
+refuses it with E0434.
+
+An abstract method's body may hold only a docstring, `pass` or `...`.
+CPython returns `None` when such a body runs, so where the method's
+result does not hold `None`, a call that runs the body directly is
+E0434: `super().area()`, `Shape.area(square)`, and `Shape.area` read as
+a value. A call through an instance runs the override. An abstract
+static or class method, which a call through the class runs, gives a
+value or raises, as other functions do (E0405). Without `ABC` among the
+class's ancestors, `@abstractmethod` changes nothing, as in CPython.
+`ABC` and `abstractmethod` are the names of `abc` TyPy gives;
+`ABCMeta` as a metaclass, and `ABC` as a type or a value, are refused.
 
 ## Attributes are declared
 

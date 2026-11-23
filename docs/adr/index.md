@@ -120,3 +120,4 @@ supersedes it.
 | [ADR-0112](0112-check-a-call-against-the-first-overload-that-takes-it.md) | Check a call against the first overload that takes it | Accepted | 2026-11-23 |
 | [ADR-0113](0113-read-self-as-the-class-a-call-is-made-through.md) | Read `Self` as the class a call is made through | Accepted | 2026-11-23 |
 | [ADR-0114](0114-test-what-a-type-guard-narrows-when-the-program-runs.md) | Test what a type guard narrows when the program runs | Accepted | 2026-11-23 |
+| [ADR-0115](0115-refuse-a-direct-call-of-an-abstract-method-that-gives-no-value.md) | Refuse a direct call of an abstract method that gives no value | Accepted | 2026-11-23 |

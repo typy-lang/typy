@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.56 |
+| Version | 1.57 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -497,7 +497,7 @@ that the specification does not define.
 | CLS-42 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-42_*.py` |
 | CLS-43 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-43_*.py` |
 | CLS-44 | 0.12 | UT, IT | `typy-check` tests of the expansion of each enum kind and of `auto()`; `tests/conformance/cls/CLS-44_*.py` for members, iteration, lookup, comparison, hashing, `match` and the `Flag` operators, with CPython's errors |
-| CLS-45 | 0.12 | UT, IT | `typy-check` tests of an abstract class named in a call, and of a subclass that overrides every abstract method; `tests/conformance/cls/CLS-45_*.py` for the `TypeError` through a `type[C]` value |
+| CLS-45 | 0.12 | UT, IT | `crates/typy-check/src/check/abstract_class/tests.rs` for what the reading of `abc` takes out and marks; `crates/typy-check/tests/integration/abstract_classes.rs` for the forms accepted, an abstract class named in a call, abstract methods through other modules and copies of generic classes, a direct call of an empty abstract method, a misplaced `@abstractmethod` and the names of `abc` refused; `tests/conformance/cls/CLS-45_*.py` for overrides, the `TypeError` of `cls()` on an abstract class, and the refusals |
 | CLS-46 | 0.14 | IT | `tests/conformance/cls/CLS-46_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |

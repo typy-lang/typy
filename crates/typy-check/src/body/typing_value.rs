@@ -261,8 +261,9 @@ impl BodyChecker<'_> {
         self.program.annotation_names.get(id).copied()
     }
 
-    /// Returns E0202 for `cast`, `overload`, `NamedTuple`, `dataclass` or `field` read as a value: each is
-    /// a function, which TyPy reads only where it is called or a class names it as its base.
+    /// Returns E0202 for `cast`, `overload`, `NamedTuple`, `dataclass`, `field`, `ABC` or
+    /// `abstractmethod` read as a value, which TyPy reads only where it is called, decorates or
+    /// a class names it as its base.
     fn function_of_typing(&mut self, expression: &Expr) -> Option<TypedExpr> {
         let name = self.standard_name_of(expression)?;
         if !matches!(
@@ -271,12 +272,13 @@ impl BodyChecker<'_> {
                 | AnnotationName::NamedTuple
                 | AnnotationName::Dataclasses
                 | AnnotationName::Overload
+                | AnnotationName::AbstractClasses
         ) {
             return None;
         }
         let span = expression.span();
-        let message = "this function of `typing` or `dataclasses` is read only where it is \
-                       called or a class names it, not as a value";
+        let message = "this name of `typing`, `dataclasses` or `abc` is read only where it is \
+                       called, decorates or a class names it, not as a value";
         Some(
             self.error(
                 Diagnostic::new(DiagnosticCode::error(202), span, message)
@@ -661,6 +663,7 @@ fn named_text(name: AnnotationName) -> Option<NamedText> {
         | AnnotationName::NamedTuple
         | AnnotationName::Dataclasses
         | AnnotationName::Overload
+        | AnnotationName::AbstractClasses
         | AnnotationName::Rebound => return None,
     })
 }

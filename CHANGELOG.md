@@ -8,6 +8,14 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `abc.ABC` and `@abstractmethod`: a class derived from `ABC` has
+  instances only once every abstract method is overridden. A call that
+  names a class with one left is E0404, and one through a value such as
+  `cls()` raises CPython's `TypeError`. An abstract method may have an
+  empty body, and a call through `super()` or the class that would run
+  it where its result does not hold `None` is E0434, as is
+  `@abstractmethod` above `@property`, `@staticmethod` or `@classmethod`
+  (CLS-45, ADR-0093, ADR-0115).
 - `typing.TypeGuard[T]` and `typing.TypeIs[T]` as a module function's
   result: a test of a call narrows its first argument, a variable, to `T`,
   and for `TypeIs` to the rest where it is false. A result the argument's

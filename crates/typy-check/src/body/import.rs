@@ -395,7 +395,6 @@ impl Program {
         let planned = match top {
             "os" => Some(("1.0", RuleId::LIB_07)),
             "enum" => Some(("0.12", RuleId::CLS_44)),
-            "abc" => Some(("0.12", RuleId::CLS_45)),
             "textwrap" | "base64" | "heapq" | "bisect" | "statistics" | "time" | "random"
             | "copy" | "string" => Some(("0.12", RuleId::LIB_27)),
             _ => None,
@@ -421,8 +420,8 @@ impl Program {
             )
             .with_rule(RuleId::LIB_08)
             .with_help(
-                "TyPy provides `math`, `sys`, `dataclasses`, `typing`, `collections.abc` and \
-                 `types`",
+                "TyPy provides `math`, `sys`, `dataclasses`, `abc`, `typing`, \
+                 `collections.abc` and `types`",
             ),
         }))
     }
@@ -484,6 +483,11 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         )
         .with_rule(rule);
     }
+    let rule = if module.as_str() == "abc" {
+        RuleId::CLS_45
+    } else {
+        RuleId::LIB_17
+    };
     Diagnostic::new(
         DiagnosticCode::error(425),
         alias.name.span,
@@ -492,7 +496,7 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
             listed(given_names(module.as_str()))
         ),
     )
-    .with_rule(RuleId::LIB_17)
+    .with_rule(rule)
 }
 
 /// Returns the names TyPy gives of `typing`, `collections.abc` or `dataclasses`, each of
@@ -518,6 +522,7 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "ItemsView",
         ],
         "dataclasses" => &["dataclass", "field"],
+        "abc" => &["ABC", "abstractmethod"],
         _ => &[
             "Iterator",
             "Iterable",

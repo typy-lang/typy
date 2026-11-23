@@ -1,6 +1,7 @@
 //! The integration tests of `typy-check`, one module per area, built as one test program so the
 //! crate links its tests once.
 
+mod abstract_classes;
 mod call_arguments;
 mod call_unpacking;
 mod callable_adapters;

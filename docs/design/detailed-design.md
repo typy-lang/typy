@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.126 |
+| Version | 2.127 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -361,6 +361,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0431 | Value that is not one of the constants its `Literal` type names | TYP-28 |
 | E0432 | `@overload` without an implementation, one its implementation does not accept, or a call no overload takes | TYP-29 |
 | E0433 | Value of a method's own class where `Self` is wanted | TYP-30 |
+| E0434 | `@abstractmethod` above another method decorator, or a direct call of an abstract method that gives no value | CLS-45 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -1232,6 +1233,33 @@ for each overload as a look with `body_signature`, keeping the errors the
 check of the body did not report, labelled with the overload, while
 `Program::overload_look` lets `test_reach` decide code by a `LiteralTest`'s
 `may_hold` and `may_fail`.
+`check/abstract_class.rs` reads the classes of `abc` before the dataclass
+expansion (CLS-45, ADR-0093, ADR-0115). `read` takes `ABC` out of each
+class's bases and the last `@abstractmethod` out of each function's
+decorators, finding both through `imported_name::ImportedName`, which
+also finds `typing.overload`, and keeps in `AbstractMarks`, by the span
+of each name, the classes that named `ABC` and the methods it marked;
+`@abstractmethod` above `@property`, `@staticmethod`, `@classmethod` or a
+setter is E0434 and taken out. `mark_abstract` gives each class's
+`ClassInfo` three fields as `ABCMeta` would: `abstract_base`, set when the
+class or an ancestor named `ABC`; `abstract_methods`, its own marked
+methods and each of its base's that its body does not define again,
+sorted; and `empty_abstract`, its own marked methods that take the
+instance and whose bodies `gives_no_value` finds to hold only a
+docstring, `pass` or `...`. A base that is a copy of a generic class is
+read through the class it is copied from. An exception class keeps none,
+as `BaseException` makes its instances without the test. In
+`body/abstract_call.rs`, `abstract_called` refuses, with E0404, a call
+that names a class with abstract methods left, from `new_instance`;
+`call_class_value` calls `instance_made` and `abstract_made`, which
+makes the call through a `type[C]` value, such as `cls()`, a `Sequence`
+of its arguments ending in `raise TypeError` with CPython's message.
+`check_end` lets an empty abstract method reach its end, which returns
+`None` where its result holds `None`, and `abstract_end` adds
+`raise NotImplementedError` where it does not. `empty_abstract_run`
+refuses, with E0434, `super_method`, `unbound_call` and
+`class_method_value` of such a method, which `Program::runs_empty_abstract`
+finds as the nearest class defining the name.
 `BodyChecker::statements` stops at the first statement no path reaches,
 `assigned` being `None` there, so a statement that cannot run is neither
 checked nor compiled (TYP-34, ADR-0111). `flow::test_reach` says whether a

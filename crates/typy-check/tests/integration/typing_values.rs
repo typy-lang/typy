@@ -133,8 +133,8 @@ fn typ_18_what_no_typing_value_gives_is_refused_with_the_reason() {
         (
             "from typing import cast\nf = cast\n",
             "E0202",
-            "this function of `typing` or `dataclasses` is read only where it is called or a \
-             class names it, not as a value",
+            "this name of `typing`, `dataclasses` or `abc` is read only where it is called, \
+             decorates or a class names it, not as a value",
         ),
         (
             "import typing\nprint(typing)\n",

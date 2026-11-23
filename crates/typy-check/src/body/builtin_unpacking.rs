@@ -722,7 +722,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns `raise TypeError(message)` in place of a value of type `ty`.
-    fn raised(&mut self, message: TypedExpr, ty: &Type, span: Span) -> TypedExpr {
+    pub(super) fn raised(&mut self, message: TypedExpr, ty: &Type, span: Span) -> TypedExpr {
         let class = ExceptionClass::Builtin(BuiltinException::TypeError);
         self.program.record_creation(&class, &[Type::Str]);
         let exception = Self::typed(

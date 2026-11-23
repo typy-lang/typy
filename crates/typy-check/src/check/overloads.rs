@@ -3,12 +3,13 @@
 //! implementation, leaves the module or the class body and is kept by name, so the checker
 //! reads its signature and no program runs it.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
-use typy_source::syntax::{Expr, Stmt};
+use typy_source::syntax::Stmt;
 
 use super::definition::{Definition, FunctionParts};
+use super::imported_name::ImportedName;
 use crate::body::Program;
 use crate::typed::FunctionId;
 
@@ -40,7 +41,7 @@ impl Overloads {
 /// Takes the overloads out of a module's body and of its classes' bodies, and reports an
 /// overload without an implementation, and one in a form a later release gives.
 pub(crate) fn gather(body: &mut Vec<Stmt>, diagnostics: &mut Diagnostics) -> Overloads {
-    let names = OverloadNames::of(body);
+    let names = ImportedName::of(body, "typing", "overload");
     let mut overloads = Overloads::default();
     if names.is_empty() {
         return overloads;
@@ -74,86 +75,24 @@ pub(crate) fn gather(body: &mut Vec<Stmt>, diagnostics: &mut Diagnostics) -> Ove
     overloads
 }
 
-/// The names a module reads `typing.overload` through: the names `from typing import
-/// overload` binds, and the names of the module `typing` itself.
-struct OverloadNames {
-    direct: BTreeSet<String>,
-    modules: BTreeSet<String>,
-}
-
-impl OverloadNames {
-    /// Returns the names the imports of `body` bind to `typing.overload` and to `typing`.
-    fn of(body: &[Stmt]) -> Self {
-        let mut found = Self {
-            direct: BTreeSet::new(),
-            modules: BTreeSet::new(),
-        };
-        for statement in body {
-            match statement {
-                Stmt::ImportFrom {
-                    module: Some(module),
-                    names,
-                    level: 0,
-                    ..
-                } if module.name == "typing" => {
-                    for alias in names {
-                        if alias.name.name == "overload" {
-                            let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
-                            found.direct.insert(bound.name.clone());
-                        }
-                    }
-                }
-                Stmt::Import { names, .. } => {
-                    for alias in names {
-                        if alias.name.name == "typing" {
-                            let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
-                            found.modules.insert(bound.name.clone());
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        found
-    }
-
-    fn is_empty(&self) -> bool {
-        self.direct.is_empty() && self.modules.is_empty()
-    }
-
-    /// Returns whether `decorator` names `typing.overload`.
-    fn names(&self, decorator: &Expr) -> bool {
-        match decorator {
-            Expr::Name { id, .. } => self.direct.contains(id),
-            Expr::Attribute {
-                value, attribute, ..
-            } => {
-                attribute.name == "overload"
-                    && matches!(value.as_ref(), Expr::Name { id, .. } if self.modules.contains(id))
-            }
-            _ => false,
-        }
-    }
-
-    /// Returns whether a statement is a `def` decorated with `typing.overload`.
-    fn decorates(&self, statement: &Stmt) -> bool {
-        matches!(statement, Stmt::FunctionDef { decorators, .. }
-            if decorators.iter().any(|decorator| self.names(decorator)))
-    }
+/// Returns whether a statement is a `def` decorated with `typing.overload`.
+fn decorates(names: &ImportedName, statement: &Stmt) -> bool {
+    matches!(statement, Stmt::FunctionDef { decorators, .. }
+        if decorators.iter().any(|decorator| names.names(decorator)))
 }
 
 /// Takes the overloads out of one block, a module's or a class's body, and returns them by
 /// the name of their implementation, which must follow them.
 fn gather_block(
     body: &mut Vec<Stmt>,
-    names: &OverloadNames,
+    names: &ImportedName,
     class: Option<&str>,
     diagnostics: &mut Diagnostics,
 ) -> Vec<(String, Vec<Stmt>)> {
     let mut gathered = Vec::new();
     let mut waiting: Vec<Stmt> = Vec::new();
     for statement in std::mem::take(body) {
-        if names.decorates(&statement) {
+        if decorates(names, &statement) {
             let stub = stub(statement, names, class, diagnostics);
             if waiting
                 .first()
@@ -186,7 +125,7 @@ fn gather_block(
 /// another decorator, type parameters, or a special method.
 fn stub(
     mut statement: Stmt,
-    names: &OverloadNames,
+    names: &ImportedName,
     class: Option<&str>,
     diagnostics: &mut Diagnostics,
 ) -> Stmt {
@@ -232,7 +171,7 @@ fn check_implementation(statement: &Stmt, class: Option<&str>, diagnostics: &mut
 
 /// Reports each overload in a block of a function, a class method's body or a block such as
 /// an `if`, which a later release gives.
-fn refuse_nested(body: &[Stmt], names: &OverloadNames, diagnostics: &mut Diagnostics) {
+fn refuse_nested(body: &[Stmt], names: &ImportedName, diagnostics: &mut Diagnostics) {
     for statement in body {
         if let Stmt::FunctionDef {
             name, decorators, ..

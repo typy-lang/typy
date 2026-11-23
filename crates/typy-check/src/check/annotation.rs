@@ -76,6 +76,9 @@ pub(crate) enum AnnotationName {
     /// `dataclasses.dataclass` and `dataclasses.field`, which the dataclass expansion reads
     /// (CLS-05).
     Dataclasses,
+    /// `abc.ABC` and `abc.abstractmethod`, which the reading of abstract classes takes out of
+    /// the module (CLS-45).
+    AbstractClasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
     /// `typing.cast`, a function a call checks when the program runs (TYP-24).
@@ -118,9 +121,10 @@ pub(crate) enum Origin {
     Abc,
 }
 
-/// The modules that give names for annotations only in 0.3.
-pub(crate) const ANNOTATION_MODULES: [&str; 4] =
-    ["typing", "collections.abc", "types", "dataclasses"];
+/// The modules that give names for annotations only in 0.3, and `abc` from 0.12, whose
+/// names the reading of abstract classes takes out of the module (CLS-45).
+pub(crate) const ANNOTATION_MODULES: [&str; 5] =
+    ["typing", "collections.abc", "types", "dataclasses", "abc"];
 
 /// Returns the annotation name `name` of the module `module`, if TyPy 0.3 gives it.
 pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName> {
@@ -157,6 +161,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Tuple") => Some(AnnotationName::Builtin("tuple")),
         ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
+        ("abc", "ABC" | "abstractmethod") => Some(AnnotationName::AbstractClasses),
         ("typing" | "collections.abc", _) => AbstractCollection::named(module, name)
             .map(|collection| AnnotationName::Abstract(collection, origin(module))),
         _ => None,
@@ -324,9 +329,10 @@ fn bare_standard(
     match name {
         AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
         AnnotationName::Final => final_elsewhere(annotation, diagnostics),
-        AnnotationName::Dataclasses | AnnotationName::Cast | AnnotationName::Overload => {
-            not_a_type(&name, annotation.span(), diagnostics)
-        }
+        AnnotationName::Dataclasses
+        | AnnotationName::Cast
+        | AnnotationName::Overload
+        | AnnotationName::AbstractClasses => not_a_type(&name, annotation.span(), diagnostics),
         AnnotationName::Protocol => {
             diagnostics.push(
                 Diagnostic::new(
@@ -1163,6 +1169,11 @@ fn not_a_type(
         ("`cast` is a function, not a type", RuleId::TYP_24)
     } else if *name == AnnotationName::Overload {
         ("`overload` is a decorator, not a type", RuleId::TYP_29)
+    } else if *name == AnnotationName::AbstractClasses {
+        (
+            "`ABC` and `abstractmethod` are read as a base and a decorator, not as types",
+            RuleId::CLS_45,
+        )
     } else {
         ("`dataclass` and `field` are not types", RuleId::CLS_05)
     };

@@ -1,5 +1,6 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
+mod abstract_call;
 mod accessor;
 mod alias_value;
 mod arity_table;
@@ -399,12 +400,13 @@ impl<'program> BodyChecker<'program> {
         let saved = checker.import_names_of(checked_body);
         let statements: Vec<&Stmt> = checked_body.iter().collect();
         checker.collect_locals(&statements);
-        let body = checker.statements(&statements);
+        let mut body = checker.statements(&statements);
         checker.finish_first_adds();
         checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
         if !protocol {
             checker.check_end(definition, &returns);
+            body.extend(checker.abstract_end(definition, &returns));
         }
         let generator = checker.generator.take();
         let named_targets = std::mem::take(&mut checker.named_targets);
@@ -546,10 +548,13 @@ impl<'program> BodyChecker<'program> {
             Some(types) => types.returns.clone(),
             None => returns.clone(),
         };
+        // An abstract method whose body gives no value runs only where its result holds
+        // `None`, which it returns at its end; no call runs it where it does not (CLS-45).
         if self.assigned.is_none()
             || self.result == ResultSource::Inferred
             || returns == Type::NoneType
             || returns == Type::Error
+            || self.is_empty_abstract(definition)
         {
             return;
         }

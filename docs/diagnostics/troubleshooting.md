@@ -573,7 +573,8 @@ print(count, label)
 
 An argument does not match its parameter, an argument is missing or extra,
 or a keyword names no parameter (TYP-01). Pass a value of the parameter's
-type.
+type. A call that names a class with an abstract method it does not
+override is E0404 too, since the class has no instances (CLS-45).
 
 This program gives E0404:
 
@@ -1476,6 +1477,58 @@ class Shape:
 
 
 print(type(Shape().copy()).__name__)
+```
+
+## E0434: abstract method written or called out of place
+
+`@abstractmethod` comes last, just above `def`: above `@property`,
+`@staticmethod`, `@classmethod` or a setter, CPython raises
+`AttributeError` when the class is defined (CLS-45). An abstract method
+whose body holds only a docstring, `pass` or `...` gives no value, so a
+call that runs that body directly, through `super()` or the class,
+returns `None` in CPython where its result may not hold `None`. Call the
+method through an instance, which runs its override, or give the
+abstract method a body that returns a value.
+
+This program gives E0434:
+
+<!-- typy-expect: rejected E0434 at 11:24 -->
+```python
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float: ...
+
+
+class Square(Shape):
+    def area(self) -> float:
+        return super().area() + 4.0
+
+
+print(Square().area())
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float:
+        return 0.0
+
+
+class Square(Shape):
+    def area(self) -> float:
+        return super().area() + 4.0
+
+
+print(Square().area())
 ```
 
 ## E0701: C toolchain program not found

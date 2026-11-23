@@ -169,6 +169,11 @@ impl BodyChecker<'_> {
             Ok(found) => found,
             Err(error) => return error,
         };
+        if let Some(refused) =
+            self.empty_abstract_run(base, &name.name, &signature.returns, name.span)
+        {
+            return self.refused_super(refused, arguments, span);
+        }
         let bound = match self.bind_to(&signature, 1, &qualified, arguments, keywords, span) {
             Ok(bound) => bound,
             Err(error) => return error,

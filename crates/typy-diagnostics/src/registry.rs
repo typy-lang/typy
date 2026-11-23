@@ -282,6 +282,11 @@ pub const CODES: &[CodeInfo] = &[
         "value of a method's own class where `Self` is wanted",
         RuleId::TYP_30,
     ),
+    active(
+        434,
+        "`@abstractmethod` above another method decorator, or a direct call of an abstract method that gives no value",
+        RuleId::CLS_45,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

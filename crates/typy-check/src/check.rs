@@ -1,5 +1,6 @@
 //! Checks a project and builds its typed program (detailed design section 7.2).
 
+mod abstract_class;
 mod annotation;
 pub(crate) mod builtin_iterators;
 mod callable_annotation;
@@ -18,6 +19,7 @@ mod generic_class;
 mod generic_copies;
 #[cfg(test)]
 mod generic_tests;
+mod imported_name;
 mod inference;
 mod literal_annotation;
 mod module_imports;
@@ -106,10 +108,16 @@ impl TypeChecker {
         let mut foreign = BTreeMap::new();
         let mut structures = Vec::new();
         let mut overloads = BTreeMap::new();
+        let mut abstracts = BTreeMap::new();
         let expanded: Vec<(Module, BTreeMap<String, type_alias::Alias>)> = project
             .modules_in_order()
             .map(|module| {
-                let mut module = dataclasses.expand(module, &mut diagnostics);
+                // `ABC` and `@abstractmethod` leave the module, and the checker keeps what
+                // they mark (CLS-45).
+                let (read, marks) = abstract_class::read(module, &mut diagnostics);
+                let mut module =
+                    dataclasses.expand(read.as_ref().unwrap_or(module), &mut diagnostics);
+                abstracts.insert(module.name.as_str().to_owned(), marks);
                 // The overloads of a function leave the module, and the checker reads their
                 // signatures (TYP-29).
                 let gathered = overloads::gather(&mut module.syntax.body, &mut diagnostics);
@@ -149,6 +157,7 @@ impl TypeChecker {
             modules: &modules,
             aliases: &aliases,
             overloads: &overloads,
+            abstracts: &abstracts,
             dataclasses: &dataclasses,
             foreign: &foreign,
             structures: &structures,
@@ -235,6 +244,8 @@ struct Checked<'project> {
     aliases: &'project [BTreeMap<String, type_alias::Alias>],
     /// The overloads of each module's functions and methods, by the module's name (TYP-29).
     overloads: &'project BTreeMap<String, overloads::Overloads>,
+    /// What `ABC` and `@abstractmethod` mark in each module, by the module's name (CLS-45).
+    abstracts: &'project BTreeMap<String, abstract_class::AbstractMarks>,
     dataclasses: &'project dataclass::Dataclasses,
     /// The `ctypes` declarations of each module, by its name.
     foreign: &'project BTreeMap<String, ctypes_declarations::ModuleDeclarations>,
@@ -302,14 +313,23 @@ impl Checked<'_> {
                 .get(module.name.as_str())
                 .cloned()
                 .unwrap_or_default();
+            let marks = self
+                .abstracts
+                .get(module.name.as_str())
+                .cloned()
+                .unwrap_or_default();
+            let gathered = Gathered {
+                overloads: &stubs,
+                dataclasses: &frozen,
+                abstracts: &marks,
+            };
             let (waiting, checked) = check_module(
                 &mut program,
-                (module, aliases, &mut copies, &exported, &stubs),
+                (module, aliases, &mut copies, &exported, gathered),
                 (&path, &definitions),
                 // `from __future__ import annotations` defers one module's annotations as the
                 // floor defers every module's (LIB-29).
                 self.floor_defers || module.syntax.defers_annotations,
-                &frozen,
                 diagnostics,
             );
             deferred.extend(waiting);
@@ -422,16 +442,15 @@ fn known_classes<'known>(
 
 fn check_module<'tree>(
     program: &mut Program,
-    (module, aliases, copies, exported, stubs): (
+    (module, aliases, copies, exported, gathered): (
         &'tree Module,
         &BTreeMap<String, type_alias::Alias>,
         &mut class::ClassMethodCopies<'tree>,
         &BTreeSet<String>,
-        &overloads::Overloads,
+        Gathered<'_>,
     ),
     (path, earlier): (&str, &ModuleDefinitions<'tree>),
     floor_defers: bool,
-    dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
     diagnostics: &mut Diagnostics,
 ) -> (Vec<Deferred<'tree>>, (Vec<Definition<'tree>>, usize)) {
     let tree = &module.syntax;
@@ -459,13 +478,13 @@ fn check_module<'tree>(
             names: &annotations,
             copies: &program.class_copies,
         },
-        (floor_defers, stubs),
+        (floor_defers, gathered.overloads),
         diagnostics,
     );
     let (mut class_infos, methods, method_overloads) = collect_members(
         &known_classes(program, &class_ids, &instances),
         &classes,
-        (&annotations, stubs),
+        (&annotations, gathered.overloads),
         floor_defers,
         (first_function + definitions.len(), copies),
         diagnostics,
@@ -473,7 +492,7 @@ fn check_module<'tree>(
     program
         .overloads
         .extend(function_overloads.into_iter().chain(method_overloads));
-    mark_dataclasses(&mut class_infos, dataclasses);
+    mark_classes(program, &mut class_infos, &classes, gathered);
     let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
     class_value_variables(&classes, (&annotations, program), &mut variables);
@@ -838,6 +857,30 @@ fn derive_module_bases(
 }
 
 /// Notes in each dataclass's information what its expansion wrote (CLS-05, CST-06).
+/// What the readings before the check took out of one module: its overloads (TYP-29), its
+/// dataclasses' options (CLS-05), and what `ABC` and `@abstractmethod` mark (CLS-45).
+#[derive(Clone, Copy)]
+struct Gathered<'module> {
+    overloads: &'module overloads::Overloads,
+    dataclasses: &'module BTreeMap<String, dataclass::DataclassInfo>,
+    abstracts: &'module abstract_class::AbstractMarks,
+}
+
+/// Gives a module's classes what the readings before the check found: the options of each
+/// dataclass (CLS-05), and the abstract methods of each class (CLS-45).
+fn mark_classes(
+    program: &Program,
+    infos: &mut [ClassInfo],
+    classes: &[class::ClassStatement<'_>],
+    gathered: Gathered<'_>,
+) {
+    mark_dataclasses(infos, gathered.dataclasses);
+    let copies = program.class_copies.borrow();
+    let root_of = |class| copies.copy(class).map(|copy| copy.root);
+    let earlier = (program.classes(), &root_of as &dyn Fn(_) -> _);
+    abstract_class::mark_abstract(infos, classes, earlier, gathered.abstracts);
+}
+
 fn mark_dataclasses(
     infos: &mut [ClassInfo],
     dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
