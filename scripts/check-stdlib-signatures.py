@@ -7,8 +7,8 @@ pins, which scripts/typeshed.sh fetches, and compares their public names and, fo
 function, its parameters across the stub's overloads: their names, how each is passed and
 whether it may be left out, and its result where the stub writes a plain type. A difference
 TyPy keeps on purpose is listed in crates/typy-stdlib/signature-differences.toml with its
-reason; any other difference, and a listed one that no longer exists, fails (ADR-0097,
-ADR-0119).
+reason, either a parameter some functions leave out or names the module leaves out; any
+other difference, and a listed one that no longer exists, fails (ADR-0097, ADR-0119).
 """
 
 from __future__ import annotations
@@ -132,9 +132,14 @@ def public(module: dict[str, Function | str]) -> dict[str, Function | str]:
     return {name: entry for name, entry in module.items() if not name.startswith("_")}
 
 
+BUILT_IN_TYPES = {"None", "bool", "int", "float", "str", "bytes", "list", "dict", "set", "tuple", "frozenset"}
+
+
 def plain(result: str) -> bool:
-    """Returns whether a stub's result names no type variable or protocol of typeshed."""
-    return not any(part in result for part in ("_T", "Supports", "Self", "_KT", "_VT", "_S", "_P"))
+    """Returns whether a stub's result names built-in types only, and so no type variable or
+    protocol of typeshed, which the module's own annotations write otherwise."""
+    names = {node.id for node in ast.walk(ast.parse(result, mode="eval")) if isinstance(node, ast.Name)}
+    return names <= BUILT_IN_TYPES
 
 
 def compare(name: str, own: Function, stub: Function, allowed: set[str]) -> list[str]:
@@ -178,19 +183,33 @@ def main() -> int:
     for source in sorted((STDLIB / "lib").glob("*.py")):
         module_name = source.stem
         stub_path = STUBS / "stdlib" / f"{module_name}.pyi"
+        if not stub_path.is_file():
+            stub_path = STUBS / "stdlib" / module_name / "__init__.pyi"
         own: dict[str, Function | str] = {}
         collect(ast.parse(source.read_text()).body, own, None)
         stub: dict[str, Function | str] = {}
         collect(ast.parse(stub_path.read_text()).body, stub, STUBS / "stdlib")
         own, stub = public(own), public(stub)
+        left_out: dict[str, int] = {
+            name: index
+            for index, difference in enumerate(differences)
+            if difference["module"] == module_name and "parameter" not in difference
+            for name in difference["names"]
+        }
         for name, entry in stub.items():
-            if name not in own:
+            if name not in own and name in left_out:
+                used.add(left_out[name])
+            elif name not in own:
                 problems.append(f"{module_name}: no name `{name}`")
             elif isinstance(entry, Function) and isinstance(own[name], Function):
                 allowed: set[str] = set()
                 own_parameters = {parameter.name for parameter in own[name].signatures[0]}  # type: ignore[union-attr]
                 for index, difference in enumerate(differences):
-                    if difference["module"] == module_name and name in difference["names"]:
+                    if (
+                        difference["module"] == module_name
+                        and "parameter" in difference
+                        and name in difference["names"]
+                    ):
                         allowed.add(difference["parameter"])
                         # A listed parameter the module now has is a difference no longer kept.
                         if difference["parameter"] not in own_parameters:

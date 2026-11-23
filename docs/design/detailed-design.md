@@ -573,7 +573,8 @@ that is not a literal.
 `typy-stdlib` holds the Python sources of the standard library modules
 TyPy gives, in `crates/typy-stdlib/lib`, embedded in the `typy` binary
 with `include_str!` (ADR-0007, ADR-0119). `source(name)` gives a module's
-text and `names()` lists them; 0.12 gives `bisect` (LIB-27). The loader
+text and `names()` lists them; 0.12 gives `bisect`, `heapq` and `string`
+(LIB-27). The loader
 looks for an imported module in the program's directories first, as
 CPython looks in the script's directory first, then asks `embedded`,
 which returns a `Location` holding the text under the path

@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- The standard library modules `heapq` and `string`, written in typed
+  Python: the heap functions, `merge`, `nlargest` and `nsmallest`, and
+  the constants, `capwords` and `Template`; `key` of `heapq` and
+  `string.Formatter` are planned for 0.13 (LIB-27).
 - The standard library module `bisect`, written in typed Python that
   CPython also runs and given from the compiler, without `key`, which is
   planned for 0.13; a test compares its signatures with typeshed's

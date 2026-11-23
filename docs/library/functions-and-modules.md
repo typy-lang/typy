@@ -261,6 +261,49 @@ The `key` parameter, which makes the searched value of another type than
 the items, needs `@overload` with type parameters and is planned for
 0.13 (TYP-35).
 
+## The heapq module
+
+`import heapq` gives CPython's `heapq` module in typed Python (LIB-27):
+`heappush`, `heappop`, `heappushpop`, `heapreplace` and `heapify` keep a
+list as a heap, `merge` merges sorted iterables lazily, with `reverse`,
+and `nlargest` and `nsmallest` pick items, ties broken as CPython breaks
+them. An empty heap raises CPython's `IndexError: index out of range`:
+
+<!-- typy-expect: accepted -->
+```python
+import heapq
+
+tasks = [(2, "write"), (1, "plan"), (3, "test")]
+heapq.heapify(tasks)
+print(heapq.heappop(tasks), heapq.nlargest(2, [5, 1, 9, 4]))
+print(list(heapq.merge([1, 4, 7], [2, 5, 8])))
+```
+
+`key` of `merge`, `nlargest` and `nsmallest` is planned for 0.13
+(TYP-35), as is the `heapify_max` family Python 3.14 adds.
+
+## The string module
+
+`import string` gives CPython's `string` module in typed Python
+(LIB-27): its constants, such as `ascii_letters`, `digits` and
+`punctuation`, `capwords`, and `Template`, whose `substitute`,
+`safe_substitute`, `is_valid` and `get_identifiers` read `$name`,
+`${name}` and `$$` as CPython's default pattern does, with a class's own
+`delimiter`. A placeholder of no form raises CPython's `ValueError` with
+its line and column:
+
+<!-- typy-expect: accepted -->
+```python
+from string import Template, capwords
+
+print(capwords(" hello  world "), Template("$who: ${n} $$").substitute(who="a", n=1))
+print(Template("$a $b").safe_substitute({"a": "x"}), Template("$a").get_identifiers())
+```
+
+`Formatter`, and a `Template` subclass's own `idpattern`,
+`braceidpattern`, `flags` or `pattern`, which CPython compiles into a
+regular expression, are planned for 0.13 (TYP-25).
+
 ## The sys module
 
 `import sys` gives these names of CPython's `sys` module (LIB-04,
