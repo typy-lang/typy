@@ -99,7 +99,9 @@ impl BodyChecker<'_> {
         let value = match expected {
             Some(expected) if expected.has_literal() => self.checked_literal(value, expected),
             Some(expected) if expected.has_self() => self.checked_self(value, expected),
-            _ => value,
+            // A member of an `IntEnum` or a `StrEnum` passes as its value (CLS-44).
+            Some(expected) => self.enum_value_for(value, expected),
+            None => value,
         };
         Self::converted(value, expected)
     }

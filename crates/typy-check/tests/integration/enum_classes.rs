@@ -116,8 +116,12 @@ fn forms_of_a_later_release_are_planned() {
         ),
         ("from enum import unique\n", "CLS-47"),
         (
-            "from enum import IntEnum\nclass C(IntEnum):\n    X = 1\n",
+            "from enum import Flag\nclass C(Flag):\n    X = 1\n",
             "CLS-44",
+        ),
+        (
+            "from enum import IntEnum\nclass C(IntEnum):\n    X = 'x'\n",
+            "CLS-47",
         ),
     ];
     for (body, rule) in cases {
@@ -149,4 +153,55 @@ fn names_of_enum_outside_bases_and_values_are_refused() {
     for (source, code) in cases {
         assert_eq!(app(source), [code], "{source}");
     }
+}
+
+const LEVEL: &str = "from enum import IntEnum, StrEnum, auto\nclass Level(IntEnum):\n    LOW = auto()\n    HIGH = 10\n    ZERO = 0\nclass Mode(StrEnum):\n    READ = auto()\n    WRITE = 'w'\n";
+
+#[test]
+fn a_member_of_an_int_or_str_enum_is_its_value_where_one_is_wanted() {
+    let cases = [
+        "def double(n: int) -> int:\n    return n * 2\nprint(double(Level.HIGH), Level.LOW + 1, -Level.HIGH, Level.HIGH // 3)\n",
+        "print(Level.LOW == 1, Level.HIGH > 5, sorted([Level.HIGH, Level.LOW]), [1, 2][Level.LOW])\n",
+        "print(abs(Level.LOW), int(Level.LOW), float(Level.HIGH), hex(Level.HIGH), round(Level.LOW))\n",
+        "print(list(range(Level.LOW)), divmod(Level.HIGH, 3), bool(Level.ZERO), f'{Level.HIGH:03}')\n",
+        "def shout(text: str) -> str:\n    return text + '!'\nprint(shout(Mode.WRITE), Mode.READ.upper(), len(Mode.READ), Mode.READ + 'x')\n",
+        "x: int = Level.HIGH\ny: str = Mode.READ\nprint(x, y, 'ea' in Mode.READ, f'{Mode.WRITE:>3}', Mode('w'))\n",
+        "if Level.ZERO:\n    print('true')\nprint(Level.LOW in [Level.LOW], Level.LOW is Level.LOW, {Level.LOW: 1})\n",
+    ];
+    for source in cases {
+        assert_eq!(
+            app(&format!("{LEVEL}{source}")),
+            Vec::<String>::new(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn a_member_of_another_type_where_a_value_is_wanted_is_still_refused() {
+    let cases = [
+        // A plain enum's member is no `int`.
+        (
+            "from enum import Enum\nclass C(Enum):\n    X = 1\nprint(C.X + 1)\n",
+            "E0401",
+        ),
+        (
+            "{LEVEL}def f(text: str) -> str:\n    return text\nprint(f(Level.LOW))\n",
+            "E0404",
+        ),
+        // A list of members is no list of their values.
+        ("{LEVEL}print(', '.join(list(Mode)))\n", "E0404"),
+        (
+            "from enum import StrEnum\nclass C(StrEnum):\n    X = 1\n",
+            "E0404",
+        ),
+    ];
+    for (source, code) in cases {
+        let source = source.replace("{LEVEL}", LEVEL);
+        assert_eq!(app(&source), [code], "{source}");
+    }
+    assert_eq!(
+        messages("from enum import StrEnum\nclass C(StrEnum):\n    X = 1\n")[0].1,
+        "1 is not a string, as CPython raises `TypeError` when the class statement runs"
+    );
 }

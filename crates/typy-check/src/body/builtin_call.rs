@@ -81,9 +81,25 @@ impl BodyChecker<'_> {
             .iter()
             .map(|argument| {
                 let value = self.expression(argument);
-                if builtin == Builtin::Len {
-                    // `len` of an enum class is its number of members (CLS-44).
+                // `len` of an enum class is its number of members, and a member of an `IntEnum`
+                // or a `StrEnum` is its value to the builtins of numbers and text (CLS-44).
+                let value = if matches!(
+                    builtin,
+                    Builtin::Len
+                        | Builtin::Range
+                        | Builtin::Abs
+                        | Builtin::Int
+                        | Builtin::Float
+                        | Builtin::Bool
+                        | Builtin::Chr
+                        | Builtin::Ord
+                ) {
                     let value = self.enum_members(value);
+                    self.enum_value(value)
+                } else {
+                    value
+                };
+                if builtin == Builtin::Len {
                     self.tuple_view(value)
                 } else {
                     value

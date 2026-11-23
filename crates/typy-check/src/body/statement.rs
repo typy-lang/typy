@@ -645,7 +645,10 @@ impl BodyChecker<'_> {
     ) -> Option<TypedStmt> {
         let values: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
+            .map(|argument| {
+                let value = self.expression(argument);
+                self.enum_value(value)
+            })
             .collect();
         for value in &values {
             self.expect(value, Type::Int, "an argument of `range`");

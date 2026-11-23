@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.128 |
+| Version | 2.129 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -1274,7 +1274,17 @@ class, so a class derived from one is reported. In `body/enum_call.rs`,
 `enum_member_made` reads the member call as `instance_made`;
 `new_instance` calls `enum_lookup`, the subscript `enum_named`, and
 `sequence`, `len` and `enum_containers`, for `in`, read an enum class as
-`enum_members`; each calls its method through `static_call`.
+`enum_members`; each calls its method through `static_call`. An
+`IntEnum` or a `StrEnum` also gets `__str__`, `__hash__` and `__bool__`
+of the value, the order methods between members, and the hidden method
+`ENUM_VALUE`, which marks it (ADR-0117). `enum_value` reads a member of
+such a class as its `_value_`: for the operands of a binary or unary
+operator, `enum_values_compared` for a comparison but beside `is` and
+left of `in` over a container of members, an index of a sequence, the
+builtins of numbers and text, `range`, `round` and `call_number_builtin`,
+an f-string field with a format specification, `enum_value_for` in
+`expression_expecting` where the expected type takes the value and not
+the member, and `enum_receiver` for a method its class does not have.
 `BodyChecker::statements` stops at the first statement no path reaches,
 `assigned` being `None` there, so a statement that cannot run is neither
 checked nor compiled (TYP-34, ADR-0111). `flow::test_reach` says whether a

@@ -41,7 +41,11 @@ impl BodyChecker<'_> {
         };
         let values: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
+            .map(|argument| {
+                // A member of an `IntEnum` is its value here (CLS-44).
+                let value = self.expression(argument);
+                self.enum_value(value)
+            })
             .collect();
         if !self.arity(builtin, values.len(), allowed, span) {
             return Self::invalid_call(span);

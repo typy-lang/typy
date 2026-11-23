@@ -15,11 +15,31 @@ use typy_source::syntax::{Constant, Expr, Identifier, Stmt};
 use typy_source::{PythonFloor, SourceFile, parse};
 
 use super::{DataclassInfo, Dataclasses, Names};
-use crate::class_type::{ENUM_LOOKUP, ENUM_MEMBER, ENUM_MEMBERS, ENUM_NAMED};
+use crate::class_type::{ENUM_LOOKUP, ENUM_MEMBER, ENUM_MEMBERS, ENUM_NAMED, ENUM_VALUE};
 use crate::literal_type::LiteralValue;
 
 /// The names of the methods the expansion writes, which a member may not take.
 const WRITTEN: [&str; 5] = ["name", "value", "_name_", "_value_", "__init__"];
+
+/// The kinds of enum class TyPy gives: `Enum`, and `IntEnum` and `StrEnum`, whose members are
+/// also their `int` or `str` values.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kind {
+    Plain,
+    Int,
+    Str,
+}
+
+impl Kind {
+    fn named(name: &str) -> Option<Self> {
+        match name {
+            "Enum" => Some(Self::Plain),
+            "IntEnum" => Some(Self::Int),
+            "StrEnum" => Some(Self::Str),
+            _ => None,
+        }
+    }
+}
 
 /// One member of an enum class, in the order the class body defines it.
 struct Member {
@@ -79,7 +99,7 @@ impl Dataclasses {
                 _ => None,
             })?;
         let at = name.span;
-        if kind != "Enum" {
+        let Some(kind) = Kind::named(&kind) else {
             diagnostics.push(
                 Diagnostic::new(
                     DiagnosticCode::error(201),
@@ -90,7 +110,7 @@ impl Dataclasses {
             );
             bases.clear();
             return None;
-        }
+        };
         let refused = if bases.len() > 1 || *keyword_count > 0 {
             Some("an enum class with other bases or keywords".to_owned())
         } else if !decorators.is_empty() || !type_parameters.is_empty() {
@@ -104,7 +124,7 @@ impl Dataclasses {
             bases.clear();
             return None;
         }
-        let members = members(body, (module, names), diagnostics)?;
+        let members = members(body, (module, names, kind), diagnostics)?;
         bases.clear();
         let class = name.name.clone();
         self.enums
@@ -112,7 +132,7 @@ impl Dataclasses {
         let mut expanded: Vec<Stmt> = Vec::with_capacity(body.len() + members.len() + 8);
         expanded.extend(member_variables(&class, &members, at));
         expanded.append(body);
-        expanded.extend(methods(&class, &members, at));
+        expanded.extend(methods(&class, (&members, kind), at));
         *body = expanded;
         Some((class, DataclassInfo::default()))
     }
@@ -122,7 +142,7 @@ impl Dataclasses {
 /// member CPython refuses, and a form TyPy takes from a later release.
 fn members(
     body: &mut Vec<Stmt>,
-    (module, names): (&str, &Names),
+    (module, names, kind): (&str, &Names, Kind),
     diagnostics: &mut Diagnostics,
 ) -> Option<Vec<Member>> {
     let mut members: Vec<Member> = Vec::new();
@@ -148,7 +168,7 @@ fn members(
             name: id.clone(),
             span: *span,
         };
-        match member(name, value, &members, (module, names)) {
+        match member(name, value, &members, (module, names, kind)) {
             Ok(member) => members.push(member),
             Err(diagnostic) => {
                 diagnostics.push(*diagnostic);
@@ -164,7 +184,7 @@ fn member(
     name: Identifier,
     value: &Expr,
     before: &[Member],
-    (module, names): (&str, &Names),
+    (module, names, kind): (&str, &Names, Kind),
 ) -> Result<Member, Box<Diagnostic>> {
     if let Some(earlier) = before.iter().find(|each| each.name.name == name.name) {
         return Err(Box::new(class_error(
@@ -183,7 +203,10 @@ fn member(
     let is_auto = matches!(value, Expr::Call { function, arguments, keywords, .. }
         if arguments.is_empty() && keywords.is_empty()
             && names.class_key(function, module) == Some(("enum".to_owned(), "auto".to_owned())));
-    let (value, written) = if is_auto {
+    let (value, written) = if is_auto && kind == Kind::Str {
+        // `StrEnum`'s `auto()` gives the member's name in lower case.
+        (LiteralValue::Str(name.name.to_lowercase()), None)
+    } else if is_auto {
         (next_value(before, name.span)?, None)
     } else {
         let found = LiteralValue::of_written(value).ok_or_else(|| {
@@ -195,6 +218,23 @@ fn member(
         })?;
         (found, Some(value.clone()))
     };
+    match (kind, &value) {
+        (Kind::Int, LiteralValue::Int(_))
+        | (Kind::Str, LiteralValue::Str(_) | LiteralValue::StrPoints(_))
+        | (Kind::Plain, _) => {}
+        (Kind::Str, other) => {
+            return Err(Box::new(class_error(
+                name.span,
+                &format!("{other} is not a string"),
+            )));
+        }
+        (Kind::Int, _) => {
+            return Err(Box::new(planned(
+                name.span,
+                "an `IntEnum` member whose value is not an `int` constant",
+            )));
+        }
+    }
     let alias_of = before
         .iter()
         .position(|each| each.alias_of.is_none() && each.value.equals(&value));
@@ -350,9 +390,20 @@ fn value_annotation(members: &[Member]) -> String {
     }
 }
 
-/// Returns the methods an enum class gets, as CPython's `Enum` and `EnumType` behave.
-fn methods(class: &str, members: &[Member], at: Span) -> Vec<Stmt> {
-    let value = value_annotation(members);
+/// Returns the methods an enum class gets, as CPython's `Enum` and `EnumType` behave. A member
+/// of an `IntEnum` or a `StrEnum` shows, hashes and tests true as its value, and has the
+/// hidden method `ENUM_VALUE` that marks it as one the checker reads as its value.
+fn methods(class: &str, (members, kind): (&[Member], Kind), at: Span) -> Vec<Stmt> {
+    let value = match kind {
+        Kind::Plain => value_annotation(members),
+        Kind::Int => "int".to_owned(),
+        Kind::Str => "str".to_owned(),
+    };
+    let shown = match kind {
+        Kind::Plain => format!("'{class}.' + self._name_"),
+        Kind::Int => "str(self._value_)".to_owned(),
+        Kind::Str => "self._value_".to_owned(),
+    };
     let mut source = format!(
         "def __init__(self, _name_: str, _value_: {value}) -> None:\n    \
          self._name_ = _name_\n    self._value_ = _value_\n\
@@ -360,7 +411,7 @@ fn methods(class: &str, members: &[Member], at: Span) -> Vec<Stmt> {
          @property\ndef value(self) -> {value}:\n    return self._value_\n\
          def __repr__(self) -> str:\n    \
          return '<{class}.' + self._name_ + ': ' + repr(self._value_) + '>'\n\
-         def __str__(self) -> str:\n    return '{class}.' + self._name_\n\
+         def __str__(self) -> str:\n    return {shown}\n\
          @staticmethod\ndef _lookup_(value: {value}) -> '{class}':\n"
     );
     let canonical: Vec<&Member> = members
@@ -396,6 +447,18 @@ fn methods(class: &str, members: &[Member], at: Span) -> Vec<Stmt> {
          @staticmethod\ndef _members_() -> 'list[{class}]':\n    return [{}]\n",
         listed.join(", ")
     );
+    if kind != Kind::Plain {
+        let _ = write!(
+            source,
+            "def __lt__(self, other: '{class}') -> bool:\n    return self._value_ < other._value_\n\
+             def __le__(self, other: '{class}') -> bool:\n    return self._value_ <= other._value_\n\
+             def __gt__(self, other: '{class}') -> bool:\n    return self._value_ > other._value_\n\
+             def __ge__(self, other: '{class}') -> bool:\n    return self._value_ >= other._value_\n\
+             def __hash__(self) -> int:\n    return hash(self._value_)\n\
+             def __bool__(self) -> bool:\n    return bool(self._value_)\n\
+             def _value_of_(self) -> {value}:\n    return self._value_\n"
+        );
+    }
     let file = SourceFile::from_text(FileId(u32::MAX), Utf8PathBuf::from("<enum>"), &source);
     // The source is written above and always parses.
     let mut methods = parse(&file, PythonFloor::default())
@@ -408,12 +471,33 @@ fn methods(class: &str, members: &[Member], at: Span) -> Vec<Stmt> {
                 "_lookup_" => ENUM_LOOKUP,
                 "_named_" => ENUM_NAMED,
                 "_members_" => ENUM_MEMBERS,
+                "_value_of_" => ENUM_VALUE,
+                "__hash__" => {
+                    hash_by_value(method);
+                    continue;
+                }
                 _ => continue,
             };
             hidden.clone_into(&mut name.name);
         }
     }
     methods
+}
+
+/// Makes `__hash__` call the hash a set and a dict take of the value; no program names that
+/// function, since `hash` is not provided.
+fn hash_by_value(method: &mut Stmt) {
+    if let Stmt::FunctionDef { body, .. } = method
+        && let [
+            Stmt::Return {
+                value: Some(Expr::Call { function, .. }),
+                ..
+            },
+        ] = body.as_mut_slice()
+        && let Expr::Name { id, .. } = function.as_mut()
+    {
+        "<hash>".clone_into(id);
+    }
 }
 
 /// Returns the error for what CPython raises when an enum class statement runs.

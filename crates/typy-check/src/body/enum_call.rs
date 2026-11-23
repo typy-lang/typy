@@ -7,8 +7,8 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{CompareOperator, Expr, Identifier, Keyword};
 
 use super::{BodyChecker, Program};
-use crate::class_type::{ENUM_LOOKUP, ENUM_MEMBER, ENUM_MEMBERS, ENUM_NAMED};
-use crate::typed::{ClassId, FunctionId, TypedExpr};
+use crate::class_type::{ENUM_LOOKUP, ENUM_MEMBER, ENUM_MEMBERS, ENUM_NAMED, ENUM_VALUE};
+use crate::typed::{ClassId, FunctionId, TypedExpr, TypedExprKind};
 use crate::types::Type;
 
 impl Program {
@@ -134,6 +134,99 @@ impl BodyChecker<'_> {
                     self.enum_members(operand)
                 } else {
                     operand
+                }
+            })
+            .collect()
+    }
+}
+
+impl BodyChecker<'_> {
+    /// Returns `value`, or the value of the member it is when it is a member of an `IntEnum`
+    /// or a `StrEnum`, which CPython reads as its `int` or `str` in arithmetic, in comparisons
+    /// and where one is wanted.
+    pub(super) fn enum_value(&mut self, value: TypedExpr) -> TypedExpr {
+        let Type::Instance(instance) = &value.ty else {
+            return value;
+        };
+        let class = instance.id;
+        let Some(method) = self.program.enum_method(class, ENUM_VALUE) else {
+            return value;
+        };
+        let Some(index) = self.program.classes[class.0 as usize].attribute("_value_") else {
+            return value;
+        };
+        let ty = self.program.signatures[method.0 as usize].returns.clone();
+        let span = value.span;
+        Self::typed(
+            TypedExprKind::Attribute {
+                object: Box::new(value),
+                index,
+            },
+            ty,
+            span,
+        )
+    }
+
+    /// Returns `value` as its member's value where `expected` takes the value and not the
+    /// member, such as an `IntEnum` member passed for an `int`.
+    pub(super) fn enum_value_for(&mut self, value: TypedExpr, expected: &Type) -> TypedExpr {
+        if value.ty.has_error() || value.ty.is_assignable_to(expected) {
+            return value;
+        }
+        let read = self.enum_value(value.clone());
+        if read.ty.is_assignable_to(expected) {
+            read
+        } else {
+            value
+        }
+    }
+
+    /// Returns the receiver of a method call as its member's value when its class has no
+    /// method or attribute `name`, as `Mode.READ.upper()` calls `str.upper`.
+    pub(super) fn enum_receiver(&mut self, receiver: TypedExpr, name: &str) -> TypedExpr {
+        let Some(class) = receiver.ty.class_id() else {
+            return receiver;
+        };
+        if self.program.method(class, name).is_some()
+            || self.program.classes[class.0 as usize]
+                .attribute(name)
+                .is_some()
+        {
+            return receiver;
+        }
+        self.enum_value(receiver)
+    }
+
+    /// Returns the operands of a comparison with each member of an `IntEnum` or a `StrEnum`
+    /// read as its value, except beside `is` and `is not`, and left of `in` and `not in` where
+    /// the container holds members of its class.
+    pub(super) fn enum_values_compared(
+        &mut self,
+        operators: &[CompareOperator],
+        operands: Vec<TypedExpr>,
+    ) -> Vec<TypedExpr> {
+        let items: Vec<Option<Type>> = operands
+            .iter()
+            .map(|operand| operand.ty.iterable_item())
+            .collect();
+        operands
+            .into_iter()
+            .enumerate()
+            .map(|(position, operand)| {
+                let before = position.checked_sub(1).and_then(|at| operators.get(at));
+                let after = operators.get(position);
+                let identity = [before, after].into_iter().flatten().any(|operator| {
+                    matches!(operator, CompareOperator::Is | CompareOperator::IsNot)
+                });
+                let held = matches!(after, Some(CompareOperator::In | CompareOperator::NotIn))
+                    && items
+                        .get(position + 1)
+                        .and_then(Option::as_ref)
+                        .is_some_and(|item| *item == operand.ty);
+                if identity || held {
+                    operand
+                } else {
+                    self.enum_value(operand)
                 }
             })
             .collect()

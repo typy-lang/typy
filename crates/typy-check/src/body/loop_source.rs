@@ -309,6 +309,7 @@ impl BodyChecker<'_> {
             .iter()
             .map(|argument| {
                 let value = self.expression(argument);
+                let value = self.enum_value(value);
                 self.expect(&value, Type::Int, "an argument of `range`");
                 value
             })

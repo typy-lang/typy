@@ -191,7 +191,7 @@ and `ModuleType`, for annotations (TYP-15, LIB-06). `dataclasses` gives
 `dataclass` and `field`, as [Classes](classes.md#dataclasses) describes
 (CLS-05), and `abc` gives `ABC` and `abstractmethod`, as
 [Abstract classes](classes.md#abstract-classes) describes (CLS-45).
-`enum` gives `Enum` and `auto`, as
+`enum` gives `Enum`, `IntEnum`, `StrEnum` and `auto`, as
 [Enum classes](classes.md#enum-classes) describes (CLS-44).
 The library reference describes
 [`math`](../library/functions-and-modules.md#the-math-module) and

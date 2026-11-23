@@ -114,6 +114,9 @@ impl BodyChecker<'_> {
                 let right = self.refuse_class(right);
                 let left = Self::version_tuple(left);
                 let right = Self::version_tuple(right);
+                // A member of an `IntEnum` or a `StrEnum` is its value here (CLS-44).
+                let left = self.enum_value(left);
+                let right = self.enum_value(right);
                 // An instance's class may define the operator's method (CLS-07).
                 let (left, right) = match self.operator_binary(*operator, left, right, span) {
                     super::operator_method::Comparison::Called(call) => return call,
@@ -141,6 +144,10 @@ impl BodyChecker<'_> {
                 operator, operand, ..
             } => {
                 let operand = self.expression(operand);
+                let operand = match operator {
+                    typy_source::syntax::UnaryOperator::Not => operand,
+                    _ => self.enum_value(operand),
+                };
                 if let Some(call) = super::operator_method::unary_name(*operator)
                     .and_then(|name| self.operator_unary(name, &operand, span))
                 {
@@ -219,6 +226,7 @@ impl BodyChecker<'_> {
             } => {
                 let operands = self.comparison_operands(left, comparators, operators);
                 let operands = self.enum_containers(operators, operands);
+                let operands = self.enum_values_compared(operators, operands);
                 // What the comparison shows of a variable, read before a `bool` is compared as
                 // an `int` (TYP-28).
                 let narrowing = match (operators.as_slice(), operands.as_slice()) {
@@ -343,6 +351,7 @@ impl BodyChecker<'_> {
                         | Type::Range
                 ) {
                     let index = self.expression(index);
+                    let index = self.enum_value(index);
                     if index.ty == Type::Slice {
                         return self.sliced_by_object(value, index, span);
                     }

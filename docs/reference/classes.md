@@ -20,7 +20,7 @@ class body or assigned in `__init__`, and has one type.
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | A class derived from `typing.NamedTuple`, whose instances are tuples of its fields | CLS-27 |
 | A class derived from `abc.ABC`, with `@abstractmethod`; see [Abstract classes](#abstract-classes) | CLS-45 |
-| A class derived from `enum.Enum`, with its members; see [Enum classes](#enum-classes) | CLS-44 |
+| A class derived from `enum.Enum`, `IntEnum` or `StrEnum`, with its members; see [Enum classes](#enum-classes) | CLS-44 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -956,11 +956,47 @@ members' value types. `Color(value)` takes a value of that type, and a
 value no member has raises CPython's `ValueError`; `Color[name]` raises
 `KeyError` for a name no member has.
 
+A member of an `IntEnum` or a `StrEnum` is also its value, an `int` or a
+`str`: arithmetic, comparisons, an index, the builtins of numbers and
+text, a parameter or a variable declared `int` or `str`, the methods of
+`str`, and an f-string field with a format specification read its value,
+while `repr` still shows the member (ADR-0117). `auto()` of a `StrEnum`
+gives the member's name in lower case:
+
+<!-- typy-expect: accepted -->
+```python
+from enum import IntEnum, StrEnum, auto
+
+
+class Level(IntEnum):
+    LOW = auto()
+    HIGH = 10
+
+
+class Mode(StrEnum):
+    READ = auto()
+    WRITE = "w"
+
+
+def double(n: int) -> int:
+    return n * 2
+
+
+print(repr(Level.HIGH), Level.HIGH + 1, double(Level.LOW), [7, 8][Level.LOW])
+print(sorted([Level.HIGH, Level.LOW]), f"{Level.HIGH:04}", Level.LOW == 1)
+print(repr(Mode.READ), Mode.READ, Mode.READ.upper(), Mode.WRITE == "w")
+```
+
+A list of members is not a list of their values, so
+`", ".join(list(Mode))` is E0404; `[m.value for m in Mode]` gives the
+values.
+
 What CPython refuses when the class statement runs is E0404, such as a
-member defined twice or a class derived from an enum class with members.
-`auto()` after a value that is not an `int` is E0202, as CPython 3.12
-gives `1` with a warning and 3.13 raises `TypeError`. `IntEnum`,
-`StrEnum`, `Flag` and `IntFlag` are planned for 0.12 (CLS-44). Members
+member defined twice, a class derived from an enum class with members,
+or a `StrEnum` member whose value is not a `str`. `auto()` after a value
+that is not an `int` is E0202, as CPython 3.12 gives `1` with a warning
+and 3.13 raises `TypeError`. `Flag` and `IntFlag` are planned for 0.12
+(CLS-44). Members
 of other values, annotated members, `__init__`, `__new__`, `_missing_`,
 other bases, decorators such as `@unique`, and classes derived from an
 enum class without members are planned for 0.13 (CLS-47).

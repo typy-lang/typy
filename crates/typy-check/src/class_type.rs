@@ -49,6 +49,11 @@ pub(crate) const ENUM_NAMED: &str = " (named)";
 /// left out, which a loop over the class, `len` and `in` read.
 pub(crate) const ENUM_MEMBERS: &str = " (members)";
 
+/// The hidden method of an `IntEnum` or a `StrEnum` that returns a member's value, which marks
+/// the class as one whose members the checker reads as their values where an `int` or a `str`
+/// is wanted.
+pub(crate) const ENUM_VALUE: &str = " (value)";
+
 /// The start of the hidden name an enum class's member variables call to make each member,
 /// followed by the class's name: a new instance through `__init__`, where `Color(...)` finds a
 /// member instead.

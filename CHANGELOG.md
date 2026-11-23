@@ -8,6 +8,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `enum.IntEnum` and `enum.StrEnum`, whose members are also their `int`
+  or `str` values in arithmetic, comparisons, indexes, f-string formats,
+  `str` methods and where an `int` or a `str` is declared, and show
+  their own `repr` (CLS-44, ADR-0117).
 - `enum.Enum` and `enum.auto`: an enum class's members are its instances,
   with `name` and `value`, aliases where two members share a value, and
   CPython's `repr` and `str`. `Color(value)` and `Color[name]` find a
