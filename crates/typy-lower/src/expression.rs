@@ -228,6 +228,7 @@ impl FunctionLowerer<'_> {
                 left,
                 operators,
                 comparators,
+                ..
             } => self.comparison_chain(left, operators, comparators, span),
             TypedExprKind::IfExp { test, body, orelse } => {
                 self.conditional(test, body, orelse, ty, span)

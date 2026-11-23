@@ -140,7 +140,7 @@ fn float_repr(value: f64) -> String {
 /// Quotes text or bytes as `repr` does: single quotes unless the text holds a single quote
 /// and no double quote, with escapes for the quote, backslash and control characters. Bytes
 /// come as the characters U+0000 to U+00FF.
-fn quoted(characters: impl Iterator<Item = char> + Clone, bytes: bool) -> String {
+pub(crate) fn quoted(characters: impl Iterator<Item = char> + Clone, bytes: bool) -> String {
     let quote = if characters.clone().any(|each| each == '\'')
         && !characters.clone().any(|each| each == '"')
     {

@@ -97,6 +97,8 @@ pub(crate) enum AnnotationName {
     /// An abstract collection of `typing` or `collections.abc`, such as `Sequence`, held as
     /// the union of the built-in types CPython registers with it (LIB-20, ADR-0086).
     Abstract(AbstractCollection, Origin),
+    /// `typing.Literal`, whose values are constants (TYP-28).
+    Literal,
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -135,6 +137,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
+        ("typing", "Literal") => Some(AnnotationName::Literal),
         ("typing", "List") => Some(AnnotationName::Builtin("list")),
         ("typing", "Dict") => Some(AnnotationName::Builtin("dict")),
         ("typing", "Set") => Some(AnnotationName::Builtin("set")),
@@ -270,6 +273,11 @@ fn standard_annotation(
         {
             union_annotation(name, index, scope, diagnostics)
         }
+        Expr::Subscript { value, index, .. }
+            if standard_name(value, scope) == Some(AnnotationName::Literal) =>
+        {
+            super::literal_annotation::literal_annotation(index, scope, diagnostics)
+        }
         Expr::Subscript { value, .. }
             if standard_name(value, scope) == Some(AnnotationName::ClassVar) =>
         {
@@ -377,6 +385,10 @@ fn bare_standard(
         }
         AnnotationName::Generator(_) => {
             diagnostics.push(generator_form(annotation.span()));
+            Type::Error
+        }
+        AnnotationName::Literal => {
+            diagnostics.push(super::literal_annotation::literal_form(annotation.span()));
             Type::Error
         }
     }

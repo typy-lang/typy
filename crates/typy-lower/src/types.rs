@@ -9,6 +9,8 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
     match ty {
         // A declared abstract collection is held as the built-in types it holds (LIB-20).
         Type::Abstract(collection) => tyir_type(&collection.members, tuples),
+        // A literal type is held as its base type (TYP-28, ADR-0110).
+        Type::Literal(value) => tyir_type(&value.base(), tuples),
         Type::Int => TyirType::Int,
         Type::Float => TyirType::Float,
         Type::Bool => TyirType::Bool,

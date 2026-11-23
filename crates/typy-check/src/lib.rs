@@ -16,6 +16,7 @@ mod exports;
 mod generic;
 mod iterator_fits;
 mod library_version;
+mod literal_type;
 mod math;
 mod method;
 mod open;
@@ -39,6 +40,7 @@ pub use ctypes::{CData, CType, ForeignFunction, ForeignLibrary, StructureClass, 
 pub use exception::{BuiltinException, ExceptionClass, ProgramException};
 pub use exports::{Export, RUNTIME_C_FUNCTIONS};
 pub use generic::TypeParameter;
+pub use literal_type::LiteralValue;
 pub use math::{MathFunction, MathShape};
 pub use method::Method;
 pub use open::OpenAccess;
@@ -47,12 +49,12 @@ pub use typed::{
     Argument, AssignTarget, Attribute, BuiltinValue, CDataExpr, CDataPlace, CapturedVariable,
     CastCheck, ClassId, Conversion, DictPart, EachMember, ExceptionPart, ExceptionValues,
     FStringPart, FileAttribute, FormattedValue, FunctionId, FunctionSignature, Generator,
-    GeneratorTypes, ImportBinding, InitCall, IsInstanceTest, KeyedOperation, LoopSource,
-    MemberTest, OpenOptions, OperatorCall, OperatorKind, PartOperation, Passed, PercentConversion,
-    PercentField, PercentNumber, PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind,
-    SignatureParameter, SpreadKind, SpreadPart, Symbol, SymbolId, SymbolKind, TypedCase,
-    TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
-    TypedPattern, TypedProgram, TypedStmt, TypedTypeAlias, TypedTypingValue, UnpackedException,
-    WithProtocol, dump,
+    GeneratorTypes, ImportBinding, InitCall, IsInstanceTest, KeyedOperation, LiteralTest,
+    LoopSource, MemberTest, OpenOptions, OperatorCall, OperatorKind, PartOperation, Passed,
+    PercentConversion, PercentField, PercentNumber, PercentPart, PercentValue, PrintCall,
+    RaiseCause, RuntimeKind, SignatureParameter, SpreadKind, SpreadPart, Symbol, SymbolId,
+    SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction,
+    TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt, TypedTypeAlias,
+    TypedTypingValue, UnpackedException, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

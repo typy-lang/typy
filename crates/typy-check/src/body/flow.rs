@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::typed::{SymbolId, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{LiteralTest, SymbolId, TypedConstant, TypedExpr, TypedExprKind};
 use crate::types::Type;
 use typy_source::syntax::{BoolOperator, CompareOperator, UnaryOperator};
 
@@ -71,15 +71,40 @@ fn is_none(expression: &TypedExpr) -> bool {
     )
 }
 
+/// Returns the facts a comparison of a variable with constants gives when it holds and when
+/// it fails: the literal types it narrows the variable to, and that it is not `None`.
+fn literal_facts(narrowing: &LiteralTest) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
+    let facts = |position: Option<u32>, not_none: bool| {
+        let mut facts = BTreeSet::new();
+        if let Some(position) = position {
+            facts.insert(Fact::Narrowed(narrowing.variable, position));
+        }
+        if not_none {
+            facts.insert(Fact::NotNone(narrowing.variable));
+        }
+        facts
+    };
+    (
+        facts(narrowing.holds, narrowing.not_none_when_holds),
+        facts(narrowing.fails, narrowing.not_none_when_fails),
+    )
+}
+
 /// Returns the facts a test gives when it holds and when it fails: `x is not None` and a
 /// truth test of `x` show `x` is not `None` when they hold, and `x is None` when it fails.
 pub(super) fn test_facts(test: &TypedExpr) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
     let none = BTreeSet::new;
     match &test.kind {
+        // A comparison with constants narrows the variable to literal types (TYP-28).
+        TypedExprKind::Compare {
+            narrowing: Some(narrowing),
+            ..
+        } => literal_facts(narrowing),
         TypedExprKind::Compare {
             left,
             operators,
             comparators,
+            ..
         } if operators.len() == 1 => {
             let right = &comparators[0];
             let variable = match (is_none(left), is_none(right)) {

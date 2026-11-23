@@ -1031,9 +1031,11 @@ impl Program {
                             .enumerate()
                             .map(|(position, attribute)| Attribute {
                                 name: attribute.name.clone(),
+                                // An attribute declared of a literal type holds a value of
+                                // its base type (TYP-28).
                                 ty: self
                                     .attribute_ty(class.id, position)
-                                    .unwrap_or(crate::types::Type::Error),
+                                    .map_or(crate::types::Type::Error, |ty| ty.without_literal()),
                             })
                             .collect()
                     },
@@ -1084,9 +1086,20 @@ impl Program {
         let classes = self.typed_classes();
         let adapters = self.override_adapters();
         let protocol_methods = self.protocol_values.bound_methods.clone();
+        // A literal type is a refinement the checker reads; a value of one is a value of its
+        // base type, which is all the program holds (TYP-28, ADR-0110).
+        for symbol in &mut self.symbols {
+            symbol.ty = symbol.ty.without_literal();
+        }
+        let functions: Vec<crate::typed::TypedFunction> = self
+            .functions
+            .into_iter()
+            .flatten()
+            .map(crate::typed::TypedFunction::without_literals)
+            .collect();
         TypedProgram {
             symbols: self.symbols,
-            functions: self.functions.into_iter().flatten().collect(),
+            functions,
             classes,
             modules: self.modules,
             lazy_imports: self.lazy_imports,

@@ -456,6 +456,19 @@ fn default_value(
             diagnostic = diagnostic.with_fix(*span, format!("{digits}.0"));
         }
         diagnostics.push(diagnostic);
+    } else if ty.has_literal()
+        && let Some(value) = crate::literal_type::LiteralValue::of_constant(&constant)
+        && !Type::literal(value.clone()).takes_literals_of(ty)
+    {
+        // A parameter of literal types takes only their values (TYP-28).
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(431),
+                *span,
+                format!("the default value is `{value}`, and the parameter is {ty}"),
+            )
+            .with_rule(RuleId::TYP_28),
+        );
     }
     Some(constant)
 }

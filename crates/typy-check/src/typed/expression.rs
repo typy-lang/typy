@@ -123,8 +123,10 @@ pub enum TypedExprKind {
     },
     Compare {
         left: Box<TypedExpr>,
-        operators: Vec<CompareOperator>,
+        operators: Box<[CompareOperator]>,
         comparators: Vec<TypedExpr>,
+        /// What the comparison shows of a variable it compares with constants (TYP-28).
+        narrowing: Option<Box<LiteralTest>>,
     },
     IfExp {
         test: Box<TypedExpr>,
@@ -730,6 +732,23 @@ pub enum OperatorKind {
         /// Whether the operands no method compares are `is not` rather than `is`.
         different: bool,
     },
+}
+
+/// What a comparison of a variable with constants shows of the variable (TYP-28,
+/// ADR-0110): the positions, in the function's table of narrowed types, of the literal types
+/// it holds when the comparison holds and when it fails, and whether it is not `None` then.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LiteralTest {
+    /// The variable.
+    pub variable: SymbolId,
+    /// Its narrowed type when the comparison holds.
+    pub holds: Option<u32>,
+    /// Its narrowed type when the comparison fails.
+    pub fails: Option<u32>,
+    /// Whether the variable, optional, is not `None` when the comparison holds.
+    pub not_none_when_holds: bool,
+    /// Whether it is not `None` when the comparison fails.
+    pub not_none_when_fails: bool,
 }
 
 /// `isinstance(value, classes)`, with what the checker could decide when the program is

@@ -267,6 +267,11 @@ pub const CODES: &[CodeInfo] = &[
         "`ctypes` declaration TyPy cannot compile",
         RuleId::FFI_02,
     ),
+    active(
+        431,
+        "value that is not one of the constants its `Literal` type names",
+        RuleId::TYP_28,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

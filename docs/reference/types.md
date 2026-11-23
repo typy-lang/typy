@@ -30,6 +30,7 @@ value.
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 | `Callable[[A, ...], R]` from `typing` or `collections.abc`, the type of a function value; see [Functions as values](functions.md#functions-as-values) | FUN-05, NFR-19 |
 | `object`: a value of any type, narrowed by `isinstance`, a class pattern or `type(x) is C` before an operation `object` does not define; see [Objects](#objects) | TYP-23 |
+| `Literal` of `int`, `str`, `bytes` and `bool` constants and `None`, narrowed by `==`, `in` and `match`; see [Literal types](#literal-types) | TYP-28 |
 
 ## Objects
 
@@ -67,6 +68,65 @@ narrows to `int | bool`, since a `bool` is an `int` and stays a `bool`;
 `isinstance(x, list)`, is E0201: its items would be of type `Any`, which
 is planned for 0.13 (TYP-25). Sorting a list of `object` items is E0407,
 as an `object` has no order.
+
+## Literal types
+
+`typing.Literal` names constants as a type: `Literal['r', 'w']` holds
+`'r'` and `'w'`, and a value of it is a `str` (TYP-28, ADR-0110). Its
+values are `int`, `str`, `bytes` and `bool` constants, a negative `int`
+such as `-1`, `None`, and other `Literal` types. A constant passes where
+a literal type is declared when it is one of its values, and so does a
+variable, an attribute or a function's result declared of literal types
+within it. Any other value is E0431, even of the right base type:
+
+<!-- typy-expect: rejected E0431 at 9:9 -->
+```python
+from typing import Literal
+
+
+def open_as(mode: Literal["r", "w"]) -> str:
+    return mode
+
+
+text = "r"
+open_as(text)
+```
+
+A test narrows a variable to the constants it is compared with: `==` and
+`!=` with one constant, `in` and `not in` with a tuple, a list or a set of
+them, and the cases of a `match`. A variable of literal types narrows to
+its other values where the test fails, and a `match` with a case for each
+of its values covers it:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Literal
+
+type Mode = Literal["r", "w"]
+
+
+def open_as(mode: Mode) -> str:
+    match mode:
+        case "r":
+            return "read"
+        case "w":
+            return "write"
+
+
+def parse(text: str) -> Mode | None:
+    if text in ("r", "w"):
+        return text
+    return None
+
+
+print(open_as("r"), parse("w"), parse("x"))
+```
+
+A narrowing never changes how a value is held, so a variable of literal
+types of two base types, such as `Literal['r', 1]`, is narrowed by
+`isinstance` and not by `==`. A literal type inside another type, such as
+`list[Literal['r']]`, is tested for each item a display writes; a `list`
+declared otherwise passes for it, since its items are held alike.
 
 ## Casts
 
@@ -264,7 +324,7 @@ These forms are planned, and each is E0201 until its release:
 
 | Form | Release | Requirement |
 | --- | --- | --- |
-| `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-28 to TYP-31 |
+| `@overload`, `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-29 to TYP-31 |
 | `typing.Any`, bound when the program runs | 0.13 | TYP-25 |
 | `TypedDict`, `Required`, `NotRequired` and `ReadOnly` | 0.13 | TYP-32 |
 

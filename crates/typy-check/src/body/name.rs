@@ -274,7 +274,7 @@ impl BodyChecker<'_> {
             return None;
         }
         let facts = self.assigned.as_ref()?;
-        let mut narrowest: Option<&Type> = None;
+        let mut narrowest: Option<Type> = None;
         for fact in facts {
             let Fact::Narrowed(each, position) = fact else {
                 continue;
@@ -286,16 +286,29 @@ impl BodyChecker<'_> {
             else {
                 continue;
             };
-            if narrowest.is_none_or(|current| ty.is_assignable_to(current)) {
-                narrowest = Some(ty);
-            }
+            narrowest = Some(match narrowest {
+                None => ty.clone(),
+                // Two tests that each narrowed the variable to literal types leave it the
+                // values both allow (TYP-28).
+                Some(current) => match crate::literal_type::meet(&current, ty) {
+                    Some(both) => both,
+                    None if ty.takes_literals_of(&current) => ty.clone(),
+                    None => current,
+                },
+            });
         }
-        narrowest.cloned()
+        narrowest
     }
 
     /// Returns the read of a variable as the type a test narrowed it to: the value an
     /// optional holds, then the instance as one of a derived class.
     fn narrowed_read(read: TypedExpr, narrowed: Type, span: Span) -> TypedExpr {
+        // A variable narrowed to a literal type holds a value of its base type (TYP-28).
+        let narrowed = if narrowed.has_literal() {
+            narrowed.without_literal()
+        } else {
+            narrowed
+        };
         let read = match &read.ty {
             Type::Optional(inner) if !matches!(narrowed, Type::Optional(_)) => {
                 let inner = inner.as_ref().clone();

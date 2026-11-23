@@ -184,7 +184,7 @@ impl BodyChecker<'_> {
             self.global_names.insert(name.name.clone());
             self.locals.insert(name.name.clone(), symbol);
             self.declared.insert(symbol, ty.clone());
-            self.types.insert(symbol, ty.without_abstract());
+            self.types.insert(symbol, ty.value_type());
         }
     }
 
@@ -217,7 +217,7 @@ impl BodyChecker<'_> {
             self.locals.insert(name.name.clone(), symbol);
             self.local_order.push(symbol);
             self.declared.insert(symbol, ty.clone());
-            self.types.insert(symbol, ty.without_abstract());
+            self.types.insert(symbol, ty.value_type());
             self.assigned
                 .get_or_insert_with(std::collections::BTreeSet::new)
                 .insert(super::flow::Fact::Assigned(symbol));
@@ -281,7 +281,7 @@ impl BodyChecker<'_> {
             Some(_) => {}
             None => {
                 self.declared.insert(symbol, ty.clone());
-                self.types.insert(symbol, ty.without_abstract());
+                self.types.insert(symbol, ty.value_type());
             }
         }
     }
@@ -328,6 +328,12 @@ impl BodyChecker<'_> {
             return None;
         };
         let symbol = self.locals.get(id)?;
+        // A variable declared of a literal type takes only its values (TYP-28).
+        if let Some(declared) = self.declared.get(symbol)
+            && declared.has_literal()
+        {
+            return Some(declared.clone());
+        }
         self.types.get(symbol).cloned()
     }
 

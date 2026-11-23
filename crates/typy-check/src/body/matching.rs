@@ -26,6 +26,10 @@ impl BodyChecker<'_> {
         let errors = self.error_count();
         let checked = self.expression(subject);
         let subject_type = checked.ty.clone();
+        // A subject of literal types is covered by a case for each of its values (TYP-28).
+        let covered_type = self
+            .literal_of(&checked)
+            .unwrap_or_else(|| subject_type.clone());
         let (name, stored) =
             if let (TypedExprKind::Local(_), Expr::Name { id, .. }) = (&checked.kind, subject) {
                 (id.clone(), None)
@@ -51,11 +55,29 @@ impl BodyChecker<'_> {
             let body = self.block(&case.body);
             ends = meet(ends, self.assigned.take());
             self.assigned = entry;
-            // A later case knows this one failed when it is one test without a guard.
-            if guard.is_none()
-                && let TypedPattern::Test(test) = &pattern
-            {
-                self.add_facts(test_facts(test).1);
+            // A later case knows this one failed when it is one test without a guard, or
+            // alternatives that are each one test.
+            if guard.is_none() {
+                let tests: Vec<&TypedExpr> = match &pattern {
+                    TypedPattern::Test(test) => vec![test],
+                    TypedPattern::Any(alternatives) => alternatives
+                        .iter()
+                        .map_while(|alternative| match alternative {
+                            TypedPattern::Test(test) => Some(test),
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                let every = match &pattern {
+                    TypedPattern::Any(alternatives) => tests.len() == alternatives.len(),
+                    _ => true,
+                };
+                if every {
+                    for test in tests {
+                        self.add_facts(test_facts(test).1);
+                    }
+                }
             }
             matched_all |= guard.is_none() && pattern.always_matches();
             typed.push(TypedCase {
@@ -64,10 +86,10 @@ impl BodyChecker<'_> {
                 body,
             });
         }
-        let uncovered = self.uncovered(&subject_type, cases);
+        let uncovered = self.uncovered(&covered_type, cases);
         if uncovered.is_empty() {
             matched_all = true;
-        } else if members(&subject_type).len() > 1 && self.error_count() == errors {
+        } else if members(&covered_type).len() > 1 && self.error_count() == errors {
             // A `match` with an error has that one diagnostic, so no warning follows it.
             self.missing_cases(&uncovered, subject.span());
         }

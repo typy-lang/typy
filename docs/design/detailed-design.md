@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.120 |
+| Version | 2.121 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -358,6 +358,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0428 | Copies of a generic function without end | GEN-03 |
 | E0429 | Module or export that a C library cannot have | FFI-05, CLI-09 |
 | E0430 | `ctypes` declaration TyPy cannot compile | FFI-01, FFI-02, FFI-03 |
+| E0431 | Value that is not one of the constants its `Literal` type names | TYP-28 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -1186,6 +1187,32 @@ its keys does not read (LIB-20, ADR-0086). Only declared types are
 abstract: `BodyChecker::typed` gives every expression the type
 `without_abstract` makes, a variable's current type is its members while
 `declared` keeps the collection, and lowering maps it to its members.
+`Literal[...]` names `AnnotationName::Literal`, which
+`check/literal_annotation.rs` reads as the union of `Type::Literal` of a
+`LiteralValue` each, an `int` as canonical decimal digits, or `None`
+(TYP-28, ADR-0110). As with abstract collections, only declared types are
+literal: `BodyChecker::typed` gives an expression the base type through
+`value_type`, `known_type` gives a variable declared of literal types its
+declaration, and `Program::finish` gives symbols, signatures and
+attributes `without_literal`. `expression_expecting` calls
+`checked_literal`, which reads what a value is known to be with
+`literal_of`: a constant's own value, a variable's narrowed or declared
+literal type, an attribute's or a called function's declared one; a value
+that `takes_literals_of` refuses is E0431, and `default_value` tests a
+default alike. `is_assignable_to` and `matches` let a value of the base
+type pass where a literal type is declared, and `Type::union` keeps a base
+type over its literal types by `takes_literals_of`. A comparison with
+constants records a `LiteralTest` in `TypedExprKind::Compare`, made by
+`literal_test` before a `bool` is compared as an `int`: the positions of
+the narrowed types when it holds and fails, and whether an optional is not
+`None`; `test_facts` turns it into `Fact::Narrowed`, `narrowed_type` meets
+two literal narrowings of one variable, and `narrowed_read` holds a
+literal narrowing as its base type, so a read changes only by `Unwrap`.
+A `match` covers a subject of literal types through `literal_of`, a value
+pattern covering the member of an equal constant, and a case of
+alternatives that are each one test leaves the facts of all failing to
+the next case. A `Literal[...]` read as a value is a typing value, written
+as CPython writes it and equal whatever the order of its values.
 `AbstractType::takes` and `member_for` decide assignability, with a
 derived class's instances for the items of a collection that
 `reads_only`, a dict of any other part for a member that reads one part,

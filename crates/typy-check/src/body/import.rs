@@ -411,7 +411,7 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 }
 
 /// Returns the error for a name of `typing`, `collections.abc`, `types` or `dataclasses` that
-/// TyPy does not give: one a later release gives, such as `Any`, `cast`, `Literal` or some
+/// TyPy does not give: one a later release gives, such as `Any`, `TypedDict` or some
 /// abstract collections, names that release, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
@@ -441,7 +441,6 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let typing = module.as_str() == "typing";
     let planned = match name.as_str() {
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
-        "Literal" if typing => Some(("0.12", RuleId::TYP_28)),
         "overload" if typing => Some(("0.12", RuleId::TYP_29)),
         "Self" if typing => Some(("0.12", RuleId::TYP_30)),
         "TypeGuard" | "TypeIs" if typing => Some(("0.12", RuleId::TYP_31)),
@@ -509,6 +508,7 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "ClassVar",
             "Protocol",
             "NamedTuple",
+            "Literal",
             "Sequence",
             "MutableSequence",
             "Mapping",

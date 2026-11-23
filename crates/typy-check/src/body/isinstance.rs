@@ -611,7 +611,7 @@ impl BodyChecker<'_> {
 
     /// Returns the position of `narrowed` in the function's table of narrowed types, adding
     /// it when it is not there yet.
-    fn narrowing_index(&mut self, narrowed: Type) -> u32 {
+    pub(super) fn narrowing_index(&mut self, narrowed: Type) -> u32 {
         let position = self
             .narrowings
             .iter()

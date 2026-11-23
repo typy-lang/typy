@@ -35,8 +35,8 @@ impl Type {
             // A member is dropped for a wider one, or for an equal one written before it.
             let covered = flat.iter().enumerate().any(|(other, wider)| {
                 other != position
-                    && member.is_assignable_to(wider)
-                    && (!wider.is_assignable_to(member) || other < position)
+                    && member.takes_literals_of(wider)
+                    && (!wider.takes_literals_of(member) || other < position)
             });
             if !covered {
                 kept.push(member.clone());

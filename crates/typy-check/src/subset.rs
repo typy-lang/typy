@@ -6,6 +6,8 @@ mod feature;
 mod global_scope;
 mod matching;
 mod pattern_key;
+
+pub(crate) use pattern_key::quoted;
 mod statement;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};

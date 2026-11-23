@@ -218,6 +218,14 @@ impl BodyChecker<'_> {
                 ..
             } => {
                 let operands = self.comparison_operands(left, comparators, operators);
+                // What the comparison shows of a variable, read before a `bool` is compared as
+                // an `int` (TYP-28).
+                let narrowing = match (operators.as_slice(), operands.as_slice()) {
+                    ([operator], [left, right]) => {
+                        self.literal_test(*operator, left, right).map(Box::new)
+                    }
+                    _ => None,
+                };
                 let operands = Self::objects_compared(operators, operands);
                 let mut operands = Self::numbers_compared(operators, operands);
                 let mut comparators = operands.split_off(1);
@@ -260,8 +268,9 @@ impl BodyChecker<'_> {
                 Self::typed(
                     TypedExprKind::Compare {
                         left: Box::new(left),
-                        operators: operators.clone(),
+                        operators: operators.as_slice().into(),
                         comparators,
+                        narrowing,
                     },
                     Type::Bool,
                     span,

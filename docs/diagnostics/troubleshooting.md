@@ -1353,6 +1353,48 @@ libc.abs.restype = ctypes.c_int
 print(libc.abs(-3))
 ```
 
+## E0431: value that is not one of a `Literal` type's constants
+
+A value where a `Literal` type is declared is one of its constants, or a
+variable, attribute or result declared of literal types within it
+(TYP-28). A value of the base type read from elsewhere, such as a `str`
+parameter, passes once a test narrows it.
+
+This program gives E0431:
+
+<!-- typy-expect: rejected E0431 at 9:20 -->
+```python
+from typing import Literal
+
+
+def open_as(mode: Literal["r", "w"]) -> str:
+    return mode
+
+
+def read(text: str) -> str:
+    return open_as(text)
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Literal
+
+
+def open_as(mode: Literal["r", "w"]) -> str:
+    return mode
+
+
+def read(text: str) -> str:
+    if text == "r":
+        return open_as(text)
+    return "-"
+
+
+print(read("r"))
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

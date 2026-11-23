@@ -24,14 +24,13 @@ fn planned_module(name: &str, release: &str, rule: &str) -> (String, String, Str
 #[test]
 fn each_typing_form_of_a_later_release_names_it() {
     let found = messages(
-        "from typing import Any, Literal, overload, Self, TypeGuard, TypeIs\n\
+        "from typing import Any, overload, Self, TypeGuard, TypeIs\n\
          from typing import TypedDict, Required, NotRequired, ReadOnly\n",
     );
     assert_eq!(
         found,
         [
             planned("typing.Any", "0.13", "TYP-25"),
-            planned("typing.Literal", "0.12", "TYP-28"),
             planned("typing.overload", "0.12", "TYP-29"),
             planned("typing.Self", "0.12", "TYP-30"),
             planned("typing.TypeGuard", "0.12", "TYP-31"),
@@ -91,24 +90,6 @@ fn any_as_a_type_is_planned_for_0_13() {
             "`Any` as a type is planned for TyPy 0.13 (TYP-25)".to_owned(),
             "TYP-25".to_owned(),
         )]
-    );
-}
-
-#[test]
-fn the_values_of_a_literal_are_not_read_as_annotations() {
-    let found = messages(
-        "from typing import Literal\ndef open_as(mode: Literal['r', 'w']) -> str:\n    \
-         return mode\n",
-    );
-    assert!(
-        found.contains(&planned("typing.Literal", "0.12", "TYP-28")),
-        "{found:?}"
-    );
-    assert!(
-        found
-            .iter()
-            .all(|(_, message, _)| !message.contains("written as strings")),
-        "{found:?}"
     );
 }
 

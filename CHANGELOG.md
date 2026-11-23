@@ -8,6 +8,12 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `typing.Literal` of `int`, `str`, `bytes` and `bool` constants and
+  `None`: a constant passes where it is declared when it is one of its
+  values, any other value is E0431, and `==`, `!=`, `in`, `not in` and
+  `match` narrow a variable to the constants it is compared with. A
+  `match` with a case for each value covers a variable of literal types
+  (TYP-28, ADR-0110).
 - A variable of a function assigned an empty `[]`, `{}`, `set()`,
   `list()` or `dict()` without an annotation takes its types from the
   first statement of the function that adds to it: `append`, `insert` or

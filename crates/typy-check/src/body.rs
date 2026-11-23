@@ -61,6 +61,7 @@ mod key_argument;
 mod lambda;
 mod list;
 mod list_call;
+mod literal_value;
 mod locals;
 mod loop_source;
 mod map_filter;
@@ -441,10 +442,10 @@ impl<'program> BodyChecker<'program> {
             self.locals.insert(name.clone(), symbol);
             // A parameter of an abstract collection holds the built-in collection given, and
             // takes another as its declared type says (LIB-20).
-            if parameter.ty.has_abstract() {
+            if parameter.ty.has_abstract() || parameter.ty.has_literal() {
                 self.declared.insert(symbol, parameter.ty.clone());
             }
-            self.types.insert(symbol, parameter.ty.without_abstract());
+            self.types.insert(symbol, parameter.ty.value_type());
             self.assigned
                 .get_or_insert_with(BTreeSet::new)
                 .insert(flow::Fact::Assigned(symbol));
@@ -613,9 +614,10 @@ impl<'program> BodyChecker<'program> {
 
     pub(super) fn typed(kind: TypedExprKind, ty: Type, span: Span) -> TypedExpr {
         // A value of a declared abstract collection is the built-in collection it holds
-        // (LIB-20, ADR-0086).
-        let ty = if ty.has_abstract() {
-            ty.without_abstract()
+        // (LIB-20, ADR-0086), and a value of a literal type a value of its base type (TYP-28,
+        // ADR-0110).
+        let ty = if ty.has_abstract() || ty.has_literal() {
+            ty.value_type()
         } else {
             ty
         };

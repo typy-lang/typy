@@ -121,6 +121,9 @@ pub enum Type {
     /// A declared abstract collection, such as `Sequence[int]`, held as the built-in types it
     /// stands for, which an expression's type is in its place (LIB-20, ADR-0086).
     Abstract(Box<crate::abstract_type::AbstractType>),
+    /// One constant of `typing.Literal`, such as `Literal['r']`, held as a value of its base
+    /// type, which an expression's type is in its place (TYP-28, ADR-0110).
+    Literal(Box<crate::literal_type::LiteralValue>),
     /// `object`: a value of any type, held as an object whose header says what it is, a value
     /// held by value boxed, and narrowed before any operation `object` does not define
     /// (TYP-23, ADR-0090).
@@ -230,6 +233,7 @@ impl TypeObjectOf {
     pub fn of(ty: &Type) -> Option<Self> {
         Some(match ty {
             Type::Abstract(collection) => return Self::of(&collection.members),
+            Type::Literal(value) => return Self::of(&value.base()),
             Type::Int => Self::Int,
             Type::Float => Self::Float,
             Type::Bool => Self::Bool,
@@ -485,6 +489,12 @@ impl Type {
                 own == other || other.takes(&own.members)
             }
             (_, Self::Abstract(collection)) => collection.takes(self),
+            // A value of a literal type is a value of its base type; a value meets a declared
+            // literal type where the checker tests it, since an expression's type is never a
+            // literal (TYP-28, ADR-0110).
+            (Self::Literal(own), Self::Literal(other)) => own == other,
+            (Self::Literal(own), _) => own.base().is_assignable_to(target),
+            (_, Self::Literal(other)) => self.is_assignable_to(&other.base()),
             // A typing value written alike from an older floor may stand where one written
             // alike only from a newer floor is held (TYP-18).
             (Self::Typing(own), Self::Typing(target))
@@ -562,6 +572,11 @@ impl Type {
     pub fn matches(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
+            (Self::Literal(own), Self::Literal(literal)) => own == literal,
+            // A value of literal types is held as a value of their base types (TYP-28).
+            _ if self.has_literal() || other.has_literal() => {
+                self.without_literal().matches(&other.without_literal())
+            }
             (Self::Abstract(own), _) => own.members.matches(other),
             (_, Self::Abstract(collection)) => self.matches(&collection.members),
             (Self::List(item), Self::List(other))
@@ -990,6 +1005,10 @@ impl Type {
             }
             Self::Iterator(_) | Self::Iterable(_) | Self::Object => format!("an {self}"),
             Self::Parameter(parameter) => format!("a value of type {}", parameter.name),
+            // A union of literal types is written as one `Literal[...]` (TYP-28).
+            Self::Union(members) if matches!(members.first(), Some(Self::Literal(_))) => {
+                format!("a {self}")
+            }
             // The article reads with the first member, as in `an A | B`.
             Self::Union(members) => {
                 let rest: Vec<String> = members[1..].iter().map(ToString::to_string).collect();
@@ -1014,6 +1033,9 @@ impl fmt::Display for Type {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Abstract(collection) => write!(formatter, "{collection}"),
+            Self::Literal(value) => {
+                crate::literal_type::write_literal(formatter, &[value.as_ref()])
+            }
             Self::Object => formatter.write_str("object"),
             Self::Int => formatter.write_str("int"),
             Self::Float => formatter.write_str("float"),
@@ -1041,10 +1063,7 @@ impl fmt::Display for Type {
                 write!(formatter, "{}[{key}, {value}]", view.name())
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
-            Self::Union(members) => {
-                let text: Vec<String> = members.iter().map(ToString::to_string).collect();
-                formatter.write_str(&text.join(" | "))
-            }
+            Self::Union(members) => write_union(formatter, members),
             Self::Parameter(parameter) => formatter.write_str(&parameter.name),
             Self::Instance(class) => write!(formatter, "{class}"),
             Self::Exception(class) => write!(formatter, "{class}"),
@@ -1098,6 +1117,34 @@ impl fmt::Display for Type {
             Self::Error => formatter.write_str("<error>"),
         }
     }
+}
+
+/// Writes the members of a union joined by `|`, the literal members as one `Literal[...]`
+/// where the first of them is (TYP-28).
+fn write_union(formatter: &mut fmt::Formatter<'_>, members: &[Type]) -> fmt::Result {
+    let literals: Vec<&crate::literal_type::LiteralValue> = members
+        .iter()
+        .filter_map(|member| match member {
+            Type::Literal(value) => Some(value.as_ref()),
+            _ => None,
+        })
+        .collect();
+    let mut written_literals = false;
+    for (index, member) in members.iter().enumerate() {
+        if matches!(member, Type::Literal(_)) && written_literals {
+            continue;
+        }
+        if index > 0 {
+            formatter.write_str(" | ")?;
+        }
+        if let Type::Literal(_) = member {
+            written_literals = true;
+            crate::literal_type::write_literal(formatter, &literals)?;
+        } else {
+            write!(formatter, "{member}")?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

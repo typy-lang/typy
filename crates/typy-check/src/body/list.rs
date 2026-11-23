@@ -94,6 +94,11 @@ impl BodyChecker<'_> {
             ) => self.conditional((test, body, orelse), Some(callable), *span),
             _ => self.expression_for(expression, target),
         };
+        // A value where a literal type is declared must be one of its values (TYP-28).
+        let value = match expected {
+            Some(expected) if expected.has_literal() => self.checked_literal(value, expected),
+            _ => value,
+        };
         Self::converted(value, expected)
     }
 
@@ -165,6 +170,15 @@ impl BodyChecker<'_> {
     pub(super) fn converted(value: TypedExpr, expected: Option<&Type>) -> TypedExpr {
         // An abstract collection holds a value as one of its built-in types; one of a member's
         // kind with items of a derived class is that member as it is (LIB-20, ADR-0086).
+        // A value of a literal type is held as a value of its base type (TYP-28).
+        let widened;
+        let expected = match expected {
+            Some(expected) if expected.has_literal() => {
+                widened = expected.without_literal();
+                Some(&widened)
+            }
+            other => other,
+        };
         let expected = match expected {
             None => return value,
             Some(Type::Abstract(collection)) => {

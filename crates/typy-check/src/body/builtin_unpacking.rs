@@ -388,8 +388,9 @@ impl BodyChecker<'_> {
         Self::typed(
             TypedExprKind::Compare {
                 left: Box::new(self.tail_length(tail, span)),
-                operators: vec![operator],
+                operators: Box::new([operator]),
                 comparators: vec![Self::number(count, span)],
+                narrowing: None,
             },
             Type::Bool,
             span,

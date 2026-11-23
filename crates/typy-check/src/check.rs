@@ -19,6 +19,7 @@ mod generic_copies;
 #[cfg(test)]
 mod generic_tests;
 mod inference;
+mod literal_annotation;
 mod module_imports;
 mod module_scope;
 pub(crate) mod not_implemented;
