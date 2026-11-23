@@ -8,6 +8,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- The builtin `hash`: the hash a set or a dict keeps a value by,
+  CPython's for numbers, `None` and tuples of them, and what `__hash__`
+  returns for an instance (LIB-34, ADR-0122).
 - The standard library module `textwrap`, written in typed Python with
   the results of CPython 3.15: `TextWrapper`, `wrap`, `fill`, `shorten`,
   `dedent` and `indent`, splitting words and hyphenated words as
@@ -141,6 +144,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- The hash of an instance is what its `__hash__` returns when that fits
+  64 bits, as in CPython, rather than that value modulo `2**61 - 1`; a
+  set of such instances may iterate in another order (ADR-0122).
 - `copy` is planned for 0.13 rather than 0.12, given by the compiler, as
   `copy.copy` and `copy.deepcopy` read each object's class (LIB-33,
   ADR-0121).

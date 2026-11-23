@@ -26,6 +26,7 @@ mod generator_types;
 mod generators;
 mod generics;
 mod guards;
+mod hash_calls;
 mod iterator_classes;
 mod lambda_expressions;
 mod lazy_imports;

@@ -128,5 +128,10 @@ fn an_int_from_hash_is_reduced_as_cpython_reduces_it() {
     unsafe {
         assert_eq!(super::typy_rt_int_hash(word(42)), 42);
         assert_eq!(super::typy_rt_int_hash(word(-1)), -2);
+        // A value that fits a word is kept, as CPython's slot keeps it.
+        assert_eq!(super::typy_rt_int_hash(word(1 << 61)), 1 << 61);
+        // One that does not is hashed as the `int`: `2**70` is `2**9` modulo `2**61 - 1`.
+        let large = crate::int::value::Integer::from_i128(1 << 70).into_word();
+        assert_eq!(super::typy_rt_int_hash(large), 512);
     }
 }

@@ -15,6 +15,7 @@
 | `callable(x)`: true for a function value, a built-in function, method or type, and a class | LIB-23 |
 | `map` and `filter`, lazy iterators that go on after the function raises | LIB-23 |
 | `divmod`, `pow` with or without a modulus, `bin`, `hex`, `oct` and `format`; see [Numbers and formatting](#numbers-and-formatting) | LIB-28 |
+| `hash`, the hash a set or a dict keeps a value by; see [Hashing](#hashing) | LIB-34 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -135,6 +136,36 @@ and `format(value, spec)` formats a value as the f-string `f"{value:spec}"`
 does. A modulus of zero, or a negative exponent whose base has no inverse,
 raises `ValueError`. `bytearray` is described in
 [Built-in types](built-in-types.md#bytearrays).
+
+## Hashing
+
+`hash(x)` gives the hash a set or a dict keeps `x` by (LIB-34). For an
+`int`, a `float`, a `bool`, `None` and a tuple of them it is CPython's;
+for an instance it is what the class's `__hash__` returns, so `__hash__`
+can hash a tuple of the attributes `__eq__` compares. `str` and `bytes`
+hash with CPython's function under a fixed key, where CPython draws a key
+at random for each run, so their hashes are not promised (STD-03):
+
+<!-- typy-expect: accepted -->
+```python
+class Point:
+    def __init__(self, x: int, y: int) -> None:
+        self.x = x
+        self.y = y
+
+    def __eq__(self, other: "Point") -> bool:
+        return (self.x, self.y) == (other.x, other.y)
+
+    def __hash__(self) -> int:
+        return hash((self.x, self.y))
+
+
+print(hash(Point(1, 2)) == hash((1, 2)), len({Point(1, 2), Point(1, 2)}))
+```
+
+A value of a type that has no hash, such as a list, is E0413. In a copy
+of a generic function or class whose type argument has no hash, the call
+raises `TypeError` where it runs, as CPython raises it.
 
 ## Formatting with `%`
 

@@ -37,6 +37,7 @@ mod generator_expression;
 mod generic_call;
 mod generic_copy;
 mod guard_call;
+mod hash_call;
 mod override_adapter;
 mod override_copy;
 mod protocol_method_value;

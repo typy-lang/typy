@@ -801,7 +801,8 @@ print("a,b".split(","))
 ## E0413: set item or dict key of a type without a hash
 
 A list, a set, a dict or a tuple that holds one cannot be a set item or a
-dict key (DAT-09, DAT-10). Use a tuple, a `str` or a number as the key.
+dict key (DAT-09, DAT-10), nor the argument of `hash` (LIB-34). Use a
+tuple, a `str` or a number as the key.
 
 This program gives E0413:
 

@@ -75,6 +75,7 @@ fn arity(builtin: Builtin) -> Option<Arity> {
         B::Abs => one("abs() takes exactly one argument ({} given)"),
         B::Bin => one("bin() takes exactly one argument ({} given)"),
         B::Hex => one("hex() takes exactly one argument ({} given)"),
+        B::Hash => one("hash() takes exactly one argument ({} given)"),
         B::Oct => one("oct() takes exactly one argument ({} given)"),
         B::Divmod => two("divmod expected 2 arguments, got {}"),
         B::Format => Arity::new(

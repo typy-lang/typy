@@ -22,6 +22,7 @@ pub enum Builtin {
     Enumerate,
     Float,
     Format,
+    Hash,
     Hex,
     Int,
     Input,
@@ -73,6 +74,7 @@ impl Builtin {
             "enumerate" => Self::Enumerate,
             "float" => Self::Float,
             "format" => Self::Format,
+            "hash" => Self::Hash,
             "hex" => Self::Hex,
             "int" => Self::Int,
             "input" => Self::Input,
@@ -119,6 +121,7 @@ impl Builtin {
                 | Self::Chr
                 | Self::Divmod
                 | Self::Format
+                | Self::Hash
                 | Self::Hex
                 | Self::Input
                 | Self::IsInstance
@@ -176,6 +179,7 @@ impl Builtin {
             Self::Enumerate => "enumerate",
             Self::Float => "float",
             Self::Format => "format",
+            Self::Hash => "hash",
             Self::Hex => "hex",
             Self::Int => "int",
             Self::Input => "input",

@@ -29,7 +29,7 @@ fn dynamic_and_unlisted_builtins_are_excluded() {
         "globals",
         "getattr",
         "id",
-        "hash",
+        "vars",
         "object",
     ] {
         assert_eq!(unprovided(name), Some(Unprovided::Excluded), "{name}");

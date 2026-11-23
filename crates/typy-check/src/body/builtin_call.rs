@@ -54,6 +54,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
+        if builtin == Builtin::Hash {
+            return self.hash_call(arguments, keywords, span);
+        }
         if matches!(
             builtin,
             Builtin::Divmod
@@ -218,6 +221,7 @@ impl BodyChecker<'_> {
         let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
             Builtin::Print
+            | Builtin::Hash
             | Builtin::Bytes
             | Builtin::Bytearray
             | Builtin::List

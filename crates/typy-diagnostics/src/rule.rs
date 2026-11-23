@@ -382,6 +382,8 @@ impl RuleId {
     pub const LIB_30: Self = Self("LIB-30");
     /// `copy.copy` and `copy.deepcopy` shall be available for a value of any type, with the `memo` of `deepcopy` and a class's own `__copy__` and `__deepcopy__`, given by the compiler since they read each object's class (ADR-0121).
     pub const LIB_33: Self = Self("LIB-33");
+    /// `hash` shall be available for a value of every type that has a hash, giving the hash a set or a dict keeps it by, CPython's for an `int`, a `float`, a `bool`, `None` and tuples of them and what `__hash__` returns for an instance, and shall refuse a value of a type that has none (ADR-0122).
+    pub const LIB_34: Self = Self("LIB-34");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -683,6 +685,7 @@ impl RuleId {
         Self::LIB_29,
         Self::LIB_30,
         Self::LIB_33,
+        Self::LIB_34,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,
