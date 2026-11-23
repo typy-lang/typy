@@ -110,14 +110,7 @@ impl Dataclasses {
             })?;
         let at = name.span;
         let Some(kind) = Kind::named(&kind) else {
-            diagnostics.push(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    at,
-                    format!("a class derived from `enum.{kind}` is planned for TyPy 0.12 (CLS-44)"),
-                )
-                .with_rule(RuleId::CLS_44),
-            );
+            diagnostics.push(planned(at, &format!("a class derived from `enum.{kind}`")));
             bases.clear();
             return None;
         };
@@ -170,8 +163,13 @@ fn members(
             body.push(statement);
             continue;
         };
+        // CPython makes each name of a tuple, or of several targets, a member.
         let [Expr::Name { id, span }] = targets.as_slice() else {
-            body.push(statement);
+            diagnostics.push(planned(
+                statement.span(),
+                "an enum member assigned with several targets or a tuple of names",
+            ));
+            failed = true;
             continue;
         };
         if id.starts_with("__") && id.ends_with("__") {

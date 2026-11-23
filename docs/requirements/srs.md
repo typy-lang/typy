@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.135 |
+| Version | 1.136 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -399,7 +399,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | CLS-44 | A class derived from `enum.Enum`, `IntEnum`, `StrEnum`, `Flag` or `IntFlag` shall be accepted, with its members, `name`, `value`, `auto()`, iteration, `len`, lookup by value and by name, comparison, hashing and the `Flag` operators as CPython gives them (ADR-0093). | S | 0.12 | |
 | CLS-45 | A class derived from `abc.ABC` shall accept `@abstractmethod`, and making an instance of a class that leaves an abstract method without an override shall be rejected where the class is named and raise CPython's `TypeError` otherwise; a call through `super()` or the class of an abstract method whose body gives no value, where its result does not hold `None`, shall be rejected (ADR-0093, ADR-0115). | S | 0.12 | |
 | CLS-46 | A class method called through `super()` shall run with the class of the instance as `cls` also when a class derived from the class of the enclosing method defines the class method again. | C | 0.14 | |
-| CLS-47 | An enum class with other bases, keywords, decorators or type parameters, derived from an enum class without members, with a member annotated, named `name`, `value` or a `_sunder_` name, of a value other than an `int`, `str`, `bytes` or `bool` constant or `auto()`, or, for a flag, of other than one bit, or defining `__init__`, `__new__`, `_missing_` or `_generate_next_value_`, shall be accepted as CPython gives it (ADR-0116, ADR-0118). | C | 0.13 | |
+| CLS-47 | An enum class with other bases, keywords, decorators or type parameters, derived from an enum class without members, with a member annotated, assigned with several targets or a tuple of names, named `name`, `value` or a `_sunder_` name, of a value other than an `int`, `str`, `bytes` or `bool` constant or `auto()`, or, for a flag, of other than one bit, or defining `__init__`, `__new__`, `_missing_` or `_generate_next_value_`, shall be accepted as CPython gives it (ADR-0116, ADR-0118). | C | 0.13 | |
 | CLS-14 | `super().__init__(...)` shall be accepted in the `__init__` of an exception class and shall set the exception's arguments; any other use of `super()` shall be rejected until 0.4. | M | 0.3 | |
 
 ### 3.11 Generics and protocols (GEN)

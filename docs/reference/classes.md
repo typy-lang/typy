@@ -1031,7 +1031,8 @@ member defined twice, a class derived from an enum class with members,
 or a `StrEnum` member whose value is not a `str`. `auto()` after a value
 that is not an `int` is E0202, as CPython 3.12 gives `1` with a warning
 and 3.13 raises `TypeError`. Members
-of other values, annotated members, `__init__`, `__new__`, `_missing_`,
+of other values, annotated members, members assigned with several
+targets or a tuple of names, `__init__`, `__new__`, `_missing_`,
 other bases, decorators such as `@unique`, flag members of other than
 one bit, and classes derived from an enum class without members are
 planned for 0.13 (CLS-47).

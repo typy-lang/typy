@@ -90,7 +90,7 @@ impl BodyChecker<'_> {
         index: &Expr,
         span: Span,
     ) -> Option<TypedExpr> {
-        let class = enum_class(self.program, &value.ty)?;
+        let (class, _) = enum_class(self.program, &value.ty)?;
         let named = self.program.enum_method(class, ENUM_NAMED)?;
         let name = Identifier {
             name: ENUM_NAMED.to_owned(),
@@ -119,10 +119,7 @@ impl BodyChecker<'_> {
                 span,
             );
         }
-        let Some(class) = enum_class(self.program, &value.ty) else {
-            return value;
-        };
-        let Some(members) = self.program.enum_method(class, ENUM_MEMBERS) else {
+        let Some((class, members)) = enum_class(self.program, &value.ty) else {
             return value;
         };
         let name = Identifier {
@@ -281,11 +278,14 @@ impl BodyChecker<'_> {
     }
 }
 
-/// Returns the enum class a value of type `ty` is, when it is one.
-fn enum_class(program: &Program, ty: &Type) -> Option<ClassId> {
+/// Returns the enum class a value of type `ty` is, when it is one, with the method that lists
+/// its members, which every enum class has.
+fn enum_class(program: &Program, ty: &Type) -> Option<(ClassId, FunctionId)> {
     let Type::TypeObject(Some(of)) = ty else {
         return None;
     };
     let class = BodyChecker::program_class(of)?;
-    program.enum_method(class, ENUM_LOOKUP).map(|_| class)
+    program
+        .enum_method(class, ENUM_MEMBERS)
+        .map(|members| (class, members))
 }

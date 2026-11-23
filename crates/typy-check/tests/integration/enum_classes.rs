@@ -284,3 +284,35 @@ fn rare_forms_of_members_have_their_answers() {
         );
     }
 }
+
+#[test]
+fn members_of_every_written_form_are_read_or_planned() {
+    // A third member of one value is an alias of the first, and a name with one leading
+    // underscore is a member.
+    assert_eq!(
+        app(
+            "from enum import Enum\nclass C(Enum):\n    A = 1\n    B = 1\n    D = 1\n    _hidden = 2\nprint(C.D is C.A, list(C))\n"
+        ),
+        Vec::<String>::new()
+    );
+    let planned = [
+        "import enum\nclass C(enum.ReprEnum):\n    X = 1\n",
+        "from enum import Enum\nclass C(Enum, boundary=1):\n    X = 1\n",
+        "from enum import Enum\ndef keep[T](cls: T) -> T:\n    return cls\n@keep\nclass C(Enum):\n    X = 1\n",
+        "from enum import Enum\nclass C(Enum):\n    X, Y = 1, 2\n",
+        "from enum import Enum\nclass C(Enum):\n    X = Y = 1\n",
+        "from enum import Enum, auto\nclass C(Enum):\n    X = auto(1)\n",
+        "from enum import Enum\nclass C(Enum):\n    X = int()\n",
+    ];
+    for source in planned {
+        let found = messages(source);
+        assert!(
+            found
+                .iter()
+                .any(|(code, _, rule)| code == "E0201" && rule == "CLS-47"),
+            "{source}\n{found:?}"
+        );
+    }
+    // A keyword other than `value` is refused as any other call of the class.
+    assert_eq!(app(&format!("{COLOR}print(Color(val=1))\n")), ["E0404"]);
+}
