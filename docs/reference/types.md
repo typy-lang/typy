@@ -324,7 +324,7 @@ These forms are planned, and each is E0201 until its release:
 
 | Form | Release | Requirement |
 | --- | --- | --- |
-| `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-30, TYP-31 |
+| `TypeGuard` and `TypeIs` | 0.12 | TYP-31 |
 | `typing.Any`, bound when the program runs | 0.13 | TYP-25 |
 | `TypedDict`, `Required`, `NotRequired` and `ReadOnly` | 0.13 | TYP-32 |
 

@@ -57,17 +57,17 @@ pub struct GeneratorTypes {
 
 impl TypedFunction {
     /// Returns the function with each literal type in its declared types as its base type,
-    /// the type of a value of it (TYP-28, ADR-0110).
+    /// and `Self` as the method's class, the types of values of them (TYP-28, TYP-30).
     #[must_use]
     pub(crate) fn without_literals(mut self) -> Self {
         for parameter in &mut self.signature.parameters {
-            parameter.ty = parameter.ty.without_literal();
+            parameter.ty = parameter.ty.without_literal().with_self(None);
         }
-        self.signature.returns = self.signature.returns.without_literal();
+        self.signature.returns = self.signature.returns.without_literal().with_self(None);
         if let Some(generator) = &mut self.generator {
-            generator.yields = generator.yields.without_literal();
-            generator.sends = generator.sends.without_literal();
-            generator.returns = generator.returns.without_literal();
+            generator.yields = generator.yields.without_literal().with_self(None);
+            generator.sends = generator.sends.without_literal().with_self(None);
+            generator.returns = generator.returns.without_literal().with_self(None);
         }
         self
     }

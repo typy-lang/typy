@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.54 |
+| Version | 1.55 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -360,12 +360,13 @@ that the specification does not define.
 | TYP-27 | 0.12 | UT, IT | `crates/typy-check/src/body/first_add/tests.rs` for the scan of a body's assignments; `crates/typy-check/tests/integration/first_add.rs` for each statement that adds to an empty list, dict or set, a read before it, a value without a type, and no such statement; `tests/conformance/typ/TYP-27_*.py` |
 | TYP-28 | 0.12 | UT, IT | `crates/typy-check/src/literal_type/tests.rs` for literal values, their text and which values a literal type takes; `crates/typy-check/tests/integration/literal_types.rs` for each literal kind, a constant, variable, attribute and result that pass, values that are E0431, annotations that are E0408, and narrowing by `==`, `in` and `match`; `tests/conformance/typ/TYP-28_*.py` |
 | TYP-29 | 0.12 | UT, IT | `crates/typy-check/tests/integration/overloads.rs` for a call that matches each signature, one that matches none, a body that breaks a signature, overloads their implementation does not fit, overloads without an implementation, and `overload` as a value and a type; `tests/conformance/typ/TYP-29_*.py` |
-| TYP-30 | 0.12 | UT, IT | `typy-check` tests of `Self` through a base and a derived class; `tests/conformance/typ/TYP-30_*.py` |
+| TYP-30 | 0.12 | UT, IT | `crates/typy-check/src/self_type/tests.rs` for reading `Self` as a class; `crates/typy-check/tests/integration/self_type.rs` for `Self` through a base and a derived class, as a parameter, an optional result and a class method's, and an instance of the own class refused, E0433; `tests/conformance/typ/TYP-30_*.py` |
 | TYP-31 | 0.12 | UT, IT | `typy-check` tests of narrowing after a `TypeGuard` and a `TypeIs` call, and of `TypeIs`'s narrowing in the `else` branch; `tests/conformance/typ/TYP-31_*.py` |
 | TYP-32 | 0.13 | UT, IT | `typy-check` tests of each key kind and of a missing or unknown key; `tests/conformance/typ/TYP-32_*.py` |
 | TYP-33 | 0.13 | IT | `crates/typy-check/tests/integration/result_inference.rs` for a nested function's result inferred from its `return` statements, and E0204 while it is planned; `tests/conformance/typ/TYP-33_*.py` |
 | TYP-34 | 0.12 | IT | `crates/typy-check/tests/integration/unreachable_code.rs` for statements after `return`, `raise`, `break` and `continue`, branches `isinstance`, `assert` and `True` rule out, patterns that never match, W0402, and code that can run still checked; `tests/conformance/typ/TYP-34_*.py` |
 | TYP-35 | 0.13 | IT | `crates/typy-check/tests/integration/overloads.rs` for each form E0201 while it is planned |
+| TYP-36 | 0.13 | IT | `crates/typy-check/tests/integration/self_type.rs` for each form E0201 while it is planned |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |

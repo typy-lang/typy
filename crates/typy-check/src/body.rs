@@ -95,6 +95,7 @@ mod program;
 mod protocol;
 mod rebound;
 mod round_call;
+mod self_call;
 mod set;
 mod slice;
 mod slice_object;
@@ -520,7 +521,8 @@ impl<'program> BodyChecker<'program> {
             self.locals.insert(name.clone(), symbol);
             // A parameter of an abstract collection holds the built-in collection given, and
             // takes another as its declared type says (LIB-20).
-            if parameter.ty.has_abstract() || parameter.ty.has_literal() {
+            if parameter.ty.has_abstract() || parameter.ty.has_literal() || parameter.ty.has_self()
+            {
                 self.declared.insert(symbol, parameter.ty.clone());
             }
             self.types.insert(symbol, parameter.ty.value_type());
@@ -692,9 +694,9 @@ impl<'program> BodyChecker<'program> {
 
     pub(super) fn typed(kind: TypedExprKind, ty: Type, span: Span) -> TypedExpr {
         // A value of a declared abstract collection is the built-in collection it holds
-        // (LIB-20, ADR-0086), and a value of a literal type a value of its base type (TYP-28,
-        // ADR-0110).
-        let ty = if ty.has_abstract() || ty.has_literal() {
+        // (LIB-20, ADR-0086), a value of a literal type a value of its base type (TYP-28,
+        // ADR-0110), and a value of `Self` an instance of the method's class (TYP-30).
+        let ty = if ty.has_abstract() || ty.has_literal() || ty.has_self() {
             ty.value_type()
         } else {
             ty

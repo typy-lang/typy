@@ -441,7 +441,6 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let typing = module.as_str() == "typing";
     let planned = match name.as_str() {
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
-        "Self" if typing => Some(("0.12", RuleId::TYP_30)),
         "TypeGuard" | "TypeIs" if typing => Some(("0.12", RuleId::TYP_31)),
         "Any" if typing => Some(("0.13", RuleId::TYP_25)),
         "TypedDict" | "Required" | "NotRequired" | "ReadOnly" if typing => {
@@ -509,6 +508,7 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "NamedTuple",
             "Literal",
             "overload",
+            "Self",
             "Sequence",
             "MutableSequence",
             "Mapping",

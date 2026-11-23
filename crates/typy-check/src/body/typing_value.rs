@@ -634,6 +634,7 @@ fn named_text(name: AnnotationName) -> Option<NamedText> {
         AnnotationName::ClassVar => typing("ClassVar"),
         AnnotationName::Final => typing("Final"),
         AnnotationName::Literal => typing("Literal"),
+        AnnotationName::SelfType => typing("Self"),
         AnnotationName::Optional => typing("Optional"),
         AnnotationName::Union => NamedText {
             module: "typing",

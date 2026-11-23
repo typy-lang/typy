@@ -95,7 +95,7 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             "E0425",
             "TyPy's `typing` gives `Iterator`, `Iterable`, `Generator`, `Callable`, \
             `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar`, \
-            `Protocol`, `NamedTuple`, `Literal`, `overload`, `Sequence`, `MutableSequence`, `Mapping`, \
+            `Protocol`, `NamedTuple`, `Literal`, `overload`, `Self`, `Sequence`, `MutableSequence`, `Mapping`, \
             `MutableMapping`, `AbstractSet`, `MutableSet`, `Collection`, `Container`, \
             `Reversible`, `KeysView`, `ValuesView`, `ItemsView` and `cast`, not `Awaitable`",
         ),

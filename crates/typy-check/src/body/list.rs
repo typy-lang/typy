@@ -94,9 +94,11 @@ impl BodyChecker<'_> {
             ) => self.conditional((test, body, orelse), Some(callable), *span),
             _ => self.expression_for(expression, target),
         };
-        // A value where a literal type is declared must be one of its values (TYP-28).
+        // A value where a literal type is declared must be one of its values (TYP-28), and
+        // one where `Self` is the instance a method is called through (TYP-30).
         let value = match expected {
             Some(expected) if expected.has_literal() => self.checked_literal(value, expected),
+            Some(expected) if expected.has_self() => self.checked_self(value, expected),
             _ => value,
         };
         Self::converted(value, expected)

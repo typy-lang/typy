@@ -44,6 +44,7 @@ mod percent;
 mod planned_forms;
 mod protocols;
 mod result_inference;
+mod self_type;
 mod sys;
 mod type_aliases;
 mod type_objects;

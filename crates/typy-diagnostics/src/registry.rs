@@ -277,6 +277,11 @@ pub const CODES: &[CodeInfo] = &[
         "`@overload` without an implementation, one its implementation does not accept, or a call no overload takes",
         RuleId::TYP_29,
     ),
+    active(
+        433,
+        "value of a method's own class where `Self` is wanted",
+        RuleId::TYP_30,
+    ),
     active(701, "C toolchain program not found", RuleId::A_01),
     active(702, "link failed", RuleId::A_01),
     CodeInfo {

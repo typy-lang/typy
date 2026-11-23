@@ -11,6 +11,8 @@ pub(crate) fn tyir_type(ty: &Type, tuples: &mut TupleTypes) -> TyirType {
         Type::Abstract(collection) => tyir_type(&collection.members, tuples),
         // A literal type is held as its base type (TYP-28, ADR-0110).
         Type::Literal(value) => tyir_type(&value.base(), tuples),
+        // `Self` is held as an instance of the method's class (TYP-30, ADR-0113).
+        Type::SelfType(own) => tyir_type(own, tuples),
         Type::Int => TyirType::Int,
         Type::Float => TyirType::Float,
         Type::Bool => TyirType::Bool,

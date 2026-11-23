@@ -969,6 +969,21 @@ impl<'tree> ClassMethodCopies<'tree> {
                 },
                 None => *scope,
             };
+            // A copy of a class method is its class's own, so `Self` is that class (TYP-30).
+            let mut with_self = read_in.parameters.clone();
+            if let Some(instance) = known.instances.get(&info.id)
+                && read_in.parameters.is_empty()
+                && !super::protocol::is_protocol(instance)
+            {
+                with_self.insert(
+                    crate::self_type::SELF_PARAMETER.to_owned(),
+                    instance.clone(),
+                );
+            }
+            let read_in = AnnotationScope {
+                parameters: &with_self,
+                ..read_in
+            };
             let mut method = class_method_definition(&parts, &owner, &read_in, sink);
             if !method.type_parameters.is_empty() {
                 info.generic_methods.push(parts.name.name.clone());
@@ -1047,6 +1062,38 @@ fn class_method_definition<'tree>(
     method
 }
 
+/// Reports `Self` inside another type in a method's parameters or result, such as
+/// `list[Self]`, which TyPy gives in 0.13 (TYP-36), and gives that parameter or result the
+/// error type.
+fn refuse_nested_self(
+    method: &mut Definition<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let mut nested = false;
+    for parameter in &mut method.signature.parameters {
+        if parameter.ty.has_nested_self() {
+            parameter.ty = Type::Error;
+            nested = true;
+        }
+    }
+    if method.signature.returns.has_nested_self() {
+        method.signature.returns = Type::Error;
+        nested = true;
+    }
+    if nested {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                "`Self` inside another type, such as `list[Self]`, is planned for TyPy 0.13 \
+                 (TYP-36)",
+            )
+            .with_rule(RuleId::TYP_36),
+        );
+    }
+}
+
 /// Widens the return type of a method that may return `NotImplemented`, as the scan of the
 /// program found, to take it (CLS-21).
 fn give_way(
@@ -1118,10 +1165,6 @@ fn method_definition<'tree>(
             .iter()
             .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone()))),
     );
-    let method_scope = AnnotationScope {
-        parameters: &in_scope,
-        ..*scope
-    };
     // An instance method of a class that is neither generic nor a protocol may leave its
     // result out, which its `return` statements give (TYP-26). The result of a special
     // method, a property, and a static or class method is read before any body is checked:
@@ -1136,6 +1179,21 @@ fn method_definition<'tree>(
         && !special
         && in_scope.is_empty()
         && !super::protocol::is_protocol(&owner.instance);
+    // `Self` in an instance method of a class that is neither generic nor a protocol is the
+    // class the method is called through (TYP-30).
+    if *kind == MethodKind::Instance
+        && in_scope.is_empty()
+        && !super::protocol::is_protocol(&owner.instance)
+    {
+        in_scope.insert(
+            crate::self_type::SELF_PARAMETER.to_owned(),
+            Type::self_of(owner.instance.clone()),
+        );
+    }
+    let method_scope = AnnotationScope {
+        parameters: &in_scope,
+        ..*scope
+    };
     let mut method = definition(
         parts,
         (Some(&method_owner), infers),
@@ -1146,6 +1204,7 @@ fn method_definition<'tree>(
         info.inferred_methods.push((id, parts.name.span));
     }
     method.type_parameters = type_parameters;
+    refuse_nested_self(&mut method, parts.name, diagnostics);
     // A parameter that names a protocol makes the method generic; a special method or a
     // property has one body, so its parameter takes protocol values (ADR-0041).
     super::protocol::protocol_parameters(&mut method, special || !plain, diagnostics);

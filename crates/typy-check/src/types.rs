@@ -124,6 +124,10 @@ pub enum Type {
     /// One constant of `typing.Literal`, such as `Literal['r']`, held as a value of its base
     /// type, which an expression's type is in its place (TYP-28, ADR-0110).
     Literal(Box<crate::literal_type::LiteralValue>),
+    /// `typing.Self` of the class whose instances are of the type held, in a method's
+    /// parameters and result; a value of it is held as one of those instances, which an
+    /// expression's type is in its place (TYP-30, ADR-0113).
+    SelfType(Box<Type>),
     /// `object`: a value of any type, held as an object whose header says what it is, a value
     /// held by value boxed, and narrowed before any operation `object` does not define
     /// (TYP-23, ADR-0090).
@@ -234,6 +238,7 @@ impl TypeObjectOf {
         Some(match ty {
             Type::Abstract(collection) => return Self::of(&collection.members),
             Type::Literal(value) => return Self::of(&value.base()),
+            Type::SelfType(own) => return Self::of(own),
             Type::Int => Self::Int,
             Type::Float => Self::Float,
             Type::Bool => Self::Bool,
@@ -495,6 +500,11 @@ impl Type {
             (Self::Literal(own), Self::Literal(other)) => own == other,
             (Self::Literal(own), _) => own.base().is_assignable_to(target),
             (_, Self::Literal(other)) => self.is_assignable_to(&other.base()),
+            // A value of `Self` is an instance of the method's class; a value meets a
+            // declared `Self` where the checker tests it (TYP-30, ADR-0113).
+            (Self::SelfType(own), Self::SelfType(other)) => own.is_assignable_to(other),
+            (Self::SelfType(own), _) => own.is_assignable_to(target),
+            (_, Self::SelfType(other)) => self.is_assignable_to(other),
             // A typing value written alike from an older floor may stand where one written
             // alike only from a newer floor is held (TYP-18).
             (Self::Typing(own), Self::Typing(target))
@@ -573,6 +583,8 @@ impl Type {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
             (Self::Literal(own), Self::Literal(literal)) => own == literal,
+            (Self::SelfType(own), _) => own.matches(other),
+            (_, Self::SelfType(own)) => self.matches(own),
             // A value of literal types is held as a value of their base types (TYP-28).
             _ if self.has_literal() || other.has_literal() => {
                 self.without_literal().matches(&other.without_literal())
@@ -1036,6 +1048,7 @@ impl fmt::Display for Type {
             Self::Literal(value) => {
                 crate::literal_type::write_literal(formatter, &[value.as_ref()])
             }
+            Self::SelfType(_) => formatter.write_str("Self"),
             Self::Object => formatter.write_str("object"),
             Self::Int => formatter.write_str("int"),
             Self::Float => formatter.write_str("float"),

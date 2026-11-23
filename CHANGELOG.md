@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `typing.Self` in the parameters and the result of an instance or a class
+  method, as the class the method is called through: a method a derived
+  class inherits returns that class's instances through it. Another
+  instance of the class where `Self` is declared is E0433, and `Self`
+  elsewhere is planned for 0.13 (TYP-30, TYP-36, ADR-0113).
 - `typing.overload` on module functions and instance methods: a call
   takes the first overload whose parameters take its arguments, which
   gives its result, the body is checked against every overload, and an

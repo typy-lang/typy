@@ -217,3 +217,59 @@ impl BodyChecker<'_> {
         }
     }
 }
+
+impl BodyChecker<'_> {
+    /// Returns `value`, or the error type with E0433 when `expected` declares `Self` and the
+    /// value is not known to be the instance a method is called through (TYP-30).
+    pub(super) fn checked_self(&mut self, value: TypedExpr, expected: &Type) -> TypedExpr {
+        let own = match expected {
+            Type::SelfType(own) => own,
+            Type::Optional(inner) => match inner.as_ref() {
+                Type::SelfType(own) if value.ty != Type::NoneType => own,
+                _ => return value,
+            },
+            _ => return value,
+        };
+        if value.ty.has_error() || self.is_self(&value) {
+            return value;
+        }
+        let span = value.span;
+        let message = format!(
+            "this is {}, and `Self` is wanted here, which a call through a class derived from \
+             {own} gives as an instance of that class",
+            value.ty.with_article()
+        );
+        self.error(
+            Diagnostic::new(DiagnosticCode::error(433), span, message)
+                .with_rule(RuleId::TYP_30)
+                .with_help("give `self`, or a value of `Self`, such as one a method returning `Self` gives"),
+            span,
+        )
+    }
+
+    /// Returns whether a value is the instance a method is called through: `self`, a
+    /// parameter declared `Self`, or what a method returning `Self` gives through one of them.
+    fn is_self(&self, value: &TypedExpr) -> bool {
+        match &value.kind {
+            TypedExprKind::Local(symbol) => {
+                self.method.is_some_and(|method| method.instance == *symbol)
+                    || self.declared.get(symbol).is_some_and(Type::has_self)
+            }
+            TypedExprKind::Unwrap(inner) | TypedExprKind::Upcast(inner) => self.is_self(inner),
+            TypedExprKind::Call {
+                function,
+                arguments,
+                ..
+            } => {
+                matches!(
+                    self.program.signatures[function.0 as usize].returns,
+                    Type::SelfType(_)
+                ) && arguments
+                    .first()
+                    .is_some_and(|receiver| self.is_self(&receiver.value))
+            }
+            TypedExprKind::IfExp { body, orelse, .. } => self.is_self(body) && self.is_self(orelse),
+            _ => false,
+        }
+    }
+}

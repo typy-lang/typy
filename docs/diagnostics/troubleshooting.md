@@ -1443,6 +1443,41 @@ def double(value: int | str) -> int | str:
 print(double(21))
 ```
 
+## E0433: an instance of the method's own class where `Self` is wanted
+
+Where a method declares `Self`, the value is the instance the method is
+called through: `self`, a parameter declared `Self`, or what a method that
+returns `Self` gives through them (TYP-30). A new instance of the class is
+not, since a call through a derived class would get it in place of an
+instance of that class. Return `self`, or declare the class itself.
+
+This program gives E0433:
+
+<!-- typy-expect: rejected E0433 at 6:16 -->
+```python
+from typing import Self
+
+
+class Shape:
+    def copy(self) -> Self:
+        return Shape()
+
+
+print(Shape().copy())
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    def copy(self) -> "Shape":
+        return Shape()
+
+
+print(type(Shape().copy()).__name__)
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed

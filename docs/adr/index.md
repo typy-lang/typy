@@ -118,3 +118,4 @@ supersedes it.
 | [ADR-0110](0110-hold-a-literal-types-values-as-its-base-type.md) | Hold a literal type's values as its base type | Accepted | 2026-11-23 |
 | [ADR-0111](0111-leave-code-that-cannot-run-unchecked-and-uncompiled.md) | Leave code that cannot run unchecked and uncompiled | Accepted | 2026-11-23 |
 | [ADR-0112](0112-check-a-call-against-the-first-overload-that-takes-it.md) | Check a call against the first overload that takes it | Accepted | 2026-11-23 |
+| [ADR-0113](0113-read-self-as-the-class-a-call-is-made-through.md) | Read `Self` as the class a call is made through | Accepted | 2026-11-23 |

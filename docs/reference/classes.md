@@ -12,6 +12,7 @@ class body or assigned in `__init__`, and has one type.
 | A class derived from one class of the program, with its attributes and methods, overriding them | CLS-04 |
 | Class variables and attribute defaults given a value in the class body | CLS-11 |
 | `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
+| `typing.Self` in an instance or a class method's parameters and result; see [The class a method is called through](#the-class-a-method-is-called-through) | TYP-30 |
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
 | `NotImplemented`, returned by an operator or comparison method to give way | CLS-21 |
@@ -419,6 +420,47 @@ subclass, its subclasses and their instances read it from then on, and
 the base keeps its own (CLS-25). Assigning it through a variable that
 holds such a subclass, such as `cls` in a class method, is planned for
 0.14 (CLS-31).
+
+## The class a method is called through
+
+`Self` of `typing`, in the parameters and the result of an instance or a
+class method, is the class the method is called through (TYP-30,
+ADR-0113). A method inherited by a derived class returns that class's
+instances through it, and a `Self` parameter takes them:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Self
+
+
+class Shape:
+    def __init__(self, size: float) -> None:
+        self.size = size
+
+    def grown(self, factor: float) -> Self:
+        self.size = self.size * factor
+        return self
+
+    @classmethod
+    def unit(cls) -> Self:
+        return cls(1.0)
+
+
+class Circle(Shape):
+    def label(self) -> str:
+        return f"circle {self.size}"
+
+
+print(Circle(1.0).grown(2.0).label(), Circle.unit().label())
+```
+
+In the body, `self`, a parameter declared `Self` and what a method that
+returns `Self` gives through them are of `Self`; another instance of the
+class is E0433, since a call through a derived class would get it in place
+of an instance of that class. A class method's `cls` makes its own class,
+so `cls(...)` is of `Self`. `Self` in a static method, in a generic or a
+protocol class, in an attribute's annotation and inside another type, such
+as `list[Self]`, is planned for 0.13 (TYP-36).
 
 ## Comparison methods
 

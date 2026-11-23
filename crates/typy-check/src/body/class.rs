@@ -669,6 +669,7 @@ impl BodyChecker<'_> {
             .parameters
             .first()
             .map(|parameter| parameter.ty.clone());
+        let receiver_type = receiver.ty.clone();
         let mut bound = vec![Argument {
             passed: crate::typed::Passed::Position,
             parameter: 0,
@@ -685,11 +686,11 @@ impl BodyChecker<'_> {
             Ok(found) => found,
             Err(error) => return error,
         };
-        // A method with overloads takes the arguments the first that fits takes, and gives
-        // that overload's result (TYP-29).
-        if let Some(call) = self.overloaded_method_call(
+        // A method with overloads, or whose signature names `Self`, gives the result its
+        // overload, or the instance's class, gives (TYP-29, TYP-30).
+        if let Some(call) = self.method_call_by_signature(
             (target, &signature),
-            bound.clone(),
+            (&receiver_type, bound.clone()),
             &qualified,
             (arguments, keywords),
             span,

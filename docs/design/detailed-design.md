@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.124 |
+| Version | 2.125 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -360,6 +360,7 @@ it enforces and its status. `typy explain` reads the same table.
 | E0430 | `ctypes` declaration TyPy cannot compile | FFI-01, FFI-02, FFI-03 |
 | E0431 | Value that is not one of the constants its `Literal` type names | TYP-28 |
 | E0432 | `@overload` without an implementation, one its implementation does not accept, or a call no overload takes | TYP-29 |
+| E0433 | Value of a method's own class where `Self` is wanted | TYP-30 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -1189,6 +1190,20 @@ its keys does not read (LIB-20, ADR-0086). Only declared types are
 abstract: `BodyChecker::typed` gives every expression the type
 `without_abstract` makes, a variable's current type is its members while
 `declared` keeps the collection, and lowering maps it to its members.
+`typing.Self` names `AnnotationName::SelfType`, which reads the type
+`self_type::SELF_PARAMETER` gives in the annotation scope (TYP-30,
+ADR-0113): `method_definition` gives an instance method of a class that is
+neither generic nor a protocol `Type::SelfType` of its instances, and
+`ClassMethodCopies::make` gives each copy of a class method its own class.
+`SelfType` stands in declared types only: `value_type` and
+`Program::finish` read it as the class. `checked_self` refuses, with E0433,
+a value where `Self` is declared that `is_self` does not find to be `self`,
+a parameter declared `Self` or a `Self` result through one of them.
+`method_call_by_signature` reads a call through an instance with `Self`
+as the instance's type, converts each argument to the compiled
+parameter's type, and reads the result through `tested_as`; `bind_to`
+reads `Self` as the own class in any other call. `refuse_nested_self`
+refuses `Self` inside another type, planned for 0.13 (TYP-36).
 `check/overloads.rs` takes the `@overload` definitions out of a module and
 its classes before decorators are expanded, keeping them by the name of
 the implementation that follows, and refuses the forms TYP-35 plans with

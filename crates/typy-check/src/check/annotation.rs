@@ -102,6 +102,8 @@ pub(crate) enum AnnotationName {
     /// `typing.overload`, the decorator of an overload, which the checker reads before
     /// anything else (TYP-29).
     Overload,
+    /// `typing.Self`, the class a method is called through (TYP-30).
+    SelfType,
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -138,6 +140,7 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
         ("typing", "cast") => Some(AnnotationName::Cast),
         ("typing", "overload") => Some(AnnotationName::Overload),
+        ("typing", "Self") => Some(AnnotationName::SelfType),
         ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
@@ -395,7 +398,32 @@ fn bare_standard(
             diagnostics.push(super::literal_annotation::literal_form(annotation.span()));
             Type::Error
         }
+        AnnotationName::SelfType => self_annotation(annotation, scope, diagnostics),
     }
+}
+
+/// Returns the type `Self` names: the class a method is called through, in the parameters
+/// and the result of an instance or a class method (TYP-30). Anywhere else it is E0201,
+/// planned for 0.13 (TYP-36).
+fn self_annotation(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    if let Some(own) = scope.parameters.get(crate::self_type::SELF_PARAMETER) {
+        return own.clone();
+    }
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            annotation.span(),
+            "`Self` outside the parameters and the result of an instance or a class method \
+             of a class that is neither generic nor a protocol is planned for TyPy 0.13 \
+             (TYP-36)",
+        )
+        .with_rule(RuleId::TYP_36),
+    );
+    Type::Error
 }
 
 /// Returns E0408 for an abstract collection without the types of its items, or with another

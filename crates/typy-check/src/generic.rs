@@ -47,7 +47,8 @@ impl Type {
             | Self::Set(item)
             | Self::Optional(item)
             | Self::Iterator(item)
-            | Self::Iterable(item) => item.visit(each),
+            | Self::Iterable(item)
+            | Self::SelfType(item) => item.visit(each),
             Self::Dict(key, value) | Self::DictView(_, key, value) => {
                 key.visit(each);
                 value.visit(each);

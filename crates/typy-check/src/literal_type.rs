@@ -217,10 +217,11 @@ impl Type {
     }
 
     /// Returns the type a value of this declared type has: each abstract collection as the
-    /// built-in types it holds (LIB-20), and each literal type as its base type (TYP-28).
+    /// built-in types it holds (LIB-20), each literal type as its base type (TYP-28), and
+    /// `Self` as the method's class (TYP-30).
     #[must_use]
     pub fn value_type(&self) -> Self {
-        self.without_abstract().without_literal()
+        self.without_abstract().without_literal().with_self(None)
     }
 
     /// Returns the literal values of a type made of literal types, with whether `None` is

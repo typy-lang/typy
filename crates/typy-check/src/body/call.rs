@@ -361,6 +361,10 @@ impl BodyChecker<'_> {
         if super::call_expression::unpacking(arguments, keywords).is_some() {
             self.unpacking_calls.push(span);
         }
+        // A call not made through an instance, such as one through the class or `super()`,
+        // reads `Self` as the method's own class (TYP-30).
+        let own = super::self_call::through_own_class(signature);
+        let signature = own.as_ref().unwrap_or(signature);
         let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
         let shape = Parameters::of(parameters);
         let mut bound: Vec<Argument> = Vec::new();
