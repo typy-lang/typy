@@ -20,18 +20,15 @@ impl Program {
     /// Returns whether the method `name` of `class`, its own or that of the nearest base that
     /// defines it, is abstract with a body that gives no value.
     pub(crate) fn runs_empty_abstract(&self, class: ClassId, name: &str) -> bool {
-        let mut current = Some(class);
-        while let Some(class) = current {
-            let info = &self.classes[class.0 as usize];
-            if info.empty_abstract.iter().any(|each| each == name) {
-                return true;
-            }
-            if info.method(name).is_some() {
-                return false;
-            }
-            current = info.base;
-        }
-        false
+        let empty = |class: ClassId| {
+            self.classes[class.0 as usize]
+                .empty_abstract
+                .iter()
+                .any(|each| each == name)
+        };
+        std::iter::successors(Some(class), |each| self.classes[each.0 as usize].base)
+            .find(|each| empty(*each) || self.classes[each.0 as usize].method(name).is_some())
+            .is_some_and(empty)
     }
 }
 
@@ -76,38 +73,39 @@ impl BodyChecker<'_> {
     /// without an override; `made` itself otherwise.
     pub(super) fn abstract_made(&mut self, class: ClassId, made: TypedExpr) -> TypedExpr {
         let methods = self.program.abstract_methods(class);
-        if methods.is_empty() || !matches!(made.kind, TypedExprKind::New { .. }) {
+        if methods.is_empty() {
             return made;
         }
         let quoted: Vec<String> = methods.iter().map(|method| format!("'{method}'")).collect();
+        let noun = if methods.len() == 1 {
+            "method"
+        } else {
+            "methods"
+        };
         let message = format!(
-            "Can't instantiate abstract class {} without an implementation for abstract {} {}",
+            "Can't instantiate abstract class {} without an implementation for abstract {noun} {}",
             self.program.classes[class.0 as usize].name,
-            if methods.len() == 1 {
-                "method"
-            } else {
-                "methods"
-            },
             quoted.join(", ")
         );
-        let (span, ty) = (made.span, made.ty.clone());
-        let TypedExprKind::New { arguments, .. } = made.kind else {
-            return made;
+        let arguments = match made.kind {
+            TypedExprKind::New { arguments, .. } => arguments,
+            // A call its class's `__init__` refuses is reported as it is.
+            kind => return TypedExpr { kind, ..made },
         };
         let text = Self::typed(
             TypedExprKind::Constant(TypedConstant::Str(message)),
             Type::Str,
-            span,
+            made.span,
         );
-        let mut raised = self.raised(text, &ty, span);
+        let mut raised = self.raised(text, &made.ty, made.span);
         for argument in arguments.into_iter().rev() {
             raised = Self::typed(
                 TypedExprKind::Sequence {
                     first: Box::new(argument.value),
                     then: Box::new(raised),
                 },
-                ty.clone(),
-                span,
+                made.ty.clone(),
+                made.span,
             );
         }
         raised

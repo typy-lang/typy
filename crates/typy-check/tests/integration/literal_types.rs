@@ -177,3 +177,11 @@ fn typ_28_a_match_of_literal_types_narrows_and_covers_them() {
     assert_eq!(codes, ["W0401", "E0405"], "{found:?}");
     assert!(found[0].1.contains("Literal['w']"), "{found:?}");
 }
+
+#[test]
+fn a_variable_narrowed_to_its_base_type_compares_as_it() {
+    // `x is not None` leaves `int`, which no constant narrows further before the test.
+    let source = "def f(x: int | None) -> int:\n    if x is not None:\n        if x == 1:\n            \
+                  return x\n        return 0\n    return -1\n\n\nprint(f(1))\n";
+    assert_eq!(app(source), Vec::<String>::new());
+}

@@ -2,7 +2,7 @@
 //! accept, the classes that have no instances, and the calls that would run an abstract
 //! method's empty body.
 
-use crate::common::{app, codes, messages};
+use crate::common::{app, codes, dump, messages};
 
 const SHAPE: &str = "from abc import ABC, abstractmethod\nclass Shape(ABC):\n    @abstractmethod\n    def area(self) -> float: ...\n    @abstractmethod\n    def name(self) -> str: ...\n";
 
@@ -184,4 +184,33 @@ fn names_of_abc_outside_bases_and_decorators_are_refused() {
         messages("from abc import get_cache_token\n")[0].1,
         "TyPy's `abc` gives `ABC` and `abstractmethod`, not `get_cache_token`"
     );
+}
+
+#[test]
+fn a_call_through_the_class_value_raises_with_cpython_s_message() {
+    let source = "from abc import ABC, abstractmethod\nclass Shape(ABC):\n    @abstractmethod\n    def area(self) -> float: ...\n    @classmethod\n    def make(cls) -> 'Shape':\n        return cls()\n";
+    assert!(
+        dump(source).contains(
+            "Can't instantiate abstract class Shape without an implementation for abstract \
+             method 'area'"
+        ),
+        "{source}"
+    );
+    // Arguments its `__init__` refuses are reported as for any class.
+    let refused = source.replace("return cls()", "return cls(1)");
+    assert_eq!(app(&refused), ["E0404"]);
+}
+
+#[test]
+fn other_decorators_beside_abstractmethod_follow_their_own_rules() {
+    let cases = [
+        "from abc import ABC, abstractmethod\nimport functools\nclass Base(ABC):\n    @abstractmethod\n    @functools.cache\n    def run(self) -> int: ...\n",
+        "from abc import ABC, abstractmethod\nclass Base(ABC):\n    @abstractmethod\n    @other(1)\n    def run(self) -> int: ...\n",
+        "from abc import ABC, abstractmethod\nimport abc\nclass Base(ABC):\n    @abc.abc.abstractmethod\n    def run(self) -> int: ...\n",
+    ];
+    for source in cases {
+        let found = app(source);
+        assert!(!found.is_empty(), "{source}");
+        assert!(!found.contains(&"E0434".to_owned()), "{source}: {found:?}");
+    }
 }

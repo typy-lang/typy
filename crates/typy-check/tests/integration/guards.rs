@@ -55,6 +55,12 @@ fn typ_31_forms_a_later_release_gives_are_planned() {
          return True\n",
         "from typing import TypeIs\n\n\nclass C:\n    def f(self, value: object) -> TypeIs[int]:\n        \
          return True\n",
+        // A guard of a protocol or of a copy of a generic class, which no test of a class
+        // tells apart.
+        "from typing import Protocol, TypeGuard\n\n\nclass P(Protocol):\n    def f(self) -> int: ...\n\n\n\
+         def g(value: object) -> TypeGuard[P]:\n    return True\n",
+        "from typing import TypeGuard\n\n\nclass Box[T]:\n    def __init__(self, item: T) -> None:\n        \
+         self.item = item\n\n\ndef g(value: object) -> TypeGuard[Box[int]]:\n    return True\n",
     ];
     for source in cases {
         let found = at_3_13(source);
@@ -96,4 +102,18 @@ fn typ_31_type_is_comes_with_the_python_floor_3_13() {
         )]
     );
     assert_eq!(messages("from typing import TypeGuard\n"), Vec::new());
+}
+
+#[test]
+fn typ_31_a_guard_call_the_checker_refuses_or_decides_reports_alone() {
+    // Arguments the guard does not take give their error alone.
+    let found = at_3_13(&format!("{GUARDS}print(is_text(1, 2))\n"));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, "E0404", "{found:?}");
+    // An argument of the guard's own type needs no test when the program runs.
+    let found = at_3_13(&format!(
+        "{GUARDS}def f(value: str) -> str:\n    if is_text(value):\n        \
+         return value\n    return ''\n\n\nprint(f('a'))\n"
+    ));
+    assert_eq!(found, Vec::new());
 }

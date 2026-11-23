@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
-use typy_source::syntax::Stmt;
+use typy_source::syntax::{Identifier, Stmt};
 
 use super::definition::{Definition, FunctionParts};
 use super::imported_name::ImportedName;
@@ -75,12 +75,6 @@ pub(crate) fn gather(body: &mut Vec<Stmt>, diagnostics: &mut Diagnostics) -> Ove
     overloads
 }
 
-/// Returns whether a statement is a `def` decorated with `typing.overload`.
-fn decorates(names: &ImportedName, statement: &Stmt) -> bool {
-    matches!(statement, Stmt::FunctionDef { decorators, .. }
-        if decorators.iter().any(|decorator| names.names(decorator)))
-}
-
 /// Takes the overloads out of one block, a module's or a class's body, and returns them by
 /// the name of their implementation, which must follow them.
 fn gather_block(
@@ -91,9 +85,26 @@ fn gather_block(
 ) -> Vec<(String, Vec<Stmt>)> {
     let mut gathered = Vec::new();
     let mut waiting: Vec<Stmt> = Vec::new();
-    for statement in std::mem::take(body) {
-        if decorates(names, &statement) {
-            let stub = stub(statement, names, class, diagnostics);
+    for mut statement in std::mem::take(body) {
+        if let Stmt::FunctionDef {
+            name,
+            decorators,
+            type_parameters,
+            ..
+        } = &mut statement
+            && decorators.iter().any(|decorator| names.names(decorator))
+        {
+            let others = decorators
+                .iter()
+                .filter(|decorator| !names.names(decorator))
+                .count();
+            check_stub(
+                (name, others, type_parameters.is_empty()),
+                class,
+                diagnostics,
+            );
+            decorators.clear();
+            let stub = statement;
             if waiting
                 .first()
                 .is_some_and(|first| name_of(first) != name_of(&stub))
@@ -105,8 +116,10 @@ fn gather_block(
             continue;
         }
         if let Some(first) = waiting.first() {
-            if matches!(&statement, Stmt::FunctionDef { name, .. } if name.name == name_of(first)) {
-                check_implementation(&statement, class, diagnostics);
+            if let Some(parts) =
+                FunctionParts::of(&statement).filter(|parts| parts.name.name == name_of(first))
+            {
+                check_implementation(&parts, class, diagnostics);
                 gathered.push((name_of(first).to_owned(), std::mem::take(&mut waiting)));
             } else {
                 diagnostics.push(no_implementation(first));
@@ -121,44 +134,31 @@ fn gather_block(
     gathered
 }
 
-/// Returns an overload without its decorator, after reporting a form a later release gives:
-/// another decorator, type parameters, or a special method.
-fn stub(
-    mut statement: Stmt,
-    names: &ImportedName,
+/// Reports an overload, by its name, its number of other decorators and whether it has no
+/// type parameters, in a form a later release gives: another decorator, type parameters, or
+/// a special method.
+fn check_stub(
+    (name, others, plain): (&Identifier, usize, bool),
     class: Option<&str>,
     diagnostics: &mut Diagnostics,
-) -> Stmt {
-    if let Stmt::FunctionDef {
-        name,
-        decorators,
-        type_parameters,
-        ..
-    } = &mut statement
-    {
-        let others = decorators
-            .iter()
-            .filter(|decorator| !names.names(decorator))
-            .count();
-        if others > 0 || !type_parameters.is_empty() {
-            diagnostics.push(planned_form(
-                name.span,
-                "with another decorator or type parameters",
-            ));
-        } else if class.is_some() && is_special(&name.name) {
-            diagnostics.push(planned_form(name.span, "on a special method"));
-        }
-        decorators.clear();
+) {
+    if others > 0 || !plain {
+        diagnostics.push(planned_form(
+            name.span,
+            "with another decorator or type parameters",
+        ));
+    } else if class.is_some() && is_special(&name.name) {
+        diagnostics.push(planned_form(name.span, "on a special method"));
     }
-    statement
 }
 
 /// Reports an implementation in a form a later release gives: decorated, generic, or a
 /// special method.
-fn check_implementation(statement: &Stmt, class: Option<&str>, diagnostics: &mut Diagnostics) {
-    let Some(parts) = FunctionParts::of(statement) else {
-        return;
-    };
+fn check_implementation(
+    parts: &FunctionParts<'_>,
+    class: Option<&str>,
+    diagnostics: &mut Diagnostics,
+) {
     if !parts.decorators.is_empty() || !parts.type_parameters.is_empty() {
         diagnostics.push(planned_form(
             parts.name.span,

@@ -48,6 +48,21 @@ fn typ_30_an_instance_of_another_class_is_no_self() {
     let found = messages(&format!("{SHAPE}print(Circle(1.0).same(Shape(2.0)))\n"));
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].0, "E0404", "{found:?}");
+    // A call of a method returning `Self` with an argument it refuses gives that error alone.
+    let found = messages(&format!("{SHAPE}print(Circle(1.0).grown('2'))\n"));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, "E0404", "{found:?}");
+    // Either branch of a conditional must be the instance.
+    let found = messages(
+        &format!("{SHAPE}c: Circle = Circle(1.0).grown(2.0)\n").replace(
+            "        return self\n",
+            "        return Shape(1.0) if factor else self\n",
+        ),
+    );
+    assert!(
+        found.iter().any(|(code, _, _)| code == "E0433"),
+        "{found:?}"
+    );
 }
 
 #[test]
