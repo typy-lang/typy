@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.131 |
+| Version | 2.132 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -504,7 +504,12 @@ display, `Expr::Dict`, a dict display whose `keys` hold `None` for a `**`
 item, as CPython's `ast.Dict` does, and `Expr::ListComp`, `SetComp` and
 `DictComp`, whose clauses are `Comprehension` values as CPython's
 `ast.comprehension`; 0.9 converts `Expr::GeneratorExp` with the same
-parts (EXP-15), and `Expr::Starred`, a `*value` item (EXP-17).
+parts (EXP-15), and `Expr::Starred`, a `*value` item (EXP-17). From the
+Python floor 3.15, a comprehension element that unpacks, which the parser
+accepts only there, is converted as PEP 798 defines it (EXP-23): `unpacked`
+adds a clause over `*iterable` whose hidden target, `" (unpacked)"`, is the
+element, and `{**mapping for ...}` adds one over `mapping.items()` whose
+hidden key and value are the element's.
 `elif` chains become nested `If` nodes, as
 in CPython's `ast`. An integer literal keeps its value as decimal digits,
 so literals of any size survive conversion (DAT-01).

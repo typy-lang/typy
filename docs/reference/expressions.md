@@ -19,6 +19,7 @@ order.
 | Truth tests of numbers, strings, containers, optional values and instances | EXP-10 |
 | `x if c else y` with branches of one type | EXP-11 |
 | List, set and dict comprehensions, each with its own scope | EXP-12 |
+| `*iterable` and `**mapping` as comprehension elements, from the Python floor 3.15 | EXP-23 |
 | `*iterable` in list, set and tuple displays and `**dict` in dict displays | EXP-17 |
 | Assignment expressions `name := value`, as CPython scopes them | EXP-13 |
 | `lambda` where a `Callable` is expected | EXP-14 |
@@ -31,9 +32,16 @@ assigns the variable of the function or module around it. A test of
 `(name := value) is not None` narrows `name`, as a test of the variable
 does. CPython's syntax errors are E0103: rebinding a name the
 comprehension binds, `:=` in a comprehension's source, and `__debug__`
-as the name. A comprehension element that unpacks, such as
-`[*row for row in rows]`, which needs the Python floor 3.15, is E0201,
-planned for 0.12 (EXP-23).
+as the name.
+
+From the Python floor 3.15, a comprehension element may unpack, as PEP
+798 defines it (EXP-23): `[*row for row in rows]` and
+`{*row for row in rows}` put each item of each `row` in the result,
+`(*row for row in rows)` gives each item, and
+`{**table for table in tables}` puts each key and value of each `table`
+in the dict, a later one replacing an earlier one. Each reads as one more
+`for` clause over the unpacked value. Below that floor it is CPython's
+syntax error, E0103.
 
 <!-- typy-expect: accepted -->
 ```python

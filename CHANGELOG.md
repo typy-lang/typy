@@ -8,6 +8,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- From the Python floor 3.15, a comprehension element that unpacks:
+  `[*row for row in rows]`, `{*row ...}`, `(*row ...)` and
+  `{**table for table in tables}` (EXP-23).
 - `math.integer` from the Python floor 3.15, with `comb`, `factorial`,
   `gcd`, `isqrt`, `lcm` and `perm`, read as `math.integer`, through an
   alias or by `from` (LIB-26).

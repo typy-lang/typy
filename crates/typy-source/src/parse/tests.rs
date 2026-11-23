@@ -1250,3 +1250,72 @@ fn future_imports_are_refused_where_cpython_refuses_them() {
     let flufl = errors("from __future__ import barry_as_FLUFL\n");
     assert_eq!(flufl[0].0, "E0202");
 }
+
+/// Returns the one expression `source` holds, parsed at the Python floor 3.15.
+fn expression_at_3_15(source: &str) -> Expr {
+    let tree = parse(&file(source), PythonFloor::V3_15).expect("parses");
+    match tree.body.as_slice() {
+        [Stmt::Expr { value, .. }] => value.clone(),
+        other => panic!("not one expression: {other:?}"),
+    }
+}
+
+#[test]
+fn exp_23_an_unpacking_element_reads_as_one_more_clause() {
+    for source in [
+        "[*xs for xs in rows]\n",
+        "{*xs for xs in rows}\n",
+        "(*xs for xs in rows)\n",
+    ] {
+        let (element, generators) = match expression_at_3_15(source) {
+            Expr::ListComp {
+                element,
+                generators,
+                ..
+            }
+            | Expr::SetComp {
+                element,
+                generators,
+                ..
+            }
+            | Expr::GeneratorExp {
+                element,
+                generators,
+                ..
+            } => (element, generators),
+            other => panic!("not a comprehension: {other:?}"),
+        };
+        assert!(
+            matches!(*element, Expr::Name { ref id, .. } if id == " (unpacked)"),
+            "{source}"
+        );
+        assert_eq!(generators.len(), 2, "{source}");
+        assert!(
+            matches!(&generators[1].iter, Expr::Name { id, .. } if id == "xs"),
+            "{source}"
+        );
+    }
+    let Expr::DictComp {
+        key,
+        value,
+        generators,
+        ..
+    } = expression_at_3_15("{**d for d in maps}\n")
+    else {
+        panic!("not a dict comprehension");
+    };
+    assert!(matches!(*key, Expr::Name { ref id, .. } if id == " (unpacked key)"));
+    assert!(matches!(*value, Expr::Name { ref id, .. } if id == " (unpacked value)"));
+    assert!(matches!(&generators[1].iter, Expr::Call { function, .. }
+            if matches!(function.as_ref(), Expr::Attribute { attribute, .. } if attribute.name == "items")));
+}
+
+#[test]
+fn exp_23_an_unpacking_element_is_a_syntax_error_below_the_floor_3_15() {
+    for source in ["[*xs for xs in rows]\n", "{**d for d in maps}\n"] {
+        assert!(
+            parse(&file(source), PythonFloor::V3_14).is_err(),
+            "{source}"
+        );
+    }
+}

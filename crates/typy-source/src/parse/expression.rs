@@ -145,6 +145,31 @@ impl Converter<'_> {
             .collect()
     }
 
+    /// Returns the element and clauses of a list, set or generator comprehension: an element
+    /// `*iterable`, from Python 3.15, which the parser accepts only at that floor, reads as one
+    /// more clause over the iterable, whose item is the element, as PEP 798 defines it
+    /// (EXP-23).
+    fn unpacked(
+        &self,
+        element: &ast::Expr,
+        generators: &[ast::Comprehension],
+    ) -> (Expr, Vec<Comprehension>) {
+        let mut converted = self.generators(generators);
+        let ast::Expr::Starred(starred) = element else {
+            return (self.expression(element), converted);
+        };
+        let iterable = self.expression(&starred.value);
+        let at = iterable.span();
+        converted.push(Comprehension {
+            target: hidden(UNPACKED_ITEM, at),
+            iter: iterable,
+            ifs: Vec::new(),
+            is_async: false,
+            span: at,
+        });
+        (hidden(UNPACKED_ITEM, at), converted)
+    }
+
     /// Converts an expression, one level deeper; past `MAX_DEPTH` it stands in `None`, and
     /// parsing fails.
     pub(super) fn expression(&self, expression: &ast::Expr) -> Expr {
@@ -292,32 +317,71 @@ impl Converter<'_> {
                     .collect(),
                 span: self.span(node.range),
             },
-            ast::Expr::ListComp(node) => Expr::ListComp {
-                element: Box::new(self.expression(&node.elt)),
-                generators: self.generators(&node.generators),
-                span: self.span(node.range),
-            },
-            ast::Expr::SetComp(node) => Expr::SetComp {
-                element: Box::new(self.expression(&node.elt)),
-                generators: self.generators(&node.generators),
-                span: self.span(node.range),
-            },
-            ast::Expr::DictComp(node) => Expr::DictComp {
-                // Ruff leaves the key out only for `{**d for ...}`, a syntax error, and a tree
-                // with errors is never converted.
-                key: Box::new(match node.key.as_deref() {
-                    Some(key) => self.expression(key),
-                    None => self.expression(&node.value),
-                }),
-                value: Box::new(self.expression(&node.value)),
-                generators: self.generators(&node.generators),
-                span: self.span(node.range),
-            },
-            ast::Expr::Generator(node) => Expr::GeneratorExp {
-                element: Box::new(self.expression(&node.elt)),
-                generators: self.generators(&node.generators),
-                span: self.span(node.range),
-            },
+            ast::Expr::ListComp(node) => {
+                let (element, generators) = self.unpacked(&node.elt, &node.generators);
+                Expr::ListComp {
+                    element: Box::new(element),
+                    generators,
+                    span: self.span(node.range),
+                }
+            }
+            ast::Expr::SetComp(node) => {
+                let (element, generators) = self.unpacked(&node.elt, &node.generators);
+                Expr::SetComp {
+                    element: Box::new(element),
+                    generators,
+                    span: self.span(node.range),
+                }
+            }
+            ast::Expr::DictComp(node) => {
+                let mut generators = self.generators(&node.generators);
+                let (key, value) = if let Some(key) = node.key.as_deref() {
+                    (self.expression(key), self.expression(&node.value))
+                } else {
+                    // `{**mapping for ...}`, from Python 3.15, which the parser accepts only at
+                    // that floor, reads as `{k: v for ... for k, v in mapping.items()}`
+                    // (PEP 798, EXP-23).
+                    let mapping = self.expression(&node.value);
+                    let at = mapping.span();
+                    generators.push(Comprehension {
+                        target: Expr::Tuple {
+                            elements: vec![hidden(UNPACKED_KEY, at), hidden(UNPACKED_VALUE, at)],
+                            span: at,
+                        },
+                        iter: Expr::Call {
+                            function: Box::new(Expr::Attribute {
+                                value: Box::new(mapping),
+                                attribute: Identifier {
+                                    name: "items".to_owned(),
+                                    span: at,
+                                },
+                                span: at,
+                            }),
+                            arguments: Vec::new(),
+                            keywords: Vec::new(),
+                            span: at,
+                        },
+                        ifs: Vec::new(),
+                        is_async: false,
+                        span: at,
+                    });
+                    (hidden(UNPACKED_KEY, at), hidden(UNPACKED_VALUE, at))
+                };
+                Expr::DictComp {
+                    key: Box::new(key),
+                    value: Box::new(value),
+                    generators,
+                    span: self.span(node.range),
+                }
+            }
+            ast::Expr::Generator(node) => {
+                let (element, generators) = self.unpacked(&node.elt, &node.generators);
+                Expr::GeneratorExp {
+                    element: Box::new(element),
+                    generators,
+                    span: self.span(node.range),
+                }
+            }
             ast::Expr::Await(node) => self.other(NodeKind::Await, node.range),
             ast::Expr::Yield(node) => Expr::Yield {
                 value: node.value.as_deref().map(|value| self.boxed(value)),
@@ -405,5 +469,19 @@ impl Converter<'_> {
             value,
             span: self.span(range),
         }
+    }
+}
+
+/// The hidden names of the clause an unpacking comprehension element reads as: each name holds
+/// a space, so no program writes it (EXP-23).
+const UNPACKED_ITEM: &str = " (unpacked)";
+const UNPACKED_KEY: &str = " (unpacked key)";
+const UNPACKED_VALUE: &str = " (unpacked value)";
+
+/// Returns the hidden name `id` at `span`.
+fn hidden(id: &str, span: typy_diagnostics::Span) -> Expr {
+    Expr::Name {
+        id: id.to_owned(),
+        span,
     }
 }

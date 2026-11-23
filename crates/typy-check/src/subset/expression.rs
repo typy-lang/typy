@@ -44,20 +44,9 @@ impl Walker {
                 self.expression(condition);
             }
         }
+        // An element that unpacks, from Python 3.15, reads as one more clause, which the
+        // parser writes (EXP-23).
         for expression in made {
-            // An element that unpacks, from Python 3.15 (PEP 798), which the parser accepts
-            // only at that floor.
-            if let Expr::Starred { span, .. } = expression {
-                self.report(
-                    *span,
-                    planned(
-                        "`*` and `**` in comprehension elements",
-                        "0.12",
-                        RuleId::EXP_23,
-                    ),
-                );
-                continue;
-            }
             self.expression(expression);
         }
         self.comprehension_names.pop();

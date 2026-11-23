@@ -125,22 +125,20 @@ fn later_features_name_their_release_and_rule() {
 
 #[test]
 fn newer_python_forms_name_their_release_at_their_floor() {
-    for (source, expected) in [
-        (
-            "name = 'x'\nt = t'hi {name}'\n",
-            "template strings are planned for TyPy 0.13 (LEX-12)",
-        ),
-        (
-            "rows = [[1]]\nflat = [*row for row in rows]\n",
-            "`*` and `**` in comprehension elements are planned for TyPy 0.12 (EXP-23)",
-        ),
-    ] {
-        let found = diagnostics_with_floor(source, PythonFloor::V3_15);
-        assert!(
-            found.iter().any(|(_, message)| message == expected),
-            "{source:?} gave {found:?}"
-        );
-    }
+    let source = "name = 'x'\nt = t'hi {name}'\n";
+    let found = diagnostics_with_floor(source, PythonFloor::V3_15);
+    assert!(
+        found
+            .iter()
+            .any(|(_, message)| message == "template strings are planned for TyPy 0.13 (LEX-12)"),
+        "{source:?} gave {found:?}"
+    );
+}
+
+#[test]
+fn comprehension_elements_that_unpack_pass_with_floor_3_15() {
+    let source = "rows = [[1]]\nflat = [*row for row in rows]\nmerged = {**d for d in [{1: 2}]}\n";
+    assert_eq!(diagnostics_with_floor(source, PythonFloor::V3_15), []);
 }
 
 #[test]
