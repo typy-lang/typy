@@ -6,7 +6,7 @@ use typy_source::syntax::{Constant, Expr, Stmt};
 use super::BodyChecker;
 use std::collections::BTreeSet;
 
-use super::flow::{Fact, meet, test_facts};
+use super::flow::{Fact, meet, test_facts, test_reach};
 use crate::builtin::Builtin;
 use crate::typed::{AssignTarget, TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
 use crate::types::Type;
@@ -15,6 +15,11 @@ impl BodyChecker<'_> {
     pub(super) fn statements(&mut self, statements: &[&Stmt]) -> Vec<TypedStmt> {
         let mut typed = Vec::new();
         for statement in statements {
+            // A statement no path reaches cannot run, so it is neither checked nor compiled,
+            // and neither is the rest of the block (TYP-34, ADR-0111).
+            if self.assigned.is_none() {
+                break;
+            }
             if let Stmt::ClassDef {
                 name,
                 body,
@@ -402,11 +407,18 @@ impl BodyChecker<'_> {
             } => {
                 let test = self.truth_test(test);
                 let (holds, fails) = test_facts(&test);
+                let (may_hold, may_fail) = test_reach(&test);
                 let before = self.assigned.clone();
                 self.add_facts(holds);
+                if !may_hold {
+                    self.assigned = None;
+                }
                 let body = self.block(body);
                 let after_body = std::mem::replace(&mut self.assigned, before);
                 self.add_facts(fails);
+                if !may_fail {
+                    self.assigned = None;
+                }
                 let orelse = self.block(orelse);
                 self.assigned = meet(after_body, self.assigned.take());
                 TypedStmt::If {

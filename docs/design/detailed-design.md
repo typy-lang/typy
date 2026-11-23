@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.121 |
+| Version | 2.122 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -1187,6 +1187,14 @@ its keys does not read (LIB-20, ADR-0086). Only declared types are
 abstract: `BodyChecker::typed` gives every expression the type
 `without_abstract` makes, a variable's current type is its members while
 `declared` keeps the collection, and lowering maps it to its members.
+`BodyChecker::statements` stops at the first statement no path reaches,
+`assigned` being `None` there, so a statement that cannot run is neither
+checked nor compiled (TYP-34, ADR-0111). `flow::test_reach` says whether a
+test may hold and may fail: a constant `bool`, and an `IsInstanceTest`
+whose `always`, `none_matches`, `checks` and `held` show the outcome, with
+`not`, `and` and `or` combined. An `if` starts a branch its test rules
+out unreachable, an `assert` whose test never holds leaves what follows
+unreachable, and `flow::pattern_reach` does the same for a `case`.
 `Literal[...]` names `AnnotationName::Literal`, which
 `check/literal_annotation.rs` reads as the union of `Type::Literal` of a
 `LiteralValue` each, an `int` as canonical decimal digits, or `None`

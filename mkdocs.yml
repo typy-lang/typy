@@ -243,6 +243,7 @@ nav:
           - adr/0108-hold-a-bytearray-in-a-growable-bytes-buffer.md
           - adr/0109-keep-the-result-annotation-where-a-class-offers-the-result.md
           - adr/0110-hold-a-literal-types-values-as-its-base-type.md
+          - adr/0111-leave-code-that-cannot-run-unchecked-and-uncompiled.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

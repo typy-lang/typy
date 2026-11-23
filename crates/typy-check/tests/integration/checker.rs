@@ -391,9 +391,9 @@ fn rejected_programs_give_their_codes() {
         ("print(1 if True else \"a\")\n", &["E0305"]),
         ("print(1 == \"a\")\n", &["E0407"]),
         ("print(None < None)\n", &["E0407"]),
-        ("if True:\n    x = 1\nprint(x)\n", &["E0306"]),
+        ("if False:\n    x = 1\nprint(x)\n", &["E0306"]),
         (
-            "def f() -> int:\n    if True:\n        return 1\n",
+            "def f() -> int:\n    if False:\n        return 1\n",
             &["E0405"],
         ),
         (
@@ -2313,7 +2313,7 @@ fn isinstance_narrows_variables_where_its_test_holds() {
             &["E0414"],
         ),
         (
-            "class A:\n    pass\nclass E(Exception):\n    pass\ndef f(a: A, e: Exception) -> None:\n    print(isinstance(a, E), isinstance(e, ()))\n    if isinstance(a, E):\n        print(a.x)\n",
+            "class A:\n    pass\nclass E(Exception):\n    pass\ndef f(a: A, e: Exception) -> None:\n    print(isinstance(a, E), isinstance(e, ()))\n    if isinstance(e, E):\n        print(e.x)\n",
             &["E0414"],
         ),
         ("print(isinstance(1, int, x=2))\n", &["E0404"]),

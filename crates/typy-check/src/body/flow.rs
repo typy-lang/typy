@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::typed::{LiteralTest, SymbolId, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{LiteralTest, SymbolId, TypedConstant, TypedExpr, TypedExprKind, TypedPattern};
 use crate::types::Type;
 use typy_source::syntax::{BoolOperator, CompareOperator, UnaryOperator};
 
@@ -69,6 +69,57 @@ fn is_none(expression: &TypedExpr) -> bool {
         expression.kind,
         TypedExprKind::Constant(TypedConstant::None)
     )
+}
+
+/// Returns whether a test may hold and whether it may fail when the program runs, as the
+/// types decide it: `True` and `False` decide themselves, an `isinstance` test of a value no
+/// tested class takes never holds, and one every value passes never fails (TYP-34,
+/// ADR-0111). A value's static type holds for each of its values, so a branch the test rules
+/// out never runs.
+pub(super) fn test_reach(test: &TypedExpr) -> (bool, bool) {
+    match &test.kind {
+        TypedExprKind::Constant(TypedConstant::Bool(value)) => (*value, !*value),
+        TypedExprKind::IsInstance(isinstance) => {
+            let optional = matches!(isinstance.value.ty, Type::Optional(_));
+            let may_hold = isinstance.always
+                || isinstance.none_matches
+                || !isinstance.checks.is_empty()
+                || !isinstance.held.is_empty();
+            let may_fail = !(isinstance.always && (!optional || isinstance.none_matches));
+            (may_hold, may_fail)
+        }
+        TypedExprKind::Unary {
+            operator: UnaryOperator::Not,
+            operand,
+        } => {
+            let (may_hold, may_fail) = test_reach(operand);
+            (may_fail, may_hold)
+        }
+        TypedExprKind::BoolOp { operator, values } => {
+            let reach: Vec<(bool, bool)> = values.iter().map(test_reach).collect();
+            match operator {
+                BoolOperator::And => (
+                    reach.iter().all(|(may_hold, _)| *may_hold),
+                    reach.iter().any(|(_, may_fail)| *may_fail),
+                ),
+                BoolOperator::Or => (
+                    reach.iter().any(|(may_hold, _)| *may_hold),
+                    reach.iter().all(|(_, may_fail)| *may_fail),
+                ),
+            }
+        }
+        _ => (true, true),
+    }
+}
+
+/// Returns whether a pattern may match, as the types decide its tests (TYP-34).
+pub(super) fn pattern_reach(pattern: &TypedPattern) -> bool {
+    match pattern {
+        TypedPattern::Test(test) => test_reach(test).0,
+        TypedPattern::Bind(..) => true,
+        TypedPattern::All(steps) => steps.iter().all(pattern_reach),
+        TypedPattern::Any(alternatives) => alternatives.iter().any(pattern_reach),
+    }
 }
 
 /// Returns the facts a comparison of a variable with constants gives when it holds and when

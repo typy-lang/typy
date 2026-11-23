@@ -12,6 +12,7 @@
 | `iter` and `next`, with or without a default, and `for` over an iterator | CST-09 |
 | `with`, with one or more context managers and `as` targets | CST-05, CST-10 |
 | `match` with literal, value, capture, wildcard, `as`, `\|`, sequence, mapping and class patterns and guards | CST-06 |
+| Code that cannot run is neither checked nor compiled; see [Code that cannot run](#code-that-cannot-run) | TYP-34 |
 
 ## Example
 
@@ -41,6 +42,34 @@ refused:
 ```python
 for item in (1, "a"):
     print(item)
+```
+
+## Code that cannot run
+
+A statement after `return`, `raise`, `break` or `continue` in its block
+cannot run, and neither can a branch that a test of `True` or `False`, an
+`isinstance` test, an `assert` or a class pattern rules out by the types
+(TYP-34, ADR-0111). TyPy checks none of it and compiles none of it, as
+CPython runs such a program; a mistake there is not reported. The
+branches of a conditional expression and the operands of `and` and `or`
+are always checked.
+
+<!-- typy-expect: accepted -->
+```python
+def label(value: int) -> str:
+    if isinstance(value, str):
+        return value.upper()
+    return str(value)
+
+
+def first(values: list[int]) -> int:
+    for value in values:
+        return value
+        print(value.upper())
+    return -1
+
+
+print(label(3), first([4]), first([]))
 ```
 
 ## Matching values

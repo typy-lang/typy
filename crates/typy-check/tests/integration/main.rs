@@ -50,4 +50,5 @@ mod typing_names;
 mod typing_values;
 mod unions;
 mod unpacking;
+mod unreachable_code;
 mod variadic;

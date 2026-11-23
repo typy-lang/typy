@@ -116,3 +116,4 @@ supersedes it.
 | [ADR-0108](0108-hold-a-bytearray-in-a-growable-bytes-buffer.md) | Hold a bytearray in a growable bytes buffer it owns | Accepted | 2026-11-23 |
 | [ADR-0109](0109-keep-the-result-annotation-where-a-class-offers-the-result.md) | Keep the result annotation where a class offers the result | Accepted | 2026-11-23 |
 | [ADR-0110](0110-hold-a-literal-types-values-as-its-base-type.md) | Hold a literal type's values as its base type | Accepted | 2026-11-23 |
+| [ADR-0111](0111-leave-code-that-cannot-run-unchecked-and-uncompiled.md) | Leave code that cannot run unchecked and uncompiled | Accepted | 2026-11-23 |

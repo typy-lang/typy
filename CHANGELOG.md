@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- Code that cannot run is neither checked nor compiled: a statement after
+  `return`, `raise`, `break` or `continue`, and a branch a test of
+  `True`, `False`, `isinstance`, an `assert` or a class pattern rules out
+  by the types. A program with such code, which CPython runs, is accepted
+  (TYP-34, ADR-0111).
 - `typing.Literal` of `int`, `str`, `bytes` and `bool` constants and
   `None`: a constant passes where it is declared when it is one of its
   values, any other value is E0431, and `==`, `!=`, `in`, `not in` and
