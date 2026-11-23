@@ -167,7 +167,9 @@ errno-texts: dev ## Write the runtime's table of glibc's error texts, which OSEr
 errno-texts-check: dev ## Fail when the committed table of error texts differs from glibc's
 	@$(EXEC) python3.15 scripts/generate-errno-texts.py --check
 
-check: sweep fmt-check lint coverage-branches docs-lint docs ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
+# The quickest checks run first, so a formatting, text or document mistake stops the gate in
+# seconds; Clippy and the build follow, and the tests with coverage, the longest step, run last.
+check: sweep fmt-check ascii-check docs-lint traceability docs unicode-tables-check format-cases-check stdlib-names-check errno-texts-check diagrams-check lint runtime-size coverage-branches ## Run the whole quality gate, quickest checks first
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy development guide |
-| Version | 0.30 |
+| Version | 0.31 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-22 |
+| Last updated | 2026-11-23 |
 
 ## 1. Purpose
 
@@ -84,7 +84,7 @@ The `macos-15` job of CI does the same on every pull request.
 | `make bench` | Builds the compiler in release mode and times it on generated 10,000-line projects, in one file and in 200 modules, against the budgets of NFR-04, NFR-05 and NFR-14, with a check that checking time grows linearly with the modules |
 | `make bench-peers` | Downloads, once, the languages the cross-language benchmark compares with TyPy that the image lacks, about 0.5 GB: Go 1.27.4, the Temurin JDK 25.0.5, PyPy 3.11 v7.3.23 and Codon 0.20.6 from their release archives, and mypyc, Cython and Nuitka into a CPython 3.14 environment from `tests/bench/peers/requirements.txt`. Each archive is checked against the sha256 its project publishes and each wheel against its hash; everything goes into the `bench-tools` volume, `/var/cache/typy/bench`, and a tool already there is kept. It also links `lib/libz.so` there to the image's zlib, which Codon links its programs with |
 | `make stdlib-names` | Writes `crates/typy-source/src/stdlib_names.rs`, the standard library module names of CPython 3.12 to 3.15, which the loader leaves to the checker (LIB-08); `make check` runs `make stdlib-names-check` |
-| `make check` | Runs the sweep below, then the whole quality gate: formatting, Clippy, the tests with line and branch coverage, the five documentation checks below, the Unicode table check and the runtime size check |
+| `make check` | Runs the sweep below, then the whole quality gate, quickest checks first so a mistake stops it in seconds: formatting, the ASCII check, the Markdown lint, the traceability check, the site build, the checks of the tables taken from CPython and glibc, the diagrams, Clippy, the runtime size check, and last the tests with line and branch coverage |
 | `make fmt` | Formats the Rust code |
 | `make lint` | Runs Clippy on every crate and test, with warnings as errors |
 | `make type` | Type checks every crate and test |
