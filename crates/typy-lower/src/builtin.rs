@@ -2,6 +2,7 @@
 
 use typy_check::{Builtin, PrintCall, Type, TypedExpr};
 use typy_diagnostics::Span;
+use typy_source::syntax::BinaryOperator;
 use typy_tyir::{
     Comparison, Constant, IntOperator, Operation, RuntimeFunction, ScalarKind, Terminator,
     TyirType, ValueId,
@@ -155,6 +156,15 @@ impl FunctionLowerer<'_> {
             (Builtin::Min | Builtin::Max, _) => {
                 self.extreme(builtin == Builtin::Max, &values, types, ty, span)
             }
+            (
+                Builtin::Divmod
+                | Builtin::Bin
+                | Builtin::Hex
+                | Builtin::Oct
+                | Builtin::Format
+                | Builtin::Pow,
+                _,
+            ) => self.number_builtin(builtin, &values, types, ty, span),
             _ => unreachable!(
                 "the checker refuses `{}` with {} arguments",
                 builtin.name(),
@@ -180,6 +190,68 @@ impl FunctionLowerer<'_> {
             return self.produced(value.value, value.ty);
         }
         converted
+    }
+
+    /// Calls `divmod`, `bin`, `hex`, `oct`, `format` or `pow` with a modulus (LIB-28); no
+    /// argument is released.
+    fn number_builtin(
+        &mut self,
+        builtin: Builtin,
+        values: &[Lowered],
+        types: &[Type],
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        match (builtin, values) {
+            (Builtin::Divmod, [left, right]) => self.divmod(*left, *right, types, ty, span),
+            (Builtin::Format, [value, spec]) => self.format_value(*value, &types[0], *spec, span),
+            (Builtin::Pow, [base, exponent, modulus]) => self.call_runtime(
+                RuntimeFunction::IntPowerModulo,
+                vec![base.value, exponent.value, modulus.value],
+                span,
+            ),
+            (_, [value]) => {
+                // `bin`, `hex` and `oct` format as the alternate forms of `b`, `x` and `o`.
+                let spec = match builtin {
+                    Builtin::Bin => "#b",
+                    Builtin::Hex => "#x",
+                    Builtin::Oct => "#o",
+                    _ => "",
+                };
+                let spec = Self::borrowed(self.string(spec, span), TyirType::STR);
+                self.format_value(*value, &types[0], spec, span)
+            }
+            _ => unreachable!(
+                "the checker refuses `{}` with {} arguments",
+                builtin.name(),
+                values.len()
+            ),
+        }
+    }
+
+    /// `divmod(left, right)`: the tuple of `left // right` and `left % right`, each computed
+    /// as the operator computes it, of `int`s or of `float`s (LIB-28). Neither is released.
+    fn divmod(
+        &mut self,
+        left: Lowered,
+        right: Lowered,
+        types: &[Type],
+        ty: TyirType,
+        span: Span,
+    ) -> Lowered {
+        let item = if types.iter().all(|item| *item == Type::Int) {
+            Type::Int
+        } else {
+            Type::Float
+        };
+        let mut parts = Vec::with_capacity(2);
+        for operator in [BinaryOperator::FloorDiv, BinaryOperator::Mod] {
+            // `binary` releases its operands, and the arguments are released after the call.
+            let left = Self::borrowed(left.value, left.ty);
+            let right = Self::borrowed(right.value, right.ty);
+            parts.push(self.binary(operator, left, right, &item, span));
+        }
+        self.make_tuple(ty, parts, span)
     }
 
     /// `min` and `max` of two or more values: the first value wins a tie, as CPython keeps the first it found.

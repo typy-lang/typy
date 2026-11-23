@@ -14,6 +14,7 @@
 | `open` for text files in UTF-8, with `read`, `readline`, `readlines`, `write`, `writelines`, `flush`, `close`, iteration and `with` | LIB-04 |
 | `callable(x)`: true for a function value, a built-in function, method or type, and a class | LIB-23 |
 | `map` and `filter`, lazy iterators that go on after the function raises | LIB-23 |
+| `divmod`, `pow` with or without a modulus, `bin`, `hex`, `oct` and `format`; see [Numbers and formatting](#numbers-and-formatting) | LIB-28 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -111,6 +112,28 @@ iterables differ in length; below 3.14 it is refused, as CPython 3.12
 and 3.13 raise `TypeError` for it. `map` and `filter` themselves as
 values, such as `f = map`, and `*` in a call of `map` are planned for 1.0
 (LIB-25).
+
+## Numbers and formatting
+
+`divmod(a, b)` gives `(a // b, a % b)`, of `int`s for two integers and of
+`float`s otherwise. `pow(a, b)` is `a ** b`, so its exponent follows the
+rule for `**`: an `int` exponent of an `int` is a non-negative integer
+literal (EXP-04). `pow(a, b, m)` of three integers reduces the power
+modulo `m` at every step, gives a result with the sign of `m`, and takes a
+negative exponent when `a` has an inverse modulo `m`:
+
+<!-- typy-expect: accepted -->
+```python
+print(divmod(17, 5), divmod(-7.5, 2))
+print(pow(2, 10), pow(2, 10**20, 97), pow(3, -1, 7))
+print(bin(10), hex(255), oct(-8))
+print(format(1234567.891, ",.2f"), format("id", ">6"), format(42))
+```
+
+`bin`, `hex` and `oct` write an `int` with the prefix `0b`, `0x` or `0o`,
+and `format(value, spec)` formats a value as the f-string `f"{value:spec}"`
+does. A modulus of zero, or a negative exponent whose base has no inverse,
+raises `ValueError`. `bytearray` is planned for 0.12 (LIB-28).
 
 ## Formatting with `%`
 

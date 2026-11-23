@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.113 |
+| Version | 2.114 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -673,6 +673,16 @@ needs generics (0.4), so ADR-0007's "written around it" applies: each
 builtin is a `Builtin` value that `typy-check` types from its own table and
 `typy-lower` lowers to runtime calls (section 7.3). A builtin moves to
 `builtins.py` when the features it needs arrive.
+
+The builtins of LIB-28 follow the same path through `body/number_call.rs`.
+`pow(a, b)` is checked as the expression `a ** b`, so it keeps the rule of
+EXP-04, and `pow` takes `base`, `exp` and `mod` by name. `divmod` lowers
+to `//` and `%` of the same operands, `bin`, `hex` and `oct` to the
+f-string formatter of their argument with the specification `#b`, `#x` or
+`#o`, and `format` to that formatter with its specification.
+`pow(a, b, m)` calls `typy_rt_int_power_modulo`, which reduces each step
+modulo `m`, gives the result the sign of `m` and inverts the base by the
+extended Euclidean algorithm for a negative exponent.
 
 ## 7. typy-check
 

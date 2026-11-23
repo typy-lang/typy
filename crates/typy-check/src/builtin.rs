@@ -1,4 +1,4 @@
-//! The builtin functions TyPy compiles (LIB-01, LIB-02).
+//! The builtin functions TyPy compiles (LIB-01, LIB-02, LIB-28).
 
 /// A builtin function TyPy compiles (LIB-01, LIB-02). Each one is typed by the checker and lowered to runtime calls, because several take a variable number of arguments, which the 0.1 subset cannot declare (EXP-17).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -10,14 +10,18 @@ pub enum Builtin {
     Abs,
     All,
     Any,
+    Bin,
     Bool,
     Bytes,
     /// `callable(x)`, whether `x` is a function value or a class (LIB-23).
     Callable,
     Chr,
     Dict,
+    Divmod,
     Enumerate,
     Float,
+    Format,
+    Hex,
     Int,
     Input,
     IsInstance,
@@ -29,8 +33,10 @@ pub enum Builtin {
     Max,
     Min,
     Next,
+    Oct,
     Open,
     Ord,
+    Pow,
     Print,
     Range,
     /// `slice(stop)` or `slice(start, stop[, step])` (CLS-23).
@@ -55,13 +61,17 @@ impl Builtin {
             "abs" => Self::Abs,
             "all" => Self::All,
             "any" => Self::Any,
+            "bin" => Self::Bin,
             "bool" => Self::Bool,
             "bytes" => Self::Bytes,
             "callable" => Self::Callable,
             "chr" => Self::Chr,
             "dict" => Self::Dict,
+            "divmod" => Self::Divmod,
             "enumerate" => Self::Enumerate,
             "float" => Self::Float,
+            "format" => Self::Format,
+            "hex" => Self::Hex,
             "int" => Self::Int,
             "input" => Self::Input,
             "isinstance" => Self::IsInstance,
@@ -72,8 +82,10 @@ impl Builtin {
             "max" => Self::Max,
             "min" => Self::Min,
             "next" => Self::Next,
+            "oct" => Self::Oct,
             "open" => Self::Open,
             "ord" => Self::Ord,
+            "pow" => Self::Pow,
             "print" => Self::Print,
             "range" => Self::Range,
             "slice" => Self::Slice,
@@ -100,8 +112,12 @@ impl Builtin {
             Self::Abs
                 | Self::All
                 | Self::Any
+                | Self::Bin
                 | Self::Callable
                 | Self::Chr
+                | Self::Divmod
+                | Self::Format
+                | Self::Hex
                 | Self::Input
                 | Self::IsInstance
                 | Self::IsSubclass
@@ -110,8 +126,10 @@ impl Builtin {
                 | Self::Max
                 | Self::Min
                 | Self::Next
+                | Self::Oct
                 | Self::Open
                 | Self::Ord
+                | Self::Pow
                 | Self::Print
                 | Self::Repr
                 | Self::Round
@@ -145,13 +163,17 @@ impl Builtin {
             Self::Abs => "abs",
             Self::All => "all",
             Self::Any => "any",
+            Self::Bin => "bin",
             Self::Bool => "bool",
             Self::Bytes => "bytes",
             Self::Callable => "callable",
             Self::Chr => "chr",
             Self::Dict => "dict",
+            Self::Divmod => "divmod",
             Self::Enumerate => "enumerate",
             Self::Float => "float",
+            Self::Format => "format",
+            Self::Hex => "hex",
             Self::Int => "int",
             Self::Input => "input",
             Self::IsInstance => "isinstance",
@@ -162,8 +184,10 @@ impl Builtin {
             Self::Max => "max",
             Self::Min => "min",
             Self::Next => "next",
+            Self::Oct => "oct",
             Self::Open => "open",
             Self::Ord => "ord",
+            Self::Pow => "pow",
             Self::Print => "print",
             Self::Range => "range",
             Self::Slice => "slice",

@@ -99,7 +99,13 @@ impl FunctionLowerer<'_> {
 
     /// Returns `format(value, spec)` of a value of the checked type `ty`, by the formatter of
     /// its type; neither is released.
-    fn format_value(&mut self, value: Lowered, ty: &Type, spec: Lowered, span: Span) -> Lowered {
+    pub(crate) fn format_value(
+        &mut self,
+        value: Lowered,
+        ty: &Type,
+        spec: Lowered,
+        span: Span,
+    ) -> Lowered {
         match value.ty {
             TyirType::Int => self.call_runtime(
                 RuntimeFunction::FormatInt,

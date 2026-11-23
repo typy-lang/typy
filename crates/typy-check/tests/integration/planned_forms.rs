@@ -82,14 +82,11 @@ fn doctest_is_planned_for_after_1_0() {
 }
 
 #[test]
-fn each_builtin_of_0_12_names_it() {
-    for name in ["divmod", "bin", "hex", "oct", "pow", "format", "bytearray"] {
-        assert_eq!(
-            messages(&format!("value = {name}\n")),
-            [planned(name, "0.12", "LIB-28")],
-            "{name}"
-        );
-    }
+fn bytearray_is_planned_for_0_12() {
+    assert_eq!(
+        messages("value = bytearray\n"),
+        [planned("bytearray", "0.12", "LIB-28")]
+    );
 }
 
 #[test]

@@ -51,6 +51,17 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
+        if matches!(
+            builtin,
+            Builtin::Divmod
+                | Builtin::Pow
+                | Builtin::Bin
+                | Builtin::Hex
+                | Builtin::Oct
+                | Builtin::Format
+        ) {
+            return self.call_number_builtin(builtin, arguments, keywords, span);
+        }
         if builtin == Builtin::Iter {
             return self.call_iter(arguments, keywords, span);
         }
@@ -186,6 +197,12 @@ impl BodyChecker<'_> {
             | Builtin::Set
             | Builtin::Dict
             | Builtin::Round
+            | Builtin::Divmod
+            | Builtin::Pow
+            | Builtin::Bin
+            | Builtin::Hex
+            | Builtin::Oct
+            | Builtin::Format
             | Builtin::Iter
             | Builtin::Next
             | Builtin::Open

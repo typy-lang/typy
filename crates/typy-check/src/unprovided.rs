@@ -29,9 +29,7 @@ pub(crate) fn unprovided(name: &str) -> Option<Unprovided> {
         "property" | "staticmethod" | "classmethod" => Some(planned("1.0", RuleId::FUN_17)),
         // A call of either is an object of the class the module is given for it (ADR-0089).
         "map" | "filter" => Some(planned("1.0", RuleId::LIB_25)),
-        "divmod" | "bin" | "hex" | "oct" | "pow" | "format" | "bytearray" => {
-            Some(planned("0.12", RuleId::LIB_28))
-        }
+        "bytearray" => Some(planned("0.12", RuleId::LIB_28)),
         _ if CPYTHON_3_12_BUILTINS.contains(&name) => Some(Unprovided::Excluded),
         _ => None,
     }

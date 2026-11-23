@@ -12,6 +12,7 @@ pub enum RuntimeFunction {
     IntFloorDivide,
     IntModulo,
     IntPower,
+    IntPowerModulo,
     IntLeftShift,
     IntRightShift,
     IntTrueDivide,
@@ -567,10 +568,11 @@ const FLOAT_FLOAT: &[TyirType] = &[TyirType::Float, TyirType::Float];
 
 impl RuntimeFunction {
     /// Every runtime function.
-    pub const ALL: [Self; 403] = [
+    pub const ALL: [Self; 404] = [
         Self::IntFloorDivide,
         Self::IntModulo,
         Self::IntPower,
+        Self::IntPowerModulo,
         Self::IntLeftShift,
         Self::IntRightShift,
         Self::IntTrueDivide,
@@ -1020,6 +1022,7 @@ impl RuntimeFunction {
             | Self::IntRightShift
             | Self::MathComb
             | Self::MathPerm => signature(INT_INT, Int, true),
+            Self::IntPowerModulo => signature(&[Int, Int, Int], Int, true),
             Self::IntTrueDivide => signature(INT_INT, Float, true),
             Self::IntToFloat => signature(&[Int], Float, true),
             Self::IntAbsolute => signature(&[Int], Int, false),
@@ -1435,6 +1438,7 @@ impl RuntimeFunction {
             Self::IntFloorDivide => "int_floor_divide",
             Self::IntModulo => "int_modulo",
             Self::IntPower => "int_power",
+            Self::IntPowerModulo => "int_power_modulo",
             Self::IntLeftShift => "int_left_shift",
             Self::IntRightShift => "int_right_shift",
             Self::IntTrueDivide => "int_true_divide",
