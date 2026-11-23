@@ -660,6 +660,34 @@ impl Program {
         self.annotation_modules = annotations.standard;
     }
 
+    /// Starts the module body `body` by initialising `packages`, outermost first, as CPython
+    /// imports the packages that hold the module `-m` runs before it runs (CLI-28).
+    pub(crate) fn initialise_first(
+        &mut self,
+        body: FunctionId,
+        packages: &[typy_source::ModuleName],
+        span: Span,
+    ) {
+        if packages.is_empty() {
+            return;
+        }
+        let Some(Some(function)) = self.functions.get_mut(body.0 as usize) else {
+            return;
+        };
+        function.body.insert(
+            0,
+            TypedStmt::Import {
+                modules: packages
+                    .iter()
+                    .map(|package| package.as_str().to_owned())
+                    .collect(),
+                pending: Vec::new(),
+                bindings: Vec::new(),
+                span,
+            },
+        );
+    }
+
     /// Ends checking a module whose body is the function `body`, and keeps its names for
     /// the modules that import it.
     pub(crate) fn end_module(&mut self, body: FunctionId) {

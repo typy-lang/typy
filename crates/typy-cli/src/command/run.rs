@@ -1,10 +1,12 @@
-//! `typy run FILE [-- ARGS]` (CLI-02, UC-03): builds into the cache, then runs the program.
+//! `typy run FILE [-- ARGS]`, `typy run -c CODE` and `typy run -m MODULE` (CLI-02, CLI-28,
+//! UC-03): builds into the cache, then runs the program.
 
+use std::os::unix::process::CommandExt as _;
 use std::process::Command;
 
-use camino::Utf8PathBuf;
 use typy_build::BuildRequest;
 use typy_driver::Pipeline;
+use typy_source::MainSource;
 
 use crate::cache;
 use crate::exit_status::ExitStatus;
@@ -14,13 +16,13 @@ use crate::output::Reporter;
 /// returns its exit status.
 pub(super) fn run(
     pipeline: &Pipeline,
-    file: Utf8PathBuf,
+    main: MainSource,
     generation: &super::generation::Generation,
     overrides: typy_source::SettingOverrides,
     arguments: &[String],
     reporter: Reporter,
 ) -> ExitStatus {
-    let request = match BuildRequest::new(file) {
+    let request = match BuildRequest::of_main(main) {
         Ok(request) => request
             .with_mode(generation.mode)
             .with_processor(generation.processor.clone(), generation.features.clone()),
@@ -33,7 +35,8 @@ pub(super) fn run(
             Err(failure) => reporter.report(failure),
         };
     };
-    let name = request.main().file_stem().unwrap_or("program").to_owned();
+    let name = request.main().program_name().to_owned();
+    let argument_zero = argument_zero(request.main(), &files);
     let executable = cache::directory()
         .join(cache::key(
             &request,
@@ -63,11 +66,30 @@ pub(super) fn run(
             typy_build::command_line(executable.as_str(), arguments)
         );
     }
-    match Command::new(&executable).args(arguments).status() {
+    let mut command = Command::new(&executable);
+    if let Some(zero) = argument_zero {
+        command.arg0(zero);
+    }
+    match command.args(arguments).status() {
         Ok(status) => ExitStatus::Program(program_status(status)),
         Err(error) => {
             reporter.internal(&format!("cannot start {executable}: {error}"));
             ExitStatus::Internal
+        }
+    }
+}
+
+/// Returns what the program reads as `sys.argv[0]` when it is not the executable's path: `-c`
+/// for code, and the full path of the module's file for a module, as CPython gives them
+/// (CLI-28). `files` start with the main file, by its path from the current directory.
+fn argument_zero(main: &MainSource, files: &[(String, String)]) -> Option<String> {
+    match main {
+        MainSource::File(_) => None,
+        MainSource::Code(_) => Some("-c".to_owned()),
+        MainSource::Module(_) => {
+            let path = files.first().map_or("", |(path, _)| path.as_str());
+            let directory = std::env::current_dir().unwrap_or_default();
+            Some(directory.join(path).to_string_lossy().into_owned())
         }
     }
 }

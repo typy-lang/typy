@@ -5,6 +5,7 @@ use typy_build::{ArtifactKind, BuildRequest, EmitStage};
 use typy_codegen::{Target, TargetTriple};
 use typy_diagnostics::SourceLookup;
 use typy_driver::{Emission, Failure, Outcome, Pipeline, Sources};
+use typy_source::MainSource;
 
 /// A directory holding `app.py` with `source`.
 pub(crate) fn program(source: &str) -> (tempfile::TempDir, Utf8PathBuf) {
@@ -53,7 +54,7 @@ const SOURCE: &str = "s = \"a\"\ns = s + \"b\"\nprint(s, 1 + 2)\n";
 fn a_correct_program_checks() {
     let (_guard, main) = program(SOURCE);
     match pipeline()
-        .check(&main, Target::host())
+        .check(&MainSource::File(main.clone()), Target::host())
         .map(|success| success.outcome)
     {
         Ok(Outcome::Checked(Sources::Project(project))) => {
@@ -66,7 +67,9 @@ fn a_correct_program_checks() {
 #[test]
 fn a_wrong_program_fails_with_its_diagnostics_and_files() {
     let (_guard, main) = program("x: int = \"a\"\n");
-    let failure = pipeline().check(&main, Target::host()).unwrap_err();
+    let failure = pipeline()
+        .check(&MainSource::File(main.clone()), Target::host())
+        .unwrap_err();
     assert_eq!(codes(&failure), ["E0402"]);
     assert!(matches!(failure.sources, Sources::Project(_)));
 }
@@ -75,7 +78,10 @@ fn a_wrong_program_fails_with_its_diagnostics_and_files() {
 fn a_missing_main_file_fails_with_the_files_it_tried() {
     let (_guard, main) = program("");
     let failure = pipeline()
-        .check(&main.with_file_name("absent.py"), Target::host())
+        .check(
+            &MainSource::File(main.with_file_name("absent.py")),
+            Target::host(),
+        )
         .unwrap_err();
     assert_eq!(codes(&failure), ["E0105"]);
     assert!(matches!(failure.sources, Sources::Unloaded(_)));

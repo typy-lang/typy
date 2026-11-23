@@ -9,6 +9,7 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy check FILE` | Reports every diagnostic without generating code | CLI-03 |
 | `typy build FILE` | Writes a native executable beside the file, or at `-o PATH` | CLI-01 |
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
+| `typy run -c CODE`, `typy run -m MODULE` | Builds and runs code, or a module of the project in the current directory, as `python -c` and `python -m` run them; see [Running code and modules](#running-code-and-modules) | CLI-28 |
 | `typy explain CODE` | Prints what a diagnostic code means, a program that gives it and the corrected program | CLI-10 |
 | `typy print WHAT` | Writes what `typy` would use: `targets`, `target-cpus`, `host`, `paths`, `settings` or `version`; see [Asking typy what it uses](#asking-typy-what-it-uses) | CLI-25 |
 | `typy NAME [ARGS]` | Runs the program `typy-NAME` found on `PATH`, for a NAME that is not a command of `typy`; see [Commands of other tools](#commands-of-other-tools) | CLI-32 |
@@ -34,6 +35,27 @@ The exit status of `typy` is 0 on success, 1 when the program has errors,
 `TYPY_HOME`, and `NO_COLOR`, which only takes the colour from diagnostics
 on a terminal (CLI-11). A program reads its arguments through `sys.argv`,
 which comes with imports in 0.3.
+
+## Running code and modules
+
+`typy run -c` builds and runs code given on the command line, and
+`typy run -m` a module of the project in the current directory, as
+`python -c` and `python -m` run them:
+
+```sh
+typy run -c "import tools; print(tools.version())"
+typy run -m tools.report -- --verbose
+typy run -m tools
+```
+
+The current directory is the project's root, so the code and the module
+import the project's modules, and its `typy.toml` applies. Diagnostics of
+code name it `<string>`, as CPython does, and the program reads `-c` as
+`sys.argv[0]`. `-m` runs the packages that hold the module first, so
+`tools/__init__.py` runs before `tools/report.py`, and its relative imports
+start from its package. A package runs its `__main__.py`. The program reads
+the full path of the module's file as `sys.argv[0]`. A module that is not
+there is E0206. FILE, `-c` and `-m` exclude one another.
 
 ## Asking typy what it uses
 

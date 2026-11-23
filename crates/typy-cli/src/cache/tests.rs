@@ -1,7 +1,7 @@
 //! Tests of `cache`.
 
 use typy_diagnostics::{WarningLevel, WarningLevels, WarningSelector};
-use typy_source::{PythonFloor, SettingOverrides};
+use typy_source::{MainSource, ModuleName, PythonFloor, SettingOverrides};
 
 /// The key without settings flags.
 fn key(request: &BuildRequest, files: &[(String, String)], compiler: &[u8]) -> String {
@@ -76,6 +76,16 @@ fn the_key_changes_with_each_input() {
             &program,
             SettingOverrides::default(),
             &denied(WarningSelector::parse("W0101").unwrap()),
+            b"build",
+        ),
+        key(
+            &BuildRequest::of_main(MainSource::Code("x = 1\n".to_owned())).unwrap(),
+            &program,
+            b"build",
+        ),
+        key(
+            &BuildRequest::of_main(MainSource::Module(ModuleName::new("app").unwrap())).unwrap(),
+            &program,
             b"build",
         ),
     ];

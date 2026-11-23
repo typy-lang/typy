@@ -33,6 +33,8 @@ Lower --> Check
 Lower --> Tyir
 Codegen --> Tyir
 Codegen --> Inkwell
+Build --> Codegen
+Build --> Source
 Build ..> Runtime : links the built archive
 Source --> Diagnostics
 Check --> Diagnostics

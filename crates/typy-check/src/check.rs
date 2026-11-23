@@ -496,6 +496,8 @@ fn check_module<'tree>(
     program.note_protocol_fits(None);
     program.end_first_look();
     let body = BodyChecker::check_module(program, &module_body, diagnostics);
+    let start = typy_diagnostics::Span::empty(module.file, typy_diagnostics::TextOffset(0));
+    program.initialise_first(body, &module.enclosing_packages(), start);
     let deferred = check_bodies(
         program,
         others,

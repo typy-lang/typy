@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy use case model |
-| Version | 1.5 |
+| Version | 1.6 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -153,9 +153,9 @@ Alternate flows:
 | Primary actor | Application developer |
 | Supporting actors | C toolchain |
 | Preconditions | As UC-02. |
-| Trigger | The developer runs `typy run FILE`, optionally followed by `--` and arguments. |
+| Trigger | The developer runs `typy run FILE`, `typy run -c CODE` or `typy run -m MODULE`, optionally followed by `--` and arguments. |
 | Postconditions | The program has run, and `typy` exits with the program's exit status. |
-| Requirements | CLI-02, STD-02, STD-05, STD-06, FUN-02 |
+| Requirements | CLI-02, CLI-28, STD-02, STD-05, STD-06, FUN-02 |
 
 Main flow:
 
@@ -170,6 +170,15 @@ Main flow:
 
 Alternate flows:
 
+- **1a.** The developer runs `typy run -c CODE`. CODE is the main module,
+  which diagnostics name `<string>`, the project's root is the current
+  directory, and the program reads `-c` as `sys.argv[0]` (CLI-28).
+- **1b.** The developer runs `typy run -m MODULE`. The module of the
+  project in the current directory, or a package's `__main__` module, runs
+  as the main module after the packages that hold it, its relative imports
+  start from its package, and the program reads its file's full path as
+  `sys.argv[0]` (CLI-28). A module that is not there is E0206, and the
+  build fails as in 2a.
 - **2a.** The build fails. TyPy follows the alternate flows of UC-02 and
   does not start the program.
 - **4a.** The program raises an exception that nothing catches. The program

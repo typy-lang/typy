@@ -1,5 +1,5 @@
 //! The commands and options of ADR-0104 and ADR-0105, run as a user runs `typy`: `typy print`,
-//! external commands, code generation, colour and warning levels.
+//! external commands, code generation, colour, warning levels, and `run -c` and `-m`.
 
 use std::process::{Command, Output};
 
@@ -567,5 +567,113 @@ fn cli_27_a_level_for_an_error_or_an_unknown_code_is_wrong_usage() {
             )),
             "{text}"
         );
+    }
+}
+
+/// Writes `files` into the project, each under its path from the project's directory.
+fn write_files(project: &Project, files: &[(&str, &str)]) {
+    for (path, text) in files {
+        let path = project.root.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+}
+
+#[test]
+fn cli_28_run_c_runs_code_that_imports_from_the_current_directory() {
+    let project = Project::new();
+    write_files(&project, &[("tools.py", "x = 41\n")]);
+    let sum = project.typy(&["run", "-c", "import tools\nprint(tools.x + 1)"], None);
+    assert_eq!(
+        (status(&sum), stdout(&sum).as_str()),
+        (0, "42\n"),
+        "{}",
+        stderr(&sum)
+    );
+    let argv = project.typy(
+        &["run", "-c", "import sys\nprint(sys.argv)", "--", "a", "b"],
+        None,
+    );
+    assert_eq!(stdout(&argv), "['-c', 'a', 'b']\n", "{}", stderr(&argv));
+    // The code is part of the cache key, so other code is another build.
+    let other = project.typy(&["run", "-c", "print(tools_x := 7)"], None);
+    assert_eq!(stdout(&other), "7\n", "{}", stderr(&other));
+}
+
+#[test]
+fn cli_28_diagnostics_of_code_name_it_string() {
+    let project = Project::new();
+    let output = project.typy(&["run", "-c", "print(undefined)"], None);
+    let text = stderr(&output);
+    assert_eq!(status(&output), 1, "{text}");
+    assert!(text.contains(" --> <string>:1:7\n"), "{text}");
+}
+
+#[test]
+fn cli_28_run_m_runs_a_module_after_its_packages_with_its_relative_imports() {
+    let project = Project::new();
+    write_files(
+        &project,
+        &[
+            ("tools/__init__.py", "print('tools starts')\n"),
+            (
+                "tools/report.py",
+                "import sys\nfrom . import numbers\n\
+                 print(__name__, numbers.value, sys.argv[0].endswith('tools/report.py'), \
+                 sys.argv[1:])\n",
+            ),
+            ("tools/numbers.py", "value = 1\n"),
+            ("tools/__main__.py", "print('tools main')\n"),
+        ],
+    );
+    let module = project.typy(&["run", "-m", "tools.report", "--", "one"], None);
+    assert_eq!(
+        (status(&module), stdout(&module).as_str()),
+        (0, "tools starts\n__main__ 1 True ['one']\n"),
+        "{}",
+        stderr(&module)
+    );
+    let package = project.typy(&["run", "-m", "tools"], None);
+    assert_eq!(
+        (status(&package), stdout(&package).as_str()),
+        (0, "tools starts\ntools main\n"),
+        "{}",
+        stderr(&package)
+    );
+}
+
+#[test]
+fn cli_28_a_module_that_cannot_run_is_an_error_and_two_mains_are_wrong_usage() {
+    let project = Project::new();
+    write_files(&project, &[("tools/__init__.py", "")]);
+    let cases = [
+        (
+            &["run", "-m", "nothing"][..],
+            1,
+            "no module named `nothing`",
+        ),
+        (
+            &["run", "-m", "tools"],
+            1,
+            "no module named `tools.__main__`; `tools` is a package and cannot be run directly",
+        ),
+        (&["run", "-m", "a..b"], 2, "`a..b` is not a module name"),
+        (&["run"], 2, "<FILE|-c <CODE>|-m <MODULE>>"),
+        (
+            &["run", "app.py", "-c", "print(1)"],
+            2,
+            "cannot be used with",
+        ),
+        (
+            &["run", "-c", "print(1)", "-m", "tools"],
+            2,
+            "cannot be used with",
+        ),
+    ];
+    for (arguments, expected_status, expected_text) in cases {
+        let output = project.typy(arguments, None);
+        let text = stderr(&output);
+        assert_eq!(status(&output), expected_status, "{arguments:?}: {text}");
+        assert!(text.contains(expected_text), "{arguments:?}: {text}");
     }
 }

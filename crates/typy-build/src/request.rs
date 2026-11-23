@@ -1,10 +1,11 @@
-//! What one build asks for: the main file, the mode, the target, the stage to stop at and the
-//! output path.
+//! What one build asks for: the main module, the mode, the target, the stage to stop at and
+//! the output path.
 
 use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use typy_codegen::{CodegenOptions, Target};
+use typy_source::MainSource;
 
 use crate::emit_stage::EmitStage;
 use crate::library_kind::LibraryKind;
@@ -30,7 +31,7 @@ impl std::error::Error for RequestError {}
 /// What one build asks for. The main file's existence is checked when it is loaded (E0105).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildRequest {
-    main: Utf8PathBuf,
+    main: MainSource,
     mode: BuildMode,
     target: Target,
     emit: Option<EmitStage>,
@@ -43,11 +44,18 @@ pub struct BuildRequest {
 }
 
 impl BuildRequest {
-    /// Returns a debug build of `main` for the host, writing an executable.
+    /// Returns a debug build of the main file `main` for the host, writing an executable.
     pub fn new(main: impl Into<Utf8PathBuf>) -> Result<Self, RequestError> {
-        let main = main.into();
-        if main.extension() != Some("py") {
-            return Err(RequestError::NotPython(main));
+        Self::of_main(MainSource::File(main.into()))
+    }
+
+    /// Returns a debug build for the host of the program whose main module `main` gives,
+    /// writing an executable (CLI-28).
+    pub fn of_main(main: MainSource) -> Result<Self, RequestError> {
+        if let MainSource::File(path) = &main
+            && path.extension() != Some("py")
+        {
+            return Err(RequestError::NotPython(path.clone()));
         }
         Ok(Self {
             main,
@@ -122,10 +130,20 @@ impl BuildRequest {
         self.library
     }
 
-    /// Returns the main file.
+    /// Returns where the main module comes from.
     #[must_use]
-    pub fn main(&self) -> &Utf8Path {
+    pub const fn main(&self) -> &MainSource {
         &self.main
+    }
+
+    /// Returns the main file's directory, where a library goes by default; empty for a main
+    /// module that is not a file.
+    #[must_use]
+    pub fn directory(&self) -> &Utf8Path {
+        match &self.main {
+            MainSource::File(path) => path.parent().unwrap_or(Utf8Path::new("")),
+            MainSource::Module(_) | MainSource::Code(_) => Utf8Path::new(""),
+        }
     }
 
     /// Returns the build mode.
@@ -152,13 +170,17 @@ impl BuildRequest {
         self.output.as_deref()
     }
 
-    /// Returns where the executable goes: the output path, or the main file without `.py`.
-    /// A library's files are named by `LibraryLayout`, after its module's version.
+    /// Returns where the executable goes: the output path, or the main file without `.py`,
+    /// or the program's name for a main module that is not a file. A library's files are
+    /// named by `LibraryLayout`, after its module's version.
     #[must_use]
     pub fn output_path(&self) -> Utf8PathBuf {
-        self.output
-            .clone()
-            .unwrap_or_else(|| self.main.with_extension(""))
+        self.output.clone().unwrap_or_else(|| match &self.main {
+            MainSource::File(path) => path.with_extension(""),
+            MainSource::Module(_) | MainSource::Code(_) => {
+                Utf8PathBuf::from(self.main.program_name())
+            }
+        })
     }
 }
 

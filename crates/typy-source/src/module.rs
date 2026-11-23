@@ -101,6 +101,10 @@ pub struct Module {
     pub syntax: SyntaxTree,
     /// Whether it is a package, read from an `__init__.py` (MOD-02).
     pub is_package: bool,
+    /// For the main module that `-m` runs, its own name, such as `tools.run`, which gives
+    /// the package its relative imports start from, as CPython's `__spec__.name` does;
+    /// `None` for any other module (CLI-28).
+    pub spec_name: Option<ModuleName>,
 }
 
 impl Module {
@@ -112,8 +116,22 @@ impl Module {
         if self.is_package {
             Some(self.name.clone())
         } else {
-            self.name.parent()
+            self.spec_name.as_ref().unwrap_or(&self.name).parent()
         }
+    }
+
+    /// Returns the packages that hold the main module `-m` runs, outermost first, which run
+    /// before it, as CPython imports them; empty for any other module (CLI-28).
+    #[must_use]
+    pub fn enclosing_packages(&self) -> Vec<ModuleName> {
+        let mut packages = Vec::new();
+        let mut package = self.spec_name.as_ref().and_then(ModuleName::parent);
+        while let Some(name) = package {
+            package = name.parent();
+            packages.push(name);
+        }
+        packages.reverse();
+        packages
     }
 }
 

@@ -10,7 +10,9 @@ use typy_build::{
 use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{Target, assembly, llvm_ir, object};
 use typy_diagnostics::{Diagnostics, WarningLevels};
-use typy_source::{Platform, Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
+use typy_source::{
+    MainSource, Platform, Project, ProjectSettings, SETTINGS_FILE, SettingOverrides,
+};
 use typy_tyir::{TyirAllocator, TyirLibrary, TyirModule};
 
 use crate::emission::Emission;
@@ -134,9 +136,9 @@ impl Pipeline {
         self
     }
 
-    /// Loads and checks the program whose main file is `main` for `target`, without generating
-    /// code (CLI-03).
-    pub fn check(&self, main: &Utf8Path, target: Target) -> Result<Success, Failure> {
+    /// Loads and checks the program whose main module `main` gives for `target`, without
+    /// generating code (CLI-03).
+    pub fn check(&self, main: &MainSource, target: Target) -> Result<Success, Failure> {
         let project = self.timed("load", || self.load(main, false, target))?;
         let (_, warnings) = self.timed("check", || self.check_program(&project))?;
         Ok(Success {
@@ -146,10 +148,10 @@ impl Pipeline {
     }
 
     /// Returns the path from the root and the text of every file of the program whose main
-    /// file is `main`, the main file first and `typy.toml` last, or `None` when it does not
-    /// load.
+    /// module `main` gives, the main file first and `typy.toml` last, or `None` when it does
+    /// not load.
     #[must_use]
-    pub fn sources(&self, main: &Utf8Path) -> Option<Vec<(String, String)>> {
+    pub fn sources(&self, main: &MainSource) -> Option<Vec<(String, String)>> {
         use typy_diagnostics::SourceLookup as _;
         let project = self.load(main, false, Target::host()).ok()?;
         let mut files: Vec<(String, String)> = Vec::new();
@@ -162,7 +164,7 @@ impl Pipeline {
                 files.push((path, file.text().to_owned()));
             }
         }
-        if let Ok(settings) = std::fs::read_to_string(root_of(main).join(SETTINGS_FILE)) {
+        if let Ok(settings) = std::fs::read_to_string(main.root().join(SETTINGS_FILE)) {
             files.push((SETTINGS_FILE.to_owned(), settings));
         }
         Some(files)
@@ -260,7 +262,7 @@ impl Pipeline {
                 let layout = match request.output() {
                     Some(path) => LibraryLayout::at(path, kind),
                     None => LibraryLayout::beside(
-                        request.main().parent().unwrap_or(Utf8Path::new("")),
+                        request.directory(),
                         kind,
                         &library.name,
                         library.version.as_deref(),
@@ -336,24 +338,23 @@ impl Pipeline {
             .map_err(Failure::without_sources)
     }
 
-    /// Loads the program with the settings of its root and of the command line, as a library
-    /// when `library` is true or the command line asks for one (CLI-09).
-    /// Loads the program whose main file is `main` for `target`, whose operating system
-    /// `sys.platform` names (LIB-22).
-    fn load(&self, main: &Utf8Path, library: bool, target: Target) -> Result<Project, Failure> {
+    /// Loads the program whose main module `main` gives for `target`, whose operating system
+    /// `sys.platform` names (LIB-22), with the settings of its root and of the command line,
+    /// as a library when `library` is true or the command line asks for one (CLI-09).
+    fn load(&self, main: &MainSource, library: bool, target: Target) -> Result<Project, Failure> {
         let unloaded = |failure: typy_source::LoadFailure| Failure {
             diagnostics: failure.diagnostics.clone(),
             sources: Sources::Unloaded(Box::new(failure)),
         };
         let mut overrides = self.overrides;
         overrides.library |= library;
-        let mut settings = ProjectSettings::read(&root_of(main), overrides).map_err(unloaded)?;
+        let mut settings = ProjectSettings::read(&main.root(), overrides).map_err(unloaded)?;
         settings.platform = if target.triple.is_macos() {
             Platform::MacOs
         } else {
             Platform::Linux
         };
-        Project::load(main, settings).map_err(unloaded)
+        Project::load_main(main, settings).map_err(unloaded)
     }
 }
 
@@ -370,14 +371,6 @@ fn with_project(diagnostics: typy_diagnostics::Diagnostics, project: &Project) -
     Failure {
         diagnostics,
         sources: Sources::Project(Box::new(project.clone())),
-    }
-}
-
-/// Returns a program's root: the main file's directory.
-fn root_of(main: &Utf8Path) -> Utf8PathBuf {
-    match main.parent() {
-        Some(parent) if !parent.as_str().is_empty() => parent.to_owned(),
-        _ => Utf8PathBuf::from("."),
     }
 }
 

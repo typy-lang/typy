@@ -6,7 +6,7 @@ use camino::Utf8PathBuf;
 use sha2::{Digest as _, Sha256};
 use typy_build::BuildRequest;
 use typy_diagnostics::WarningLevels;
-use typy_source::{PythonFloor, SettingOverrides};
+use typy_source::{MainSource, PythonFloor, SettingOverrides};
 
 /// Returns the cache directory: `$TYPY_HOME/cache`, else the user's cache directory, which is
 /// `$XDG_CACHE_HOME/typy` or `~/.cache/typy`. Its location never changes a build's output.
@@ -44,7 +44,12 @@ pub(crate) fn key(
     warning_levels: &WarningLevels,
     compiler: &[u8],
 ) -> String {
-    let name = request.main().file_name().unwrap_or("");
+    // A file counts by its name, as the program's paths count from its directory; a module
+    // or code counts as the command line gives it, `-m NAME` or `-c`, which no file name is.
+    let name = match request.main() {
+        MainSource::File(path) => path.file_name().unwrap_or("").to_owned(),
+        other => other.to_string(),
+    };
     let floor = overrides.python_floor.map_or("", PythonFloor::as_str);
     // The processor and its features change the code, so they are part of the key (CLI-33).
     let options = request.codegen_options();

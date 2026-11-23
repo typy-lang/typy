@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.41 |
+| Version | 1.42 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -304,7 +304,7 @@ that the specification does not define.
 | CLI-25 | 0.12 | UT, E2E | `crates/typy-cli/src/command/print/tests.rs`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-25 |
 | CLI-26 | 0.12 | UT, E2E | `crates/typy-diagnostics/src/render/tests.rs` for the coloured form; `crates/typy-cli/src/output/tests.rs` for `auto` and `NO_COLOR`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-26 |
 | CLI-27 | 0.12 | UT, E2E | `crates/typy-diagnostics/src/warning_levels/tests.rs` and `warning_selector/tests.rs` for the order and the codes; `crates/typy-cli/src/arguments/tests.rs` for options before and after the command; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-27 |
-| CLI-28 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-28 |
+| CLI-28 | 0.12 | UT, IT, E2E | `crates/typy-source/src/main_source/tests.rs`, `crates/typy-build/src/request/tests.rs` and `crates/typy-cli/src/cache/tests.rs` for roots, names and keys; `crates/typy-source/tests/loader.rs` for loading code, a module and a package; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-28 |
 | CLI-29 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-29 |
 | CLI-30 | 0.12 | UT, E2E | `crates/typy-cli/src/arguments/tests.rs` for each key and two values of one setting; `crates/typy-cli/src/tests.rs` for `-C help`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-30 |
 | CLI-31 | 0.13 | E2E | a `typy-cli` end-to-end test that builds the benchmark programs with and without it and compares their output with CPython's |

@@ -3,7 +3,7 @@
 
 use camino::Utf8PathBuf;
 use typy_diagnostics::{Diagnostic, SourceLookup};
-use typy_source::{LoadFailure, ModuleName, Project, ProjectSettings};
+use typy_source::{LoadFailure, MainSource, ModuleName, Project, ProjectSettings};
 
 /// Writes the files of a project and returns its directory, its root and the main file.
 fn project(files: &[(&str, &str)]) -> (tempfile::TempDir, Utf8PathBuf) {
@@ -410,4 +410,91 @@ fn a_load_failure_gives_the_text_of_each_line() {
 #[test]
 fn the_largest_source_file_is_16_mib() {
     assert_eq!(typy_source::MAX_SOURCE_BYTES, 16_777_216);
+}
+
+/// Loads the program whose main module `main` gives, from a project of `files`.
+fn load_main(files: &[(&str, &str)], main: &MainSource) -> Result<Project, LoadFailure> {
+    let (_directory, root) = project(files);
+    Project::load_main(main, ProjectSettings::new(root))
+}
+
+fn module(name: &str) -> MainSource {
+    MainSource::Module(ModuleName::new(name).unwrap())
+}
+
+#[test]
+fn code_given_with_c_is_the_main_file_string_and_imports_from_the_root() {
+    let project = load_main(
+        &[("tools.py", "x = 1\n")],
+        &MainSource::Code("import tools\nprint(tools.x)\n".to_owned()),
+    )
+    .unwrap();
+    assert_eq!(names(&project), ["tools", "__main__"]);
+    let main = project.main_module();
+    assert_eq!(project.path(main.file), "<string>");
+    assert_eq!(main.package(), None);
+}
+
+#[test]
+fn a_module_run_with_m_runs_after_its_packages_and_imports_relative_to_its_own() {
+    let project = load_main(
+        &[
+            ("tools/__init__.py", ""),
+            ("tools/text/__init__.py", ""),
+            ("tools/text/shout.py", "from . import style\n"),
+            ("tools/text/style.py", ""),
+        ],
+        &module("tools.text.shout"),
+    )
+    .unwrap();
+    assert_eq!(
+        names(&project),
+        ["tools", "tools.text", "tools.text.style", "__main__"]
+    );
+    let main = project.main_module();
+    assert_eq!(project.path(main.file), "tools/text/shout.py");
+    assert_eq!(
+        main.package().as_ref().map(ModuleName::as_str),
+        Some("tools.text")
+    );
+    let packages: Vec<String> = main
+        .enclosing_packages()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert_eq!(packages, ["tools", "tools.text"]);
+}
+
+#[test]
+fn a_package_run_with_m_runs_its_main_module() {
+    let project = load_main(
+        &[("tools/__init__.py", ""), ("tools/__main__.py", "")],
+        &module("tools"),
+    )
+    .unwrap();
+    assert_eq!(names(&project), ["tools", "__main__"]);
+    assert_eq!(
+        project.path(project.main_module().file),
+        "tools/__main__.py"
+    );
+}
+
+#[test]
+fn a_module_that_is_not_there_or_a_package_without_main_cannot_run() {
+    let cases = [
+        ("nothing", "no module named `nothing`"),
+        (
+            "tools",
+            "no module named `tools.__main__`; `tools` is a package and cannot be run directly",
+        ),
+    ];
+    for (name, message) in cases {
+        let failure = load_main(&[("tools/__init__.py", "")], &module(name)).unwrap_err();
+        let reported: Vec<(String, &str)> = failure
+            .diagnostics
+            .iter()
+            .map(|diagnostic| (diagnostic.code().to_string(), diagnostic.message()))
+            .collect();
+        assert_eq!(reported, [("E0206".to_owned(), message)], "{name}");
+    }
 }

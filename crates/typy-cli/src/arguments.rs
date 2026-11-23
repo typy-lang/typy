@@ -6,7 +6,7 @@ use clap::{ArgMatches, Args, CommandFactory as _, FromArgMatches as _, Parser, S
 use typy_build::{BuildMode, EmitStage, LibraryKind};
 use typy_codegen::{Optimization, Target, TargetTriple};
 use typy_diagnostics::{WarningLevel, WarningLevels, WarningSelector};
-use typy_source::{PythonFloor, SettingOverrides};
+use typy_source::{MainSource, ModuleName, PythonFloor, SettingOverrides};
 
 use crate::output::ErrorFormat;
 
@@ -192,8 +192,8 @@ pub(crate) enum Command {
     },
     /// Build the program and run it, passing the arguments after `--`.
     Run {
-        /// The main file of the program.
-        file: Utf8PathBuf,
+        #[command(flatten)]
+        main: Main,
         #[command(flatten)]
         levels: Levels,
         #[command(flatten)]
@@ -451,6 +451,41 @@ impl Settings {
         overrides.library = library.kind.is_some();
         overrides
     }
+}
+
+/// What `typy run` runs: a main file, code, or a module of the project, one of them (CLI-02,
+/// CLI-28).
+#[derive(Clone, Debug, Args)]
+#[group(required = true, multiple = false)]
+pub(crate) struct Main {
+    /// The main file of the program.
+    file: Option<Utf8PathBuf>,
+    /// Build and run CODE as the main module, with the project in the current directory, as
+    /// `python -c` runs it.
+    #[arg(short = 'c', value_name = "CODE")]
+    code: Option<String>,
+    /// Build and run the module MODULE of the project in the current directory as the main
+    /// module, after the packages that hold it, as `python -m` runs it.
+    #[arg(short = 'm', value_name = "MODULE", value_parser = parse_module)]
+    module: Option<ModuleName>,
+}
+
+impl Main {
+    /// Returns where the main module comes from.
+    pub(crate) fn source(self) -> MainSource {
+        if let Some(file) = self.file {
+            return MainSource::File(file);
+        }
+        if let Some(module) = self.module {
+            return MainSource::Module(module);
+        }
+        // The group asks for one of the three, so code is given here.
+        MainSource::Code(self.code.unwrap_or_default())
+    }
+}
+
+fn parse_module(text: &str) -> Result<ModuleName, String> {
+    ModuleName::new(text).map_err(|error| error.to_string())
 }
 
 fn parse_floor(text: &str) -> Result<PythonFloor, String> {

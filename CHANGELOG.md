@@ -31,6 +31,9 @@ All notable changes to TyPy are recorded here. The format follows
 - `--color auto|always|never` colours diagnostics written as text, as
   `rustc` colours its own; `auto`, the default, colours them on a terminal
   when `NO_COLOR` is not set (CLI-26).
+- `typy run -c CODE` builds and runs code, and `typy run -m MODULE` a module
+  of the project in the current directory, after the packages that hold
+  it, as `python -c` and `python -m` run them (CLI-28).
 
 ### Changed
 

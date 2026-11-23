@@ -195,7 +195,8 @@ pub(crate) fn judge_rejected(
     line: u32,
     column: u32,
 ) -> Verdict {
-    let Err(failure) = pipeline.check(&case.path, target) else {
+    let Err(failure) = pipeline.check(&typy_source::MainSource::File(case.path.clone()), target)
+    else {
         return Verdict::Fail("TyPy accepted the program".to_owned());
     };
     let mut diagnostics = failure.diagnostics.iter();

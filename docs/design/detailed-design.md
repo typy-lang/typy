@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.109 |
+| Version | 2.110 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -429,6 +429,7 @@ not an identifier.
 | `file` | `FileId` | none | Its `SourceFile` |
 | `syntax` | `SyntaxTree` | none | Built by `parse` |
 | `is_package` | `bool` | none | Read from an `__init__.py` (MOD-02); `package()` gives the package a relative import starts from |
+| `spec_name` | `Option<ModuleName>` | `None` | For the main module `-m` runs, its own name, such as `tools.report`; `package()` is then that name's parent, and `enclosing_packages()` the packages above it, outermost first (CLI-28) |
 
 `Project`
 
@@ -444,9 +445,24 @@ not an identifier.
 
 `Project::load(main_path, settings) -> Result<Project, LoadFailure>` reads
 and parses the main file and every module its imports reach, and returns
-every diagnostic of every file together. `LoadFailure` holds the
-`Diagnostics` and the files they point into, and implements
-`SourceLookup`, so a failed load can still be rendered. The checker reads
+every diagnostic of every file together. `Project::load_main(main,
+settings)` does the same for a `MainSource` (CLI-28):
+
+| `MainSource` | Main module | Root |
+| --- | --- | --- |
+| `File(path)` | The file | The file's directory |
+| `Module(name)` | The module `locate` finds for `name`, or for a package its `__main__` module, as `__main__` with `spec_name` set; a missing module, or a package without `__main__.py`, is E0206 without a location | `.` |
+| `Code(code)` | The code, as the file `<string>`, `CODE_PATH`, read from memory, so diagnostics name it as CPython does | `.` |
+
+The loader gives the main module of `Module` an import of each package
+above it, at its first byte, so the packages load and initialise before
+it; the checker starts that module's body with a `TypedStmt::Import` of
+them that binds no name (`Program::initialise_first`), so they run first
+at run time, as `python -m` imports them. `MainSource::program_name` names
+the executable: the file's name without `.py`, the module's name, or `c`.
+
+`LoadFailure` holds the `Diagnostics` and the files they point into, and
+implements `SourceLookup`, so a failed load can still be rendered. The checker reads
 the declarations of `builtins` from `typy-stdlib` (section 6).
 
 `loader.rs` finds the imports of each module at any depth, in function and
@@ -3507,11 +3523,11 @@ or `Os` for the cache key.
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `main` | `Utf8PathBuf` | none | Ends in `.py`, or `BuildRequest::new` returns `RequestError::NotPython`; that the file exists is checked when it is loaded (E0105) |
+| `main` | `MainSource` | none | A file ends in `.py`, or `BuildRequest::new` and `of_main` return `RequestError::NotPython`; that the file exists is checked when it is loaded (E0105). `directory()` is the file's directory, empty for a module or code |
 | `mode` | `BuildMode` | `DEBUG` | Two flags that give two levels are wrong usage (CLI-30) |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
 | `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
-| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it; a library's files are named by `LibraryLayout` |
+| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it, or to the program's name for a module or code; a library's files are named by `LibraryLayout` |
 | `library` | `Option<LibraryKind>` | `None` | `Static` or `Shared` builds a C library instead of an executable (CLI-09) |
 | `processor` | `Option<String>` | `None` | A processor of the target, checked by the command line; `None` for the baseline (CLI-21) |
 | `features` | `String` | empty | Features beside the processor's, as LLVM writes them (CLI-30) |
@@ -3615,15 +3631,17 @@ gives E0702 with the directory. None of them has a source location. An
 
 `Pipeline::new(compiler)` takes the path of the `typy` executable, which
 finds the runtime archives (section 11). `with_overrides` adds the
-settings of the command line (CLI-07) and `with_deny_warnings` makes
-warnings fail (DIA-07); the pipeline holds nothing else, so one pipeline
-runs any number of builds, and the conformance suite runs many in one
-process. Each method returns a `Success`, the `Outcome` with the
-`Warnings` of loading and checking the program, or a `Failure`.
+settings of the command line (CLI-07), `with_warning_levels` the level of
+each warning (DIA-07, CLI-27), and `with_verbose` and `with_save_temps`
+what CLI-23 and CLI-24 ask; beside these it holds only the time each stage
+took, so one pipeline runs any number of builds, and the conformance
+suite runs many in one process. Each method returns a `Success`, the
+`Outcome` with the `Warnings` of loading and checking the program, or a
+`Failure`.
 
 | Method | Behaviour |
 | --- | --- |
-| `check(main, target)` | Loads and checks the program for the target, whose operating system `ProjectSettings::platform` takes, and returns `Outcome::Checked` with its `Sources` (CLI-03, LIB-22) |
+| `check(main, target)` | Loads and checks the program whose `MainSource` is `main` for the target, whose operating system `ProjectSettings::platform` takes, and returns `Outcome::Checked` with its `Sources` (CLI-03, LIB-22) |
 | `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
 | `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes beside the library the C header `NAME.h`, and the binding `NAME_binding.py` and its stub `NAME_binding.pyi`, which load the soname of the shared library of the build's release, also for a static build (CLI-09, CLI-13, FFI-05, FFI-08) |
@@ -3660,7 +3678,7 @@ copies nothing.
 | Code generation flags | `arguments::Generation` holds `--release`, `--release-small`, `-O LEVEL`, `--target-cpu` and each `-C KEY=VALUE` of `build` and `run`; `Generation::choice` gives one level and one processor, and two flags that give two values are wrong usage, while two that give one agree (CLI-20, CLI-30, ADR-0104). `command::generation::resolve` turns `native` into `host_processor` and `host_features`, only when the build is for the host, and checks any other name against `print::known_processors` (CLI-21). `main` answers `-C help` in any of its spellings before the command is parsed, from `CODEGEN_KEYS`, so it needs no file. The `run` cache key adds the processor and the features to the mode's name (CLI-33) |
 | Inspection | `-v` and `--timings` are global options, and `--save-temps` an option of `build` and `run` (ADR-0104). `Pipeline::with_verbose` passes `-v` to `Linker::with_verbose` and `Toolchain::with_verbose`, whose `run` writes `typy_build::command_line` of each tool before running it; `typy run -v` writes the program's command too (CLI-23). `Pipeline::timed` records each stage it runs, `load`, `check`, `lower`, `generate` and `link`, behind a `Mutex` of the pipeline, which the conformance suite shares between threads; `command::write_timings` writes them and their total after the command, also when it fails (CLI-22). `Pipeline::with_save_temps` writes the object a build generated beside its output, named after the output up to its first dot, E0106 when it cannot (CLI-24) |
 | External commands | clap's external subcommand gives `typy NAME ARGS` for any NAME that is not a command; `command::external` accepts a NAME of letters, digits, `-` and `_` only, so it never names a path, finds the first executable `typy-NAME` in `PATH`, and runs it with ARGS, `TYPY` set to `typy`'s own path, its streams and status passed through as `typy run` passes a program's; otherwise exit status 2 (CLI-32, ADR-0105) |
-| `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |
+| `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length; a module counts as `-m NAME` and code as `-c`, and the code is the text of the file `<string>`. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error. `arguments::Main` is a clap group that takes one of FILE, `-c CODE` and `-m MODULE` and gives the `MainSource` (CLI-28); for code the program's `argv[0]` is `-c`, and for a module the full path of its file, set with `CommandExt::arg0`, as CPython sets `sys.argv[0]` |
 | Logging | `--log-level` arrives in 0.3 with UC-10; the 0.1 compiler has no log events |
 
 The pipeline is created with the path of the running executable, so an

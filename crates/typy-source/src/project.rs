@@ -11,6 +11,7 @@ use typy_diagnostics::{
 use crate::loader::{
     Import, Location, imports, initialisation_order, is_standard, locate, not_found,
 };
+use crate::main_source::{CODE_PATH, MainSource};
 use crate::module::{Module, ModuleName};
 use crate::parse::parse_with_warnings;
 use crate::settings::ProjectSettings;
@@ -42,10 +43,17 @@ impl Project {
     /// module its imports reach, found under the root (MOD-01, MOD-02); returns every
     /// diagnostic of every file together.
     pub fn load(main_path: &Utf8Path, settings: ProjectSettings) -> Result<Self, LoadFailure> {
-        let relative = main_path
-            .strip_prefix(&settings.root)
-            .unwrap_or(main_path)
-            .to_owned();
+        Self::load_main(&MainSource::File(main_path.to_owned()), settings)
+    }
+
+    /// Reads and parses the main module from `main`, relative to `settings.root`, and every
+    /// module its imports reach (MOD-01, MOD-02). A module that `-m` names runs as `__main__`
+    /// after the packages that hold it, and code given with `-c` is the file `<string>`
+    /// (CLI-28). Returns every diagnostic of every file together.
+    pub fn load_main(main: &MainSource, settings: ProjectSettings) -> Result<Self, LoadFailure> {
+        let refused = |diagnostic: Box<Diagnostic>| {
+            LoadFailure::new(Diagnostics::from(*diagnostic), Vec::new())
+        };
         let mut loader = Loader {
             settings: &settings,
             files: Vec::new(),
@@ -54,20 +62,32 @@ impl Project {
             standard: BTreeSet::new(),
             diagnostics: Diagnostics::new(),
             pending: Vec::new(),
+            main_code: None,
         };
-        let main = if settings.library {
-            library_module(&relative).map_err(|diagnostic| {
-                LoadFailure::new(Diagnostics::from(*diagnostic), Vec::new())
-            })?
-        } else {
-            ModuleName::main()
-        };
-        let location = Location {
-            path: relative,
-            is_package: false,
+        let (main, location, spec_name) = match main {
+            MainSource::File(path) => {
+                let relative = path.strip_prefix(&settings.root).unwrap_or(path).to_owned();
+                let name = if settings.library {
+                    library_module(&relative).map_err(refused)?
+                } else {
+                    ModuleName::main()
+                };
+                (name, file_location(relative), None)
+            }
+            MainSource::Code(code) => {
+                loader.main_code = Some(code);
+                (ModuleName::main(), file_location(CODE_PATH.into()), None)
+            }
+            MainSource::Module(name) => {
+                let (spec_name, location) = locate_main(&settings, name).map_err(refused)?;
+                (ModuleName::main(), location, Some(spec_name))
+            }
         };
         if !loader.read(main.clone(), &location, None) {
             return Err(loader.failure());
+        }
+        if let Some(module) = loader.modules.get_mut(&main) {
+            module.spec_name = spec_name;
         }
         while let Some(name) = loader.pending.pop() {
             loader.follow_imports(&name);
@@ -175,6 +195,8 @@ struct Loader<'settings> {
     standard: BTreeSet<ModuleName>,
     diagnostics: Diagnostics,
     pending: Vec<ModuleName>,
+    /// The main module's code when `-c` gives it, so no file is read for it (CLI-28).
+    main_code: Option<&'settings str>,
 }
 
 impl Loader<'_> {
@@ -189,7 +211,12 @@ impl Loader<'_> {
         let mut unreadable = false;
         let id = existing.unwrap_or_else(|| {
             let id = FileId(u32::try_from(self.files.len()).unwrap_or(u32::MAX));
-            let (file, read_error) = SourceFile::read(id, &self.settings.root, &location.path);
+            let (file, read_error) = match (importer, self.main_code) {
+                (None, Some(code)) => {
+                    (SourceFile::from_text(id, location.path.clone(), code), None)
+                }
+                _ => SourceFile::read(id, &self.settings.root, &location.path),
+            };
             self.files.push(file);
             if let Some(mut diagnostic) = read_error {
                 if let Some(span) = importer {
@@ -218,6 +245,7 @@ impl Loader<'_> {
                         file: id,
                         syntax,
                         is_package: location.is_package,
+                        spec_name: None,
                     },
                 );
                 self.pending.push(name);
@@ -235,7 +263,20 @@ impl Loader<'_> {
 
     /// Loads each module the imports of `name` need that is not loaded yet.
     fn follow_imports(&mut self, name: &ModuleName) {
-        let (imports, errors) = imports(&self.modules[name]);
+        let module = &self.modules[name];
+        let (mut imports, errors) = imports(module);
+        // The packages that hold the module `-m` runs are imported before it (CLI-28).
+        let start = Span::empty(module.file, TextOffset(0));
+        let packages = module
+            .enclosing_packages()
+            .into_iter()
+            .map(|package| Import {
+                module: package,
+                span: start,
+                at_module_level: true,
+                optional: false,
+            });
+        imports.splice(0..0, packages);
         for error in errors {
             self.diagnostics.push(error);
         }
@@ -271,6 +312,44 @@ impl Loader<'_> {
 
     fn failure(self) -> LoadFailure {
         LoadFailure::new(self.diagnostics, self.files)
+    }
+}
+
+/// Returns the location of a main file that holds no package.
+const fn file_location(path: camino::Utf8PathBuf) -> Location {
+    Location {
+        path,
+        is_package: false,
+    }
+}
+
+/// Returns the name and the location of the module `-m` runs: the module `name`, or the
+/// `__main__` module of the package `name`, as `python -m` runs them (CLI-28).
+fn locate_main(
+    settings: &ProjectSettings,
+    name: &ModuleName,
+) -> Result<(ModuleName, Location), Box<Diagnostic>> {
+    let missing = |message: String| {
+        Box::new(
+            Diagnostic::without_location(DiagnosticCode::error(206), message)
+                .with_rule(RuleId::LIB_08)
+                .with_help(
+                    "`-m` runs a module of the project in the current directory, a `.py` file \
+                     or a package with a `__main__.py`",
+                ),
+        )
+    };
+    let location =
+        locate(settings, name).ok_or_else(|| missing(format!("no module named `{name}`")))?;
+    if !location.is_package {
+        return Ok((name.clone(), location));
+    }
+    let main = name.child("__main__");
+    match locate(settings, &main) {
+        Some(location) if !location.is_package => Ok((main, location)),
+        _ => Err(missing(format!(
+            "no module named `{main}`; `{name}` is a package and cannot be run directly"
+        ))),
     }
 }
 

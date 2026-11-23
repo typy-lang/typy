@@ -89,7 +89,7 @@ fn dispatch(command: Command, pipeline: Pipeline, reporter: Reporter) -> (ExitSt
             (build::build(&pipeline, file, &flags, reporter), pipeline)
         }
         Command::Run {
-            file,
+            main,
             generation,
             temps,
             settings,
@@ -105,7 +105,7 @@ fn dispatch(command: Command, pipeline: Pipeline, reporter: Reporter) -> (ExitSt
                 .with_save_temps(temps.save_temps);
             let status = run::run(
                 &pipeline,
-                file,
+                main.source(),
                 &generation,
                 settings.overrides(),
                 &arguments,
