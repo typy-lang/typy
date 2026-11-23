@@ -26,7 +26,8 @@ TyPy 0.11 provides these modules of the standard library:
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
 A module or name planned for a later release is refused with E0201,
-naming the release: `textwrap`, `base64`, `heapq`, `bisect`, `statistics`,
-`time`, `random`, `copy` and `string` (LIB-27) in 0.12; `os` (LIB-07) in
-1.0; and `doctest` in a release after 1.0. Each other module is E0206.
-From the Python floor 3.15, `math` also gives `math.integer` (LIB-26).
+naming the release: `textwrap`, `base64`, `heapq`, `bisect`, `copy` and
+`string` (LIB-27) in 0.12; `statistics`, `time` and `random` (LIB-30) in
+0.13; `os` (LIB-07) in 1.0; and `doctest` in a release after 1.0. Each
+other module is E0206. From the Python floor 3.15, `math` also gives
+`math.integer` (LIB-26).

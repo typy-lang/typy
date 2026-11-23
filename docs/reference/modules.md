@@ -182,9 +182,9 @@ def sqrt(value: float) -> float:
 `from m import *` is planned for after 1.0. Standard library modules come
 with their releases: `math` and `sys` in 0.3, `dataclasses` in 0.4,
 `ctypes` in 0.5, and `abc` and `enum` in 0.12 (LIB-04 to LIB-07, FFI-01,
-CLS-44, CLS-45);
-`os`, `time` and `random`
-are planned for 1.0. `typing` and
+CLS-44, CLS-45). `textwrap`, `base64`, `heapq`, `bisect`, `copy` and
+`string` are planned for 0.12 (LIB-27), `statistics`, `time` and
+`random` for 0.13 (LIB-30), and `os` for 1.0 (LIB-07). `typing` and
 `collections.abc` give `Iterator` and `Iterable`, `typing` gives
 `ClassVar`, `Final` and `Protocol`, and `types` gives `TracebackType`
 and `ModuleType`, for annotations (TYP-15, LIB-06). `dataclasses` gives

@@ -102,7 +102,7 @@ supersedes it.
 | [ADR-0094](0094-bind-the-operations-of-an-any-value-when-the-program-runs.md) | Bind the operations of an `Any` value when the program runs | Accepted | 2026-11-21 |
 | [ADR-0095](0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md) | Follow each CPython version from its final release to its end of life | Accepted | 2026-11-21 |
 | [ADR-0096](0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md) | Run threads in parallel over shared objects with biased reference counts | Accepted | 2026-11-21 |
-| [ADR-0097](0097-check-the-standard-librarys-signatures-against-typeshed.md) | Check the standard library's signatures against typeshed | Accepted | 2026-11-21 |
+| [ADR-0097](0097-check-the-standard-librarys-signatures-against-typeshed.md) | Check the standard library's signatures against typeshed | Superseded by ADR-0119 | 2026-11-21 |
 | [ADR-0098](0098-do-arithmetic-on-bool-as-cpython-does.md) | Do arithmetic on bool as CPython does | Accepted | 2026-11-21 |
 | [ADR-0099](0099-plan-star-star-in-calls-of-built-ins-for-1-0.md) | Plan `**` in calls of built-ins for 1.0 | Accepted | 2026-11-22 |
 | [ADR-0100](0100-build-the-runtime-for-speed-and-for-size-only-for-release-small.md) | Build the runtime for speed, and for size only for `--release-small` | Accepted | 2026-11-22 |
@@ -124,3 +124,4 @@ supersedes it.
 | [ADR-0116](0116-make-enum-members-class-variables-and-the-class-calls-hidden-methods.md) | Make enum members class variables, and the class's calls hidden methods | Accepted | 2026-11-23 |
 | [ADR-0117](0117-read-an-int-or-str-enum-member-as-its-value-where-the-value-is-wanted.md) | Read an int or str enum member as its value where the value is wanted | Accepted | 2026-11-23 |
 | [ADR-0118](0118-make-each-flag-composite-once-and-keep-it-by-its-value.md) | Make each flag composite once and keep it by its value | Accepted | 2026-11-23 |
+| [ADR-0119](0119-provide-the-standard-library-modules-that-need-no-operating-system-first.md) | Provide the standard library modules that need no operating system first | Accepted | 2026-11-23 |

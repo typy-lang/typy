@@ -376,6 +376,8 @@ impl RuleId {
     pub const LIB_28: Self = Self("LIB-28");
     /// `from __future__ import annotations` shall be accepted, and shall change nothing TyPy compiles.
     pub const LIB_29: Self = Self("LIB-29");
+    /// `statistics`, `time` and `random` shall be available, written in typed Python that CPython also runs, with the operating system reached through the private module `_typy` and signatures a test compares with typeshed's (ADR-0007, ADR-0119).
+    pub const LIB_30: Self = Self("LIB-30");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -674,6 +676,7 @@ impl RuleId {
         Self::LIB_27,
         Self::LIB_28,
         Self::LIB_29,
+        Self::LIB_30,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,

@@ -121,6 +121,9 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `statistics`, `time` and `random` are planned for 0.13 rather than 0.12,
+  as they reach the operating system through the private module `_typy`
+  (LIB-30, ADR-0119).
 - An `isinstance` test that `None` passes shows an optional is not `None`
   where the test fails (TYP-07).
 - A class, sequence or mapping pattern the subject's type never matches is
