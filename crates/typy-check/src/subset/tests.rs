@@ -165,10 +165,6 @@ fn lazy_imports_cpython_refuses_give_its_messages() {
             "lazy from os import *\n",
             "lazy from ... import * is not allowed",
         ),
-        (
-            "lazy from __future__ import annotations\n",
-            "lazy from __future__ import is not allowed",
-        ),
     ];
     for (source, message) in cases {
         let found = diagnostics_with_floor(source, PythonFloor::V3_15);

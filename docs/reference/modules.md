@@ -13,6 +13,7 @@ import, as in CPython (MOD-03).
 | Modules as `.py` files under the main file's directory or a directory `module-paths` in `typy.toml` names, and packages as directories with an `__init__.py` | MOD-01, MOD-02 |
 | Relative imports inside a package, such as `from . import helper` and `from ..tools import text` | MOD-02 |
 | A module object: `m.name` reads and assigns a module variable, and the object can be printed, bound to another name and compared with `is` | MOD-10 |
+| `from __future__ import annotations` at the start of a module, and the other features of `__future__` that Python 3 already has; see [Future imports](#future-imports) | LIB-29 |
 
 `import tools.text` runs `tools/__init__.py`, then `tools/text.py`, and
 binds `tools`. A package is preferred to a module of the same name, and a
@@ -85,7 +86,7 @@ prints differently there.
 
 A lazy import is allowed at module level, also inside `if`, `for`,
 `while` and `with`. As in CPython, it is E0103 inside a function, a
-`try` statement, or with `*` or `__future__`; inside a class it is E0202,
+`try` statement, or with `*` or from `__future__`; inside a class it is E0202,
 since a class body holds only its methods.
 
 Another module may use a name a module imports lazily, as
@@ -94,6 +95,34 @@ first, as in CPython. Assigning `m.x = v` through a lazily imported `m`
 runs `m`'s import before the assignment. A variable may be bound by more
 than one lazy import, and its first use runs the one that ran last
 (MOD-11). So may a function or a class, as the next section describes.
+
+## Future imports
+
+`from __future__ import annotations` at the start of a module defers its
+annotations, as CPython does, so an annotation may name a class defined
+further down, under any Python floor:
+
+<!-- typy-expect: accepted -->
+```python
+from __future__ import annotations
+
+
+class Node:
+    def __init__(self, next: Node | None) -> None:
+        self.next = next
+
+
+print(Node(Node(None)).next is not None)
+```
+
+Without the import, a floor of 3.14 or later defers annotations too, and
+an older floor needs the name in quotes, `"Node"` (TYP-12). The other
+features, such as `generator_stop` and `division`, are part of Python 3
+and change nothing. As in CPython, a future import after any statement
+but the docstring and other future imports is E0103, and so are an
+unknown feature, `braces` and a lazy future import. `barry_as_FLUFL`,
+which makes `<>` an operator, is E0202. The import binds no name, and
+`import __future__` is E0206.
 
 ## A name bound by more than one import
 

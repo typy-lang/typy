@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.126 |
+| Version | 1.127 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -496,7 +496,7 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | LIB-26 | `math.integer` (PEP 791) shall be available with `comb`, `factorial`, `gcd`, `isqrt`, `lcm` and `perm`, under a Python floor of 3.15 or later. | S | 0.12 |
 | LIB-27 | `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097). | S | 0.12 |
 | LIB-28 | The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` shall be available, as CPython gives them. | S | 0.12 |
-| LIB-29 | `from __future__ import annotations` shall be accepted, and shall change nothing TyPy compiles. | S | 0.12 |
+| LIB-29 | `from __future__ import annotations` shall be accepted and shall defer the module's annotations, as CPython does; the other features of `__future__` that Python 3 already has shall be accepted and change nothing; and a future import CPython's compiler refuses shall be E0103. | S | 0.12 |
 
 ### 3.15 Memory management (MEM)
 

@@ -26,7 +26,7 @@ TyPy 0.11 provides these modules of the standard library:
 A module planned for a later release is refused with E0201, naming the
 release: `enum` and `abc` (CLS-44, CLS-45), `textwrap`, `base64`,
 `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string`
-(LIB-27), and `from __future__ import annotations` (LIB-29) in 0.12;
+(LIB-27) in 0.12;
 `math.integer` (LIB-26) in 0.12 from the Python floor 3.15; `os` (LIB-07)
 in 1.0; and `doctest` in a release after 1.0. Each other module is E0206.
 The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and

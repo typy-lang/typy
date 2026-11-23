@@ -1163,3 +1163,90 @@ fn a_starred_item_keeps_its_value_in_a_display_and_a_target() {
     };
     assert!(matches!(elements[1], Expr::Starred { .. }));
 }
+
+/// Returns each error of parsing `source` under the 3.15 floor, as its code and its message.
+fn errors(source: &str) -> Vec<(String, String)> {
+    parse(&file(source), PythonFloor::V3_15)
+        .unwrap_err()
+        .iter()
+        .map(|diagnostic| {
+            (
+                diagnostic.code().to_string(),
+                diagnostic.message().to_owned(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn future_imports_at_the_start_leave_the_tree_and_may_defer_annotations() {
+    let cases = [
+        ("from __future__ import annotations\nx = 1\n", 1, true),
+        (
+            "\"\"\"Doc.\"\"\"\nfrom __future__ import annotations as later\nx = 1\n",
+            2,
+            true,
+        ),
+        (
+            "from __future__ import generator_stop, division\nfrom __future__ import nested_scopes\n",
+            0,
+            false,
+        ),
+        ("x = 1\n", 1, false),
+    ];
+    for (source, statements, defers) in cases {
+        let tree = parse(&file(source), PythonFloor::V3_12).unwrap();
+        assert_eq!(
+            (tree.body.len(), tree.defers_annotations),
+            (statements, defers),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn future_imports_are_refused_where_cpython_refuses_them() {
+    let late = "from __future__ imports must occur at the beginning of the file";
+    let cases: [(&str, &str, &str); 7] = [
+        (
+            "import sys\nfrom __future__ import annotations\n",
+            "E0103",
+            late,
+        ),
+        (
+            "def f() -> None:\n    from __future__ import annotations\n",
+            "E0103",
+            late,
+        ),
+        (
+            "x = \"a\" \"b\" + 1\nfrom __future__ import division\n",
+            "E0103",
+            late,
+        ),
+        ("from __future__ import braces\n", "E0103", "not a chance"),
+        (
+            "from __future__ import nothing\n",
+            "E0103",
+            "future feature nothing is not defined",
+        ),
+        (
+            "from __future__ import *\n",
+            "E0103",
+            "future feature * is not defined",
+        ),
+        (
+            "lazy from __future__ import annotations\n",
+            "E0103",
+            "lazy from __future__ import is not allowed",
+        ),
+    ];
+    for (source, code, message) in cases {
+        assert_eq!(
+            errors(source),
+            [(code.to_owned(), message.to_owned())],
+            "{source}"
+        );
+    }
+    let flufl = errors("from __future__ import barry_as_FLUFL\n");
+    assert_eq!(flufl[0].0, "E0202");
+}

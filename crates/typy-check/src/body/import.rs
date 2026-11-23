@@ -369,7 +369,6 @@ impl Program {
             "abc" => Some(("0.12", RuleId::CLS_45)),
             "textwrap" | "base64" | "heapq" | "bisect" | "statistics" | "time" | "random"
             | "copy" | "string" => Some(("0.12", RuleId::LIB_27)),
-            "__future__" => Some(("0.12", RuleId::LIB_29)),
             _ => None,
         };
         Err(Box::new(match planned {

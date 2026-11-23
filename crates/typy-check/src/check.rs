@@ -282,7 +282,9 @@ impl Checked<'_> {
                 &mut program,
                 (module, aliases, &mut copies),
                 (&path, &definitions),
-                self.floor_defers,
+                // `from __future__ import annotations` defers one module's annotations as the
+                // floor defers every module's (LIB-29).
+                self.floor_defers || module.syntax.defers_annotations,
                 &frozen,
                 diagnostics,
             );

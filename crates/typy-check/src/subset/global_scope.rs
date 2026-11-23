@@ -136,7 +136,8 @@ impl Walker {
     }
 
     /// Checks where a lazy import stands, by CPython 3.15's rules: only outside functions,
-    /// classes and `try` statements, and never of every name or from `__future__` (MOD-06).
+    /// classes and `try` statements, and never of every name (MOD-06); the parser refuses a
+    /// lazy import from `__future__` (LIB-29).
     pub(super) fn lazy_import(
         &mut self,
         statement: &typy_source::syntax::Stmt,
@@ -153,14 +154,6 @@ impl Walker {
             {
                 Some("lazy from ... import * is not allowed")
             }
-            (
-                _,
-                Stmt::ImportFrom {
-                    module: Some(module),
-                    level: 0,
-                    ..
-                },
-            ) if module.name == "__future__" => Some("lazy from __future__ import is not allowed"),
             _ => None,
         };
         if let Some(message) = message {

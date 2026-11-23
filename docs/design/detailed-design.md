@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.112 |
+| Version | 2.113 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -517,7 +517,13 @@ target version, 3.12 in 0.1. Each entry of `Parsed::errors()` and
 `Parsed::unsupported_syntax_errors()` becomes an E0103 diagnostic, so
 syntax that the floor version does not accept is refused (STD-01). The
 parser reads PEP 810 lazy imports and marks them `is_lazy`, which the
-syntax tree keeps (MOD-06). `typy_source::lazy_modules` reads a module's
+syntax tree keeps (MOD-06). `parse/future.rs` checks `from __future__`
+imports as CPython's compiler does: each at the start of the module, after
+any docstring, names a feature CPython defines, never `braces`, and is
+not lazy, E0103 otherwise, and `barry_as_FLUFL` is E0202. The imports at
+the start bind nothing TyPy reads, so the tree leaves them out and keeps
+`SyntaxTree::defers_annotations`, true for `annotations` (LIB-29).
+`typy_source::lazy_modules` reads a module's
 `__lazy_modules__` list, and `typy_source::is_lazy` says whether an import
 statement is lazy by its keyword or by that list (MOD-07); the loader
 orders the modules of lazy imports as it orders imports inside a
@@ -1870,7 +1876,9 @@ signature after it, never in its own class. Any other use is E0306, with a
 help that quotes the name. A quoted annotation, `"Node | None"`, which the
 parser reads into `Expr::Quoted`, may name any class, and a program whose
 floor is 3.14 or later may name any class bare, since those versions
-evaluate annotations only when they are read. `collect_members` gives each
+evaluate annotations only when they are read, and so may a module whose
+tree `defers_annotations`, from `from __future__ import annotations`
+(LIB-29). `collect_members` gives each
 class its `ClassInfo`: the attributes the class body declares with an
 annotation, then those `__init__` assigns on its first parameter, in source
 order, and its methods. A method is a `Definition` whose first parameter is
@@ -2686,7 +2694,7 @@ and E0206 otherwise (LIB-08). For each module it runs:
    one waits. A function or a class bound by two is called through its
    binding variable (MOD-11, MOD-12, ADR-0036). The subset walker reports
    CPython's `SyntaxError`s for `lazy` inside a function or a `try`, and
-   with `*` or `__future__`, as E0103;
+   with `*`, as E0103, and the parser one from `__future__`;
    a class body holds only methods, so one there is E0202.
    `format % values` with a string literal on the left is checked by
    `body/percent.rs` (LIB-10). `percent_format::parse` reads the format

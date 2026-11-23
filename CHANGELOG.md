@@ -8,6 +8,11 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `from __future__ import annotations` is accepted and defers the module's
+  annotations, so an annotation may name a class defined further down
+  under any Python floor; the other features of `__future__` that Python
+  3 already has are accepted too, and a misplaced or unknown future import
+  is E0103, as in CPython (LIB-29).
 - `typy print WHAT` writes what `typy` would use, one fact a line in the
   form of `typy.toml`: the supported `targets`, a target's processors
   (`target-cpus`), the `host`, the `paths` of the compiler, its runtime
