@@ -32,6 +32,8 @@ pub struct Diagnostic {
     help: Option<String>,
     fix: Option<Fix>,
     rule: Option<RuleId>,
+    /// Whether `-D` made the warning an error (CLI-27).
+    denied: bool,
 }
 
 impl Diagnostic {
@@ -60,6 +62,7 @@ impl Diagnostic {
             help: None,
             fix: None,
             rule: None,
+            denied: false,
         }
     }
 
@@ -97,16 +100,28 @@ impl Diagnostic {
         self
     }
 
+    /// Returns the warning reported as an error, as `-D` asks (CLI-27). Its code stays the
+    /// warning's.
+    #[must_use]
+    pub fn denied(mut self) -> Self {
+        self.denied = true;
+        self
+    }
+
     /// Returns the code.
     #[must_use]
     pub fn code(&self) -> DiagnosticCode {
         self.code
     }
 
-    /// Returns the severity the code gives.
+    /// Returns the severity the code gives, or `Error` for a warning `-D` denied.
     #[must_use]
     pub fn severity(&self) -> Severity {
-        self.code.severity()
+        if self.denied {
+            Severity::Error
+        } else {
+            self.code.severity()
+        }
     }
 
     /// Returns the primary span, or `None` for a diagnostic about no place in the source.

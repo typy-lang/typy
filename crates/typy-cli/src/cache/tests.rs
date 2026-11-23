@@ -1,12 +1,26 @@
 //! Tests of `cache`.
 
+use typy_diagnostics::{WarningLevel, WarningLevels, WarningSelector};
 use typy_source::{PythonFloor, SettingOverrides};
 
 /// The key without settings flags.
 fn key(request: &BuildRequest, files: &[(String, String)], compiler: &[u8]) -> String {
-    super::key(request, files, SettingOverrides::default(), false, compiler)
+    super::key(
+        request,
+        files,
+        SettingOverrides::default(),
+        &WarningLevels::default(),
+        compiler,
+    )
 }
 use typy_build::{BuildMode, BuildRequest};
+
+/// Returns the levels that deny the warnings `selector` names.
+fn denied(selector: WarningSelector) -> WarningLevels {
+    let mut levels = WarningLevels::default();
+    levels.set(selector, WarningLevel::Deny);
+    levels
+}
 
 fn files(texts: &[(&str, &str)]) -> Vec<(String, String)> {
     texts
@@ -47,14 +61,21 @@ fn the_key_changes_with_each_input() {
                 python_floor: Some(PythonFloor::V3_15),
                 ..SettingOverrides::default()
             },
-            false,
+            &WarningLevels::default(),
             b"build",
         ),
         super::key(
             &request,
             &program,
             SettingOverrides::default(),
-            true,
+            &denied(WarningSelector::All),
+            b"build",
+        ),
+        super::key(
+            &request,
+            &program,
+            SettingOverrides::default(),
+            &denied(WarningSelector::parse("W0101").unwrap()),
             b"build",
         ),
     ];

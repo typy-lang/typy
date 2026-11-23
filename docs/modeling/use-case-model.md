@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy use case model |
-| Version | 1.4 |
+| Version | 1.5 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-17 |
+| Last updated | 2026-11-23 |
 
 ## 1. Purpose
 
@@ -109,8 +109,9 @@ Alternate flows:
   construct and names the rule it falls outside (DIA-03), then exits with
   status 1.
 - **6a.** From 0.3, TyPy finds warnings but no errors. It reports them and
-  exits with status 0, or with status 1 when `--deny-warnings` is given
-  (DIA-07). 0.1 defines no warnings.
+  exits with status 0, or with status 1 when `--deny-warnings`, or `-D`
+  for one of their codes, is given (DIA-07, CLI-27). `-A` keeps a
+  warning from being reported. 0.1 defines no warnings.
 
 ### 4.2 UC-02 Build an executable
 

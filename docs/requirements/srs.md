@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.125 |
+| Version | 1.126 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -150,7 +150,7 @@ or later.
 | CLI-08 | `typy build --target TRIPLE` and `typy check --target TRIPLE` shall build and check for each target the host supports, each Linux target on a Linux host and `aarch64-apple-darwin` on a macOS host, and another triple shall be a usage error that lists the host's targets. | S | 0.6 |
 | CLI-09 | `typy build --lib static` shall produce a static library and `--lib shared` a shared library. | M | 0.5 |
 | CLI-10 | `typy explain CODE` shall print an explanation of the diagnostic with a wrong and a corrected example. | S | 0.3 |
-| CLI-11 | `typy` shall read no environment variable that changes the output, except `TYPY_HOME`. | M | 0.1 |
+| CLI-11 | `typy` shall read no environment variable that changes the output, except `TYPY_HOME`, and `NO_COLOR`, which only takes the colour from diagnostics on a terminal (CLI-26). | M | 0.1 |
 | CLI-12 | The setting `python-floor` in `typy.toml` shall set the program's Python floor to one of `3.12`, `3.13`, `3.14` or `3.15`, and any other value shall be rejected. | S | 0.3 |
 | CLI-13 | A library build shall carry the release of the version that its module's `__version__`, or else `version` in `typy.toml`, gives in its file names, as Linux names libraries: `libNAME.so.X.Y` with the soname `libNAME.so.X`, and `libNAME.X.Y.a`, each with links of the names a linker finds. | S | 0.5 |
 | CLI-14 | The C linker driver, `ar` and `objcopy` that build for a target shall be the host's own tools for the host's target and the tools named after the target's GNU triple for another, such as `aarch64-linux-gnu-gcc`, unless `typy.toml` names others for that target. | S | 0.6 |
@@ -165,7 +165,7 @@ or later.
 | CLI-23 | `-v` shall write to standard error each command `typy` runs, such as the C linker driver with its arguments, before it runs it. | S | 0.12 |
 | CLI-24 | `--save-temps` shall keep a build's object files and other intermediate files beside its output. | S | 0.12 |
 | CLI-25 | `typy print WHAT` shall write what `typy` would use: `targets`, `target-cpus` of a target, `host`, `paths` of the runtime archives and the cache, `settings` of a project and its command line, and `version`. | S | 0.12 |
-| CLI-26 | `--color auto`, `always` or `never` shall decide whether diagnostics written as text are coloured, `auto` colouring them only on a terminal. | S | 0.12 |
+| CLI-26 | `--color auto`, `always` or `never` shall decide whether diagnostics written as text are coloured, `auto` colouring them only on a terminal and when `NO_COLOR` is not set. | S | 0.12 |
 | CLI-27 | `-W CODE`, `-A CODE` and `-D CODE` shall make the warning CODE a warning, allowed or an error, `-D warnings` standing for `--deny-warnings`, and the last of them for a code shall decide. | S | 0.12 |
 | CLI-28 | `typy run -c CODE` shall build and run CODE as the main module, and `typy run -m MODULE` the module MODULE of the project, as CPython's `-c` and `-m` run them. | S | 0.12 |
 | CLI-29 | `--emit` shall take several stages separated by commas, each written beside the output, and the stages `llvm-ir-unoptimised`, the IR before the optimisation pipeline, and `llvm-bc`. | S | 0.12 |
@@ -549,7 +549,7 @@ direct calls and links the library when the program is built.
 | DIA-04 | One root cause shall give one error, and errors that follow from it shall be suppressed. | M | 0.1 |
 | DIA-05 | `--error-format=json` shall write the same diagnostics as JSON, one object per line. | S | 0.3 |
 | DIA-06 | A code shall never be reused, and a retired code shall stay reserved. | M | 0.1 |
-| DIA-07 | Warnings shall not fail a build unless `--deny-warnings` is given. | M | 0.3 |
+| DIA-07 | Warnings shall not fail a build unless `--deny-warnings`, or `-D` for their code, is given (CLI-27). | M | 0.3 |
 | DIA-08 | Where CPython 3.12 to 3.15 give a `SyntaxWarning` while compiling a program TyPy accepts, TyPy shall give a warning: for an invalid escape sequence and for an assertion that is always true. | S | 0.3 |
 
 Code ranges follow the pack: `E01xx` lexical, `E02xx` declarations, `E03xx`

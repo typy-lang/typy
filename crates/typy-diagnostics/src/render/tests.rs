@@ -1,6 +1,6 @@
 //! Tests of `render`.
 
-use super::{SourceLookup, render_text};
+use super::{SourceLookup, render_coloured, render_text};
 use crate::code::DiagnosticCode;
 use crate::diagnostic::Diagnostic;
 use crate::rule::RuleId;
@@ -153,4 +153,107 @@ fn columns_count_code_points_not_bytes() {
     let text = render_text(&diagnostic, &OneFile(source));
     assert!(text.contains("app.py:1:10\n"), "{text}");
     assert!(text.contains("\n  |          ^\n"), "{text}");
+}
+
+/// Returns the text without its colour escape sequences.
+fn without_colour(text: &str) -> String {
+    let mut plain = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('\x1b') {
+        plain.push_str(&rest[..start]);
+        let end = rest[start..].find('m').unwrap();
+        rest = &rest[start + end + 1..];
+    }
+    plain.push_str(rest);
+    plain
+}
+
+fn every_detail() -> Diagnostic {
+    let start = u32::try_from(SOURCE.find("\"done\"").unwrap()).unwrap();
+    Diagnostic::new(
+        DiagnosticCode::error(402),
+        span(start, start + 6),
+        "`total` was declared as int and is assigned a str",
+    )
+    .with_label(span(21, 26), "declared here")
+    .with_rule(RuleId::TYP_03)
+    .with_help("assign an int")
+    .with_fix(span(start, start + 6), "0")
+}
+
+#[test]
+fn an_error_is_coloured_as_rustc_colours_one() {
+    let expected = "\
+\x1b[1;31merror[E0402]\x1b[0m\x1b[1m: `total` was declared as int and is assigned a str\x1b[0m
+ \x1b[1;34m-->\x1b[0m app.py:3:13
+  \x1b[1;34m|\x1b[0m
+\x1b[1;34m3 |\x1b[0m     total = \"done\"
+  \x1b[1;34m|\x1b[0m             \x1b[1;31m^^^^^^\x1b[0m
+  \x1b[1;34m=\x1b[0m 2:5: declared here
+  \x1b[1;34m=\x1b[0m rule: TYP-03
+\x1b[1mhelp\x1b[0m: assign an int
+\x1b[1mhelp\x1b[0m: write it as
+\x1b[1;34m3 |\x1b[0m     total = 0
+";
+    assert_eq!(render_coloured(&every_detail(), &OneFile(SOURCE)), expected);
+}
+
+#[test]
+fn coloured_text_is_the_plain_text_with_escape_sequences_added() {
+    let diagnostics = [
+        every_detail(),
+        Diagnostic::new(
+            DiagnosticCode::warning(101),
+            span(4, 5),
+            "an invalid escape",
+        ),
+        Diagnostic::new(
+            DiagnosticCode::warning(101),
+            span(4, 5),
+            "an invalid escape",
+        )
+        .denied(),
+        Diagnostic::without_location(DiagnosticCode::error(701), "`cc` not found")
+            .with_rule(RuleId::A_01)
+            .with_help("install a C toolchain"),
+    ];
+    for diagnostic in diagnostics {
+        let coloured = render_coloured(&diagnostic, &OneFile(SOURCE));
+        assert_eq!(
+            without_colour(&coloured),
+            render_text(&diagnostic, &OneFile(SOURCE))
+        );
+        assert!(coloured.contains('\x1b'), "{coloured}");
+    }
+}
+
+#[test]
+fn a_warning_is_yellow_and_a_denied_warning_is_a_red_error() {
+    let warning = Diagnostic::new(
+        DiagnosticCode::warning(101),
+        span(4, 5),
+        "an invalid escape",
+    );
+    let coloured = render_coloured(&warning, &OneFile(SOURCE));
+    assert!(
+        coloured.starts_with("\x1b[1;33mwarning[W0101]\x1b[0m"),
+        "{coloured}"
+    );
+    let denied = render_coloured(&warning.denied(), &OneFile(SOURCE));
+    assert!(
+        denied.starts_with("\x1b[1;31merror[W0101]\x1b[0m"),
+        "{denied}"
+    );
+}
+
+#[test]
+fn a_diagnostic_without_location_is_coloured_too() {
+    let diagnostic = Diagnostic::without_location(DiagnosticCode::error(701), "`cc` not found")
+        .with_rule(RuleId::A_01)
+        .with_help("install a C toolchain");
+    assert_eq!(
+        render_coloured(&diagnostic, &OneFile(SOURCE)),
+        "\x1b[1;31merror[E0701]\x1b[0m\x1b[1m: `cc` not found\x1b[0m\n \x1b[1;34m=\x1b[0m rule: \
+         A-01\n\x1b[1mhelp\x1b[0m: install a C toolchain\n"
+    );
 }

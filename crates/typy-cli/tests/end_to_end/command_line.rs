@@ -1,5 +1,5 @@
-//! The commands and options of ADR-0104 and ADR-0105, run as a user runs `typy`: `typy print`
-//! and external commands.
+//! The commands and options of ADR-0104 and ADR-0105, run as a user runs `typy`: `typy print`,
+//! external commands, code generation, colour and warning levels.
 
 use std::process::{Command, Output};
 
@@ -406,5 +406,166 @@ fn cli_33_each_level_and_processor_is_a_build_of_its_own_in_the_cache() {
         let output = project.typy(&line, None);
         assert_eq!(stdout(&output), "hello\n", "{flags:?}: {}", stderr(&output));
         assert_eq!(builds(), expected, "{flags:?}");
+    }
+}
+
+/// A program with two warnings: an invalid escape, W0101, and an assertion that is always
+/// true, W0301.
+const WARNED: &str = "print('\\d')\nassert (1, 'always')\n";
+
+/// Returns the header of each diagnostic written as text, such as `error[W0301]`.
+fn headers(output: &Output) -> Vec<String> {
+    stderr(output)
+        .lines()
+        .filter(|line| line.starts_with("warning[") || line.starts_with("error["))
+        .map(|line| line.split(':').next().unwrap_or(line).to_owned())
+        .collect()
+}
+
+#[test]
+fn cli_26_color_always_colours_text_and_auto_leaves_a_pipe_plain() {
+    let project = Project::new();
+    std::fs::write(project.root.join("app.py"), WARNED).unwrap();
+    let coloured = project.typy(&["--color", "always", "check", "app.py"], None);
+    let text = stderr(&coloured);
+    assert_eq!(status(&coloured), 0, "{text}");
+    assert!(
+        text.starts_with("\x1b[1;33mwarning[W0101]\x1b[0m\x1b[1m: "),
+        "{text}"
+    );
+    assert!(
+        text.contains(" \x1b[1;34m-->\x1b[0m app.py:1:8\n"),
+        "{text}"
+    );
+    for arguments in [
+        &["check", "app.py"][..],
+        &["check", "app.py", "--color=never"],
+        &["check", "app.py", "--color=always", "--error-format=json"],
+    ] {
+        let plain = project.typy(arguments, None);
+        assert_eq!(status(&plain), 0, "{arguments:?}");
+        assert!(!stderr(&plain).contains('\x1b'), "{arguments:?}");
+        assert!(stderr(&plain).contains("W0301"), "{arguments:?}");
+    }
+    let wrong = project.typy(&["check", "app.py", "--color=sometimes"], None);
+    assert_eq!(status(&wrong), 2, "{}", stderr(&wrong));
+}
+
+#[test]
+fn cli_27_the_last_level_given_for_a_warning_decides_it() {
+    let project = Project::new();
+    std::fs::write(project.root.join("app.py"), WARNED).unwrap();
+    let cases: [(&[&str], i32, &[&str]); 9] = [
+        (
+            &["check", "app.py"],
+            0,
+            &["warning[W0101]", "warning[W0301]"],
+        ),
+        (&["check", "app.py", "-A", "W0101"], 0, &["warning[W0301]"]),
+        (&["-A", "warnings", "check", "app.py"], 0, &[]),
+        (
+            &["check", "app.py", "-D", "W0301"],
+            1,
+            &["warning[W0101]", "error[W0301]"],
+        ),
+        (
+            &["-D", "warnings", "check", "app.py", "-A", "W0101"],
+            1,
+            &["error[W0301]"],
+        ),
+        (
+            &["check", "app.py", "-A", "W0101", "-D", "warnings"],
+            1,
+            &["error[W0101]", "error[W0301]"],
+        ),
+        (
+            &[
+                "--deny-warnings",
+                "check",
+                "app.py",
+                "-W",
+                "W0101",
+                "-A",
+                "W0301",
+            ],
+            0,
+            &["warning[W0101]"],
+        ),
+        (
+            &["-D", "W0101", "check", "app.py", "-W", "W0101"],
+            0,
+            &["warning[W0101]", "warning[W0301]"],
+        ),
+        (
+            &["check", "app.py", "-AW0101", "-W", "W0101", "-AW0301"],
+            0,
+            &["warning[W0101]"],
+        ),
+    ];
+    for (arguments, expected_status, expected_headers) in cases {
+        let output = project.typy(arguments, None);
+        assert_eq!(
+            (status(&output), headers(&output)),
+            (
+                expected_status,
+                expected_headers
+                    .iter()
+                    .map(|header| (*header).to_owned())
+                    .collect()
+            ),
+            "{arguments:?}: {}",
+            stderr(&output)
+        );
+    }
+}
+
+#[test]
+fn cli_27_a_denied_warning_fails_a_build_and_a_run_and_is_an_error_in_json() {
+    let project = Project::new();
+    std::fs::write(project.root.join("app.py"), WARNED).unwrap();
+    let built = project.typy(&["build", "app.py", "-D", "W0301"], None);
+    assert_eq!(status(&built), 1, "{}", stderr(&built));
+    assert!(!project.root.join("app").exists());
+    let quiet = project.typy(&["run", "app.py", "-A", "warnings"], None);
+    assert_eq!(
+        (
+            status(&quiet),
+            stdout(&quiet).as_str(),
+            stderr(&quiet).as_str()
+        ),
+        (0, "\\d\n", "")
+    );
+    // The cached build of the run before must not stand in for one with a denied warning.
+    let denied = project.typy(&["run", "app.py", "-D", "W0301"], None);
+    assert_eq!((status(&denied), stdout(&denied).as_str()), (1, ""));
+    let json = project.typy(
+        &["check", "app.py", "-D", "W0301", "--error-format=json"],
+        None,
+    );
+    let text = stderr(&json);
+    assert_eq!(status(&json), 1, "{text}");
+    assert!(
+        text.contains("{\"code\":\"W0301\",\"severity\":\"error\","),
+        "{text}"
+    );
+    assert!(
+        text.contains("{\"code\":\"W0101\",\"severity\":\"warning\","),
+        "{text}"
+    );
+}
+
+#[test]
+fn cli_27_a_level_for_an_error_or_an_unknown_code_is_wrong_usage() {
+    let project = Project::new();
+    for (option, code) in [("-D", "E0402"), ("-W", "W0999"), ("-A", "unused")] {
+        let output = project.typy(&["check", "app.py", option, code], None);
+        let text = stderr(&output);
+        assert_eq!(status(&output), 2, "{text}");
+        assert!(
+            text.contains(&format!(
+                "`{code}` names no warning; give `warnings` or one of W0101, W0301, W0401"
+            )),
+            "{text}"
+        );
     }
 }

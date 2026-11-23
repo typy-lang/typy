@@ -17,7 +17,6 @@ pub(super) fn run(
     file: Utf8PathBuf,
     generation: &super::generation::Generation,
     overrides: typy_source::SettingOverrides,
-    deny_warnings: bool,
     arguments: &[String],
     reporter: Reporter,
 ) -> ExitStatus {
@@ -40,7 +39,7 @@ pub(super) fn run(
             &request,
             &files,
             overrides,
-            deny_warnings,
+            pipeline.warning_levels(),
             &cache::compiler_identity(&request),
         ))
         .join(name);

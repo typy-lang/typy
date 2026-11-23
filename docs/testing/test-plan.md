@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.40 |
+| Version | 1.41 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -302,8 +302,8 @@ that the specification does not define.
 | CLI-23 | 0.12 | UT, E2E | `crates/typy-build/src/toolchain/tests.rs` for the command as a shell reads it; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-23 |
 | CLI-24 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-24 |
 | CLI-25 | 0.12 | UT, E2E | `crates/typy-cli/src/command/print/tests.rs`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-25 |
-| CLI-26 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-26 |
-| CLI-27 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-27 |
+| CLI-26 | 0.12 | UT, E2E | `crates/typy-diagnostics/src/render/tests.rs` for the coloured form; `crates/typy-cli/src/output/tests.rs` for `auto` and `NO_COLOR`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-26 |
+| CLI-27 | 0.12 | UT, E2E | `crates/typy-diagnostics/src/warning_levels/tests.rs` and `warning_selector/tests.rs` for the order and the codes; `crates/typy-cli/src/arguments/tests.rs` for options before and after the command; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-27 |
 | CLI-28 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-28 |
 | CLI-29 | 0.12 | E2E | `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-29 |
 | CLI-30 | 0.12 | UT, E2E | `crates/typy-cli/src/arguments/tests.rs` for each key and two values of one setting; `crates/typy-cli/src/tests.rs` for `-C help`; `crates/typy-cli/tests/end_to_end/command_line.rs`, tests named for CLI-30 |

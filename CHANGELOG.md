@@ -25,8 +25,19 @@ All notable changes to TyPy are recorded here. The format follows
   `--target-cpu NAME` builds for a processor, `native` for this machine's;
   and `-C KEY=VALUE` takes `opt-level`, `target-cpu` and `target-feature`,
   which `typy -C help` lists (CLI-20, CLI-21, CLI-30, ADR-0104, ADR-0106).
+- `-W CODE`, `-A CODE` and `-D CODE` report a warning as a warning, not at
+  all, or as an error that fails the command, with `warnings` naming every
+  warning and the last option for a code deciding (CLI-27).
+- `--color auto|always|never` colours diagnostics written as text, as
+  `rustc` colours its own; `auto`, the default, colours them on a terminal
+  when `NO_COLOR` is not set (CLI-26).
 
 ### Changed
+
+- With `--deny-warnings`, each warning is reported as an error, such as
+  `error[W0101]`, with `"severity":"error"` in JSON, so the output says
+  why the command failed. A tool that read `"severity":"warning"` to find
+  the cause of a denied build reads the `W` code instead.
 
 - `int` arithmetic, comparisons and reference counts on values that fit in
   63 bits run in place in the generated code, and the runtime is called

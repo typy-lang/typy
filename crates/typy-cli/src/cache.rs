@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 use camino::Utf8PathBuf;
 use sha2::{Digest as _, Sha256};
 use typy_build::BuildRequest;
+use typy_diagnostics::WarningLevels;
 use typy_source::{PythonFloor, SettingOverrides};
 
 /// Returns the cache directory: `$TYPY_HOME/cache`, else the user's cache directory, which is
@@ -32,14 +33,15 @@ pub(crate) fn directory() -> Utf8PathBuf {
 
 /// Returns the SHA-256, in hexadecimal, of everything a build's output depends on: the compiler
 /// version and `compiler`, which tells one build of it from another, the mode, the target, the
-/// processor and its features, the main file's name, the settings flags and `--deny-warnings`, and the path and text of every file of the program,
-/// `typy.toml` included (ADR-0015). Each part is preceded by its length, so no two different
+/// processor and its features, the main file's name, the settings flags, the level of each
+/// warning, which decides whether a build fails (CLI-27), and the path and text of every file
+/// of the program, `typy.toml` included (ADR-0015). Each part is preceded by its length, so no two different
 /// inputs run together into the same bytes.
 pub(crate) fn key(
     request: &BuildRequest,
     files: &[(String, String)],
     overrides: SettingOverrides,
-    deny_warnings: bool,
+    warning_levels: &WarningLevels,
     compiler: &[u8],
 ) -> String {
     let name = request.main().file_name().unwrap_or("");
@@ -47,6 +49,7 @@ pub(crate) fn key(
     // The processor and its features change the code, so they are part of the key (CLI-33).
     let options = request.codegen_options();
     let processor = options.processor.as_deref().unwrap_or("");
+    let levels = warning_levels.to_string();
     let mut parts: Vec<&[u8]> = vec![
         env!("CARGO_PKG_VERSION").as_bytes(),
         compiler,
@@ -56,7 +59,7 @@ pub(crate) fn key(
         options.features.as_bytes(),
         name.as_bytes(),
         floor.as_bytes(),
-        if deny_warnings { b"deny" } else { b"" },
+        levels.as_bytes(),
     ];
     for (path, text) in files {
         parts.push(path.as_bytes());

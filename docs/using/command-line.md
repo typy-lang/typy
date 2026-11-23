@@ -19,7 +19,9 @@ The `typy` command checks, builds and runs a program from its main file.
 | `-O0`, `-O1`, `-O2`, `-O3`, `-Os`, `-Oz` | The optimisation level of `build` and `run`; `--release` is `-O2` and `--release-small` is `-Oz`, and `-Os` and `-Oz` link the runtime built for size | CLI-20 |
 | `--target-cpu NAME` | Generates code for the processor NAME, or `native` for this machine; without it a build runs on every machine of its target | CLI-21 |
 | `-C KEY=VALUE` | A code generation option: `opt-level`, `target-cpu` or `target-feature`; `typy -C help` lists them | CLI-30 |
-| `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
+| `--deny-warnings` | Fails with status 1 when there are warnings, each reported as an error; the same as `-D warnings` given first | DIA-07 |
+| `-W CODE`, `-A CODE`, `-D CODE` | Reports the warning CODE as a warning, not at all, or as an error that fails the command; `warnings` names every warning; see [Choosing which warnings to report](#choosing-which-warnings-to-report) | CLI-27 |
+| `--color WHEN` | Colours diagnostics written as text: `auto`, the default, on a terminal when `NO_COLOR` is not set, `always` or `never` | CLI-26 |
 | `--error-format=json` | Writes diagnostics as one JSON object per line | DIA-05 |
 | `--python-floor VERSION` | Sets the Python floor for this command, over `typy.toml` | CLI-07, CLI-12 |
 | `--timings` | Writes how long each stage took to standard error: `load`, `check`, `lower`, `generate`, `link` and the `total` | CLI-22 |
@@ -29,7 +31,8 @@ The `typy` command checks, builds and runs a program from its main file.
 The exit status of `typy` is 0 on success, 1 when the program has errors,
 2 on wrong command usage and 101 on an internal compiler error (CLI-06).
 `typy` reads no environment variable that changes its output, except
-`TYPY_HOME` (CLI-11). A program reads its arguments through `sys.argv`,
+`TYPY_HOME`, and `NO_COLOR`, which only takes the colour from diagnostics
+on a terminal (CLI-11). A program reads its arguments through `sys.argv`,
 which comes with imports in 0.3.
 
 ## Asking typy what it uses
@@ -95,6 +98,33 @@ temporary object file it links; `--save-temps` keeps that object as
 `app.o` beside `app`, and the command links it the same way. A `typy run`
 that takes its build from the cache runs no build, so it writes the
 timings of loading and checking only, and keeps no object file.
+
+## Choosing which warnings to report
+
+`-W`, `-A` and `-D` set the level of one warning code, or of every warning
+with `warnings`, before or after the command:
+
+```sh
+typy check app.py -A W0301
+typy build app.py -D warnings -A W0401
+typy -D W0101 run app.py
+```
+
+`-A` stops a warning from being reported. `-D` reports it as an error, such
+as `error[W0101]`, so the command exits with status 1 and generates no
+code. `-W` reports it as a warning again. The options apply in the order
+you give them, those before the command first, so the last one that names
+a code decides: `-D warnings -A W0401` allows W0401 and denies every other
+warning, while `-A W0401 -D warnings` denies them all. `--deny-warnings`
+counts as a `-D warnings` given before every other option. A code that is
+not a warning's, such as `E0402`, is wrong usage, exit status 2. `typy run`
+keeps one build in its cache for each set of levels.
+
+`--color always` colours diagnostics written as text, as `rustc` does, also
+when standard error goes to a file or a pipe; `--color never` leaves them
+plain. The default, `auto`, colours them on a terminal unless the
+`NO_COLOR` environment variable is set to a value. JSON diagnostics are
+never coloured.
 
 ## Commands of other tools
 

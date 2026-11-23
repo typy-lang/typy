@@ -218,3 +218,52 @@ fn cli_30_a_flag_and_its_key_are_one_setting_and_two_values_are_refused() {
         assert!(parse(&["build", "app.py", "-C", wrong]).is_err(), "{wrong}");
     }
 }
+
+/// Returns the warning levels `line` gives, written as `WarningLevels` writes them.
+fn levels(line: &[&str]) -> String {
+    let (arguments, matches) =
+        Arguments::parse_with_matches(std::iter::once("typy").chain(line.iter().copied())).unwrap();
+    arguments.global(&matches).warning_levels.to_string()
+}
+
+#[test]
+fn warning_levels_apply_in_order_with_options_before_the_command_first() {
+    let cases: [(&[&str], &str); 7] = [
+        (&["check", "a.py"], "warn"),
+        (&["--deny-warnings", "build", "a.py"], "deny"),
+        (
+            &["build", "a.py", "-A", "W0101", "--deny-warnings"],
+            "deny W0101=allow",
+        ),
+        (
+            &["-D", "W0101", "check", "a.py", "-W", "W0101", "-A", "W0301"],
+            "warn W0301=allow",
+        ),
+        (
+            &[
+                "run", "a.py", "-D", "warnings", "-A", "W0401", "-W", "W0401",
+            ],
+            "deny W0401=warn",
+        ),
+        (&["-A", "warnings", "explain", "E0101"], "allow"),
+        (&["run", "a.py", "--", "-D", "warnings"], "warn"),
+    ];
+    for (line, expected) in cases {
+        assert_eq!(levels(line), expected, "{line:?}");
+    }
+}
+
+#[test]
+fn a_warning_level_names_a_warning_or_every_warning() {
+    for line in [
+        &["check", "a.py", "-D", "E0101"][..],
+        &["check", "a.py", "-W"],
+        &["-A", "all", "check", "a.py"],
+    ] {
+        assert!(
+            Arguments::parse_with_matches(std::iter::once("typy").chain(line.iter().copied()))
+                .is_err(),
+            "{line:?}"
+        );
+    }
+}

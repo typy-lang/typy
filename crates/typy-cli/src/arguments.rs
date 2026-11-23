@@ -2,9 +2,10 @@
 //! when it is wrong (CLI-06).
 
 use camino::Utf8PathBuf;
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgMatches, Args, CommandFactory as _, FromArgMatches as _, Parser, Subcommand};
 use typy_build::{BuildMode, EmitStage, LibraryKind};
 use typy_codegen::{Optimization, Target, TargetTriple};
+use typy_diagnostics::{WarningLevel, WarningLevels, WarningSelector};
 use typy_source::{PythonFloor, SettingOverrides};
 
 use crate::output::ErrorFormat;
@@ -24,9 +25,16 @@ pub(crate) struct Arguments {
         value_name = "FORMAT"
     )]
     pub(crate) error_format: ErrorFormat,
-    /// Fail with status 1 when there are warnings, before any code is generated.
+    /// Whether to colour diagnostics written as text: auto colours them on a terminal when
+    /// `NO_COLOR` is not set.
+    #[arg(long, global = true, value_enum, default_value_t, value_name = "WHEN")]
+    pub(crate) color: clap::ColorChoice,
+    /// Fail with status 1 when there are warnings, before any code is generated; the same as
+    /// `-D warnings` given first.
     #[arg(long, global = true)]
     pub(crate) deny_warnings: bool,
+    #[command(flatten)]
+    levels: Levels,
     /// Write each command typy runs, such as the C linker with its arguments, to standard
     /// error before running it.
     #[arg(short, long, global = true)]
@@ -37,10 +45,11 @@ pub(crate) struct Arguments {
 }
 
 /// The options every command takes.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Global {
-    /// `--deny-warnings` (DIA-07).
-    pub(crate) deny_warnings: bool,
+    /// The level of each warning code, from `--deny-warnings`, `-W`, `-A` and `-D` (DIA-07,
+    /// CLI-27).
+    pub(crate) warning_levels: WarningLevels,
     /// `-v` (CLI-23).
     pub(crate) verbose: bool,
     /// `--timings` (CLI-22).
@@ -48,14 +57,92 @@ pub(crate) struct Global {
 }
 
 impl Arguments {
-    /// Returns the options every command takes.
-    pub(crate) const fn global(&self) -> Global {
+    /// Parses `line`, whose first item is the program's name, and returns the arguments with
+    /// clap's matches, which say where each option stands.
+    pub(crate) fn parse_with_matches<I, T>(line: I) -> Result<(Self, ArgMatches), clap::Error>
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<std::ffi::OsString> + Clone,
+    {
+        let matches = Self::command().try_get_matches_from(line)?;
+        let arguments = Self::from_arg_matches(&matches)?;
+        Ok((arguments, matches))
+    }
+
+    /// Returns the options every command takes. `matches` are the ones the arguments were
+    /// parsed from.
+    pub(crate) fn global(&self, matches: &ArgMatches) -> Global {
         Global {
-            deny_warnings: self.deny_warnings,
+            warning_levels: self.warning_levels(matches),
             verbose: self.verbose,
             timings: self.timings,
         }
     }
+
+    /// Returns the level of each warning code: `--deny-warnings` counts as a `-D warnings`
+    /// before every other option, then each `-W`, `-A` and `-D` applies in the order given,
+    /// those before the command first (CLI-27).
+    fn warning_levels(&self, matches: &ArgMatches) -> WarningLevels {
+        let mut levels = WarningLevels::default();
+        if self.deny_warnings {
+            levels.set(WarningSelector::All, WarningLevel::Deny);
+        }
+        let mut given = self.levels.given(matches);
+        // clap keeps a command's options in matches of their own, with positions that count
+        // from the command.
+        if let (Some(after), Some((_, command))) = (self.command.levels(), matches.subcommand()) {
+            given.extend(after.given(command));
+        }
+        for (selector, level) in given {
+            levels.set(selector, level);
+        }
+        levels
+    }
+}
+
+/// The options that set a warning's level, given before or after a command that checks a
+/// program (CLI-27).
+#[derive(Clone, Debug, Default, Args)]
+pub(crate) struct Levels {
+    /// Report the warning CODE as a warning; `warnings` names every warning.
+    #[arg(short = 'W', value_name = "CODE", value_parser = parse_selector)]
+    warn: Vec<WarningSelector>,
+    /// Report nothing for the warning CODE; `-A warnings` reports no warning.
+    #[arg(short = 'A', value_name = "CODE", value_parser = parse_selector)]
+    allow: Vec<WarningSelector>,
+    /// Report the warning CODE as an error, which fails the command; `-D warnings` is
+    /// `--deny-warnings`.
+    #[arg(short = 'D', value_name = "CODE", value_parser = parse_selector)]
+    deny: Vec<WarningSelector>,
+}
+
+impl Levels {
+    /// Returns each option with its level, in the order the options stand in `matches`, the
+    /// matches they were parsed into.
+    fn given(&self, matches: &ArgMatches) -> Vec<(WarningSelector, WarningLevel)> {
+        let mut given: Vec<(usize, WarningSelector, WarningLevel)> = Vec::new();
+        for (id, selectors, level) in [
+            ("warn", &self.warn, WarningLevel::Warn),
+            ("allow", &self.allow, WarningLevel::Allow),
+            ("deny", &self.deny, WarningLevel::Deny),
+        ] {
+            let positions = matches.indices_of(id).into_iter().flatten();
+            given.extend(
+                positions
+                    .zip(selectors)
+                    .map(|(position, selector)| (position, *selector, level)),
+            );
+        }
+        given.sort_by_key(|(position, ..)| *position);
+        given
+            .into_iter()
+            .map(|(_, selector, level)| (selector, level))
+            .collect()
+    }
+}
+
+fn parse_selector(text: &str) -> Result<WarningSelector, String> {
+    WarningSelector::parse(text).map_err(|error| error.to_string())
 }
 
 /// The commands of `typy`; any other runs the program `typy-NAME` from `PATH` (ADR-0105).
@@ -65,6 +152,8 @@ pub(crate) enum Command {
     Check {
         /// The main file of the program.
         file: Utf8PathBuf,
+        #[command(flatten)]
+        levels: Levels,
         #[command(flatten)]
         settings: Settings,
         #[command(flatten)]
@@ -76,6 +165,8 @@ pub(crate) enum Command {
     Build {
         /// The main file of the program.
         file: Utf8PathBuf,
+        #[command(flatten)]
+        levels: Levels,
         /// Write this stage instead of an executable: ast, typed-ast, tyir, tyir-mem,
         /// llvm-ir, asm or obj.
         #[arg(long, value_name = "STAGE", value_parser = parse_stage)]
@@ -103,6 +194,8 @@ pub(crate) enum Command {
     Run {
         /// The main file of the program.
         file: Utf8PathBuf,
+        #[command(flatten)]
+        levels: Levels,
         #[command(flatten)]
         generation: Generation,
         #[command(flatten)]
@@ -139,6 +232,19 @@ pub(crate) enum Command {
     /// Any other command, which runs the program `typy-NAME` found on `PATH` (CLI-32).
     #[command(external_subcommand)]
     External(Vec<String>),
+}
+
+impl Command {
+    /// Returns the warning level options given after the command, for a command that checks
+    /// a program.
+    const fn levels(&self) -> Option<&Levels> {
+        match self {
+            Self::Check { levels, .. } | Self::Build { levels, .. } | Self::Run { levels, .. } => {
+                Some(levels)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// What `typy print` writes (CLI-25).

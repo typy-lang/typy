@@ -587,7 +587,7 @@ fn dia_07_warnings_are_shown_and_fail_only_with_deny_warnings() {
         let denied = workspace.typy(&[command, "app.py", "--deny-warnings"]);
         assert_eq!(status(&denied), 1, "{command}");
         assert!(
-            stderr(&denied).starts_with("warning[W0101]"),
+            stderr(&denied).starts_with("error[W0101]"),
             "{}",
             stderr(&denied)
         );

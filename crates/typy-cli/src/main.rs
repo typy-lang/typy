@@ -8,7 +8,7 @@ mod exit_status;
 mod guard;
 mod output;
 
-use clap::Parser as _;
+use std::io::IsTerminal as _;
 
 /// The stack the compiler runs on. Its passes recurse over the syntax tree, which nests up to
 /// `typy_source::MAX_DEPTH` levels; the memory is reserved, and only what a program's nesting
@@ -23,9 +23,15 @@ fn main() -> std::process::ExitCode {
         }
         return std::process::ExitCode::SUCCESS;
     }
-    let arguments = arguments::Arguments::parse();
-    let reporter = output::Reporter::new(arguments.error_format);
-    let global = arguments.global();
+    let (arguments, matches) = arguments::Arguments::parse_with_matches(std::env::args_os())
+        .unwrap_or_else(|error| error.exit());
+    let coloured = output::colours(
+        arguments.color,
+        std::io::stderr().is_terminal(),
+        std::env::var_os("NO_COLOR").as_deref(),
+    );
+    let reporter = output::Reporter::new(arguments.error_format, coloured);
+    let global = arguments.global(&matches);
     let compiler = std::thread::Builder::new()
         .name("compiler".to_owned())
         .stack_size(COMPILER_STACK)

@@ -25,14 +25,14 @@ pub(crate) fn run(command: Command, global: Global, reporter: Reporter) -> ExitS
     };
     let pipeline = match compiler() {
         Ok(path) => Pipeline::new(path)
-            .with_deny_warnings(global.deny_warnings)
+            .with_warning_levels(global.warning_levels)
             .with_verbose(global.verbose),
         Err(message) => {
             reporter.internal(&message);
             return ExitStatus::Internal;
         }
     };
-    let (status, pipeline) = dispatch(command, pipeline, global.deny_warnings, reporter);
+    let (status, pipeline) = dispatch(command, pipeline, reporter);
     if global.timings {
         write_timings(&pipeline.timings());
     }
@@ -41,12 +41,7 @@ pub(crate) fn run(command: Command, global: Global, reporter: Reporter) -> ExitS
 
 /// Runs a command of the compiler with `pipeline`, configured for it, and returns its status
 /// with the pipeline, which holds the time each stage took.
-fn dispatch(
-    command: Command,
-    pipeline: Pipeline,
-    deny_warnings: bool,
-    reporter: Reporter,
-) -> (ExitStatus, Pipeline) {
+fn dispatch(command: Command, pipeline: Pipeline, reporter: Reporter) -> (ExitStatus, Pipeline) {
     match command {
         Command::Explain { code } => (explain::explain(&code), pipeline),
         // The target's operating system gives `sys.platform` (LIB-22).
@@ -55,6 +50,7 @@ fn dispatch(
             settings,
             library,
             target,
+            ..
         } => {
             let pipeline = pipeline.with_overrides(settings.overrides_for(library));
             let target = target
@@ -73,6 +69,7 @@ fn dispatch(
             settings,
             library,
             target,
+            ..
         } => {
             let triple = target.triple.unwrap_or(typy_codegen::Target::host().triple);
             let generation = match resolve(&generation, triple) {
@@ -97,6 +94,7 @@ fn dispatch(
             temps,
             settings,
             arguments,
+            ..
         } => {
             let generation = match resolve(&generation, typy_codegen::Target::host().triple) {
                 Ok(resolved) => resolved,
@@ -110,7 +108,6 @@ fn dispatch(
                 file,
                 &generation,
                 settings.overrides(),
-                deny_warnings,
                 &arguments,
                 reporter,
             );

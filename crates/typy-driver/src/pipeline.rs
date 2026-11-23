@@ -9,7 +9,7 @@ use typy_build::{
 };
 use typy_check::{TypeChecker, TypedProgram};
 use typy_codegen::{Target, assembly, llvm_ir, object};
-use typy_diagnostics::Diagnostics;
+use typy_diagnostics::{Diagnostics, WarningLevels};
 use typy_source::{Platform, Project, ProjectSettings, SETTINGS_FILE, SettingOverrides};
 use typy_tyir::{TyirAllocator, TyirLibrary, TyirModule};
 
@@ -26,7 +26,8 @@ use crate::success::{Success, Warnings};
 pub struct Pipeline {
     compiler: Utf8PathBuf,
     overrides: SettingOverrides,
-    deny_warnings: bool,
+    /// The level of each warning code, from `-W`, `-A`, `-D` and `--deny-warnings` (CLI-27).
+    warning_levels: WarningLevels,
     /// Whether each command of the C toolchain is written before it runs (CLI-23).
     verbose: bool,
     /// Whether the object file of a build is kept beside its output (CLI-24).
@@ -41,7 +42,7 @@ impl Clone for Pipeline {
         Self {
             compiler: self.compiler.clone(),
             overrides: self.overrides,
-            deny_warnings: self.deny_warnings,
+            warning_levels: self.warning_levels.clone(),
             verbose: self.verbose,
             save_temps: self.save_temps,
             timings: Mutex::new(self.timings()),
@@ -57,7 +58,7 @@ impl Pipeline {
         Self {
             compiler: compiler.into(),
             overrides: SettingOverrides::default(),
-            deny_warnings: false,
+            warning_levels: WarningLevels::default(),
             verbose: false,
             save_temps: false,
             timings: Mutex::new(Vec::new()),
@@ -111,12 +112,19 @@ impl Pipeline {
         result
     }
 
-    /// Returns the pipeline with warnings that fail a build or a check, before any code is
-    /// generated (DIA-07).
+    /// Returns the pipeline with the level of each warning code: a denied warning fails a
+    /// build or a check before any code is generated, and an allowed one is not reported
+    /// (DIA-07, CLI-27).
     #[must_use]
-    pub const fn with_deny_warnings(mut self, deny: bool) -> Self {
-        self.deny_warnings = deny;
+    pub fn with_warning_levels(mut self, levels: WarningLevels) -> Self {
+        self.warning_levels = levels;
         self
+    }
+
+    /// Returns the level of each warning code.
+    #[must_use]
+    pub const fn warning_levels(&self) -> &WarningLevels {
+        &self.warning_levels
     }
 
     /// Returns the pipeline with settings that win over each project's `typy.toml` (CLI-07).
@@ -187,7 +195,7 @@ impl Pipeline {
             )
         })?;
         if stage == EmitStage::Ast {
-            let warnings = self.warnings(project.warnings().clone(), &project)?;
+            let warnings = self.warnings(project.warnings(), &project)?;
             return Ok((syntax_text(&project), warnings));
         }
         let (program, warnings) = self.timed("check", || self.check_program(&project))?;
@@ -302,17 +310,18 @@ impl Pipeline {
             .map_err(|diagnostics| with_project(diagnostics, project))?;
         let mut found = project.warnings().clone();
         found.extend(program.warnings.clone());
-        let warnings = self.warnings(found, project)?;
+        let warnings = self.warnings(&found, project)?;
         Ok((program, warnings))
     }
 
-    /// Returns the warnings, or a failure when there are some and warnings are denied
-    /// (DIA-07).
-    fn warnings(&self, diagnostics: Diagnostics, project: &Project) -> Result<Warnings, Failure> {
-        if diagnostics.iter().next().is_none() {
+    /// Returns the warnings at their levels, or a failure when any is denied; the failure
+    /// reports the denied warnings as errors beside the others (DIA-07, CLI-27).
+    fn warnings(&self, diagnostics: &Diagnostics, project: &Project) -> Result<Warnings, Failure> {
+        let diagnostics = self.warning_levels.apply(diagnostics);
+        if diagnostics.is_empty() {
             return Ok(Warnings::default());
         }
-        if self.deny_warnings {
+        if diagnostics.has_errors() {
             return Err(with_project(diagnostics, project));
         }
         Ok(Warnings {

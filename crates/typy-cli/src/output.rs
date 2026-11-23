@@ -4,7 +4,7 @@ use std::io::Write as _;
 
 use camino::Utf8Path;
 use typy_diagnostics::{
-    Diagnostic, DiagnosticCode, RuleId, SourceLookup, render_json, render_text,
+    Diagnostic, DiagnosticCode, RuleId, SourceLookup, render_coloured, render_json, render_text,
 };
 use typy_driver::{Emission, Failure, Sources, Warnings};
 
@@ -20,24 +20,46 @@ pub(crate) enum ErrorFormat {
     Json,
 }
 
+/// Returns whether diagnostics written as text are coloured: always, never, or, for `auto`,
+/// when standard error is a terminal and `NO_COLOR` is not set or is empty (CLI-26).
+pub(crate) fn colours(
+    choice: clap::ColorChoice,
+    terminal: bool,
+    no_color: Option<&std::ffi::OsStr>,
+) -> bool {
+    match choice {
+        clap::ColorChoice::Always => true,
+        clap::ColorChoice::Never => false,
+        clap::ColorChoice::Auto => terminal && no_color.is_none_or(std::ffi::OsStr::is_empty),
+    }
+}
+
 /// Writes diagnostics in the format the command line chose.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Reporter {
     format: ErrorFormat,
+    /// Whether text is coloured for a terminal (CLI-26).
+    coloured: bool,
 }
 
 impl Reporter {
-    /// Returns a reporter that writes in `format`.
-    pub(crate) const fn new(format: ErrorFormat) -> Self {
-        Self { format }
+    /// Returns a reporter that writes in `format`, coloured when `coloured` and the format is
+    /// text.
+    pub(crate) const fn new(format: ErrorFormat, coloured: bool) -> Self {
+        Self { format, coloured }
     }
 
     /// Writes rendered diagnostics to standard error.
     fn write(self, diagnostics: &[Diagnostic], sources: &dyn SourceLookup) {
+        let render = if self.coloured {
+            render_coloured
+        } else {
+            render_text
+        };
         let text = match self.format {
             ErrorFormat::Text => diagnostics
                 .iter()
-                .map(|diagnostic| render_text(diagnostic, sources))
+                .map(|diagnostic| render(diagnostic, sources))
                 .collect::<Vec<String>>()
                 .join("\n"),
             ErrorFormat::Json => diagnostics

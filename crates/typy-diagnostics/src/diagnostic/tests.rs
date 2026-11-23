@@ -33,3 +33,14 @@ fn a_diagnostic_may_have_no_location() {
         (None, "link failed")
     );
 }
+
+#[test]
+fn a_denied_warning_is_an_error_that_keeps_its_code() {
+    let warning = Diagnostic::without_location(DiagnosticCode::warning(101), "an escape");
+    assert_eq!(warning.severity(), crate::code::Severity::Warning);
+    let denied = warning.denied();
+    assert_eq!(
+        (denied.severity(), denied.code()),
+        (crate::code::Severity::Error, DiagnosticCode::warning(101))
+    );
+}

@@ -4,7 +4,7 @@ use crate::exit_status::ExitStatus;
 use crate::output::{ErrorFormat, Reporter};
 
 fn guarded(command: impl FnOnce() -> ExitStatus) -> ExitStatus {
-    super::guarded(Reporter::new(ErrorFormat::Text), command)
+    super::guarded(Reporter::new(ErrorFormat::Text, false), command)
 }
 
 #[test]

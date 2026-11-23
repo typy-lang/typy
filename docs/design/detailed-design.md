@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.108 |
+| Version | 2.109 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -191,9 +191,13 @@ in `docs/requirements/srs.md`.
 | `help` | `Option<String>` | `None` | A hint, shown after `help:`, when no fix is certain |
 | `fix` | `Option<Fix>` | `None` | Set only when the fix is certain (DIA-02) |
 | `rule` | `Option<RuleId>` | `None` | Required when the diagnostic rejects valid Python (DIA-03) |
+| `denied` | `bool` | `false` | Set by `denied()` for a warning that `-D` makes an error (CLI-27) |
 
 `Diagnostic::new(code, span, message)` makes a located diagnostic and
 `Diagnostic::without_location(code, message)` one without a span.
+`severity()` is the code's severity, or `Error` once the diagnostic is
+denied; a denied warning keeps its `W` code, so its output reads
+`error[W0301]`.
 
 `Fix` holds a `Span` and the `replacement: String` for it. `Label` holds a
 `Span` and a `text: String`.
@@ -206,6 +210,30 @@ in `docs/requirements/srs.md`.
 | `has_errors()` | True when any diagnostic has severity `Error` |
 | `iter()` | The diagnostics in the order they were added |
 | `into_sorted(lookup)` | Returns them sorted by file path, line, column and code; those without a location come first |
+
+`WarningLevel` is what the command line makes of a warning: `Warn`, the
+default, `Allow` or `Deny`, written `warn`, `allow` and `deny`.
+`WarningSelector` is what one `-W`, `-A` or `-D` names: `All`, from the
+text `warnings`, or `Code`, the code of a warning the registry lists as
+active. `WarningSelector::parse` refuses any other text with a
+`SelectorError`, whose message lists the warning codes.
+
+`WarningLevels` holds the level of every warning code.
+
+| Field | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `every` | `WarningLevel` | `Warn` | The level of a code not set apart |
+| `codes` | `Vec<(DiagnosticCode, WarningLevel)>` | empty | Codes whose level differs from `every`, sorted by code, each once |
+
+| Method | Behaviour |
+| --- | --- |
+| `set(selector, level)` | For `All`, sets `every` and clears `codes`; for one code, gives it `level`, kept in `codes` only when it differs from `every`. So the last call that names a code decides its level |
+| `level(code)` | The code's level |
+| `apply(&diagnostics)` | Returns the diagnostics with allowed warnings removed and denied ones marked `denied`; errors are kept as they are |
+
+Options that give each code the same level give equal values, and
+`Display` writes them in one form, such as `deny W0101=allow`, so
+`typy run` keys its cache with it.
 
 `SourceLookup` is the trait the renderers use to turn a `Span` into text.
 `typy-source::Project` implements it.
@@ -236,6 +264,12 @@ The gutter is as wide as the line number. A span that runs past its first
 line is marked to the end of that line. Each label is written as
 `= LINE:COLUMN: text`. A certain fix follows as `help: write it as` and the
 corrected line.
+
+`render_coloured` writes the same text with ANSI escape sequences, as
+`rustc` colours its own (CLI-26): the severity and code, and the marker,
+in bold red for an error and bold yellow for a warning, the message and
+`help` in bold, and the arrow, the line numbers and the gutter in bold
+blue. Without the escape sequences its text is `render_text`'s.
 
 A diagnostic without a location is written as its header, then its rule and
 its help:
@@ -3605,9 +3639,10 @@ Warnings come from two places (ADR-0017, ADR-0033). `parse_with_warnings`
 scans the parser's tokens for invalid escapes, W0101, and
 `Project::warnings` keeps them; the subset walker gives W0301, the body
 checker W0401, and `TypedProgram::warnings` keeps the checker's. After
-checking, the pipeline joins them. With `deny_warnings` set, any warning
-makes a `Failure` before lowering, so no
-code is generated; otherwise `Warnings` holds them with the project's
+checking, the pipeline joins them and applies its `WarningLevels`, which
+drop allowed warnings and mark denied ones as errors (CLI-27). When any
+is denied, the warnings make a `Failure` before lowering, so no code is
+generated; otherwise `Warnings` holds them with the project's
 `Sources`, and with `Sources::None` when there are none, so a clean build
 copies nothing.
 
@@ -3616,11 +3651,11 @@ copies nothing.
 | Item | Design |
 | --- | --- |
 | Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. `build` and `check` take `--lib static` or `--lib shared`, which sets `SettingOverrides::library` and the request's `library` (CLI-09). A main file that is not a `.py` file is wrong usage |
-| Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
+| Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text`, or `render_coloured` when the global `--color` asks for colour, and written to standard error with a blank line between two of them, or with `render_json` one per line. `output::colours` decides: `always`, `never`, or for `auto` when standard error is a terminal and `NO_COLOR` is not set or is empty (CLI-26). The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
 | `typy explain CODE` | Prints the section of `docs/diagnostics/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text, and E0429, which only a library build gives, shows modules that are correct as programs |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
-| Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
+| Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `arguments::Levels` holds `-W`, `-A` and `-D CODE`, flattened into `typy` itself and into `check`, `build` and `run`, since clap drops a global option's values from before the command when the command has its own. `Arguments::global` turns them into `WarningLevels`: `--deny-warnings` first as `-D warnings`, then the options before the command, then those after it, each in the order clap's `indices_of` gives (CLI-27). `Pipeline::with_warning_levels` takes them. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes the levels |
 | `typy print WHAT` | `command::print` writes one fact a line, in `typy.toml`'s form (CLI-25): `targets` from `TargetTriple::ALL` with `builds_on` the host; `target-cpus` the triple's baseline `TargetTriple::cpu`, `native` with `typy_codegen::host_processor` for the host, and the processors LLVM lists, which it writes only to standard error, so `print` runs its own `typy` with the hidden command `llvm-processor-help` and reads them from the child; `paths` from `RuntimeArchive::path_beside` and the cache directory; `settings` from `ProjectSettings::read` with the command line's overrides, refused as `typy check` refuses them; and `version` |
 | Code generation flags | `arguments::Generation` holds `--release`, `--release-small`, `-O LEVEL`, `--target-cpu` and each `-C KEY=VALUE` of `build` and `run`; `Generation::choice` gives one level and one processor, and two flags that give two values are wrong usage, while two that give one agree (CLI-20, CLI-30, ADR-0104). `command::generation::resolve` turns `native` into `host_processor` and `host_features`, only when the build is for the host, and checks any other name against `print::known_processors` (CLI-21). `main` answers `-C help` in any of its spellings before the command is parsed, from `CODEGEN_KEYS`, so it needs no file. The `run` cache key adds the processor and the features to the mode's name (CLI-33) |
 | Inspection | `-v` and `--timings` are global options, and `--save-temps` an option of `build` and `run` (ADR-0104). `Pipeline::with_verbose` passes `-v` to `Linker::with_verbose` and `Toolchain::with_verbose`, whose `run` writes `typy_build::command_line` of each tool before running it; `typy run -v` writes the program's command too (CLI-23). `Pipeline::timed` records each stage it runs, `load`, `check`, `lower`, `generate` and `link`, behind a `Mutex` of the pipeline, which the conformance suite shares between threads; `command::write_timings` writes them and their total after the command, also when it fails (CLI-22). `Pipeline::with_save_temps` writes the object a build generated beside its output, named after the output up to its first dot, E0106 when it cannot (CLI-24) |
