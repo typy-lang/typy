@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.48 |
+| Version | 1.49 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -363,6 +363,7 @@ that the specification does not define.
 | TYP-30 | 0.12 | UT, IT | `typy-check` tests of `Self` through a base and a derived class; `tests/conformance/typ/TYP-30_*.py` |
 | TYP-31 | 0.12 | UT, IT | `typy-check` tests of narrowing after a `TypeGuard` and a `TypeIs` call, and of `TypeIs`'s narrowing in the `else` branch; `tests/conformance/typ/TYP-31_*.py` |
 | TYP-32 | 0.13 | UT, IT | `typy-check` tests of each key kind and of a missing or unknown key; `tests/conformance/typ/TYP-32_*.py` |
+| TYP-33 | 0.13 | IT | `crates/typy-check/tests/integration/result_inference.rs` for a nested function's result inferred from its `return` statements, and E0204 while it is planned; `tests/conformance/typ/TYP-33_*.py` |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |

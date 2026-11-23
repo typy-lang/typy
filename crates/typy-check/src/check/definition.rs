@@ -275,14 +275,21 @@ fn instance_parameter(
     instance
 }
 
-/// Returns the definition of a function that is no method, such as a nested function, its
-/// annotations read in `scope` (FUN-04).
+/// Returns the definition of a nested function, its annotations read in `scope` (FUN-04). Its
+/// result is not inferred until 0.13, so a missing result annotation is E0204 (TYP-33).
 pub(crate) fn function_definition<'tree>(
     parts: &FunctionParts<'tree>,
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Definition<'tree> {
-    definition(parts, (None, false), scope, diagnostics)
+    if parts.returns.is_none() {
+        let reason = (
+            "the result of a nested function is inferred from TyPy 0.13 on (TYP-33)",
+            "write its result type, such as `-> int`",
+        );
+        missing_result(&parts.name.name, parts.name.span, Some(reason), diagnostics);
+    }
+    definition(parts, (None, true), scope, diagnostics)
 }
 
 /// Returns the definition of a function, or of a method of `owner`. A function whose result

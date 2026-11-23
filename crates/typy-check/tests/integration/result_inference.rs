@@ -83,6 +83,11 @@ fn typ_26_a_function_that_must_keep_its_annotation_is_e0204_with_the_reason() {
             "function `__len__` has no return annotation",
         ),
         (
+            "def outer() -> int:\n    def inner():\n        return 1\n\n    return inner()\n",
+            "function `inner` has no return annotation, and the result of a nested function \
+             is inferred from TyPy 0.13 on (TYP-33)",
+        ),
+        (
             "class Loop:\n    def forever(self):\n        return self.forever()\n",
             "function `forever` has no return annotation, and it calls itself, directly or \
              through other methods",

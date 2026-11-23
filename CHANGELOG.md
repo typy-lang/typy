@@ -12,9 +12,10 @@ All notable changes to TyPy are recorded here. The format follows
   out its return annotation: it returns what its `return` statements give,
   their union, with `None` when it can reach its end. A static, class or
   special method, a property, a method that overrides or is overridden, a
-  nested function, a generator, a function that calls itself and a
-  function a library exports keep the annotation, E0204 with the reason
-  (TYP-26, ADR-0092).
+  method of a generic class or of a protocol, a nested function, a
+  generator, a function that calls itself and a function a library
+  exports keep the annotation, E0204 with the reason. A nested function's
+  result is inferred from 0.13 on (TYP-26, TYP-33, ADR-0092, ADR-0109).
 - The builtins `divmod`, `pow`, also with a modulus, `bin`, `hex`, `oct`
   and `format`, as CPython gives them; `bin`, `hex` and `oct` are values
   of their own too, as `key=hex` (LIB-28).

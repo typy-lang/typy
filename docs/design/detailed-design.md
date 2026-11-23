@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.118 |
+| Version | 2.119 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -2798,7 +2798,9 @@ When any method's result was inferred, the module variables take their
 types from before the first look again, so the module body types them
 from the inferred results. The body check takes an inferred result from
 `Program::result_of`. A static or class method, a special method, a
-property and a nested function keep their annotations. Parallel checking
+property and a nested function keep their annotations (ADR-0109);
+`function_definition` gives a nested function's E0204 the release that
+infers it (TYP-33). Parallel checking
 (architecture section 7.5) is added when the build-time benchmarks of
 NFR-04 call for it.
 

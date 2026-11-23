@@ -791,7 +791,8 @@ A static or class method, a special method such as `__len__`, a property,
 a method that overrides another or that another overrides, a nested
 function, a generator, a function that calls itself, directly or through
 others, and a function a library exports need the annotation, `-> None`
-when they return nothing, E0204 otherwise:
+when they return nothing, E0204 otherwise (ADR-0109). A nested function's
+result is inferred from 0.13 on (TYP-33):
 
 <!-- typy-expect: rejected E0204 at 1:5 -->
 ```python

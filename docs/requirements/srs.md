@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.127 |
+| Version | 1.128 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -227,13 +227,14 @@ formatter applies; Ruff's formatter is the project's recommendation.
 | TYP-23 | A parameter, variable, attribute, collection item or result annotated `object` shall hold a value of any type, support `==`, `!=`, `is`, `hash`, `str`, `repr`, truth, `type()` and `isinstance`, and narrow by `isinstance`, a class pattern and `type(x) is C`, as Java narrows `Object` (ADR-0090). | S | 0.11 | 3.1 |
 | TYP-24 | `typing.cast(T, value)` shall give `value` as a `T` when it is one, and raise `TypeError` when it is not (ADR-0091). | S | 0.11 | |
 | TYP-25 | A value of type `typing.Any` shall support every operation, bound when the program runs, and raise the `TypeError` or `AttributeError` CPython raises for an operation it does not support (ADR-0094). | S | 0.13 | |
-| TYP-26 | A function without a result annotation, other than a generator function, one that calls itself, a method that overrides or is overridden, and a function a library exports, shall return the type its `return` statements give (ADR-0092). | S | 0.12 | 8.7 |
+| TYP-26 | A module-level function or an instance method without a result annotation, other than a generator function, one that calls itself, a method that overrides or is overridden, a special method, a property, a method of a generic class or of a protocol, and a function a library exports, shall return the type its `return` statements give (ADR-0092, ADR-0109). | S | 0.12 | 8.7 |
 | TYP-27 | An unannotated local variable assigned an empty list, dict or set display shall take its item types from the first statement of the same function that adds to it (ADR-0092). | S | 0.12 | 7.2 |
 | TYP-28 | `typing.Literal` of `int`, `str`, `bytes`, `bool` and `None` constants shall be accepted, a constant passing for its literal type and `==`, `in` and `match` narrowing to it. | S | 0.12 | |
 | TYP-29 | `typing.overload` shall be accepted on functions and methods, each call checked against the signature it matches and the body against every signature. | S | 0.12 | |
 | TYP-30 | `typing.Self` shall be accepted in a method's parameters and result as the class the method is called through. | S | 0.12 | |
 | TYP-31 | A function annotated to return `typing.TypeGuard[T]` or `typing.TypeIs[T]` shall narrow its argument where a call of it is tested, as CPython's type system reads them. | S | 0.12 | |
 | TYP-32 | A class derived from `typing.TypedDict` shall be accepted, its instances being dicts whose keys it names and whose values it types, with `total`, `Required`, `NotRequired` and `ReadOnly`. | S | 0.13 | |
+| TYP-33 | A nested function without a result annotation, other than a generator function and one that calls itself, shall return the type its `return` statements give (ADR-0109). | S | 0.13 | 8.7 |
 
 ### 3.5 Built-in types and values (DAT)
 
@@ -622,7 +623,7 @@ cache, unless a row says otherwise.
 | 0.10 | `Sequence` and the other abstract collections; built-in functions, built-in types, class methods, protocol methods and functions of a module with defaults, `*args` or `**kwargs` as values; `map`, `filter` and `callable`; decorators of functions; unpacking written out in full in the calls of built-ins and function values; nested functions inside generic functions; `NamedTuple`; `type[C]` holding derived classes, `isinstance` with a class held in a variable, and `issubclass` | Per-thread stacks for libraries; a bill of materials, signing and provenance for each release; coverage gate at 96 percent |
 | 0.11 | `typing` names and aliases as values (TYP-18); nested functions with type parameters of their own (FUN-18); nested functions, methods and `lambda`s with defaults, `*args` or `**kwargs` as values (FUN-19); unpacking of any iterable in the calls of built-ins and function values, and of a dict in a call of `print` (EXP-22); `object` as a type (TYP-23) and a checked `cast` (TYP-24); arithmetic on `bool` as CPython does it (DAT-19) | No benchmark program slower than CPython 3.15; the share of a `mypy --strict` corpus TyPy compiles; the concurrency model settled (OI-31) |
 | 0.12 | Results inferred from `return` statements and empty collections from their first use (TYP-26, TYP-27); `enum` and `abc` classes (CLS-44, CLS-45); `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` (TYP-28 to TYP-31); unpacking in comprehensions, `frozendict` and `math.integer` for the Python floor 3.15 (EXP-23, DAT-18, LIB-26); the first typed standard library modules (LIB-27); the builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` (LIB-28); `from __future__ import annotations` (LIB-29); optimisation levels, a target processor, timings, shown commands, kept files, `typy print`, colour, per-code warning levels, `run -c` and `-m`, more `--emit` stages, `-C` options and external `typy-NAME` commands (CLI-20 to CLI-30, CLI-32, CLI-33) | The benchmark suite within 5 times C |
-| 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes`; debug information, AddressSanitizer builds and runtime inlining (CLI-31, CLI-34, CLI-35) | |
+| 0.13 | Generics: `*Ts` and `**P`, defaults of type parameters, generic exceptions and protocols, type parameters on special methods; `typing.Any` bound when the program runs (TYP-25); `TypedDict` (TYP-32); results of nested functions inferred from their `return` statements (TYP-33); template strings for the Python floor 3.14 (LEX-12); `ctypes` callbacks, headers and the rest of `ctypes`; debug information, AddressSanitizer builds and runtime inlining (CLI-31, CLI-34, CLI-35) | |
 | 0.14 | The rest of the class rules (CLS-28 to CLS-37) and of named tuples (CLS-43); method decorators; classes and `type[C]` values as callables; positional class patterns through a variable; structural abstract collections for classes of the program; optimisation remarks (CLI-36) | |
 | 0.15 | | The benchmark suite within 3 times C |
 | 1.0 | The remaining requirements of section 3 marked 1.0; profile-guided optimisation (CLI-37) | Cycle collection, `weakref`; the object header of biased reference counts (MEM-12); Windows; performance budgets |
