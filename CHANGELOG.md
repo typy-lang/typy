@@ -171,6 +171,9 @@ All notable changes to TyPy are recorded here. The format follows
 - `typing.cast(T, value)` of a `T | None` value that holds an `int`, a
   `float` or a `bool` ended the program with a crash; it now tests only
   that the value is not `None` (TYP-24).
+- A parameter with a `bytes` default, such as `separator: bytes = b", "`,
+  was treated as one without a default, so a call that left it out was
+  refused with E0404; the call now passes the default (EXP-16).
 
 ## [0.11.0] - 2026-11-22
 
