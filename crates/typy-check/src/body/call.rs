@@ -59,6 +59,9 @@ impl BodyChecker<'_> {
         if let Some(call) = self.nested_call(name, name_span, arguments, keywords, span) {
             return call;
         }
+        if let Some(made) = self.enum_member_made(name, arguments, keywords, span) {
+            return made;
+        }
         if let Some(symbol) = self.locals.get(name).copied() {
             return self.call_local(symbol, (name, name_span), arguments, keywords, span);
         }

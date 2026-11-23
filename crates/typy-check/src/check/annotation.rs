@@ -79,6 +79,9 @@ pub(crate) enum AnnotationName {
     /// `abc.ABC` and `abc.abstractmethod`, which the reading of abstract classes takes out of
     /// the module (CLS-45).
     AbstractClasses,
+    /// The classes of `enum` and `enum.auto`, which the expansion of enum classes takes out of
+    /// the module (CLS-44).
+    EnumClasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
     /// `typing.cast`, a function a call checks when the program runs (TYP-24).
@@ -121,10 +124,17 @@ pub(crate) enum Origin {
     Abc,
 }
 
-/// The modules that give names for annotations only in 0.3, and `abc` from 0.12, whose
-/// names the reading of abstract classes takes out of the module (CLS-45).
-pub(crate) const ANNOTATION_MODULES: [&str; 5] =
-    ["typing", "collections.abc", "types", "dataclasses", "abc"];
+/// The modules that give names for annotations only in 0.3, and `abc` and `enum` from 0.12,
+/// whose names the readings of abstract and enum classes take out of the module (CLS-44,
+/// CLS-45).
+pub(crate) const ANNOTATION_MODULES: [&str; 6] = [
+    "typing",
+    "collections.abc",
+    "types",
+    "dataclasses",
+    "abc",
+    "enum",
+];
 
 /// Returns the annotation name `name` of the module `module`, if TyPy 0.3 gives it.
 pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName> {
@@ -162,6 +172,9 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
         ("abc", "ABC" | "abstractmethod") => Some(AnnotationName::AbstractClasses),
+        ("enum", "Enum" | "IntEnum" | "StrEnum" | "Flag" | "IntFlag" | "auto") => {
+            Some(AnnotationName::EnumClasses)
+        }
         ("typing" | "collections.abc", _) => AbstractCollection::named(module, name)
             .map(|collection| AnnotationName::Abstract(collection, origin(module))),
         _ => None,
@@ -332,7 +345,8 @@ fn bare_standard(
         AnnotationName::Dataclasses
         | AnnotationName::Cast
         | AnnotationName::Overload
-        | AnnotationName::AbstractClasses => not_a_type(&name, annotation.span(), diagnostics),
+        | AnnotationName::AbstractClasses
+        | AnnotationName::EnumClasses => not_a_type(&name, annotation.span(), diagnostics),
         AnnotationName::Protocol => {
             diagnostics.push(
                 Diagnostic::new(
@@ -1173,6 +1187,12 @@ fn not_a_type(
         (
             "`ABC` and `abstractmethod` are read as a base and a decorator, not as types",
             RuleId::CLS_45,
+        )
+    } else if *name == AnnotationName::EnumClasses {
+        (
+            "the classes of `enum` are read as bases, and `auto` as a member's value, not as \
+             types; an enum class is a type of its own",
+            RuleId::CLS_44,
         )
     } else {
         ("`dataclass` and `field` are not types", RuleId::CLS_05)

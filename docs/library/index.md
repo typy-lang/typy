@@ -21,12 +21,13 @@ TyPy 0.11 provides these modules of the standard library:
 | `sys` | `argv`, `exit`, the standard streams, the version and the recursion limit | [Built-in functions and modules](functions-and-modules.md#the-sys-module) |
 | `dataclasses` | `dataclass` and `field` | [Classes](../reference/classes.md#dataclasses) |
 | `abc` | `ABC` and `abstractmethod` | [Classes](../reference/classes.md#abstract-classes) |
+| `enum` | `Enum` and `auto` | [Classes](../reference/classes.md#enum-classes) |
 | `typing`, `collections.abc` and `types` | Names for annotations, such as `Iterator`, `Final` and `Protocol` | [Modules](../reference/modules.md) |
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
-A module planned for a later release is refused with E0201, naming the
-release: `enum` (CLS-44), `textwrap`, `base64`,
-`heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string`
-(LIB-27) in 0.12;
+A module or name planned for a later release is refused with E0201,
+naming the release: `IntEnum`, `StrEnum`, `Flag` and `IntFlag` of `enum`
+(CLS-44), and `textwrap`, `base64`, `heapq`, `bisect`, `statistics`,
+`time`, `random`, `copy` and `string` (LIB-27) in 0.12;
 `math.integer` (LIB-26) in 0.12 from the Python floor 3.15; `os` (LIB-07)
 in 1.0; and `doctest` in a release after 1.0. Each other module is E0206.

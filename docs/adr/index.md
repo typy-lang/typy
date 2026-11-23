@@ -121,3 +121,4 @@ supersedes it.
 | [ADR-0113](0113-read-self-as-the-class-a-call-is-made-through.md) | Read `Self` as the class a call is made through | Accepted | 2026-11-23 |
 | [ADR-0114](0114-test-what-a-type-guard-narrows-when-the-program-runs.md) | Test what a type guard narrows when the program runs | Accepted | 2026-11-23 |
 | [ADR-0115](0115-refuse-a-direct-call-of-an-abstract-method-that-gives-no-value.md) | Refuse a direct call of an abstract method that gives no value | Accepted | 2026-11-23 |
+| [ADR-0116](0116-make-enum-members-class-variables-and-the-class-calls-hidden-methods.md) | Make enum members class variables, and the class's calls hidden methods | Accepted | 2026-11-23 |

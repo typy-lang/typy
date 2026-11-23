@@ -273,12 +273,13 @@ impl BodyChecker<'_> {
                 | AnnotationName::Dataclasses
                 | AnnotationName::Overload
                 | AnnotationName::AbstractClasses
+                | AnnotationName::EnumClasses
         ) {
             return None;
         }
         let span = expression.span();
-        let message = "this name of `typing`, `dataclasses` or `abc` is read only where it is \
-                       called, decorates or a class names it, not as a value";
+        let message = "this name of `typing`, `dataclasses`, `abc` or `enum` is read only where \
+                       it is called, decorates or a class names it, not as a value";
         Some(
             self.error(
                 Diagnostic::new(DiagnosticCode::error(202), span, message)
@@ -664,6 +665,7 @@ fn named_text(name: AnnotationName) -> Option<NamedText> {
         | AnnotationName::Dataclasses
         | AnnotationName::Overload
         | AnnotationName::AbstractClasses
+        | AnnotationName::EnumClasses
         | AnnotationName::Rebound => return None,
     })
 }

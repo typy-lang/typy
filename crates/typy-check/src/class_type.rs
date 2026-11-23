@@ -36,6 +36,24 @@ pub(crate) const NAMED_TUPLE_FIELDS: &str = " (fields)";
 /// leaves the field as it is, and returns an instance of its own class (CLS-27, ADR-0088).
 pub(crate) const NAMED_TUPLE_REPLACE: &str = " (replace)";
 
+/// The hidden static method the compiler writes for an enum class, which returns the member
+/// whose value equals its argument or raises `ValueError`, as `Color(value)` does (CLS-44,
+/// ADR-0116).
+pub(crate) const ENUM_LOOKUP: &str = " (lookup)";
+
+/// The hidden static method of an enum class that returns the member a name names, an alias
+/// too, or raises `KeyError`, as `Color[name]` does.
+pub(crate) const ENUM_NAMED: &str = " (named)";
+
+/// The hidden static method of an enum class that returns a new list of its members, aliases
+/// left out, which a loop over the class, `len` and `in` read.
+pub(crate) const ENUM_MEMBERS: &str = " (members)";
+
+/// The start of the hidden name an enum class's member variables call to make each member,
+/// followed by the class's name: a new instance through `__init__`, where `Color(...)` finds a
+/// member instead.
+pub(crate) const ENUM_MEMBER: &str = " (member) ";
+
 /// The comparison and hash methods a class defines or inherits, which decide whether its
 /// instances can be ordered and hashed (CLS-07, ADR-0026), and whether it is a named tuple,
 /// whose instances are tuples (CLS-27).

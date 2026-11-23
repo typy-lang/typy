@@ -16,6 +16,7 @@ mod ctypes;
 mod ctypes_declarations;
 mod declarations;
 mod edge_cases;
+mod enum_classes;
 mod exception_parts;
 mod exports;
 mod final_names;

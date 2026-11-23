@@ -20,6 +20,7 @@ class body or assigned in `__init__`, and has one type.
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | A class derived from `typing.NamedTuple`, whose instances are tuples of its fields | CLS-27 |
 | A class derived from `abc.ABC`, with `@abstractmethod`; see [Abstract classes](#abstract-classes) | CLS-45 |
+| A class derived from `enum.Enum`, with its members; see [Enum classes](#enum-classes) | CLS-44 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -905,6 +906,64 @@ value or raises, as other functions do (E0405). Without `ABC` among the
 class's ancestors, `@abstractmethod` changes nothing, as in CPython.
 `ABC` and `abstractmethod` are the names of `abc` TyPy gives;
 `ABCMeta` as a metaclass, and `ABC` as a type or a value, are refused.
+
+## Enum classes
+
+A class derived from `enum.Enum` names its members in its body, each a
+constant or `auto()` (CLS-44). A member is an instance of the class, with
+`name` and `value`; a member whose value another member has already is
+an alias of that member. The class finds a member by its value with a
+call and by its name with a subscript, and a loop, `len` and `in` read
+its members, aliases left out:
+
+<!-- typy-expect: accepted -->
+```python
+from enum import Enum, auto
+
+
+class Color(Enum):
+    RED = 1
+    GREEN = auto()
+    BLUE = auto()
+    CRIMSON = 1
+
+    def label(self) -> str:
+        return self.name.lower()
+
+
+def warmth(color: Color) -> str:
+    match color:
+        case Color.RED:
+            return "warm"
+        case _:
+            return "cool"
+
+
+print(Color.RED, repr(Color.GREEN), Color.BLUE.value)
+print(Color(2), Color["CRIMSON"] is Color.RED, len(Color))
+print([color.label() for color in Color], warmth(Color.BLUE))
+try:
+    Color(7)
+except ValueError as error:
+    print(error)
+```
+
+Members compare and hash as themselves, so they serve as dict keys and
+`match` cases. A member's value is an `int`, `str`, `bytes` or `bool`
+constant, or `auto()`, which gives one more than the largest value
+before it, or `1` for the first member; `value` has the union of the
+members' value types. `Color(value)` takes a value of that type, and a
+value no member has raises CPython's `ValueError`; `Color[name]` raises
+`KeyError` for a name no member has.
+
+What CPython refuses when the class statement runs is E0404, such as a
+member defined twice or a class derived from an enum class with members.
+`auto()` after a value that is not an `int` is E0202, as CPython 3.12
+gives `1` with a warning and 3.13 raises `TypeError`. `IntEnum`,
+`StrEnum`, `Flag` and `IntFlag` are planned for 0.12 (CLS-44). Members
+of other values, annotated members, `__init__`, `__new__`, `_missing_`,
+other bases, decorators such as `@unique`, and classes derived from an
+enum class without members are planned for 0.13 (CLS-47).
 
 ## Attributes are declared
 

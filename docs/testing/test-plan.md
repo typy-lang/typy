@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.57 |
+| Version | 1.58 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -496,9 +496,10 @@ that the specification does not define.
 | CLS-41 | 1.0 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-41_*.py` |
 | CLS-42 | 1.0 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/cls/CLS-42_*.py` |
 | CLS-43 | 0.14 | UT, IT | `typy-check` tests of the refusals while they are planned; `tests/conformance/cls/CLS-43_*.py` |
-| CLS-44 | 0.12 | UT, IT | `typy-check` tests of the expansion of each enum kind and of `auto()`; `tests/conformance/cls/CLS-44_*.py` for members, iteration, lookup, comparison, hashing, `match` and the `Flag` operators, with CPython's errors |
+| CLS-44 | 0.12 | UT, IT | `crates/typy-check/tests/integration/enum_classes.rs` for the members and methods of each enum kind, `auto()`, enum classes of other modules and what CPython refuses when the class statement runs; `tests/conformance/cls/CLS-44_*.py` for members, iteration, lookup, comparison, hashing, `match` and the `Flag` operators, with CPython's errors |
 | CLS-45 | 0.12 | UT, IT | `crates/typy-check/src/check/abstract_class/tests.rs` for what the reading of `abc` takes out and marks; `crates/typy-check/tests/integration/abstract_classes.rs` for the forms accepted, an abstract class named in a call, abstract methods through other modules and copies of generic classes, a direct call of an empty abstract method, a misplaced `@abstractmethod` and the names of `abc` refused; `tests/conformance/cls/CLS-45_*.py` for overrides, the `TypeError` of `cls()` on an abstract class, and the refusals |
 | CLS-46 | 0.14 | IT | `tests/conformance/cls/CLS-46_*.py` |
+| CLS-47 | 0.13 | UT, IT | `crates/typy-check/tests/integration/enum_classes.rs` for the refusals while they are planned; `tests/conformance/cls/CLS-47_*.py` |
 | GEN-01 | 0.4 | IT | `tests/conformance/gen/GEN-01_*.py`; `crates/typy-check/tests/integration/generics.rs` |
 | GEN-02 | 0.4 | IT | `tests/conformance/gen/GEN-02_*.py` |
 | GEN-03 | 0.4 | IT | `tests/conformance/gen/GEN-03_*.py` |

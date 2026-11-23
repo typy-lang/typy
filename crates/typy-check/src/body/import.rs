@@ -394,7 +394,6 @@ impl Program {
         // The modules a later release gives (ADR-0093, ADR-0097).
         let planned = match top {
             "os" => Some(("1.0", RuleId::LIB_07)),
-            "enum" => Some(("0.12", RuleId::CLS_44)),
             "textwrap" | "base64" | "heapq" | "bisect" | "statistics" | "time" | "random"
             | "copy" | "string" => Some(("0.12", RuleId::LIB_27)),
             _ => None,
@@ -420,7 +419,7 @@ impl Program {
             )
             .with_rule(RuleId::LIB_08)
             .with_help(
-                "TyPy provides `math`, `sys`, `dataclasses`, `abc`, `typing`, \
+                "TyPy provides `math`, `sys`, `dataclasses`, `abc`, `enum`, `typing`, \
                  `collections.abc` and `types`",
             ),
         }))
@@ -483,6 +482,16 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         )
         .with_rule(rule);
     }
+    // The other names of `enum`, such as `unique` and `member`, come with the forms of enum
+    // class they serve (CLS-47).
+    if module.as_str() == "enum" {
+        return Diagnostic::new(
+            DiagnosticCode::error(201),
+            alias.name.span,
+            format!("`enum.{name}` is planned for TyPy 0.13 (CLS-47)"),
+        )
+        .with_rule(RuleId::CLS_47);
+    }
     let rule = if module.as_str() == "abc" {
         RuleId::CLS_45
     } else {
@@ -523,6 +532,7 @@ fn given_names(module: &str) -> &'static [&'static str] {
         ],
         "dataclasses" => &["dataclass", "field"],
         "abc" => &["ABC", "abstractmethod"],
+        "enum" => &["Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "auto"],
         _ => &[
             "Iterator",
             "Iterable",

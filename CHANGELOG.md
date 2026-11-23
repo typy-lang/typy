@@ -8,6 +8,13 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Added
 
+- `enum.Enum` and `enum.auto`: an enum class's members are its instances,
+  with `name` and `value`, aliases where two members share a value, and
+  CPython's `repr` and `str`. `Color(value)` and `Color[name]` find a
+  member, raising CPython's `ValueError` and `KeyError`, and a loop,
+  `len` and `in` read the members. A member defined twice, or a class
+  derived from an enum class with members, is E0404. Other forms of enum
+  class are planned for 0.13 (CLS-44, CLS-47, ADR-0116).
 - `abc.ABC` and `@abstractmethod`: a class derived from `ABC` has
   instances only once every abstract method is overridden. A call that
   names a class with one left is E0404, and one through a value such as

@@ -181,7 +181,8 @@ def sqrt(value: float) -> float:
 
 `from m import *` is planned for after 1.0. Standard library modules come
 with their releases: `math` and `sys` in 0.3, `dataclasses` in 0.4,
-`ctypes` in 0.5 and `abc` in 0.12 (LIB-04 to LIB-07, FFI-01, CLS-45);
+`ctypes` in 0.5, and `abc` and `enum` in 0.12 (LIB-04 to LIB-07, FFI-01,
+CLS-44, CLS-45);
 `os`, `time` and `random`
 are planned for 1.0. `typing` and
 `collections.abc` give `Iterator` and `Iterable`, `typing` gives
@@ -190,6 +191,8 @@ and `ModuleType`, for annotations (TYP-15, LIB-06). `dataclasses` gives
 `dataclass` and `field`, as [Classes](classes.md#dataclasses) describes
 (CLS-05), and `abc` gives `ABC` and `abstractmethod`, as
 [Abstract classes](classes.md#abstract-classes) describes (CLS-45).
+`enum` gives `Enum` and `auto`, as
+[Enum classes](classes.md#enum-classes) describes (CLS-44).
 The library reference describes
 [`math`](../library/functions-and-modules.md#the-math-module) and
 [`sys`](../library/functions-and-modules.md#the-sys-module), and

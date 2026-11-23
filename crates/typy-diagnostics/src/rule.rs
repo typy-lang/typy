@@ -101,6 +101,8 @@ impl RuleId {
     pub const CLS_45: Self = Self("CLS-45");
     /// A class method called through `super()` shall run with the class of the instance as `cls` also when a class derived from the class of the enclosing method defines the class method again.
     pub const CLS_46: Self = Self("CLS-46");
+    /// An enum class with other bases, keywords, decorators or type parameters, derived from an enum class without members, with a member annotated, named `name`, `value` or a `_sunder_` name, or of a value other than an `int`, `str`, `bytes` or `bool` constant or `auto()`, or defining `__init__`, `__new__`, `_missing_` or `_generate_next_value_`, shall be accepted as CPython gives it.
+    pub const CLS_47: Self = Self("CLS-47");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -536,6 +538,7 @@ impl RuleId {
         Self::CLS_44,
         Self::CLS_45,
         Self::CLS_46,
+        Self::CLS_47,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,

@@ -82,6 +82,8 @@ impl BodyChecker<'_> {
             .map(|argument| {
                 let value = self.expression(argument);
                 if builtin == Builtin::Len {
+                    // `len` of an enum class is its number of members (CLS-44).
+                    let value = self.enum_members(value);
                     self.tuple_view(value)
                 } else {
                     value

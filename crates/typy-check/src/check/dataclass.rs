@@ -4,6 +4,7 @@
 //! had written it, at the decorator. A field's `default_factory` becomes a module-level
 //! function that `__init__` calls for the field each time it is left out.
 
+mod enum_class;
 mod named_tuple;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -59,6 +60,8 @@ pub(crate) struct Dataclasses {
     /// The fields of each named tuple and each class derived from one, by module and class
     /// (CLS-27).
     named_tuples: BTreeMap<(String, String), Vec<Field>>,
+    /// Whether each enum class has members, by module and class (CLS-44).
+    enums: BTreeMap<(String, String), bool>,
 }
 
 /// The names a module binds to the `dataclasses` module and its `dataclass` and `field`.
@@ -102,7 +105,9 @@ impl Dataclasses {
         if names.dataclass.is_empty()
             && names.modules.is_empty()
             && self.named_tuples.is_empty()
-            && !names.names_typing()
+            && self.enums.is_empty()
+            && !names.names_module("typing")
+            && !names.names_module("enum")
         {
             return module.clone();
         }
@@ -113,6 +118,10 @@ impl Dataclasses {
         for mut statement in std::mem::take(&mut expanded.syntax.body) {
             if let Some((class, class_info)) =
                 self.expand_named_tuple(&mut statement, &module_name, &names, diagnostics)
+            {
+                info.insert(class, class_info);
+            } else if let Some((class, class_info)) =
+                self.expand_enum(&mut statement, &module_name, &names, diagnostics)
             {
                 info.insert(class, class_info);
             } else if let Some((class, class_info)) =
@@ -507,13 +516,11 @@ impl Names {
         names
     }
 
-    /// Returns true when the module's imports bind `typing` or a name of it, which may name
-    /// `NamedTuple` (CLS-27).
-    fn names_typing(&self) -> bool {
-        self.program_modules
-            .values()
-            .any(|module| module == "typing")
-            || self.imported.values().any(|(module, _)| module == "typing")
+    /// Returns true when the module's imports bind `module` or a name of it, as `typing` may
+    /// name `NamedTuple` (CLS-27) and `enum` its classes (CLS-44).
+    fn names_module(&self, module: &str) -> bool {
+        self.program_modules.values().any(|each| each == module)
+            || self.imported.values().any(|(each, _)| each == module)
     }
 
     /// Returns true when an expression names `name` of `dataclasses`: bound by `from` or read

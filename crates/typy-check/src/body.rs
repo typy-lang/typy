@@ -29,6 +29,7 @@ mod delete;
 mod dict;
 mod dict_call;
 mod each_member;
+mod enum_call;
 mod foreign_call;
 mod function_value;
 mod generator;

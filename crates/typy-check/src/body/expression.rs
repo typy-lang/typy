@@ -218,6 +218,7 @@ impl BodyChecker<'_> {
                 ..
             } => {
                 let operands = self.comparison_operands(left, comparators, operators);
+                let operands = self.enum_containers(operators, operands);
                 // What the comparison shows of a variable, read before a `bool` is compared as
                 // an `int` (TYP-28).
                 let narrowing = match (operators.as_slice(), operands.as_slice()) {
@@ -306,6 +307,10 @@ impl BodyChecker<'_> {
                 let value = self.tuple_expression(value);
                 if let Type::CData(class) = value.ty.clone() {
                     return self.cdata_item((value, &class), index, span);
+                }
+                // An enum class finds a member by its name (CLS-44).
+                if let Some(found) = self.enum_named(&value, index, span) {
+                    return found;
                 }
                 // An instance's class may define `__getitem__` (CLS-07).
                 let value = match self.item_call(value, index, span) {

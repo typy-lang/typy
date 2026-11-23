@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.127 |
+| Version | 2.128 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -1260,6 +1260,21 @@ of its arguments ending in `raise TypeError` with CPython's message.
 refuses, with E0434, `super_method`, `unbound_call` and
 `class_method_value` of such a method, which `Program::runs_empty_abstract`
 finds as the nearest class defining the name.
+`check/dataclass/enum_class.rs` expands a class whose base is `enum.Enum`
+into an ordinary class before the checker reads it (CLS-44, ADR-0093,
+ADR-0116). `expand_enum` reads each `name = value` of the body as a
+member, its value a `LiteralValue` or what `next_value` gives `auto()`,
+and an alias when its value `equals` an earlier member's; it writes each
+member's class variable as a call of `ENUM_MEMBER` followed by the class
+name, or the class variable of the member an alias names, then the body
+the class wrote, then `__init__`, `name`, `value`, `__repr__`, `__str__`
+and the static methods `ENUM_LOOKUP`, `ENUM_NAMED` and `ENUM_MEMBERS`,
+whose names `class_type.rs` holds. `Dataclasses::enums` notes each enum
+class, so a class derived from one is reported. In `body/enum_call.rs`,
+`enum_member_made` reads the member call as `instance_made`;
+`new_instance` calls `enum_lookup`, the subscript `enum_named`, and
+`sequence`, `len` and `enum_containers`, for `in`, read an enum class as
+`enum_members`; each calls its method through `static_call`.
 `BodyChecker::statements` stops at the first statement no path reaches,
 `assigned` being `None` there, so a statement that cannot run is neither
 checked nor compiled (TYP-34, ADR-0111). `flow::test_reach` says whether a

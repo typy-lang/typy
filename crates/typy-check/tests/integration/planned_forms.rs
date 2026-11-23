@@ -42,7 +42,6 @@ fn each_typing_form_of_a_later_release_names_it() {
 #[test]
 fn each_standard_library_module_of_a_later_release_names_it() {
     let cases = [
-        ("enum", "0.12", "CLS-44"),
         ("textwrap", "0.12", "LIB-27"),
         ("base64", "0.12", "LIB-27"),
         ("heapq", "0.12", "LIB-27"),

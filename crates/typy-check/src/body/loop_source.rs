@@ -356,7 +356,9 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        Self::sequence_of(self.tuple_expression(expression))
+        // A loop over an enum class reads the list of its members (CLS-44).
+        let value = self.tuple_expression(expression);
+        Self::sequence_of(self.enum_members(value))
     }
 
     /// Returns the checked `value` as the sequence a loop reads, as `sequence` does.
