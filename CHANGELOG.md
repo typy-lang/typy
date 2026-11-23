@@ -179,6 +179,10 @@ All notable changes to TyPy are recorded here. The format follows
 - A parameter with a `bytes` default, such as `separator: bytes = b", "`,
   was treated as one without a default, so a call that left it out was
   refused with E0404; the call now passes the default (EXP-16).
+- A `lambda` in a tuple display, such as `("double", lambda x: x * 2)`
+  where a `tuple[str, Callable[[int], int]]` is expected, was refused
+  with E0203; each item of the display now takes the type expected at
+  its place (EXP-14).
 
 ## [0.11.0] - 2026-11-22
 

@@ -58,7 +58,7 @@ A `lambda` is a function of one expression, made each time the
 expression runs, as in CPython. Its parameters have no annotations, so
 they take their types, by position, from the `Callable` its context
 expects: an annotated variable, a parameter, a function's result, an
-item of a typed list or dict, either branch of a conditional, or the
+item of a typed list, tuple or dict, either branch of a conditional, or the
 `key` of `sorted`, `list.sort`, `min` and `max`, which passes each item.
 Its result takes the expected type, or the type of its body where no
 context gives one. A `lambda` reads the variables around it as a nested

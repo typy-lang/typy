@@ -164,8 +164,32 @@ impl BodyChecker<'_> {
             {
                 self.call_dict(arguments, keywords, target, *span)
             }
+            Expr::Tuple { elements, span } => self.tuple_display(elements, target, *span),
             other => self.expression(other),
         }
+    }
+
+    /// Returns a tuple display whose items each take the type expected at their place, as a
+    /// `lambda` in it needs (EXP-14) and an empty display does (TYP-05). Without a tuple of
+    /// as many items, or a `tuple[T, ...]`, expected, the items are checked as usual.
+    fn tuple_display(&mut self, elements: &[Expr], target: Option<&Type>, span: Span) -> TypedExpr {
+        let items: Vec<TypedExpr> = elements
+            .iter()
+            .enumerate()
+            .map(|(place, element)| {
+                let expected = match target {
+                    Some(Type::Tuple(items)) if items.len() == elements.len() => items.get(place),
+                    Some(Type::TupleOf(item)) => Some(item.as_ref()),
+                    _ => None,
+                };
+                match expected {
+                    Some(expected) => self.expression_expecting(element, Some(expected)),
+                    None => self.expression(element),
+                }
+            })
+            .collect();
+        let ty = Type::Tuple(items.iter().map(|item| item.ty.clone()).collect());
+        Self::typed(TypedExprKind::Tuple(items), ty, span)
     }
 
     /// Returns `value` as a `tuple[T, ...]` when that is the expected type and `value` is a
