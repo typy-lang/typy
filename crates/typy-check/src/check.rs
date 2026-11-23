@@ -493,23 +493,21 @@ fn check_module<'tree>(
     let module_body = module_statements(&tree.body);
     // Each `__init__` comes first, as it types the attributes it assigns, then the module
     // body, which types the module variables, then the other functions.
-    let inferred_in = (
-        &mut definitions[..],
-        module_functions,
-        first_function,
-        first_class,
-    );
-    first_look(
+    let at = (module_functions, first_function, first_class);
+    let before_look = first_look(
         program,
         (&module_body, &tree.body),
-        inferred_in,
+        (&mut definitions, at),
         exported,
         diagnostics,
     );
-    let others = check_initializers(program, &definitions, first_function, diagnostics);
-    // The attributes `__init__` gives now have their types, which a protocol may name.
-    program.note_protocol_fits(None);
-    let body = check_module_body(program, module, &module_body, diagnostics);
+    let (body, others) = check_module_body(
+        program,
+        (module, &module_body),
+        (&definitions, first_function, first_class),
+        before_look,
+        diagnostics,
+    );
     let deferred = check_bodies(
         program,
         others,
@@ -555,19 +553,30 @@ fn module_statements(body: &[Stmt]) -> Vec<&Stmt> {
         .collect()
 }
 
-/// Checks the module body after the first look, and starts it with the import of the packages
-/// that hold the module `-m` runs (CLI-28); returns its function.
-fn check_module_body(
+/// Checks each `__init__`, then the module body after the first look, started with the
+/// import of the packages that hold the module `-m` runs (CLI-28); returns the body's function
+/// and the other definitions. The results of the methods without an annotation are inferred
+/// between the two, and when any is, the module variables take their types again from
+/// `before_look`, so one assigned a call of such a method takes its result (TYP-26).
+fn check_module_body<'definitions, 'tree>(
     program: &mut Program,
-    module: &Module,
-    module_body: &[&Stmt],
+    (module, module_body): (&Module, &[&Stmt]),
+    inferred_in: (&'definitions [Definition<'tree>], usize, usize),
+    before_look: Vec<Type>,
     diagnostics: &mut Diagnostics,
-) -> FunctionId {
+) -> (FunctionId, Vec<(usize, &'definitions Definition<'tree>)>) {
+    let (definitions, first_function, _) = inferred_in;
+    let others = check_initializers(program, definitions, first_function, diagnostics);
+    // The attributes `__init__` gives now have their types, which a protocol may name.
+    program.note_protocol_fits(None);
+    if inference::infer_methods(program, inferred_in, diagnostics) {
+        program.set_module_types(before_look);
+    }
     program.end_first_look();
     let body = BodyChecker::check_module(program, module_body, diagnostics);
     let start = typy_diagnostics::Span::empty(module.file, typy_diagnostics::TextOffset(0));
     program.initialise_first(body, &module.enclosing_packages(), start);
-    body
+    (body, others)
 }
 
 /// Looks at the module body with its diagnostics dropped and its effects undone but the types
@@ -579,18 +588,19 @@ fn check_module_body(
 fn first_look(
     program: &mut Program,
     (module_body, tree_body): (&[&Stmt], &[Stmt]),
-    inferred_in: (&mut [Definition<'_>], usize, usize, usize),
+    (definitions, at): (&mut [Definition<'_>], (usize, usize, usize)),
     exported: &BTreeSet<String>,
     diagnostics: &mut Diagnostics,
-) {
-    let first_class = inferred_in.3;
+) -> Vec<Type> {
+    let (module_functions, first_function, first_class) = at;
+    let inferred_in = (definitions, module_functions, first_function, first_class);
     let before_look = program.module_types();
     let snapshot = program.snapshot(first_class);
     BodyChecker::check_module(program, module_body, &mut Diagnostics::new());
     let inferred = inference::infer_results(program, tree_body, inferred_in, exported, diagnostics);
     let snapshot = if inferred {
         program.undo(snapshot);
-        program.set_module_types(before_look);
+        program.set_module_types(before_look.clone());
         let again = program.snapshot(first_class);
         BodyChecker::check_module(program, module_body, &mut Diagnostics::new());
         again
@@ -598,6 +608,7 @@ fn first_look(
         snapshot
     };
     program.keep_module_types(snapshot);
+    before_look
 }
 
 /// Checks the bodies of the module's functions after the module body, then the copies of

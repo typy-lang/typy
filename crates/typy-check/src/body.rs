@@ -311,7 +311,12 @@ impl<'program> BodyChecker<'program> {
         closure: Option<nested_function::Closure>,
         diagnostics: &mut Diagnostics,
     ) {
-        let returns = definition.signature.returns.clone();
+        // A result inferred after the definition was made is the program's (TYP-26).
+        let mut signature = definition.signature.clone();
+        if program.inferred_results.contains(&function) {
+            signature.returns = program.result_of(function);
+        }
+        let returns = signature.returns.clone();
         let mut checker = BodyChecker::new(program, diagnostics, Some(returns.clone()));
         checker.result = ResultSource::of(checker.program, function);
         let mut parameters = Vec::new();
@@ -402,7 +407,7 @@ impl<'program> BodyChecker<'program> {
             name: definition.name.clone(),
             qualified_name: definition.qualified_name.clone(),
             module: program.module.clone(),
-            signature: definition.signature.clone(),
+            signature,
             parameters,
             locals: if generic { Vec::new() } else { locals },
             body: if generic { Vec::new() } else { body },

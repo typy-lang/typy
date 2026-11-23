@@ -267,9 +267,9 @@ These forms are planned, and each is E0201 until its release:
 | `typing.Any`, bound when the program runs | 0.13 | TYP-25 |
 | `TypedDict`, `Required`, `NotRequired` and `ReadOnly` | 0.13 | TYP-32 |
 
-A function defined at module level returns what its `return` statements
-give when it has no return annotation (TYP-26); an empty `[]` without an
-annotation stays E0410 until TYP-27.
+A function defined at module level, and an instance method, returns what
+its `return` statements give when it has no return annotation (TYP-26);
+an empty `[]` without an annotation stays E0410 until TYP-27.
 
 ## Abstract collections
 

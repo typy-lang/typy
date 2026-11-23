@@ -25,6 +25,16 @@ fn typ_26_a_result_is_the_union_of_what_the_returns_give() {
 }
 
 #[test]
+fn typ_26_an_instance_method_returns_what_its_returns_give() {
+    let source = "class Account:\n    def __init__(self, owner: str) -> None:\n        \
+                  self.owner = owner\n\n    def summary(self):\n        \
+                  return self.label() + \"!\"\n\n    def label(self):\n        \
+                  return self.owner.title()\n\n\ntext: str = Account(\"ada\").summary()\n\
+                  print(text)\n";
+    assert_eq!(app(source), Vec::<String>::new());
+}
+
+#[test]
 fn typ_26_a_call_is_checked_against_the_inferred_result() {
     let found =
         messages("def name_of(code: int):\n    return str(code)\n\n\nprint(name_of(1) + 1)\n");
@@ -55,8 +65,27 @@ fn typ_26_a_function_that_must_keep_its_annotation_is_e0204_with_the_reason() {
              what it yields and is sent",
         ),
         (
-            "class Counter:\n    def value(self):\n        return 1\n",
+            "class Counter:\n    @staticmethod\n    def value():\n        return 1\n",
             "function `value` has no return annotation",
+        ),
+        (
+            "class Shape:\n    def area(self):\n        return 0\n\n\n\
+             class Square(Shape):\n    def area(self) -> int:\n        return 1\n",
+            "function `area` has no return annotation, and `Square.area` overrides it",
+        ),
+        (
+            "class Shape:\n    def area(self) -> int:\n        return 0\n\n\n\
+             class Square(Shape):\n    def area(self):\n        return 1\n",
+            "function `area` has no return annotation, and it overrides `Shape.area`",
+        ),
+        (
+            "class Box:\n    def __len__(self):\n        return 1\n",
+            "function `__len__` has no return annotation",
+        ),
+        (
+            "class Loop:\n    def forever(self):\n        return self.forever()\n",
+            "function `forever` has no return annotation, and it calls itself, directly or \
+             through other methods",
         ),
     ];
     for (source, message) in cases {

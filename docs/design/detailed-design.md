@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.117 |
+| Version | 2.118 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -2782,8 +2782,23 @@ each `return` value and `None` where the end can be reached, and
 also notes the function in `inferred_results`, whose end may then return
 the `None` its optional result holds. The module body is then checked
 again from the types before the first check, so a variable assigned a
-call of such a function takes its result. Methods and nested functions
-keep their annotations. Parallel checking
+call of such a function takes its result.
+
+An instance method of a class that is neither generic nor a protocol, and
+not a special method, gets the error type too, and
+`ClassInfo::inferred_methods` notes it. Its result is inferred after the `__init__`
+methods are checked, since its body reads the attributes they type, by
+`infer_methods`. `Program::overriding` keeps the annotation, E0204, of a
+method that overrides one of a base or that a class of the module
+overrides. The others are looked at again while a look infers a result,
+since a method calls another through its instance, which no name shows: a
+look whose result still has the error type, without an error of its own,
+waits, and one still waiting when no look makes progress calls itself.
+When any method's result was inferred, the module variables take their
+types from before the first look again, so the module body types them
+from the inferred results. The body check takes an inferred result from
+`Program::result_of`. A static or class method, a special method, a
+property and a nested function keep their annotations. Parallel checking
 (architecture section 7.5) is added when the build-time benchmarks of
 NFR-04 call for it.
 

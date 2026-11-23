@@ -74,7 +74,7 @@ pub(super) fn infer_results(
             continue;
         }
         let id = FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
-        let result = look_at(program, id, definition, first_class);
+        let (result, _) = look_at(program, id, definition, first_class);
         definitions[index].signature.returns = result.clone();
         program.set_result(id, result);
         inferred = true;
@@ -83,16 +83,17 @@ pub(super) fn infer_results(
 }
 
 /// Returns the result the body of `definition` gives, after looking at it with its
-/// diagnostics dropped and its effects undone.
+/// diagnostics dropped and its effects undone, and whether the look found an error.
 fn look_at(
     program: &mut Program,
     id: FunctionId,
     definition: &Definition<'_>,
     first_class: usize,
-) -> Type {
+) -> (Type, bool) {
     let snapshot = program.snapshot(first_class);
     program.inferring = Some((id, Vec::new()));
-    check_body(program, id, definition, &mut Diagnostics::new());
+    let mut found = Diagnostics::new();
+    check_body(program, id, definition, &mut found);
     let returned = program
         .inferring
         .take()
@@ -100,7 +101,65 @@ fn look_at(
         .unwrap_or_default();
     program.undo(snapshot);
     program.forget_function(id);
-    Type::union(returned)
+    (Type::union(returned), found.has_errors())
+}
+
+/// Infers the results of the methods of the module's classes, from `first_class` on, that
+/// have no result annotation, after each `__init__` gave its attributes their types. A method
+/// that overrides another, or that another overrides, keeps the annotation, E0204. A method
+/// reaches the others through its instance, which no name tells, so the methods are looked at
+/// again while a look infers another result: a look whose result needs one not yet inferred
+/// waits, and one that still waits when no look makes progress calls itself. Returns whether
+/// any was inferred.
+pub(super) fn infer_methods(
+    program: &mut Program,
+    (definitions, first_function, first_class): (&[Definition<'_>], usize, usize),
+    diagnostics: &mut Diagnostics,
+) -> bool {
+    let mut waiting = Vec::new();
+    for (id, class, at) in program.inferred_methods(first_class) {
+        let Some(definition) = (id.0 as usize)
+            .checked_sub(first_function)
+            .and_then(|index| definitions.get(index))
+        else {
+            continue;
+        };
+        match program.overriding(class, &definition.name, first_class) {
+            Some(reason) => {
+                let help = "write its result type, such as `-> int`";
+                missing_result(&definition.name, at, Some((&reason, help)), diagnostics);
+            }
+            None => waiting.push((id, definition, at)),
+        }
+    }
+    let mut inferred = false;
+    loop {
+        let mut progress = false;
+        let mut still = Vec::new();
+        for (id, definition, at) in waiting {
+            let (result, failed) = look_at(program, id, definition, first_class);
+            // A body with an error of its own keeps the error type, and its check reports it.
+            if result.has_error() && !failed {
+                still.push((id, definition, at));
+                continue;
+            }
+            program.set_result(id, result);
+            progress = true;
+            inferred = true;
+        }
+        waiting = still;
+        if waiting.is_empty() || !progress {
+            break;
+        }
+    }
+    for (_, definition, at) in waiting {
+        let reason = (
+            "it calls itself, directly or through other methods",
+            "write its result type, such as `-> int`",
+        );
+        missing_result(&definition.name, at, Some(reason), diagnostics);
+    }
+    inferred
 }
 
 /// Returns the names of the module's functions without a result annotation, with where each

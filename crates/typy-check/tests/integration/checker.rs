@@ -373,7 +373,10 @@ fn rejected_programs_give_their_codes() {
         ("def f() -> float:\n    return 1\n", &["E0405"]),
         ("def f() -> float:\n    return \"a\"\n", &["E0405"]),
         ("def f(x) -> None:\n    pass\n", &["E0203"]),
-        ("class A:\n    def f(self):\n        pass\n", &["E0204"]),
+        (
+            "class A:\n    @staticmethod\n    def f():\n        pass\n",
+            &["E0204"],
+        ),
         ("def f(x: Any) -> None:\n    pass\n", &["E0201"]),
         ("def f(x: Thing) -> None:\n    pass\n", &["E0205"]),
         ("print(undefined)\n", &["E0205"]),

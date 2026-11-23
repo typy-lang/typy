@@ -869,6 +869,57 @@ impl Program {
         self.add_class_variable_getters();
     }
 
+    /// Returns the methods of the classes from `first_class` on whose results are inferred,
+    /// each with its class and where its name stands (TYP-26).
+    pub(crate) fn inferred_methods(&self, first_class: usize) -> Vec<(FunctionId, ClassId, Span)> {
+        self.classes[first_class..]
+            .iter()
+            .flat_map(|info| {
+                info.inferred_methods
+                    .iter()
+                    .map(move |(id, span)| (*id, info.id, *span))
+            })
+            .collect()
+    }
+
+    /// Returns why the method `name` of `class` keeps its result annotation, when it does: it
+    /// overrides a method of a base, or a class from `first_class` on overrides it, so its
+    /// result is part of an interface (TYP-26, ADR-0092).
+    pub(crate) fn overriding(
+        &self,
+        class: ClassId,
+        name: &str,
+        first_class: usize,
+    ) -> Option<String> {
+        let info = &self.classes[class.0 as usize];
+        let mut base = info.base;
+        while let Some(current) = base {
+            let base_info = &self.classes[current.0 as usize];
+            if base_info.method(name).is_some() {
+                return Some(format!("it overrides `{}.{name}`", base_info.name));
+            }
+            base = base_info.base;
+        }
+        let derives = |mut current: Option<ClassId>| {
+            while let Some(each) = current {
+                if each == class {
+                    return true;
+                }
+                current = self.classes[each.0 as usize].base;
+            }
+            false
+        };
+        self.classes[first_class..]
+            .iter()
+            .find(|other| other.id != class && derives(other.base) && other.method(name).is_some())
+            .map(|other| format!("`{}.{name}` overrides it", other.name))
+    }
+
+    /// Returns the result of the function `id`, which may have been inferred (TYP-26).
+    pub(crate) fn result_of(&self, id: FunctionId) -> Type {
+        self.signatures[id.0 as usize].returns.clone()
+    }
+
     /// Gives the function `id` the result `returns`, which its `return` statements gave
     /// (TYP-26).
     pub(crate) fn set_result(&mut self, id: FunctionId, returns: Type) {

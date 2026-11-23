@@ -40,6 +40,9 @@ pub(crate) struct ClassInfo {
     pub(crate) exception: Option<ExceptionClass>,
     pub(crate) attributes: Vec<AttributeInfo>,
     pub(crate) methods: Vec<(String, FunctionId)>,
+    /// The methods without a result annotation whose results their `return` statements give,
+    /// with where each name stands (TYP-26).
+    pub(crate) inferred_methods: Vec<(FunctionId, Span)>,
     pub(crate) init: Option<FunctionId>,
     /// The class variables the class body gives a value, each held as the module variable
     /// `Class.name` (CLS-11, ADR-0024).
@@ -664,6 +667,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         exception,
         attributes,
         methods: Vec::new(),
+        inferred_methods: Vec::new(),
         init: None,
         class_variables: Vec::new(),
         class_methods: Vec::new(),
@@ -1013,20 +1017,32 @@ fn method_definition<'tree>(
         parameters: &in_scope,
         ..*scope
     };
-    let mut method = definition(
-        parts,
-        (Some(&method_owner), false),
-        &method_scope,
-        diagnostics,
-    );
-    method.type_parameters = type_parameters;
-    // A parameter that names a protocol makes the method generic; a special method or a
-    // property has one body, so its parameter takes protocol values (ADR-0041).
+    // An instance method of a class that is neither generic nor a protocol may leave its
+    // result out, which its `return` statements give (TYP-26). The result of a special
+    // method, a property, and a static or class method is read before any body is checked:
+    // the first two are part of what the class offers, and the others have a bridge made with
+    // their signature.
     let special = name.starts_with("__") && name.ends_with("__");
     let plain = matches!(
         kind,
         MethodKind::Instance | MethodKind::Static | MethodKind::Class
     );
+    let infers = *kind == MethodKind::Instance
+        && !special
+        && in_scope.is_empty()
+        && !super::protocol::is_protocol(&owner.instance);
+    let mut method = definition(
+        parts,
+        (Some(&method_owner), infers),
+        &method_scope,
+        diagnostics,
+    );
+    if infers && parts.returns.is_none() {
+        info.inferred_methods.push((id, parts.name.span));
+    }
+    method.type_parameters = type_parameters;
+    // A parameter that names a protocol makes the method generic; a special method or a
+    // property has one body, so its parameter takes protocol values (ADR-0041).
     super::protocol::protocol_parameters(&mut method, special || !plain, diagnostics);
     if !method.type_parameters.is_empty() {
         info.generic_methods.push(registered.clone());

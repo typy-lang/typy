@@ -766,7 +766,8 @@ def greet(name: str, punctuation: str = "!") -> str:
 print(fib(20), greet("world"), greet("you", punctuation="?"))
 ```
 
-A function defined at module level may leave its return annotation out:
+A function defined at module level, and an instance method, may leave its
+return annotation out:
 it returns what its `return` statements give, their union when they give
 several types, and `None` among them when it can reach its end (TYP-26):
 
@@ -786,9 +787,11 @@ def first(values: list[int]):
 print(label(20).upper(), first([]))
 ```
 
-A method, a nested function, a generator, a function that calls itself,
-directly or through others, and a function a library exports need the
-annotation, `-> None` when they return nothing, E0204 otherwise:
+A static or class method, a special method such as `__len__`, a property,
+a method that overrides another or that another overrides, a nested
+function, a generator, a function that calls itself, directly or through
+others, and a function a library exports need the annotation, `-> None`
+when they return nothing, E0204 otherwise:
 
 <!-- typy-expect: rejected E0204 at 1:5 -->
 ```python

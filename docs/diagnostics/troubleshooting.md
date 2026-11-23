@@ -177,12 +177,14 @@ print(double(2))
 
 ## E0204: function without a return annotation
 
-A function defined at module level without a return annotation returns
-what its `return` statements give (TYP-26). Every other function needs
-the annotation (TYP-01): a method, a nested function, a generator, a
-function that calls itself, directly or through others, and a function a
-library exports. Write `-> None` when it returns nothing. `__init__` may
-leave it out.
+A function defined at module level or an instance method without a
+return annotation returns what its `return` statements give (TYP-26).
+Every other function needs the annotation (TYP-01): a static or class
+method, a special method such as `__len__`, a property, a method that
+overrides another or that another overrides, a nested function, a
+generator, a function that calls itself, directly or through others, and a
+function a library exports. Write `-> None` when it returns nothing.
+`__init__` may leave it out.
 
 This program gives E0204, since the function calls itself:
 

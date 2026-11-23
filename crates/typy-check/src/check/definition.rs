@@ -486,7 +486,7 @@ pub(super) fn missing_result(
         Some((_, help)) => help,
         None => {
             "write its result type, such as `-> int`; TyPy infers the result of a function \
-             defined at module level, not of a method or a nested function"
+             defined at module level and of an instance method, not of this one"
         }
     };
     diagnostics.push(

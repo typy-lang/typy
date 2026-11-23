@@ -122,7 +122,7 @@ pub(super) fn check_values(
 }
 
 /// Returns true when a class's instance type is that of a protocol.
-fn is_protocol(instance: &Type) -> bool {
+pub(super) fn is_protocol(instance: &Type) -> bool {
     matches!(instance, Type::Instance(class) if class.protocol)
 }
 
