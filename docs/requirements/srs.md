@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software requirements specification |
-| Version | 1.142 |
+| Version | 1.143 |
 | Status | Approved |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-24 |
@@ -691,7 +691,15 @@ By design, TyPy adds no names of its own: no fixed-width integer types, no
 ## 7. Open issues
 
 A new question gets the next unused issue number, after the last of the
-resolved issues below. No question is open.
+resolved issues below. The corpus run of 0.12 raised these three, each a
+first error of modules that pass `mypy --strict`
+([corpus report](../testing/corpus-report.md)).
+
+| ID | Question | Raised |
+| --- | --- | --- |
+| OI-49 | In which releases, and in which order, do the standard library modules the corpus imports most come: `collections`, `itertools`, `functools` and `re`, with the rest of groups 2 and 3 of the 0.10 research note? | 2026-11-24 |
+| OI-50 | In which release do the methods of built-in types that typed programs call and TyPy lacks come, such as `tuple.count`, `int.bit_length` and `int.from_bytes`? | 2026-11-24 |
+| OI-51 | Which narrowings of an optional value that `mypy --strict` accepts does TyPy lack, as the corpus's linked nodes show, and in which release does each come? | 2026-11-24 |
 
 ## 8. Resolved issues
 
