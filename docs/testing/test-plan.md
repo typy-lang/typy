@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy test plan |
-| Version | 1.63 |
+| Version | 1.64 |
 | Status | Draft |
 | Owner | typy-lang contributors |
 | Last updated | 2026-11-23 |
@@ -368,6 +368,7 @@ that the specification does not define.
 | TYP-35 | 0.13 | IT | `crates/typy-check/tests/integration/overloads.rs` for each form E0201 while it is planned |
 | TYP-36 | 0.13 | IT | `crates/typy-check/tests/integration/self_type.rs` for each form E0201 while it is planned |
 | TYP-37 | 0.13 | IT | `crates/typy-check/tests/integration/guards.rs` for each form E0201 while it is planned |
+| TYP-38 | 0.13 | UT, IT | `typy-check` tests of each narrowing; the corpus run, whose refusals with E0411 and E0412 on an optional end |
 | DAT-01 | 0.1 | IT | `tests/conformance/dat/DAT-01_*.py` |
 | DAT-02 | 0.1 | IT | `tests/conformance/dat/DAT-02_*.py` |
 | DAT-03 | 0.1 | IT | `tests/conformance/dat/DAT-03_*.py` |
@@ -584,6 +585,10 @@ that the specification does not define.
 | LIB-32 | 0.13 | UT, IT | `typy-check` tests that a name or parameter is refused under an earlier floor; `tests/conformance/lib/LIB-32_*.py` with the floor of each Python version |
 | LIB-33 | 0.13 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/lib/LIB-33_*.py` comparing copies of each kind of value with CPython's once given |
 | LIB-34 | 0.12 | UT, IT | `typy-runtime` tests of the class hash slot; `tests/conformance/lib/LIB-34_*.py` comparing hashes CPython defines, and the refusal of a value without a hash |
+| LIB-35 | 0.13 | UT, IT | `typy-check` test of the refusal while it is planned; the typeshed comparison test and `tests/conformance/lib/LIB-35_*.py` comparing each module with CPython's once given |
+| LIB-36 | 0.14 | UT, IT | `typy-check` test of the refusal while it is planned; the typeshed comparison test and `tests/conformance/lib/LIB-36_*.py` comparing each module with CPython's once given |
+| LIB-37 | 0.13 | UT, IT | `typy-check` tests of each method's signature; `tests/conformance/lib/LIB-37_*.py` comparing results and errors with CPython's |
+| LIB-38 | 0.13 | UT, IT | `typy-check` test of the refusal while it is planned; `tests/conformance/lib/LIB-38_*.py` comparing standard error with CPython's once given |
 | LIB-28 | 0.12 | UT, IT | `crates/typy-runtime/src/int/arithmetic/tests.rs` for `pow` with a modulus; `crates/typy-runtime/src/bytearray/tests.rs` for the bytearray; `crates/typy-check/tests/integration/call_arguments.rs`, tests named for LIB-28; `tests/conformance/lib/LIB-28_*.py` |
 | LIB-29 | 0.12 | UT, IT | `crates/typy-source/src/parse/tests.rs` for the features, the placement and the errors; `tests/conformance/lib/LIB-29_*.py` |
 | LIB-13 | 0.4 | IT | `tests/conformance/lib/LIB-13_*.py` |
@@ -655,6 +660,7 @@ that the specification does not define.
 | NFR-25 | 0.10 | Release check | `scripts/check-sbom.py`, run by `make dist` on each host: fails when the archive's `sbom.cdx.json` misses a file of the archive or lists it with another SHA-256, misses a crate `cargo tree` gives for the compiler or the runtime, or misses LLVM or the Rust standard library |
 | NFR-26 | 0.10 | Release check | the publish job of `release.yml` attests each archive with `actions/attest-build-provenance` and runs `gh attestation verify` on each before it creates the release, and again on the x86-64 archive it downloads back |
 | NFR-27 | 1.0 | Benchmark | The benchmark suite built with biased and with plain counts, compared on one thread against the 2% budget |
+| NFR-28 | 0.13 | Benchmark | A validation run of `make bench-compare` in both modes, comparing each ratio against C |
 | C-01 | 0.1 | CI gate | Workspace builds with the pinned Rust toolchain only |
 | C-02 | 0.1 | CI gate | `scripts/check-pins.sh`: `ruff_python_parser` pinned with `=` in `Cargo.toml` |
 | C-03 | 0.1 | UT | `typy-codegen` test: the linked LLVM major version is 23 |

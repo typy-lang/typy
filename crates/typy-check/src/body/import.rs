@@ -395,7 +395,14 @@ impl Program {
         }
         // The modules a later release gives (ADR-0093, ADR-0097).
         let planned = match top {
+            // `os.path` comes with the modules of LIB-35, the rest of `os` later.
+            "os" if module.as_str() == "os.path" => Some(("0.13", RuleId::LIB_35)),
             "os" => Some(("1.0", RuleId::LIB_07)),
+            "itertools" | "collections" | "datetime" | "pathlib" | "fractions" | "re" => {
+                Some(("0.13", RuleId::LIB_35))
+            }
+            "warnings" => Some(("0.13", RuleId::LIB_38)),
+            "json" | "functools" | "argparse" | "logging" | "csv" => Some(("0.14", RuleId::LIB_36)),
             // These reach the operating system through `_typy` (ADR-0119).
             "statistics" | "time" | "random" => Some(("0.13", RuleId::LIB_30)),
             // `copy` reads each object's class, so the compiler gives it (ADR-0121).

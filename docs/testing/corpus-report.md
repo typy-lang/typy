@@ -163,12 +163,12 @@ modules it refused, in both corpora, comes mostly from these causes:
 | First error | Modules | Plan |
 | --- | --- | --- |
 | `import doctest`, whose `testmod()` is the module's main program | 248 | After 1.0 (OI-43) |
-| Another module of the standard library, such as `collections`, `itertools`, `functools` or `re`, E0206 | 60 | Open (OI-49) |
+| Another module of the standard library, such as `collections`, `itertools`, `functools` or `re`, E0206 | 60 | 0.13 and 0.14 (LIB-35, LIB-36) |
 | `typing.Any` | 25 | 0.13 (TYP-25) |
 | A default other than a constant | 23 | 1.0 (EXP-20) |
 | An `int` where a `float` is declared | 21 | Kept: CPython keeps the value an `int` (TYP-09, OI-12) |
 | `x ** y` whose result CPython types by the exponent's value, E0302 | 21 | Kept (EXP-04, OI-09) |
-| An optional that `mypy --strict` narrows and TyPy does not, E0411 or E0412 | 17 | Open (OI-51) |
-| A method of a built-in type TyPy lacks: `tuple.count`, `int.bit_length` or `int.from_bytes` | 14 | Open (OI-50) |
+| An optional that `mypy --strict` narrows and TyPy does not, E0411 or E0412 | 17 | 0.13 (TYP-38) |
+| A method of a built-in type TyPy lacks: `tuple.count`, `int.bit_length` or `int.from_bytes` | 14 | 0.13 (LIB-37) |
 | `random`, `statistics`, `copy` or `time` | 10 | 0.13 (LIB-30, LIB-33) |
 | `sum` of floats without a float start | 8 | Kept: CPython returns the `int` 0 for an empty list (LIB-02) |

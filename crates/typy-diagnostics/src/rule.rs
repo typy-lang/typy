@@ -336,7 +336,7 @@ impl RuleId {
     pub const LIB_05: Self = Self("LIB-05");
     /// The `dataclasses` names in CLS-05 and the `typing` names in TYP and GEN shall be available.
     pub const LIB_06: Self = Self("LIB-06");
-    /// `os.environ`, `os.path`, `time` and `random` shall be available.
+    /// `os.environ` shall be available; `os.path` comes with LIB-35.
     pub const LIB_07: Self = Self("LIB-07");
     /// Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides.
     pub const LIB_08: Self = Self("LIB-08");
@@ -384,6 +384,12 @@ impl RuleId {
     pub const LIB_33: Self = Self("LIB-33");
     /// `hash` shall be available for a value of every type that has a hash, giving the hash a set or a dict keeps it by, CPython's for an `int`, a `float`, a `bool`, `None` and tuples of them and what `__hash__` returns for an instance, and shall refuse a value of a type that has none (ADR-0122).
     pub const LIB_34: Self = Self("LIB-34");
+    /// `itertools`, `collections`, `datetime`, `pathlib`, `os.path`, `fractions` and `re` shall be available, written in typed Python that CPython also runs, reaching the operating system through the private module `_typy` where they need it, with signatures a test compares with typeshed's (ADR-0119).
+    pub const LIB_35: Self = Self("LIB-35");
+    /// `json`, `functools`, `argparse`, `logging` and `csv` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0119).
+    pub const LIB_36: Self = Self("LIB-36");
+    /// `warnings.warn` shall be available with the warning categories, writing CPython's text of a warning, `file:line: Category: message` and the source line, to standard error once for each place under the default filter, and a standard library module TyPy writes in Python shall warn where CPython's does.
+    pub const LIB_38: Self = Self("LIB-38");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -686,6 +692,9 @@ impl RuleId {
         Self::LIB_30,
         Self::LIB_33,
         Self::LIB_34,
+        Self::LIB_35,
+        Self::LIB_36,
+        Self::LIB_38,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,

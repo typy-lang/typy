@@ -245,7 +245,7 @@ This program gives E0206:
 
 <!-- typy-expect: rejected E0206 at 1:1 -->
 ```python
-import json
+import hashlib
 ```
 
 This one is correct:

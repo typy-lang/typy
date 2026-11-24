@@ -32,7 +32,10 @@ TyPy 0.11 provides these modules of the standard library:
 | `ctypes` | Calls into C libraries, with C objects, pointers, arrays and structures | [C interoperability](../extending/c-interop.md) |
 
 A module or name planned for a later release is refused with E0201,
-naming the release: `statistics`, `time` and `random` (LIB-30) and
-`copy` (LIB-33) in 0.13; `os` (LIB-07) in 1.0; and `doctest` in a
-release after 1.0. Each other module is E0206. From the Python floor
+naming the release: `statistics`, `time` and `random` (LIB-30),
+`copy` (LIB-33), `itertools`, `collections`, `datetime`, `pathlib`,
+`os.path`, `fractions` and `re` (LIB-35), and `warnings` (LIB-38) in
+0.13; `json`, `functools`, `argparse`, `logging` and `csv` (LIB-36) in
+0.14; the rest of `os` (LIB-07) in 1.0; and `doctest` in a release after
+1.0. Each other module is E0206. From the Python floor
 3.15, `math` also gives `math.integer` (LIB-26).

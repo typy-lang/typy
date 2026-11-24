@@ -148,6 +148,10 @@ All notable changes to TyPy are recorded here. The format follows
 
 ### Changed
 
+- `import` of a module a later release plans names that release, where it
+  was E0206: `itertools`, `collections`, `datetime`, `pathlib`, `os.path`,
+  `fractions`, `re` and `warnings` in 0.13, and `json`, `functools`,
+  `argparse`, `logging` and `csv` in 0.14 (LIB-35, LIB-36, LIB-38).
 - The hash of an instance is what its `__hash__` returns when that fits
   64 bits, as in CPython, rather than that value modulo `2**61 - 1`; a
   set of such instances may iterate in another order (ADR-0122).

@@ -45,6 +45,12 @@ fn each_standard_library_module_of_a_later_release_names_it() {
         ("random", "0.13", "LIB-30"),
         ("copy", "0.13", "LIB-33"),
         ("os", "1.0", "LIB-07"),
+        ("os.path", "0.13", "LIB-35"),
+        ("itertools", "0.13", "LIB-35"),
+        ("re", "0.13", "LIB-35"),
+        ("warnings", "0.13", "LIB-38"),
+        ("json", "0.14", "LIB-36"),
+        ("functools", "0.14", "LIB-36"),
     ];
     for (module, release, rule) in cases {
         assert_eq!(
