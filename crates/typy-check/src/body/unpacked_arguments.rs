@@ -292,7 +292,9 @@ impl BodyChecker<'_> {
         value: &Expr,
         entries: &mut Option<Type>,
     ) -> Option<Argument> {
+        // A `frozendict` unpacks as the dict it holds (DAT-18).
         let value = self.expression(value);
+        let value = self.frozendict_items(value);
         let item = match &value.ty {
             Type::Dict(key, item) if **key == Type::Str => item.as_ref().clone(),
             Type::Error => return None,
@@ -378,7 +380,7 @@ pub(super) fn iterated_type(ty: &Type) -> Option<Type> {
         | Type::Dict(item, _) => Some(item.as_ref().clone()),
         Type::Generator { yields, .. } => Some(yields.as_ref().clone()),
         Type::Str => Some(Type::Str),
-        Type::Bytes | Type::Range => Some(Type::Int),
+        Type::Bytes | Type::Bytearray | Type::Range => Some(Type::Int),
         Type::Tuple(items) => {
             let (first, rest) = items.split_first()?;
             rest.iter().all(|item| item == first).then(|| first.clone())

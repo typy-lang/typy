@@ -13,6 +13,7 @@ the same exceptions.
 | `None` | DAT-04 |
 | `str`, a sequence of Unicode code points | DAT-05 |
 | `bytes`, a sequence of integers from 0 to 255 | DAT-06 |
+| `bytearray`, a `bytes` that changes in place; see [Bytearrays](#bytearrays) | LIB-28 |
 | `list[T]`, shared by every name bound to it | DAT-07 |
 | `tuple[A, B]` with a fixed number of items, and `tuple[T, ...]` | DAT-08, DAT-14 |
 | `dict[K, V]`, in insertion order | DAT-09 |
@@ -25,6 +26,7 @@ the same exceptions.
 | `range` as a value: `len`, indexing, slicing, `in`, `==` and its text | DAT-17 |
 | `dict.keys()` and `dict.items()` as sets: `\|`, `&`, `-`, `^` and comparisons | DAT-16 |
 | `reversed` of a dict, `dict(name=value)` and `dict.fromkeys` | DAT-16 |
+| `frozendict[K, V]`, from the Python floor 3.15; see [Frozen dicts](#frozen-dicts) | DAT-18 |
 
 A slice without a step, or with a step of 1, takes any number of items,
 and the list grows or shrinks to fit: `xs[:0] = items` inserts at the
@@ -89,9 +91,60 @@ print(dict(defaults, size="l"), list(reversed(defaults)))
 print(dict.fromkeys(["ada", "alan"], 0), dict.fromkeys("ab"))
 ```
 
-`frozendict`, a builtin from Python 3.15, is E0201 at the Python floor
-3.15, planned for 0.12 (DAT-18); below that floor it is not defined, as
-in CPython.
+## Bytearrays
+
+A `bytearray` holds bytes that change in place. It has every method of
+`bytes`, each giving a `bytearray` where the method of `bytes` gives
+`bytes`, and the methods of a list that change it, `append`, `extend`,
+`insert`, `pop`, `remove`, `reverse`, `clear` and `copy`, with `int`
+items:
+
+<!-- typy-expect: accepted -->
+```python
+buffer = bytearray(b"hello")
+buffer[0] = ord("H")
+buffer += b", world"
+buffer.extend([33, 33])
+del buffer[-1]
+print(buffer, buffer.upper(), buffer.split(b", "), buffer[:5] == b"Hello")
+```
+
+`bytearray(n)` makes `n` zero bytes, `bytearray(values)` one of a list of
+`int`s, `bytearray(data)` a copy of a `bytes` or a `bytearray`, and
+`bytearray(text, encoding)` the encoded text. An item is an `int` from 0
+to 255, and assigning any other raises `ValueError`. A slice takes the
+bytes of any `bytes` or `bytearray`. `+=` and `*=` change the bytearray
+itself, so every name bound to it sees the change, as for a list. A
+`bytes` and a `bytearray` compare, combine and search each other, and a
+method of either takes the other where it takes bytes. A `bytearray` has
+no hash, so it cannot be a member of a set or a key of a dict (ADR-0108).
+
+## Frozen dicts
+
+From the Python floor 3.15, `frozendict[K, V]` is the immutable mapping
+of PEP 814 (DAT-18, ADR-0123). `frozendict(...)` takes what `dict(...)`
+takes: a dict or a `frozendict`, `(key, value)` pairs, keywords, or
+nothing where an annotation gives the types, as in
+`empty: frozendict[str, int] = frozendict()`. It has `len`, `in`,
+iteration, `fd[key]`, `get`, `keys`, `values`, `items`, and `copy`, which
+returns the frozendict itself. `fd | other` merges a dict or a frozendict
+into a new frozendict, and `==` compares it with either. It prints as
+`frozendict({'tea': 3})`, and hashes as CPython 3.15 hashes it, so it can
+be a key of a dict; hashing one whose values have no hash, such as lists,
+raises `TypeError`.
+
+Where CPython reads any mapping, a frozendict reads as a dict: in
+`dict(fd)`, `d.update(fd)`, `{**fd}`, `f(**fd)`, `d | fd`, `d |= fd`,
+`reversed(fd)` and a `for` loop. It has no `fd[key] = value` and no
+method that changes it, as CPython raises `TypeError` or
+`AttributeError` for them. Below the floor 3.15 the name is E0425, as
+CPython 3.12 raises `NameError`:
+
+<!-- typy-expect: rejected E0425 at 1:10 -->
+```python
+prices = frozendict({"tea": 3})
+print(prices)
+```
 
 ## Example
 

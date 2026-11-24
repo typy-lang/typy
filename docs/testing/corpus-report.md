@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy corpus report |
-| Version | 0.2 |
+| Version | 0.3 |
 | Status | Draft |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-22 |
+| Last updated | 2026-11-24 |
 
 ## 1. Purpose
 
@@ -99,45 +99,47 @@ release archive.
 
 | Corpus | Commit | Modules | Built | Same output | Share |
 | --- | --- | --- | --- | --- | --- |
-| TheAlgorithms/Python | 30507bb | 584 | 64 | 64 | 11.0 % |
-| mypyc run tests | 1572a18 | 83 | 15 | 15 | 18.1 % |
+| TheAlgorithms/Python | 30507bb | 584 | 85 | 85 | 14.6 % |
+| mypyc run tests | 1572a18 | 83 | 19 | 19 | 22.9 % |
 
 | Corpus | Outcome | Modules |
 | --- | --- | --- |
-| TheAlgorithms/Python | refused: E0201 | 357 |
-| TheAlgorithms/Python | refused: E0206 | 46 |
-| TheAlgorithms/Python | refused: E0410 | 32 |
-| TheAlgorithms/Python | refused: E0302 | 16 |
-| TheAlgorithms/Python | refused: E0404 | 16 |
-| TheAlgorithms/Python | refused: E0202 | 10 |
+| TheAlgorithms/Python | refused: E0201 | 295 |
+| TheAlgorithms/Python | refused: E0206 | 56 |
+| TheAlgorithms/Python | refused: E0412 | 26 |
+| TheAlgorithms/Python | refused: E0404 | 23 |
+| TheAlgorithms/Python | refused: E0302 | 21 |
+| TheAlgorithms/Python | refused: E0202 | 17 |
 | TheAlgorithms/Python | refused: E0103 | 9 |
-| TheAlgorithms/Python | refused: E0412 | 8 |
-| TheAlgorithms/Python | refused: E0407 | 5 |
-| TheAlgorithms/Python | refused: E0402 | 4 |
-| TheAlgorithms/Python | refused: E0306 | 3 |
-| TheAlgorithms/Python | refused: E0401 | 3 |
-| TheAlgorithms/Python | refused: E0405 | 3 |
-| TheAlgorithms/Python | refused: E0205 | 2 |
-| TheAlgorithms/Python | refused: E0303 | 2 |
+| TheAlgorithms/Python | refused: E0411 | 8 |
+| TheAlgorithms/Python | refused: E0402 | 7 |
+| TheAlgorithms/Python | refused: E0410 | 7 |
+| TheAlgorithms/Python | refused: E0303 | 5 |
+| TheAlgorithms/Python | refused: E0306 | 4 |
+| TheAlgorithms/Python | refused: E0401 | 4 |
+| TheAlgorithms/Python | refused: E0405 | 4 |
+| TheAlgorithms/Python | refused: E0205 | 3 |
+| TheAlgorithms/Python | refused: E0407 | 3 |
+| TheAlgorithms/Python | refused: E0408 | 2 |
 | TheAlgorithms/Python | refused: E0409 | 2 |
-| TheAlgorithms/Python | refused: E0411 | 2 |
-| mypyc run tests | refused: E0201 | 32 |
+| TheAlgorithms/Python | refused: E0301 | 1 |
+| TheAlgorithms/Python | refused: E0305 | 1 |
+| TheAlgorithms/Python | refused: E0309 | 1 |
+| mypyc run tests | refused: E0201 | 29 |
 | mypyc run tests | refused: E0202 | 9 |
 | mypyc run tests | refused: E0104 | 4 |
 | mypyc run tests | refused: E0206 | 4 |
 | mypyc run tests | refused: E0404 | 3 |
 | mypyc run tests | refused: E0205 | 2 |
 | mypyc run tests | refused: E0309 | 2 |
+| mypyc run tests | refused: E0412 | 2 |
 | mypyc run tests | refused: E0414 | 2 |
 | mypyc run tests | refused: E0301 | 1 |
 | mypyc run tests | refused: E0303 | 1 |
 | mypyc run tests | refused: E0402 | 1 |
-| mypyc run tests | refused: E0405 | 1 |
 | mypyc run tests | refused: E0407 | 1 |
 | mypyc run tests | refused: E0409 | 1 |
-| mypyc run tests | refused: E0410 | 1 |
 | mypyc run tests | refused: E0411 | 1 |
-| mypyc run tests | refused: E0412 | 1 |
 | mypyc run tests | refused: E0425 | 1 |
 
 <!-- end of corpus results -->
@@ -151,22 +153,22 @@ output or exit status than CPython's, or for longer than 20 seconds.
 
 ### 4.1 What keeps the most code out
 
-On 2026-11-22, every module of the corpus that TyPy built ran as CPython
-runs it. The first error of the modules it refused, in both corpora,
-comes mostly from a few causes, each planned as the resolved issues of the
-[specification](../requirements/srs.md) say:
+On 2026-11-24, with TyPy 0.12, every module of the corpus that TyPy built
+ran as CPython runs it. The shares rose from 11.0 % and 18.1 % in 0.11, as
+25 more modules built: `from __future__ import annotations` (LIB-29),
+empty collections typed from their first use (TYP-27), the builtins of
+LIB-28 and the modules of LIB-27 reached them. The first error of the
+modules it refused, in both corpora, comes mostly from these causes:
 
 | First error | Modules | Plan |
 | --- | --- | --- |
-| `import doctest`, whose `testmod()` is the module's main program | 165 | After 1.0 (OI-43) |
-| `from __future__ import annotations` | 129 | 0.12 (LIB-29, OI-42) |
-| Another module of the standard library TyPy does not provide yet, such as `collections`, `itertools` or `functools` | 50 | The `typy-stdlib` crate, from 0.12 (LIB-27) |
-| An empty `[]`, `{}` or `set()` without an annotation, E0410 | 33 | Inferred from its first use in 0.12 (TYP-27) |
-| A builtin of LIB-28, such as `divmod`, `bin` or `hex` | 22 | 0.12 (LIB-28, OI-44) |
+| `import doctest`, whose `testmod()` is the module's main program | 248 | After 1.0 (OI-43) |
+| Another module of the standard library, such as `collections`, `itertools`, `functools` or `re`, E0206 | 60 | 0.13 and 0.14 (LIB-35, LIB-36) |
+| `typing.Any` | 25 | 0.13 (TYP-25) |
 | A default other than a constant | 23 | 1.0 (EXP-20) |
-| `typing.Any` | 19 | 0.13 (TYP-25) |
-
-Measuring the corpus also found a defect: a class method called through
-`super()` took the class that defines it as `cls`, where CPython passes
-the class of the instance. TyPy 0.11 fixes it, and one mypyc run test
-that ran to another output now counts (CLS-25, CLS-46).
+| An `int` where a `float` is declared | 21 | Kept: CPython keeps the value an `int` (TYP-09, OI-12) |
+| `x ** y` whose result CPython types by the exponent's value, E0302 | 21 | Kept (EXP-04, OI-09) |
+| An optional that `mypy --strict` narrows and TyPy does not, E0411 or E0412 | 17 | 0.13 (TYP-38) |
+| A method of a built-in type TyPy lacks: `tuple.count`, `int.bit_length` or `int.from_bytes` | 14 | 0.13 (LIB-37) |
+| `random`, `statistics`, `copy` or `time` | 10 | 0.13 (LIB-30, LIB-33) |
+| `sum` of floats without a float start | 8 | Kept: CPython returns the `int` 0 for an empty list (LIB-02) |

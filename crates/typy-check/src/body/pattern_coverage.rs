@@ -10,6 +10,7 @@ use typy_source::syntax::{Constant, Expr, MatchCase, Pattern};
 
 use super::BodyChecker;
 use super::isinstance::always_instance;
+use crate::literal_type::LiteralValue;
 use crate::types::{Type, TypeObjectOf};
 
 /// One part of the subject's type that a case can cover whole.
@@ -42,6 +43,9 @@ pub(super) fn members(ty: &Type) -> Vec<Member> {
         Type::Union(each) => each.iter().flat_map(members).collect(),
         Type::NoneType => vec![Member::None],
         Type::Bool => vec![Member::True, Member::False],
+        // `Literal[True]` is the member `True` (TYP-28).
+        Type::Literal(value) if **value == LiteralValue::Bool(true) => vec![Member::True],
+        Type::Literal(value) if **value == LiteralValue::Bool(false) => vec![Member::False],
         other => vec![Member::Of(other.clone())],
     }
 }
@@ -92,7 +96,15 @@ impl BodyChecker<'_> {
             Pattern::Mapping { keys, .. } => {
                 keys.is_empty() && matches!(member, Member::Of(Type::Dict(..)))
             }
-            Pattern::Value { .. } | Pattern::Star { .. } => false,
+            // A value pattern matches every value of the literal type of an equal constant
+            // (TYP-28).
+            Pattern::Value { value, .. } => match member {
+                Member::Of(Type::Literal(member)) => {
+                    LiteralValue::of_written(value).is_some_and(|value| value.equals(member))
+                }
+                _ => false,
+            },
+            Pattern::Star { .. } => false,
         }
     }
 
@@ -114,7 +126,7 @@ fn class_covers(class: &TypeObjectOf, member: &Member) -> bool {
     match member {
         Member::None => false,
         Member::True | Member::False => always_instance(&Type::Bool, class),
-        Member::Of(ty) => always_instance(ty, class),
+        Member::Of(ty) => always_instance(&ty.without_literal(), class),
     }
 }
 

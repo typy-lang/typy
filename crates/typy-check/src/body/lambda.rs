@@ -37,7 +37,7 @@ impl BodyChecker<'_> {
         else {
             return self.expected_value(expression, expected);
         };
-        if let Some(refused) = self.refused_lambda(*span) {
+        if let Some(refused) = self.refused_capture(*span, "`lambda`") {
             return refused;
         }
         let Some(parameter_types) = self.lambda_parameter_types(parameters, expected.parameters)
@@ -158,9 +158,9 @@ impl BodyChecker<'_> {
         self.expression(expression)
     }
 
-    /// Returns E0306 for a `lambda` that captures a variable assigned no type yet: its body is
-    /// checked where it stands.
-    fn refused_lambda(&mut self, span: Span) -> Option<TypedExpr> {
+    /// Returns E0306 for a `lambda` or a generator expression, `what`, that captures a
+    /// variable assigned no type yet: its body is checked where it stands (TYP-12).
+    pub(super) fn refused_capture(&mut self, span: Span, what: &str) -> Option<TypedExpr> {
         let untyped = self.captured_names(span).into_iter().find(|name| {
             self.cell_symbol(name)
                 .is_some_and(|symbol| !self.types.contains_key(&symbol))
@@ -168,12 +168,10 @@ impl BodyChecker<'_> {
         let diagnostic = Diagnostic::new(
             DiagnosticCode::error(306),
             span,
-            format!("this `lambda` reads `{untyped}`, which has no type yet where it stands"),
+            format!("this {what} reads `{untyped}`, which has no type yet where it stands"),
         )
         .with_rule(RuleId::TYP_12)
-        .with_help(format!(
-            "assign or annotate `{untyped}` before the `lambda`"
-        ));
+        .with_help(format!("assign or annotate `{untyped}` before the {what}"));
         Some(self.error(diagnostic, span))
     }
 

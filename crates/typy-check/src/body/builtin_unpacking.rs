@@ -68,10 +68,35 @@ impl Arity {
 
 /// Returns the arity of `builtin` as a call with `*` binds it, or `None` for one that takes
 /// any number of arguments.
+#[allow(clippy::too_many_lines, reason = "one arm per builtin")]
 fn arity(builtin: Builtin) -> Option<Arity> {
     use Builtin as B;
     Some(match builtin {
         B::Abs => one("abs() takes exactly one argument ({} given)"),
+        B::Bin => one("bin() takes exactly one argument ({} given)"),
+        B::Hex => one("hex() takes exactly one argument ({} given)"),
+        B::Hash => one("hash() takes exactly one argument ({} given)"),
+        B::Oct => one("oct() takes exactly one argument ({} given)"),
+        B::Divmod => two("divmod expected 2 arguments, got {}"),
+        B::Format => Arity::new(
+            1,
+            2,
+            "format expected at least 1 argument, got {}",
+            "format expected at most 2 arguments, got {}",
+        ),
+        B::Pow => Arity::new(
+            2,
+            3,
+            "pow() missing required argument 'exp' (pos 2)",
+            "pow() takes at most 3 arguments ({} given)",
+        )
+        .worded((
+            None,
+            &[
+                "pow() missing required argument 'base' (pos 1)",
+                "pow() missing required argument 'exp' (pos 2)",
+            ],
+        )),
         B::All => one("all() takes exactly one argument ({} given)"),
         B::Any => one("any() takes exactly one argument ({} given)"),
         B::Callable => one("callable() takes exactly one argument ({} given)"),
@@ -89,6 +114,7 @@ fn arity(builtin: Builtin) -> Option<Arity> {
         B::Int => Arity::new(0, 2, "", "int expected at most 2 arguments, got {}"),
         B::Str => Arity::new(0, 3, "", "str expected at most 3 arguments, got {}"),
         B::Bytes => Arity::new(0, 3, "", "bytes() takes at most 3 arguments ({} given)"),
+        B::Bytearray => Arity::new(0, 3, "", "bytearray() takes at most 3 arguments ({} given)"),
         B::Enumerate => Arity::new(
             1,
             2,
@@ -363,8 +389,9 @@ impl BodyChecker<'_> {
         Self::typed(
             TypedExprKind::Compare {
                 left: Box::new(self.tail_length(tail, span)),
-                operators: vec![operator],
+                operators: Box::new([operator]),
                 comparators: vec![Self::number(count, span)],
+                narrowing: None,
             },
             Type::Bool,
             span,
@@ -696,7 +723,7 @@ impl BodyChecker<'_> {
     }
 
     /// Returns `raise TypeError(message)` in place of a value of type `ty`.
-    fn raised(&mut self, message: TypedExpr, ty: &Type, span: Span) -> TypedExpr {
+    pub(super) fn raised(&mut self, message: TypedExpr, ty: &Type, span: Span) -> TypedExpr {
         let class = ExceptionClass::Builtin(BuiltinException::TypeError);
         self.program.record_creation(&class, &[Type::Str]);
         let exception = Self::typed(

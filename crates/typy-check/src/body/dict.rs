@@ -51,8 +51,9 @@ impl BodyChecker<'_> {
                 )
                 .with_rule(RuleId::TYP_05)
                 .with_help(
-                    "annotate the variable, such as `counts: dict[str, int] = {}`; the types \
-                     inferred from its first use are planned for TyPy 0.12 (TYP-27)",
+                    "annotate the variable, such as `counts: dict[str, int] = {}`; a variable \
+                     of a function takes them from the first statement that adds to it, such \
+                     as `counts[\"a\"] = 1` (TYP-27)",
                 ),
                 span,
             );

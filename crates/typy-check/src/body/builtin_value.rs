@@ -467,7 +467,9 @@ impl BodyChecker<'_> {
     /// several types, which a `Callable` type of the variable chooses.
     pub(super) fn builtin_without_context(&mut self, builtin: Builtin, span: Span) -> TypedExpr {
         let fixed = match builtin {
-            Builtin::Chr => Some((Type::Int, Type::Str)),
+            Builtin::Chr | Builtin::Bin | Builtin::Hex | Builtin::Oct => {
+                Some((Type::Int, Type::Str))
+            }
             Builtin::Ord => Some((Type::Str, Type::Int)),
             _ => None,
         };
@@ -675,6 +677,7 @@ pub(super) fn receiver_of(class: &TypeObjectOf) -> Option<Type> {
     Some(match class {
         TypeObjectOf::Str => Type::Str,
         TypeObjectOf::Bytes => Type::Bytes,
+        TypeObjectOf::Bytearray => Type::Bytearray,
         TypeObjectOf::List => Type::List(Box::new(Type::Int)),
         TypeObjectOf::Set => Type::Set(Box::new(Type::Int)),
         TypeObjectOf::Dict => Type::Dict(Box::new(Type::Int), Box::new(Type::Int)),

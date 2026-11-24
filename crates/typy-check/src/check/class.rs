@@ -40,6 +40,9 @@ pub(crate) struct ClassInfo {
     pub(crate) exception: Option<ExceptionClass>,
     pub(crate) attributes: Vec<AttributeInfo>,
     pub(crate) methods: Vec<(String, FunctionId)>,
+    /// The methods without a result annotation whose results their `return` statements give,
+    /// with where each name stands (TYP-26).
+    pub(crate) inferred_methods: Vec<(FunctionId, Span)>,
     pub(crate) init: Option<FunctionId>,
     /// The class variables the class body gives a value, each held as the module variable
     /// `Class.name` (CLS-11, ADR-0024).
@@ -83,6 +86,15 @@ pub(crate) struct ClassInfo {
     /// The attributes `__init__` declares `Final`, each by its position with the statement
     /// that alone assigns it (TYP-08).
     pub(crate) final_attributes: Vec<(usize, Span)>,
+    /// Whether `abc.ABC` is the class's base or an ancestor's, so `@abstractmethod` makes the
+    /// methods it marks abstract (CLS-45).
+    pub(crate) abstract_base: bool,
+    /// The abstract methods the class has without an override, by name in sorted order; an
+    /// instance is made only of a class that has none (CLS-45).
+    pub(crate) abstract_methods: Vec<String>,
+    /// The class's own abstract methods that take the instance and whose bodies give no
+    /// value, so no call runs them directly (CLS-45).
+    pub(crate) empty_abstract: Vec<String>,
     pub(crate) span: Span,
 }
 
@@ -448,18 +460,28 @@ pub(super) struct KnownClasses<'known> {
     pub(super) generics: &'known BTreeMap<FunctionId, crate::body::Generic>,
 }
 
+/// The classes of a module, their methods' definitions and the overloads of those that have
+/// them.
+pub(super) type Members<'tree> = (
+    Vec<ClassInfo>,
+    Vec<Definition<'tree>>,
+    super::overloads::Overloaded,
+);
+
 /// Collects each class's attributes and methods; the methods become definitions whose IDs
-/// follow `first_function`.
+/// follow `first_function`. Returns with them the signatures of the overloads of each
+/// method that has them, by its ID (TYP-29).
 pub(super) fn collect_members<'tree>(
     known: &KnownClasses<'_>,
     classes: &[ClassStatement<'tree>],
-    names: &crate::check::ImportedNames,
+    (names, stubs): (&crate::check::ImportedNames, &super::overloads::Overloads),
     floor_defers: bool,
     (first_function, copies): (usize, &mut ClassMethodCopies<'tree>),
     diagnostics: &mut Diagnostics,
-) -> (Vec<ClassInfo>, Vec<Definition<'tree>>) {
+) -> Members<'tree> {
     let mut infos = Vec::new();
     let mut methods: Vec<Definition<'tree>> = Vec::new();
+    let mut overloads = Vec::new();
     for class in classes {
         let mut own_class_methods: Vec<&'tree Stmt> = Vec::new();
         let in_scope = super::generic_class::parameters_in_scope(known.copies, class.id);
@@ -477,6 +499,8 @@ pub(super) fn collect_members<'tree>(
             instance,
             takes_instance: true,
         };
+        let generic = !in_scope.is_empty() || is_protocol_class(&owner.instance);
+        let read = (&owner, &scope, generic, stubs, class.name.name.as_str());
         for statement in class.body {
             match (statement, FunctionParts::of(statement)) {
                 (Stmt::AnnAssign { .. } | Stmt::Assign { .. } | Stmt::TypeAlias { .. }, _) => {
@@ -522,44 +546,137 @@ pub(super) fn collect_members<'tree>(
                         parts.name,
                         diagnostics,
                     );
-                    let signatures = Signatures {
-                        earlier: known.signatures,
-                        local: &methods,
-                        first_function,
-                        generics: known.generics,
-                    };
-                    let override_of = (&method, kind == MethodKind::Static);
-                    match check_override(&info, classes, signatures, override_of, parts.name) {
-                        Err(diagnostic) => diagnostics.push(*diagnostic),
-                        // A call through the base reaches the override through an adapter.
-                        Ok(Some(base)) => info.adapted.push((name.clone(), base, id)),
-                        Ok(None) => {}
-                    }
+                    let local = (known, methods.as_slice(), first_function);
+                    let overriding = (&method, kind == MethodKind::Static, id);
+                    note_override(
+                        &mut info,
+                        classes,
+                        local,
+                        overriding,
+                        parts.name,
+                        diagnostics,
+                    );
                     check_special_method(&method, parts.name, diagnostics);
+                    overloads.extend(method_overloads(id, read, parts.name, diagnostics));
                     methods.push(method);
                 }
                 _ => {}
             }
         }
-        let mut collected = Collected {
-            methods: &mut methods,
+        let made = (
+            own_class_methods.as_slice(),
+            &mut methods,
             first_function,
-        };
-        copies.make(
-            &own_class_methods,
-            &mut info,
-            (known, &scope),
-            &mut collected,
-            diagnostics,
+            first_method,
         );
-        report_name_conflicts(&info, class.name.span, diagnostics);
-        super::protocol::check_values(&owner.instance, &info, class.name.span, diagnostics);
-        let own_methods = &mut methods[first_method..];
-        finish_generic_class(&info, own_methods, known.copies);
+        let at = (known, &scope, &owner, class.name.span);
+        finish_class(&mut info, at, copies, made, diagnostics);
         infos.push(info);
     }
     copies.end_module(known.ids, names);
-    (infos, methods)
+    (infos, methods, overloads)
+}
+
+/// Adds the copies of a class's own class methods to `methods`, then reports names its
+/// members give twice, checks its values against a protocol it is, and finishes a generic
+/// class's methods.
+fn finish_class<'tree>(
+    info: &mut ClassInfo,
+    (known, scope, owner, name): (&KnownClasses<'_>, &AnnotationScope<'_>, &Owner, Span),
+    copies: &mut ClassMethodCopies<'tree>,
+    (own_class_methods, methods, first_function, first_method): (
+        &[&'tree Stmt],
+        &mut Vec<Definition<'tree>>,
+        usize,
+        usize,
+    ),
+    diagnostics: &mut Diagnostics,
+) {
+    let mut collected = Collected {
+        methods: &mut *methods,
+        first_function,
+    };
+    copies.make(
+        own_class_methods,
+        info,
+        (known, scope),
+        &mut collected,
+        diagnostics,
+    );
+    report_name_conflicts(info, name, diagnostics);
+    super::protocol::check_values(&owner.instance, info, name, diagnostics);
+    finish_generic_class(info, &mut methods[first_method..], known.copies);
+}
+
+/// Reports a method that does not fit the base method it overrides, and notes the adapter a
+/// call through the base reaches the override by.
+fn note_override(
+    info: &mut ClassInfo,
+    classes: Classes<'_>,
+    (known, methods, first_function): (&KnownClasses<'_>, &[Definition<'_>], usize),
+    (method, is_static, id): (&Definition<'_>, bool, FunctionId),
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let signatures = Signatures {
+        earlier: known.signatures,
+        local: methods,
+        first_function,
+        generics: known.generics,
+    };
+    match check_override(info, classes, signatures, (method, is_static), name) {
+        Err(diagnostic) => diagnostics.push(*diagnostic),
+        // A call through the base reaches the override through an adapter.
+        Ok(Some(base)) => info.adapted.push((name.name.clone(), base, id)),
+        Ok(None) => {}
+    }
+}
+
+/// What the overloads of a class's methods are read with: the class as their owner, its
+/// annotation scope, whether it is generic or a protocol, the module's overloads and the
+/// class's name.
+type MethodScope<'scope> = (
+    &'scope Owner,
+    &'scope AnnotationScope<'scope>,
+    bool,
+    &'scope super::overloads::Overloads,
+    &'scope str,
+);
+
+/// Returns the signatures of a method's overloads by its ID, or nothing after reporting
+/// overloads in a generic or a protocol class, which TyPy gives in 0.13 (TYP-29, TYP-35).
+fn method_overloads(
+    id: FunctionId,
+    (owner, scope, generic, overloads, class): MethodScope<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) -> Option<(FunctionId, Vec<FunctionSignature>)> {
+    let stubs = overloads.of_method(class, &name.name);
+    if stubs.is_empty() {
+        return None;
+    }
+    if generic {
+        diagnostics.push(overload_in_generic_class(name));
+        return None;
+    }
+    let signatures = super::definition::overload_signatures(stubs, Some(owner), scope, diagnostics);
+    Some((id, signatures))
+}
+
+/// Returns whether the instances of a class are a protocol's.
+fn is_protocol_class(instance: &Type) -> bool {
+    super::protocol::is_protocol(instance)
+}
+
+/// Returns E0201 for the overloads of a method of a generic or a protocol class, which TyPy
+/// gives in 0.13 (TYP-35).
+fn overload_in_generic_class(name: &Identifier) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        name.span,
+        "`@overload` in a generic or a protocol class is planned for TyPy 0.13 (TYP-35)",
+    )
+    .with_rule(RuleId::TYP_35)
 }
 
 /// Returns the type of a class's instances, as the class types gave it.
@@ -664,6 +781,7 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         exception,
         attributes,
         methods: Vec::new(),
+        inferred_methods: Vec::new(),
         init: None,
         class_variables: Vec::new(),
         class_methods: Vec::new(),
@@ -680,6 +798,9 @@ fn new_info(class: &ClassStatement<'_>, instance: &Type, classes: Classes<'_>) -
         match_args: None,
         init_uses_instance: false,
         final_attributes: Vec::new(),
+        abstract_base: false,
+        abstract_methods: Vec::new(),
+        empty_abstract: Vec::new(),
         span: class.span,
     }
 }
@@ -860,6 +981,21 @@ impl<'tree> ClassMethodCopies<'tree> {
                 },
                 None => *scope,
             };
+            // A copy of a class method is its class's own, so `Self` is that class (TYP-30).
+            let mut with_self = read_in.parameters.clone();
+            if let Some(instance) = known.instances.get(&info.id)
+                && read_in.parameters.is_empty()
+                && !super::protocol::is_protocol(instance)
+            {
+                with_self.insert(
+                    crate::self_type::SELF_PARAMETER.to_owned(),
+                    instance.clone(),
+                );
+            }
+            let read_in = AnnotationScope {
+                parameters: &with_self,
+                ..read_in
+            };
             let mut method = class_method_definition(&parts, &owner, &read_in, sink);
             if !method.type_parameters.is_empty() {
                 info.generic_methods.push(parts.name.name.clone());
@@ -933,9 +1069,65 @@ fn class_method_definition<'tree>(
         parameters: &in_scope,
         ..*scope
     };
-    let mut method = definition(parts, Some(owner), &method_scope, diagnostics);
+    let mut method = definition(parts, (Some(owner), false), &method_scope, diagnostics);
     method.type_parameters = type_parameters;
     method
+}
+
+/// Reports a method whose result is `TypeGuard[T]` or `TypeIs[T]`, which TyPy gives in 0.13
+/// (TYP-37), and gives it a `bool` result.
+fn refuse_method_guard(
+    method: &mut Definition<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let Type::Guard(guard) = &method.signature.returns else {
+        return;
+    };
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            name.span,
+            format!(
+                "a method whose result is `{}` is planned for TyPy 0.13 (TYP-37)",
+                guard.kind.name()
+            ),
+        )
+        .with_rule(RuleId::TYP_37),
+    );
+    method.signature.returns = Type::Bool;
+}
+
+/// Reports `Self` inside another type in a method's parameters or result, such as
+/// `list[Self]`, which TyPy gives in 0.13 (TYP-36), and gives that parameter or result the
+/// error type.
+fn refuse_nested_self(
+    method: &mut Definition<'_>,
+    name: &Identifier,
+    diagnostics: &mut Diagnostics,
+) {
+    let mut nested = false;
+    for parameter in &mut method.signature.parameters {
+        if parameter.ty.has_nested_self() {
+            parameter.ty = Type::Error;
+            nested = true;
+        }
+    }
+    if method.signature.returns.has_nested_self() {
+        method.signature.returns = Type::Error;
+        nested = true;
+    }
+    if nested {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                name.span,
+                "`Self` inside another type, such as `list[Self]`, is planned for TyPy 0.13 \
+                 (TYP-36)",
+            )
+            .with_rule(RuleId::TYP_36),
+        );
+    }
 }
 
 /// Widens the return type of a method that may return `NotImplemented`, as the scan of the
@@ -1009,19 +1201,49 @@ fn method_definition<'tree>(
             .iter()
             .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone()))),
     );
-    let method_scope = AnnotationScope {
-        parameters: &in_scope,
-        ..*scope
-    };
-    let mut method = definition(parts, Some(&method_owner), &method_scope, diagnostics);
-    method.type_parameters = type_parameters;
-    // A parameter that names a protocol makes the method generic; a special method or a
-    // property has one body, so its parameter takes protocol values (ADR-0041).
+    // An instance method of a class that is neither generic nor a protocol may leave its
+    // result out, which its `return` statements give (TYP-26). The result of a special
+    // method, a property, and a static or class method is read before any body is checked:
+    // the first two are part of what the class offers, and the others have a bridge made with
+    // their signature.
     let special = name.starts_with("__") && name.ends_with("__");
     let plain = matches!(
         kind,
         MethodKind::Instance | MethodKind::Static | MethodKind::Class
     );
+    let infers = *kind == MethodKind::Instance
+        && !special
+        && in_scope.is_empty()
+        && !super::protocol::is_protocol(&owner.instance);
+    // `Self` in an instance method of a class that is neither generic nor a protocol is the
+    // class the method is called through (TYP-30).
+    if *kind == MethodKind::Instance
+        && in_scope.is_empty()
+        && !super::protocol::is_protocol(&owner.instance)
+    {
+        in_scope.insert(
+            crate::self_type::SELF_PARAMETER.to_owned(),
+            Type::self_of(owner.instance.clone()),
+        );
+    }
+    let method_scope = AnnotationScope {
+        parameters: &in_scope,
+        ..*scope
+    };
+    let mut method = definition(
+        parts,
+        (Some(&method_owner), infers),
+        &method_scope,
+        diagnostics,
+    );
+    if infers && parts.returns.is_none() {
+        info.inferred_methods.push((id, parts.name.span));
+    }
+    method.type_parameters = type_parameters;
+    refuse_nested_self(&mut method, parts.name, diagnostics);
+    refuse_method_guard(&mut method, parts.name, diagnostics);
+    // A parameter that names a protocol makes the method generic; a special method or a
+    // property has one body, so its parameter takes protocol values (ADR-0041).
     super::protocol::protocol_parameters(&mut method, special || !plain, diagnostics);
     if !method.type_parameters.is_empty() {
         info.generic_methods.push(registered.clone());

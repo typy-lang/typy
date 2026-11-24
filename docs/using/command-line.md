@@ -9,20 +9,186 @@ The `typy` command checks, builds and runs a program from its main file.
 | `typy check FILE` | Reports every diagnostic without generating code | CLI-03 |
 | `typy build FILE` | Writes a native executable beside the file, or at `-o PATH` | CLI-01 |
 | `typy run FILE [-- ARGS]` | Builds the program and runs it with `ARGS` | CLI-02 |
+| `typy run -c CODE`, `typy run -m MODULE` | Builds and runs code, or a module of the project in the current directory, as `python -c` and `python -m` run them; see [Running code and modules](#running-code-and-modules) | CLI-28 |
 | `typy explain CODE` | Prints what a diagnostic code means, a program that gives it and the corrected program | CLI-10 |
+| `typy print WHAT` | Writes what `typy` would use: `targets`, `target-cpus`, `host`, `paths`, `settings` or `version`; see [Asking typy what it uses](#asking-typy-what-it-uses) | CLI-25 |
+| `typy NAME [ARGS]` | Runs the program `typy-NAME` found on `PATH`, for a NAME that is not a command of `typy`; see [Commands of other tools](#commands-of-other-tools) | CLI-32 |
 | `typy build --lib KIND FILE` | Writes a `static` or `shared` C library of the functions the module's `__all__` lists, and its C header; see [C interoperability](../extending/c-interop.md) | CLI-09 |
 | `typy build --target TRIPLE FILE` | Builds for another target the host builds for, with that target's C toolchain: on Linux `x86_64-unknown-linux-gnu`, `x86_64-unknown-linux-musl` or `aarch64-unknown-linux-gnu`, and on macOS `aarch64-apple-darwin`; `typy check` takes `--target` too | CLI-08, CLI-14 |
-| `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir` or `asm`, or `obj` | CLI-04 |
+| `typy build --emit=STAGE FILE` | Writes one stage as text: `ast`, `typed-ast`, `tyir`, `tyir-mem`, `llvm-ir-unoptimised`, `llvm-ir` or `asm`, or as bytes: `llvm-bc` or `obj` | CLI-04, CLI-29 |
+| `typy build --emit=STAGE,STAGE FILE` | Writes several stages, each beside the output; see [Writing the stages of a build](#writing-the-stages-of-a-build) | CLI-29 |
 | `--release`, `--release-small` | Optimise for speed or for size, without debug information; the default is a debug build, which keeps it | CLI-05 |
-| `--deny-warnings` | Fails with status 1 when there are warnings | DIA-07 |
+| `-O0`, `-O1`, `-O2`, `-O3`, `-Os`, `-Oz` | The optimisation level of `build` and `run`; `--release` is `-O2` and `--release-small` is `-Oz`, and `-Os` and `-Oz` link the runtime built for size | CLI-20 |
+| `--target-cpu NAME` | Generates code for the processor NAME, or `native` for this machine; without it a build runs on every machine of its target | CLI-21 |
+| `-C KEY=VALUE` | A code generation option: `opt-level`, `target-cpu` or `target-feature`; `typy -C help` lists them | CLI-30 |
+| `--deny-warnings` | Fails with status 1 when there are warnings, each reported as an error; the same as `-D warnings` given first | DIA-07 |
+| `-W CODE`, `-A CODE`, `-D CODE` | Reports the warning CODE as a warning, not at all, or as an error that fails the command; `warnings` names every warning; see [Choosing which warnings to report](#choosing-which-warnings-to-report) | CLI-27 |
+| `--color WHEN` | Colours diagnostics written as text: `auto`, the default, on a terminal when `NO_COLOR` is not set, `always` or `never` | CLI-26 |
 | `--error-format=json` | Writes diagnostics as one JSON object per line | DIA-05 |
 | `--python-floor VERSION` | Sets the Python floor for this command, over `typy.toml` | CLI-07, CLI-12 |
+| `--timings` | Writes how long each stage took to standard error: `load`, `check`, `lower`, `generate`, `link` and the `total` | CLI-22 |
+| `-v`, `--verbose` | Writes each command `typy` runs to standard error before it runs it, as a shell would read it: the C linker with its arguments, and for `typy run` the program | CLI-23 |
+| `--save-temps` | Keeps a build's object file beside its output, named after it up to its first dot: `app.o` for `app`, `libtools.o` for `libtools.so.1` | CLI-24 |
 
 The exit status of `typy` is 0 on success, 1 when the program has errors,
 2 on wrong command usage and 101 on an internal compiler error (CLI-06).
 `typy` reads no environment variable that changes its output, except
-`TYPY_HOME` (CLI-11). A program reads its arguments through `sys.argv`,
+`TYPY_HOME`, and `NO_COLOR`, which only takes the colour from diagnostics
+on a terminal (CLI-11). A program reads its arguments through `sys.argv`,
 which comes with imports in 0.3.
+
+## Running code and modules
+
+`typy run -c` builds and runs code given on the command line, and
+`typy run -m` a module of the project in the current directory, as
+`python -c` and `python -m` run them:
+
+```sh
+typy run -c "import tools; print(tools.version())"
+typy run -m tools.report -- --verbose
+typy run -m tools
+```
+
+The current directory is the project's root, so the code and the module
+import the project's modules, and its `typy.toml` applies. Diagnostics of
+code name it `<string>`, as CPython does, and the program reads `-c` as
+`sys.argv[0]`. `-m` runs the packages that hold the module first, so
+`tools/__init__.py` runs before `tools/report.py`, and its relative imports
+start from its package. A package runs its `__main__.py`. The program reads
+the full path of the module's file as `sys.argv[0]`. A module that is not
+there is E0206. FILE, `-c` and `-m` exclude one another.
+
+## Asking typy what it uses
+
+`typy print` writes one fact a line, as `typy.toml` writes its settings, so
+a person or a script can read it:
+
+```sh
+typy print targets
+typy print target-cpus --target aarch64-unknown-linux-gnu
+typy print paths
+typy print settings app.py --python-floor 3.15
+typy print version
+```
+
+`targets` lists every supported target, marks the host, and says which
+need another host to build. `target-cpus` lists a target's processors: its
+baseline first, which every build uses unless it asks for another,
+`native` for the machine `typy` runs on, and every processor LLVM knows.
+`paths` names the compiler, the runtime archives it links for a target,
+for debug and `--release` builds and for `--release-small`, and its cache.
+`settings` writes the settings a command would use for the project of a
+main file, `typy.toml` and the command line together, and refuses a
+`typy.toml` that `typy check` refuses. `version` names the versions of
+`typy`, its runtime and LLVM, and the Python floors.
+
+## Optimising for a level and a processor
+
+A build optimises at the level `-O` gives, from `-O0`, the debug build's,
+to `-O3`, or for small code with `-Os` and the smallest with `-Oz`:
+
+```sh
+typy build app.py -O3
+typy build app.py -Oz
+typy build app.py -O3 --target-cpu native
+typy build app.py -O2 -C target-feature=+avx2
+```
+
+Without `--target-cpu`, a build targets the baseline processor of its
+target, so it runs on every machine of that target and two builds of one
+program are the same bytes. `--target-cpu native` builds for the processor
+of the machine you build on and its features, which may not run on another
+machine; it is refused when you build for another target.
+`--target-cpu NAME` names one of the processors `typy print target-cpus`
+lists, and any other name is refused. `-C target-feature` turns features on
+with `+` or off with `-` beside the processor's own.
+
+A flag and its `-C` key are one setting: `-O3` and `-C opt-level=3` say the
+same, and `-O3` with `-C opt-level=1` is refused, as are two different
+processors. `typy run` keeps one build in its cache for each level,
+processor and set of features.
+
+## Seeing what a build does
+
+`--timings` and `-v` show where a build spends its time and what it runs:
+
+```sh
+typy build app.py --timings -v --save-temps
+```
+
+`-v` writes the linker's command as `typy` runs it, which names the
+temporary object file it links; `--save-temps` keeps that object as
+`app.o` beside `app`, and the command links it the same way. A `typy run`
+that takes its build from the cache runs no build, so it writes the
+timings of loading and checking only, and keeps no object file.
+
+## Choosing which warnings to report
+
+`-W`, `-A` and `-D` set the level of one warning code, or of every warning
+with `warnings`, before or after the command:
+
+```sh
+typy check app.py -A W0301
+typy build app.py -D warnings -A W0401
+typy -D W0101 run app.py
+```
+
+`-A` stops a warning from being reported. `-D` reports it as an error, such
+as `error[W0101]`, so the command exits with status 1 and generates no
+code. `-W` reports it as a warning again. The options apply in the order
+you give them, those before the command first, so the last one that names
+a code decides: `-D warnings -A W0401` allows W0401 and denies every other
+warning, while `-A W0401 -D warnings` denies them all. `--deny-warnings`
+counts as a `-D warnings` given before every other option. A code that is
+not a warning's, such as `E0402`, is wrong usage, exit status 2. `typy run`
+keeps one build in its cache for each set of levels.
+
+`--color always` colours diagnostics written as text, as `rustc` does, also
+when standard error goes to a file or a pipe; `--color never` leaves them
+plain. The default, `auto`, colours them on a terminal unless the
+`NO_COLOR` environment variable is set to a value. JSON diagnostics are
+never coloured.
+
+## Writing the stages of a build
+
+`--emit` writes what a stage of the compiler made instead of an
+executable. One stage goes to standard output, or to the file `-o` names:
+
+```sh
+typy build app.py --emit=tyir
+typy build app.py -O2 --emit=asm -o app.s
+```
+
+Several stages, separated by commas or given in several `--emit` options,
+go each to a file beside the output, named after it up to its first dot,
+as `rustc --emit` names its files:
+
+```sh
+typy build app.py -O2 --emit=llvm-ir-unoptimised,llvm-ir,asm
+typy build app.py --emit=llvm-bc,obj -o out/prog
+```
+
+The first command writes `app.unoptimised.ll`, `app.ll` and `app.s`, and
+the second `out/prog.bc` and `out/prog.o`. The other stages take their
+names as extensions: `app.ast`, `app.typed-ast`, `app.tyir` and
+`app.tyir-mem`. `llvm-ir-unoptimised` is the LLVM IR before the
+optimisation pipeline runs, and `llvm-ir` the IR after it, so the two show
+what the optimiser did. `llvm-bc` is the optimised IR as LLVM bitcode,
+which LLVM's tools read. The program is checked and compiled once for all
+the stages, and the stages written together are the same bytes as each
+written alone.
+
+## Commands of other tools
+
+`typy` is the compiler: `check`, `build`, `run`, `explain` and `print`.
+Any other command runs a program of its own, as `git` and `cargo` run
+theirs: `typy fmt --check` runs `typy-fmt --check`, the first program named
+`typy-fmt` on `PATH` that may run. Its output, its input and its exit status
+are the program's own, and `TYPY` names the `typy` that ran it, so the tool
+builds with the same compiler. A command that is not a word, or that no
+program on `PATH` answers, is wrong usage, exit status 2. Running a
+command this way trusts the programs on your `PATH`, as running `git` or
+`cargo` commands does (ADR-0105).
 
 ## Building for another target
 

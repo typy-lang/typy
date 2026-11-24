@@ -23,6 +23,9 @@ enum Kind {
     Str,
     /// A `bytes`, whose items are `int` values.
     Bytes,
+    /// A bytearray, whose items are `int` values; its length is read at each step, since the
+    /// loop may change it (LIB-28).
+    Bytearray,
     /// A set, read slot by slot in its table's order.
     Set,
     /// A `ctypes` array, whose items are of the class at this index of the module's classes
@@ -529,6 +532,7 @@ impl FunctionLowerer<'_> {
             }
             (_, Some(item)) => (Kind::List, self.lowered_type(item)),
             (typy_check::Type::Bytes, None) => (Kind::Bytes, TyirType::Int),
+            (typy_check::Type::Bytearray, None) => (Kind::Bytearray, TyirType::Int),
             _ => (Kind::Str, TyirType::STR),
         };
         let sequence = self.kept(sequence, "sequence", span);
@@ -876,6 +880,7 @@ impl FunctionLowerer<'_> {
             Kind::List => RuntimeFunction::ListLength,
             Kind::Str => RuntimeFunction::StrLength,
             Kind::Bytes => RuntimeFunction::BytesLength,
+            Kind::Bytearray => RuntimeFunction::BytearrayLength,
             Kind::Set => RuntimeFunction::SetLength,
             Kind::CData(_) => RuntimeFunction::CdataLength,
         };
@@ -1030,6 +1035,11 @@ impl FunctionLowerer<'_> {
             ),
             Kind::Bytes => self.call_runtime(
                 RuntimeFunction::BytesGet,
+                vec![value.value, index.value],
+                span,
+            ),
+            Kind::Bytearray => self.call_runtime(
+                RuntimeFunction::BytearrayGet,
                 vec![value.value, index.value],
                 span,
             ),

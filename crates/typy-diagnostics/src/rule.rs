@@ -101,6 +101,8 @@ impl RuleId {
     pub const CLS_45: Self = Self("CLS-45");
     /// A class method called through `super()` shall run with the class of the instance as `cls` also when a class derived from the class of the enclosing method defines the class method again.
     pub const CLS_46: Self = Self("CLS-46");
+    /// An enum class with other bases, keywords, decorators or type parameters, derived from an enum class without members, with a member annotated, assigned with several targets or a tuple of names, named `name`, `value` or a `_sunder_` name, of a value other than an `int`, `str`, `bytes` or `bool` constant or `auto()`, or, for a flag, of other than one bit, or defining `__init__`, `__new__`, `_missing_` or `_generate_next_value_`, shall be accepted as CPython gives it.
+    pub const CLS_47: Self = Self("CLS-47");
     /// `for` shall iterate over `range`, `str`, `bytes`, `list`, `tuple`, `dict`, `set` and any class with `__iter__` and `__next__`.
     pub const CST_03: Self = Self("CST-03");
     /// `try` with `except`, `else` and `finally` clauses shall be accepted, and `finally` shall run on `return`, `break`, `continue` and exceptions.
@@ -304,6 +306,8 @@ impl RuleId {
     pub const GEN_16: Self = Self("GEN-16");
     /// A protocol shall be usable as the base of a class, with properties, static methods, class methods, class variables and defaults, and in the signatures of its own methods; an attribute shall be assignable through a protocol value, and a value of a built-in type shall be held as a protocol.
     pub const GEN_17: Self = Self("GEN-17");
+    /// A comparison of values whose type holds a type parameter without a bound shall be accepted in a generic function and checked in each copy the program makes of it (ADR-0120).
+    pub const GEN_18: Self = Self("GEN-18");
     /// Source files shall be UTF-8 with the `.py` extension.
     pub const LEX_01: Self = Self("LEX-01");
     /// Bytes literals shall be accepted.
@@ -332,7 +336,7 @@ impl RuleId {
     pub const LIB_05: Self = Self("LIB-05");
     /// The `dataclasses` names in CLS-05 and the `typing` names in TYP and GEN shall be available.
     pub const LIB_06: Self = Self("LIB-06");
-    /// `os.environ`, `os.path`, `time` and `random` shall be available.
+    /// `os.environ` shall be available; `os.path` comes with LIB-35.
     pub const LIB_07: Self = Self("LIB-07");
     /// Importing a standard library module that TyPy does not provide shall be rejected with the list of modules it provides.
     pub const LIB_08: Self = Self("LIB-08");
@@ -368,12 +372,24 @@ impl RuleId {
     pub const LIB_25: Self = Self("LIB-25");
     /// `math.integer` (PEP 791) shall be available with `comb`, `factorial`, `gcd`, `isqrt`, `lcm` and `perm`, under a Python floor of 3.15 or later.
     pub const LIB_26: Self = Self("LIB-26");
-    /// `textwrap`, `base64`, `heapq`, `bisect`, `statistics`, `time`, `random`, `copy` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097).
+    /// `textwrap`, `base64` with the `binascii` functions it uses, `heapq`, `bisect` and `string` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0007, ADR-0097, ADR-0119, ADR-0121).
     pub const LIB_27: Self = Self("LIB-27");
     /// The builtins `divmod`, `bin`, `hex`, `oct`, `pow`, `format` and `bytearray` shall be available, as CPython gives them.
     pub const LIB_28: Self = Self("LIB-28");
     /// `from __future__ import annotations` shall be accepted, and shall change nothing TyPy compiles.
     pub const LIB_29: Self = Self("LIB-29");
+    /// `statistics`, `time` and `random` shall be available, written in typed Python that CPython also runs, with the operating system reached through the private module `_typy` and signatures a test compares with typeshed's (ADR-0007, ADR-0119).
+    pub const LIB_30: Self = Self("LIB-30");
+    /// `copy.copy` and `copy.deepcopy` shall be available for a value of any type, with the `memo` of `deepcopy` and a class's own `__copy__` and `__deepcopy__`, given by the compiler since they read each object's class (ADR-0121).
+    pub const LIB_33: Self = Self("LIB-33");
+    /// `hash` shall be available for a value of every type that has a hash, giving the hash a set or a dict keeps it by, CPython's for an `int`, a `float`, a `bool`, `None` and tuples of them and what `__hash__` returns for an instance, and shall refuse a value of a type that has none (ADR-0122).
+    pub const LIB_34: Self = Self("LIB-34");
+    /// `itertools`, `collections`, `datetime`, `pathlib`, `os.path`, `fractions` and `re` shall be available, written in typed Python that CPython also runs, reaching the operating system through the private module `_typy` where they need it, with signatures a test compares with typeshed's (ADR-0119).
+    pub const LIB_35: Self = Self("LIB-35");
+    /// `json`, `functools`, `argparse`, `logging` and `csv` shall be available, written in typed Python that CPython also runs, with signatures a test compares with typeshed's (ADR-0119).
+    pub const LIB_36: Self = Self("LIB-36");
+    /// `warnings.warn` shall be available with the warning categories, writing CPython's text of a warning, `file:line: Category: message` and the source line, to standard error once for each place under the default filter, and a standard library module TyPy writes in Python shall warn where CPython's does.
+    pub const LIB_38: Self = Self("LIB-38");
     /// The allocator shall be replaceable per project through three C functions, allocate, reallocate and free, that `typy.toml` names.
     pub const MEM_08: Self = Self("MEM-08");
     /// A program shall be built from several `.py` files, found from the main file's directory and from paths set in `typy.toml`.
@@ -470,14 +486,22 @@ impl RuleId {
     pub const TYP_27: Self = Self("TYP-27");
     /// `typing.Literal` of `int`, `str`, `bytes`, `bool` and `None` constants shall be accepted, a constant passing for its literal type and `==`, `in` and `match` narrowing to it.
     pub const TYP_28: Self = Self("TYP-28");
-    /// `typing.overload` shall be accepted on functions and methods, each call checked against the signature it matches and the body against every signature.
+    /// `typing.overload` shall be accepted on module functions and instance methods, each call checked against the first signature that takes its arguments and the body against every signature (ADR-0112).
     pub const TYP_29: Self = Self("TYP-29");
-    /// `typing.Self` shall be accepted in a method's parameters and result as the class the method is called through.
+    /// `typing.Self` shall be accepted in the parameters and the result of an instance or a class method as the class the method is called through (ADR-0113).
     pub const TYP_30: Self = Self("TYP-30");
-    /// A function annotated to return `typing.TypeGuard[T]` or `typing.TypeIs[T]` shall narrow its argument where a call of it is tested, as CPython's type system reads them.
+    /// A module function annotated to return `typing.TypeGuard[T]` or `typing.TypeIs[T]`, of a `T` a test of the value's class tells apart, shall narrow its first argument, a variable, where a call of it is tested, as CPython's type system reads them, and a result the argument's class does not bear out shall raise `TypeError`; `TypeIs` from the Python floor 3.13 (ADR-0114).
     pub const TYP_31: Self = Self("TYP-31");
     /// A class derived from `typing.TypedDict` shall be accepted, its instances being dicts whose keys it names and whose values it types, with `total`, `Required`, `NotRequired` and `ReadOnly`.
     pub const TYP_32: Self = Self("TYP-32");
+    /// A statement that cannot run, because one before it in its block leaves the block or because a test of `True`, `False`, `isinstance` or a class pattern that the static types decide rules it out, shall be neither checked nor compiled, as CPython runs the program (ADR-0111).
+    pub const TYP_34: Self = Self("TYP-34");
+    /// `typing.overload` shall be accepted on static, class and special methods, inside functions and blocks, with decorated or generic implementations, in generic and protocol classes, on a method a derived class overrides, and in calls that unpack with `*` or `**` (ADR-0112).
+    pub const TYP_35: Self = Self("TYP-35");
+    /// `typing.Self` shall be accepted in a static method, in a generic or a protocol class, in an attribute's annotation, and inside another type such as `list[Self]` (ADR-0113).
+    pub const TYP_36: Self = Self("TYP-36");
+    /// `TypeGuard[T]` and `TypeIs[T]` shall be accepted of a `T` a test of the value's class does not tell apart, such as `list[int]`, and as a method's result (ADR-0114).
+    pub const TYP_37: Self = Self("TYP-37");
 
     /// Every rule a diagnostic can name, in ID order.
     pub const ALL: &'static [Self] = &[
@@ -528,6 +552,7 @@ impl RuleId {
         Self::CLS_44,
         Self::CLS_45,
         Self::CLS_46,
+        Self::CLS_47,
         Self::CST_03,
         Self::CST_04,
         Self::CST_05,
@@ -628,6 +653,7 @@ impl RuleId {
         Self::GEN_15,
         Self::GEN_16,
         Self::GEN_17,
+        Self::GEN_18,
         Self::LEX_01,
         Self::LEX_06,
         Self::LEX_07,
@@ -663,6 +689,12 @@ impl RuleId {
         Self::LIB_27,
         Self::LIB_28,
         Self::LIB_29,
+        Self::LIB_30,
+        Self::LIB_33,
+        Self::LIB_34,
+        Self::LIB_35,
+        Self::LIB_36,
+        Self::LIB_38,
         Self::MEM_08,
         Self::MOD_01,
         Self::MOD_02,
@@ -715,6 +747,10 @@ impl RuleId {
         Self::TYP_30,
         Self::TYP_31,
         Self::TYP_32,
+        Self::TYP_34,
+        Self::TYP_35,
+        Self::TYP_36,
+        Self::TYP_37,
     ];
 
     /// Returns the ID as text, such as `TYP-03`.
@@ -731,35 +767,4 @@ impl fmt::Display for RuleId {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::RuleId;
-
-    fn specification() -> String {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../docs/requirements/srs.md"
-        );
-        std::fs::read_to_string(path).expect("the specification is part of the repository")
-    }
-
-    #[test]
-    fn every_rule_is_an_id_defined_in_the_specification() {
-        let specification = specification();
-        for rule in RuleId::ALL {
-            let row = format!("\n| {rule} |");
-            assert!(
-                specification.contains(&row),
-                "{rule} is not defined in srs.md"
-            );
-        }
-    }
-
-    #[test]
-    fn the_list_of_rules_is_sorted_and_has_no_duplicates() {
-        let ids: Vec<&str> = RuleId::ALL.iter().map(|rule| rule.as_str()).collect();
-        let mut sorted = ids.clone();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(ids, sorted);
-    }
-}
+mod tests;

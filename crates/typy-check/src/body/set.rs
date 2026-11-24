@@ -91,8 +91,9 @@ impl BodyChecker<'_> {
                 )
                 .with_rule(RuleId::TYP_05)
                 .with_help(
-                    "annotate the variable, such as `items: set[int] = set()`; the item type \
-                     inferred from its first use is planned for TyPy 0.12 (TYP-27)",
+                    "annotate the variable, such as `items: set[int] = set()`; a variable of \
+                     a function takes it from the first statement that adds to it, such as \
+                     `items.add(1)` (TYP-27)",
                 ),
                 span,
             ),

@@ -8,9 +8,11 @@ use typy_diagnostics::{
     TextOffset,
 };
 
+use crate::built_in_import::add_built_in_imports;
 use crate::loader::{
-    Import, Location, imports, initialisation_order, is_standard, locate, not_found,
+    Import, Location, embedded, imports, initialisation_order, is_standard, locate, not_found,
 };
+use crate::main_source::{CODE_PATH, MainSource};
 use crate::module::{Module, ModuleName};
 use crate::parse::parse_with_warnings;
 use crate::settings::ProjectSettings;
@@ -42,10 +44,17 @@ impl Project {
     /// module its imports reach, found under the root (MOD-01, MOD-02); returns every
     /// diagnostic of every file together.
     pub fn load(main_path: &Utf8Path, settings: ProjectSettings) -> Result<Self, LoadFailure> {
-        let relative = main_path
-            .strip_prefix(&settings.root)
-            .unwrap_or(main_path)
-            .to_owned();
+        Self::load_main(&MainSource::File(main_path.to_owned()), settings)
+    }
+
+    /// Reads and parses the main module from `main`, relative to `settings.root`, and every
+    /// module its imports reach (MOD-01, MOD-02). A module that `-m` names runs as `__main__`
+    /// after the packages that hold it, and code given with `-c` is the file `<string>`
+    /// (CLI-28). Returns every diagnostic of every file together.
+    pub fn load_main(main: &MainSource, settings: ProjectSettings) -> Result<Self, LoadFailure> {
+        let refused = |diagnostic: Box<Diagnostic>| {
+            LoadFailure::new(Diagnostics::from(*diagnostic), Vec::new())
+        };
         let mut loader = Loader {
             settings: &settings,
             files: Vec::new(),
@@ -54,20 +63,32 @@ impl Project {
             standard: BTreeSet::new(),
             diagnostics: Diagnostics::new(),
             pending: Vec::new(),
+            main_code: None,
         };
-        let main = if settings.library {
-            library_module(&relative).map_err(|diagnostic| {
-                LoadFailure::new(Diagnostics::from(*diagnostic), Vec::new())
-            })?
-        } else {
-            ModuleName::main()
-        };
-        let location = Location {
-            path: relative,
-            is_package: false,
+        let (main, location, spec_name) = match main {
+            MainSource::File(path) => {
+                let relative = path.strip_prefix(&settings.root).unwrap_or(path).to_owned();
+                let name = if settings.library {
+                    library_module(&relative).map_err(refused)?
+                } else {
+                    ModuleName::main()
+                };
+                (name, file_location(relative), None)
+            }
+            MainSource::Code(code) => {
+                loader.main_code = Some(code);
+                (ModuleName::main(), file_location(CODE_PATH.into()), None)
+            }
+            MainSource::Module(name) => {
+                let (spec_name, location) = locate_main(&settings, name).map_err(refused)?;
+                (ModuleName::main(), location, Some(spec_name))
+            }
         };
         if !loader.read(main.clone(), &location, None) {
             return Err(loader.failure());
+        }
+        if let Some(module) = loader.modules.get_mut(&main) {
+            module.spec_name = spec_name;
         }
         while let Some(name) = loader.pending.pop() {
             loader.follow_imports(&name);
@@ -175,6 +196,8 @@ struct Loader<'settings> {
     standard: BTreeSet<ModuleName>,
     diagnostics: Diagnostics,
     pending: Vec<ModuleName>,
+    /// The main module's code when `-c` gives it, so no file is read for it (CLI-28).
+    main_code: Option<&'settings str>,
 }
 
 impl Loader<'_> {
@@ -189,7 +212,12 @@ impl Loader<'_> {
         let mut unreadable = false;
         let id = existing.unwrap_or_else(|| {
             let id = FileId(u32::try_from(self.files.len()).unwrap_or(u32::MAX));
-            let (file, read_error) = SourceFile::read(id, &self.settings.root, &location.path);
+            let (file, read_error) = match (importer, self.main_code, location.embedded) {
+                (None, Some(code), _) | (_, _, Some(code)) => {
+                    (SourceFile::from_text(id, location.path.clone(), code), None)
+                }
+                _ => SourceFile::read(id, &self.settings.root, &location.path),
+            };
             self.files.push(file);
             if let Some(mut diagnostic) = read_error {
                 if let Some(span) = importer {
@@ -210,7 +238,14 @@ impl Loader<'_> {
                 for warning in parsed.warnings {
                     self.diagnostics.push(warning);
                 }
-                let syntax = parsed.tree;
+                let mut syntax = parsed.tree;
+                // A module that names `frozendict` imports the class that writes it (DAT-18).
+                add_built_in_imports(
+                    &mut syntax.body,
+                    file.text(),
+                    self.settings.python_floor,
+                    id,
+                );
                 self.modules.insert(
                     name.clone(),
                     Module {
@@ -218,6 +253,7 @@ impl Loader<'_> {
                         file: id,
                         syntax,
                         is_package: location.is_package,
+                        spec_name: None,
                     },
                 );
                 self.pending.push(name);
@@ -235,7 +271,20 @@ impl Loader<'_> {
 
     /// Loads each module the imports of `name` need that is not loaded yet.
     fn follow_imports(&mut self, name: &ModuleName) {
-        let (imports, errors) = imports(&self.modules[name]);
+        let module = &self.modules[name];
+        let (mut imports, errors) = imports(module);
+        // The packages that hold the module `-m` runs are imported before it (CLI-28).
+        let start = Span::empty(module.file, TextOffset(0));
+        let packages = module
+            .enclosing_packages()
+            .into_iter()
+            .map(|package| Import {
+                module: package,
+                span: start,
+                at_module_level: true,
+                optional: false,
+            });
+        imports.splice(0..0, packages);
         for error in errors {
             self.diagnostics.push(error);
         }
@@ -243,7 +292,11 @@ impl Loader<'_> {
             if self.modules.contains_key(&import.module) || self.standard.contains(&import.module) {
                 continue;
             }
-            if let Some(location) = locate(self.settings, &import.module) {
+            // A module of the program comes first, as CPython's search finds the script's
+            // directory first; then a standard library module TyPy gives in Python (LIB-27).
+            if let Some(location) =
+                locate(self.settings, &import.module).or_else(|| embedded(&import.module))
+            {
                 self.read(import.module.clone(), &location, Some(import.span));
             } else if is_standard(&import.module) {
                 // The checker says whether TyPy provides it (LIB-08).
@@ -271,6 +324,45 @@ impl Loader<'_> {
 
     fn failure(self) -> LoadFailure {
         LoadFailure::new(self.diagnostics, self.files)
+    }
+}
+
+/// Returns the location of a main file that holds no package.
+const fn file_location(path: camino::Utf8PathBuf) -> Location {
+    Location {
+        path,
+        is_package: false,
+        embedded: None,
+    }
+}
+
+/// Returns the name and the location of the module `-m` runs: the module `name`, or the
+/// `__main__` module of the package `name`, as `python -m` runs them (CLI-28).
+fn locate_main(
+    settings: &ProjectSettings,
+    name: &ModuleName,
+) -> Result<(ModuleName, Location), Box<Diagnostic>> {
+    let missing = |message: String| {
+        Box::new(
+            Diagnostic::without_location(DiagnosticCode::error(206), message)
+                .with_rule(RuleId::LIB_08)
+                .with_help(
+                    "`-m` runs a module of the project in the current directory, a `.py` file \
+                     or a package with a `__main__.py`",
+                ),
+        )
+    };
+    let location =
+        locate(settings, name).ok_or_else(|| missing(format!("no module named `{name}`")))?;
+    if !location.is_package {
+        return Ok((name.clone(), location));
+    }
+    let main = name.child("__main__");
+    match locate(settings, &main) {
+        Some(location) if !location.is_package => Ok((main, location)),
+        _ => Err(missing(format!(
+            "no module named `{main}`; `{name}` is a package and cannot be run directly"
+        ))),
     }
 }
 
@@ -348,73 +440,4 @@ impl SourceLookup for LoadFailure {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::Project;
-    use crate::settings::ProjectSettings;
-    use crate::syntax::Stmt;
-    use camino::Utf8PathBuf;
-    use typy_diagnostics::{SourceLookup, render_text};
-
-    fn project_with(source: &str) -> (tempfile::TempDir, Utf8PathBuf) {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(directory.path().join("app.py"), source).unwrap();
-        let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
-        (directory, root)
-    }
-
-    #[test]
-    fn valid_program_loads_as_the_main_module() {
-        let (_directory, root) = project_with("print(1 + 2)\n");
-        let project =
-            Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
-        let main = project.main_module();
-        assert_eq!(main.name.as_str(), "__main__");
-        assert!(matches!(main.syntax.body.as_slice(), [Stmt::Expr { .. }]));
-        assert_eq!(project.modules().count(), 1);
-        assert_eq!(project.path(main.file), "app.py");
-        assert_eq!(project.line_text(main.file, 1), "print(1 + 2)");
-        assert_eq!(project.settings().root, root);
-        assert!(project.file(main.file).is_some());
-    }
-
-    #[test]
-    fn syntax_errors_are_returned_with_the_files_to_render_them() {
-        let (_directory, root) = project_with("x = (1 +\n");
-        let failure = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap_err();
-        assert!(failure.diagnostics.has_errors());
-        let first = failure.diagnostics.clone().into_sorted(&failure).remove(0);
-        let text = render_text(&first, &failure);
-        assert!(text.starts_with("error[E0103]: "), "{text}");
-        assert!(text.contains("--> app.py:"), "{text}");
-    }
-
-    #[test]
-    fn missing_main_file_fails_with_e0105() {
-        let directory = tempfile::tempdir().unwrap();
-        let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
-        let failure =
-            Project::load(&root.join("absent.py"), ProjectSettings::new(root)).unwrap_err();
-        let diagnostics = failure.diagnostics.clone().into_sorted(&failure);
-        assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].code().to_string(), "E0105");
-        assert_eq!(
-            failure.path(diagnostics[0].span().unwrap().file()),
-            "absent.py"
-        );
-    }
-
-    #[test]
-    fn unknown_file_ids_render_without_panicking() {
-        let (_directory, root) = project_with("pass\n");
-        let project = Project::load(&root.join("app.py"), ProjectSettings::new(root)).unwrap();
-        let unknown = typy_diagnostics::FileId(99);
-        assert_eq!(project.path(unknown), "<unknown>");
-        assert_eq!(project.line_text(unknown, 1), "");
-        assert_eq!(
-            project
-                .position(unknown, typy_diagnostics::TextOffset(0))
-                .line,
-            1
-        );
-    }
-}
+mod tests;

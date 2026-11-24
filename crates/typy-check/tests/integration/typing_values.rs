@@ -35,6 +35,9 @@ fn typ_18_each_kind_of_typing_value_is_a_value() {
         "from typing import Union\nprint(Union[int], int | int)\n",
         "import typing\nprint(typing.List is typing.List, typing.Optional is not typing.Union)\n",
         "held: object = list[int]\nprint(held, \"%s\" % (set[int],), f\"{dict[str, int]!r}\")\n",
+        // A literal type written with a value twice, or inside another, shows each value once.
+        "from typing import Literal\nprint(Literal[1, 1], Literal[Literal[1], 2], Literal[-1])\n\
+         print(list[tuple[()]], tuple[tuple[()], int])\n",
     ] {
         assert_eq!(messages(source), Vec::new(), "{source}");
     }
@@ -133,8 +136,8 @@ fn typ_18_what_no_typing_value_gives_is_refused_with_the_reason() {
         (
             "from typing import cast\nf = cast\n",
             "E0202",
-            "this function of `typing` or `dataclasses` is read only where it is called or a \
-             class names it, not as a value",
+            "this name of `typing`, `dataclasses`, `abc` or `enum` is read only where it is \
+             called, decorates or a class names it, not as a value",
         ),
         (
             "import typing\nprint(typing)\n",

@@ -1,6 +1,6 @@
 //! Lowers `isinstance` tests and the narrowed reads they allow (CLS-09, TYP-07).
 
-use typy_check::{IsInstanceTest, Type, TypedExpr};
+use typy_check::{GuardCall, IsInstanceTest, Type, TypedExpr};
 use typy_diagnostics::Span;
 use typy_tyir::{BoolOperator, Constant, Operation, RuntimeFunction, TyirType, ValueId};
 
@@ -20,10 +20,68 @@ impl FunctionLowerer<'_> {
     /// any other value is an instance when every value of its static type is one, or when
     /// the runtime finds its class derives from one of the classes left to check.
     pub(crate) fn isinstance(&mut self, test: &IsInstanceTest, span: Span) -> Lowered {
+        if let Some(guard) = &test.guard {
+            return self.guarded(guard, test, span);
+        }
         let lowered = self.expression(&test.value);
         let result = self.tested(Self::borrowed(lowered.value, lowered.ty), test, span);
         self.release(lowered, span);
         result
+    }
+
+    /// Returns the result of a call of a `TypeGuard` or `TypeIs` function, after testing the
+    /// value it narrows: a true result for a value the test does not find to be of the type,
+    /// and for `TypeIs` a false one for a value it does, raise the `TypeError` that names the
+    /// function, so a narrowed read never takes a value of another type (TYP-31, ADR-0114).
+    fn guarded(&mut self, guard: &GuardCall, test: &IsInstanceTest, span: Span) -> Lowered {
+        let returned = self.expression(&guard.call);
+        let lowered = self.expression(&test.value);
+        let holds = self.tested(Self::borrowed(lowered.value, lowered.ty), test, span);
+        let name = self.string(&guard.shown, span);
+        let found = self.runtime_type(
+            Self::borrowed(lowered.value, lowered.ty),
+            &test.value.ty,
+            span,
+        );
+        // `TypeIs` fails where the result and the test differ, `TypeGuard` where the result
+        // is true and the test false.
+        let unborne = if guard.exact {
+            BoolOperator::Xor
+        } else {
+            BoolOperator::And
+        };
+        let tested = if guard.exact {
+            holds.value
+        } else {
+            self.builder
+                .push_value(Operation::BoolNot(holds.value), TyirType::Bool, span)
+        };
+        let failed = self.builder.push_value(
+            Operation::BoolBinary {
+                operator: unborne,
+                left: returned.value,
+                right: tested,
+            },
+            TyirType::Bool,
+            span,
+        );
+        let fails = self.builder.create_block();
+        let passes = self.builder.create_block();
+        self.builder.terminate(typy_tyir::Terminator::Branch {
+            condition: failed,
+            then: fails,
+            otherwise: passes,
+        });
+        self.builder.switch_to(fails);
+        self.call_runtime(
+            RuntimeFunction::GuardFailed,
+            vec![name, found.value, returned.value],
+            span,
+        );
+        self.builder.terminate(typy_tyir::Terminator::Unreachable);
+        self.builder.switch_to(passes);
+        self.release(lowered, span);
+        returned
     }
 
     /// Returns the outcome of `test` for `lowered`, its value evaluated already.

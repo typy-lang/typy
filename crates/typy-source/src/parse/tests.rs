@@ -1163,3 +1163,159 @@ fn a_starred_item_keeps_its_value_in_a_display_and_a_target() {
     };
     assert!(matches!(elements[1], Expr::Starred { .. }));
 }
+
+/// Returns each error of parsing `source` under the 3.15 floor, as its code and its message.
+fn errors(source: &str) -> Vec<(String, String)> {
+    parse(&file(source), PythonFloor::V3_15)
+        .unwrap_err()
+        .iter()
+        .map(|diagnostic| {
+            (
+                diagnostic.code().to_string(),
+                diagnostic.message().to_owned(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn future_imports_at_the_start_leave_the_tree_and_may_defer_annotations() {
+    let cases = [
+        ("from __future__ import annotations\nx = 1\n", 1, true),
+        (
+            "\"\"\"Doc.\"\"\"\nfrom __future__ import annotations as later\nx = 1\n",
+            2,
+            true,
+        ),
+        (
+            "from __future__ import generator_stop, division\nfrom __future__ import nested_scopes\n",
+            0,
+            false,
+        ),
+        ("x = 1\n", 1, false),
+    ];
+    for (source, statements, defers) in cases {
+        let tree = parse(&file(source), PythonFloor::V3_12).unwrap();
+        assert_eq!(
+            (tree.body.len(), tree.defers_annotations),
+            (statements, defers),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn future_imports_are_refused_where_cpython_refuses_them() {
+    let late = "from __future__ imports must occur at the beginning of the file";
+    let cases: [(&str, &str, &str); 7] = [
+        (
+            "import sys\nfrom __future__ import annotations\n",
+            "E0103",
+            late,
+        ),
+        (
+            "def f() -> None:\n    from __future__ import annotations\n",
+            "E0103",
+            late,
+        ),
+        (
+            "x = \"a\" \"b\" + 1\nfrom __future__ import division\n",
+            "E0103",
+            late,
+        ),
+        ("from __future__ import braces\n", "E0103", "not a chance"),
+        (
+            "from __future__ import nothing\n",
+            "E0103",
+            "future feature nothing is not defined",
+        ),
+        (
+            "from __future__ import *\n",
+            "E0103",
+            "future feature * is not defined",
+        ),
+        (
+            "lazy from __future__ import annotations\n",
+            "E0103",
+            "lazy from __future__ import is not allowed",
+        ),
+    ];
+    for (source, code, message) in cases {
+        assert_eq!(
+            errors(source),
+            [(code.to_owned(), message.to_owned())],
+            "{source}"
+        );
+    }
+    let flufl = errors("from __future__ import barry_as_FLUFL\n");
+    assert_eq!(flufl[0].0, "E0202");
+}
+
+/// Returns the one expression `source` holds, parsed at the Python floor 3.15.
+fn expression_at_3_15(source: &str) -> Expr {
+    let tree = parse(&file(source), PythonFloor::V3_15).expect("parses");
+    match tree.body.as_slice() {
+        [Stmt::Expr { value, .. }] => value.clone(),
+        other => panic!("not one expression: {other:?}"),
+    }
+}
+
+#[test]
+fn exp_23_an_unpacking_element_reads_as_one_more_clause() {
+    for source in [
+        "[*xs for xs in rows]\n",
+        "{*xs for xs in rows}\n",
+        "(*xs for xs in rows)\n",
+    ] {
+        let (element, generators) = match expression_at_3_15(source) {
+            Expr::ListComp {
+                element,
+                generators,
+                ..
+            }
+            | Expr::SetComp {
+                element,
+                generators,
+                ..
+            }
+            | Expr::GeneratorExp {
+                element,
+                generators,
+                ..
+            } => (element, generators),
+            other => panic!("not a comprehension: {other:?}"),
+        };
+        assert!(
+            matches!(*element, Expr::Name { ref id, .. } if id == " (unpacked)"),
+            "{source}"
+        );
+        assert_eq!(generators.len(), 2, "{source}");
+        assert!(
+            matches!(&generators[1].iter, Expr::Name { id, .. } if id == "xs"),
+            "{source}"
+        );
+    }
+    let Expr::DictComp {
+        key,
+        value,
+        generators,
+        ..
+    } = expression_at_3_15("{**d for d in maps}\n")
+    else {
+        panic!("not a dict comprehension");
+    };
+    assert!(matches!(*key, Expr::Name { ref id, .. } if id == " (unpacked key)"));
+    assert!(matches!(*value, Expr::Name { ref id, .. } if id == " (unpacked value)"));
+    assert!(matches!(&generators[1].iter, Expr::Call { function, .. }
+            if matches!(function.as_ref(), Expr::Attribute { attribute, .. } if attribute.name == "items")));
+}
+
+#[test]
+fn exp_23_an_unpacking_element_is_a_syntax_error_below_the_floor_3_15() {
+    for source in ["[*xs for xs in rows]\n", "{**d for d in maps}\n"] {
+        assert!(
+            parse(&file(source), PythonFloor::V3_14).is_err(),
+            "{source}"
+        );
+    }
+}

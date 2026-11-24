@@ -47,11 +47,12 @@ impl Program {
                     TypedExprKind::CheckedLength(Box::new(call)),
                     Type::Int,
                 )),
-                operators: vec![CompareOperator::NotEq],
+                operators: Box::new([CompareOperator::NotEq]),
                 comparators: vec![typed(
                     TypedExprKind::Constant(TypedConstant::Int("0".to_owned())),
                     Type::Int,
                 )],
+                narrowing: None,
             },
             Type::Bool,
         );

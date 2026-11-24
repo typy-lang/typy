@@ -1,0 +1,31 @@
+# Each difference between a standard library module TyPy gives and typeshed's
+# stub of it that TyPy keeps on purpose, with its reason (ADR-0097, ADR-0119).
+# scripts/check-stdlib-signatures.py fails on any other difference, and on a
+# difference listed here that no longer exists.
+
+[[difference]]
+module = "bisect"
+names = ["bisect_left", "bisect_right", "insort_left", "insort_right", "bisect", "insort"]
+parameter = "key"
+reason = "A key function makes the value another type than the items, which needs @overload with type parameters, planned for 0.13 (TYP-35)."
+
+[[difference]]
+module = "heapq"
+names = ["merge", "nlargest", "nsmallest"]
+parameter = "key"
+reason = "A key function orders the items by values of another type, which needs @overload with type parameters, planned for 0.13 (TYP-35)."
+
+[[difference]]
+module = "string"
+names = ["Formatter"]
+reason = "Formatter's methods take and give values of any type, which needs typing.Any, planned for 0.13 (TYP-25)."
+
+[[difference]]
+module = "base64"
+names = ["encode", "decode"]
+reason = "They read and write binary files of any kind, typed IO[bytes], which needs typing.BinaryIO, planned for 1.0 (LIB-19)."
+
+[[difference]]
+module = "binascii"
+names = ["a2b_uu", "b2a_uu", "a2b_qp", "b2a_qp", "crc_hqx"]
+reason = "The uuencode and quoted-printable codecs and crc_hqx are planned for 0.13 (LIB-31)."

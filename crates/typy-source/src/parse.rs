@@ -4,6 +4,7 @@
 
 mod escape;
 mod expression;
+mod future;
 mod limits;
 mod operator;
 mod pattern;
@@ -71,10 +72,14 @@ pub fn parse_with_warnings(
         return Err(errors);
     }
     let warnings = converter.escape_warnings(parsed.tokens());
-    let body = match parsed.into_syntax() {
-        ast::Mod::Module(module) => converter.statements(&module.body),
-        ast::Mod::Expression(_) => unreachable!("Mode::Module always produces a module"),
+    let ast::Mod::Module(module) = parsed.into_syntax() else {
+        unreachable!("Mode::Module always produces a module")
     };
+    // The `__future__` imports at the start bind nothing TyPy reads, so the tree leaves them
+    // out, and only whether they defer annotations is kept (LIB-29).
+    let future = converter.future_imports(&module.body)?;
+    let mut body = converter.statements(&module.body[..future.start]);
+    body.extend(converter.statements(&module.body[future.end..]));
     if let Some(range) = converter.too_deep.get() {
         let message = format!(
             "the program nests more than {MAX_DEPTH} levels deep, past what CPython compiles"
@@ -86,7 +91,10 @@ pub fn parse_with_warnings(
         ]);
     }
     Ok(Parsed {
-        tree: SyntaxTree { body },
+        tree: SyntaxTree {
+            body,
+            defers_annotations: future.defers_annotations,
+        },
         warnings,
     })
 }

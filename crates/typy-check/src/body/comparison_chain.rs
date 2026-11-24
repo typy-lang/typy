@@ -78,8 +78,9 @@ impl BodyChecker<'_> {
                 Self::typed(
                     TypedExprKind::Compare {
                         left: Box::new(left),
-                        operators: vec![operator],
+                        operators: Box::new([operator]),
                         comparators: vec![right],
+                        narrowing: None,
                     },
                     Type::Bool,
                     span,

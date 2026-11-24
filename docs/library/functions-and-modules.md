@@ -14,6 +14,8 @@
 | `open` for text files in UTF-8, with `read`, `readline`, `readlines`, `write`, `writelines`, `flush`, `close`, iteration and `with` | LIB-04 |
 | `callable(x)`: true for a function value, a built-in function, method or type, and a class | LIB-23 |
 | `map` and `filter`, lazy iterators that go on after the function raises | LIB-23 |
+| `divmod`, `pow` with or without a modulus, `bin`, `hex`, `oct` and `format`; see [Numbers and formatting](#numbers-and-formatting) | LIB-28 |
+| `hash`, the hash a set or a dict keeps a value by; see [Hashing](#hashing) | LIB-34 |
 
 `str` has `find`, `index`, `count`, `split`, `join`, `strip`, `replace`,
 `startswith`, `upper`, `lower`, `title`, `center`, `zfill`, `encode`, the
@@ -112,6 +114,59 @@ and 3.13 raise `TypeError` for it. `map` and `filter` themselves as
 values, such as `f = map`, and `*` in a call of `map` are planned for 1.0
 (LIB-25).
 
+## Numbers and formatting
+
+`divmod(a, b)` gives `(a // b, a % b)`, of `int`s for two integers and of
+`float`s otherwise. `pow(a, b)` is `a ** b`, so its exponent follows the
+rule for `**`: an `int` exponent of an `int` is a non-negative integer
+literal (EXP-04). `pow(a, b, m)` of three integers reduces the power
+modulo `m` at every step, gives a result with the sign of `m`, and takes a
+negative exponent when `a` has an inverse modulo `m`:
+
+<!-- typy-expect: accepted -->
+```python
+print(divmod(17, 5), divmod(-7.5, 2))
+print(pow(2, 10), pow(2, 10**20, 97), pow(3, -1, 7))
+print(bin(10), hex(255), oct(-8))
+print(format(1234567.891, ",.2f"), format("id", ">6"), format(42))
+```
+
+`bin`, `hex` and `oct` write an `int` with the prefix `0b`, `0x` or `0o`,
+and `format(value, spec)` formats a value as the f-string `f"{value:spec}"`
+does. A modulus of zero, or a negative exponent whose base has no inverse,
+raises `ValueError`. `bytearray` is described in
+[Built-in types](built-in-types.md#bytearrays).
+
+## Hashing
+
+`hash(x)` gives the hash a set or a dict keeps `x` by (LIB-34). For an
+`int`, a `float`, a `bool`, `None` and a tuple of them it is CPython's;
+for an instance it is what the class's `__hash__` returns, so `__hash__`
+can hash a tuple of the attributes `__eq__` compares. `str` and `bytes`
+hash with CPython's function under a fixed key, where CPython draws a key
+at random for each run, so their hashes are not promised (STD-03):
+
+<!-- typy-expect: accepted -->
+```python
+class Point:
+    def __init__(self, x: int, y: int) -> None:
+        self.x = x
+        self.y = y
+
+    def __eq__(self, other: "Point") -> bool:
+        return (self.x, self.y) == (other.x, other.y)
+
+    def __hash__(self) -> int:
+        return hash((self.x, self.y))
+
+
+print(hash(Point(1, 2)) == hash((1, 2)), len({Point(1, 2), Point(1, 2)}))
+```
+
+A value of a type that has no hash, such as a list, is E0413. In a copy
+of a generic function or class whose type argument has no hash, the call
+raises `TypeError` where it runs, as CPython raises it.
+
 ## Formatting with `%`
 
 `format % values` formats a string literal as CPython does (LIB-10). The
@@ -177,6 +232,13 @@ print(math.frexp(8.0), math.degrees(math.pi), math.log10(10**400))
 A function the module gained after the program's Python floor is E0425
 at that floor: `math.fma` needs `python-floor = "3.13"`, and `fmax`,
 `fmin`, `signbit`, `isnormal` and `issubnormal` need `"3.15"`.
+
+From the Python floor 3.15, the submodule `math.integer` gives the
+functions of `math` that take integers, `comb`, `factorial`, `gcd`,
+`isqrt`, `lcm` and `perm` (LIB-26): `import math.integer as mi` with
+`mi.gcd(12, 18)`, `from math.integer import isqrt`, or
+`math.integer.lcm(4, 6)` after `import math.integer`. Below that floor,
+`math` is no package and `math.integer` is E0206, as in CPython 3.14.
 A function of `math` or `sys` is a value where a `Callable` is expected,
 such as `sorted(values, key=math.fabs)` or `root: Callable[[float], float]
 = math.sqrt`, written `<built-in function sqrt>`; with no `Callable`
@@ -206,6 +268,146 @@ the exact `int` product until its first `float` item, and `prod([],
 start=True)` is `True`. `prod` of items that are not numbers, such as
 strings, is planned for 1.0 (LIB-21).
 
+## The bisect module
+
+`import bisect` gives CPython's `bisect` module, written in typed Python
+that CPython also runs (LIB-27): `bisect_left`, `bisect_right` and
+`bisect` find where a value goes in a sorted sequence, and `insort_left`,
+`insort_right` and `insort` put it there in a list, each with `lo` and
+`hi` bounds and CPython's `ValueError` for a negative `lo`. The items
+compare as their types do, so a list of tuples is sorted item by item
+(GEN-18):
+
+<!-- typy-expect: accepted -->
+```python
+import bisect
+
+grades = [60, 70, 80, 90]
+events = [(1, "start"), (5, "stop")]
+bisect.insort(events, (3, "pause"))
+print(bisect.bisect(grades, 75), bisect.bisect_left(grades, 80), events)
+```
+
+The `key` parameter, which makes the searched value of another type than
+the items, needs `@overload` with type parameters and is planned for
+0.13 (TYP-35).
+
+## The heapq module
+
+`import heapq` gives CPython's `heapq` module in typed Python (LIB-27):
+`heappush`, `heappop`, `heappushpop`, `heapreplace` and `heapify` keep a
+list as a heap, `merge` merges sorted iterables lazily, with `reverse`,
+and `nlargest` and `nsmallest` pick items, ties broken as CPython breaks
+them. An empty heap raises CPython's `IndexError: index out of range`:
+
+<!-- typy-expect: accepted -->
+```python
+import heapq
+
+tasks = [(2, "write"), (1, "plan"), (3, "test")]
+heapq.heapify(tasks)
+print(heapq.heappop(tasks), heapq.nlargest(2, [5, 1, 9, 4]))
+print(list(heapq.merge([1, 4, 7], [2, 5, 8])))
+```
+
+`key` of `merge`, `nlargest` and `nsmallest` is planned for 0.13
+(TYP-35), as is the `heapify_max` family Python 3.14 adds (LIB-32).
+
+## The string module
+
+`import string` gives CPython's `string` module in typed Python
+(LIB-27): its constants, such as `ascii_letters`, `digits` and
+`punctuation`, `capwords`, and `Template`, whose `substitute`,
+`safe_substitute`, `is_valid` and `get_identifiers` read `$name`,
+`${name}` and `$$` as CPython's default pattern does, with a class's own
+`delimiter`. A placeholder of no form raises CPython's `ValueError` with
+its line and column:
+
+<!-- typy-expect: accepted -->
+```python
+from string import Template, capwords
+
+print(capwords(" hello  world "), Template("$who: ${n} $$").substitute(who="a", n=1))
+print(Template("$a $b").safe_substitute({"a": "x"}), Template("$a").get_identifiers())
+```
+
+`Formatter`, and a `Template` subclass's own `idpattern`,
+`braceidpattern`, `flags` or `pattern`, which CPython compiles into a
+regular expression, are planned for 0.13 (TYP-25).
+
+## The textwrap module
+
+`import textwrap` gives CPython's `textwrap` module in typed Python
+(LIB-27): `TextWrapper` with each of its options, and `wrap`, `fill`,
+`shorten`, `dedent` and `indent`. Text is split into words, whitespace
+and the parts of hyphenated words as CPython 3.15 splits it with its
+regular expression:
+
+<!-- typy-expect: accepted -->
+```python
+import textwrap
+
+text = "The well-known rule: wrap at word boundaries, never mid-word."
+print(textwrap.wrap(text, 20))
+print(textwrap.shorten(text, 30), textwrap.dedent("  a\n    b"))
+print(textwrap.indent("one\ntwo", "> "), sep="")
+```
+
+The attributes `wordsep_re`, `wordsep_simple_re` and `sentence_end_re`
+of `TextWrapper`, which hold regular expressions, are not given, so a
+subclass changes how text is split by overriding `_split`.
+
+## The base64 module
+
+`import base64` gives CPython's `base64` module in typed Python
+(LIB-27): `b64encode` and `b64decode`, with `altchars` and `validate`,
+their `standard_` and `urlsafe_` forms, `b32encode`, `b32decode`,
+`b32hexencode`, `b32hexdecode`, `b16encode`, `b16decode`, `a85encode`,
+`a85decode`, `b85encode`, `b85decode`, `encodebytes` and `decodebytes`.
+A decoder takes `bytes` or a `str` of ASCII characters. The results and
+messages are those of CPython 3.15, which reads malformed input
+otherwise than 3.12 did: `urlsafe_b64decode` needs no padding, and
+`binascii.Error`, a `ValueError`, says what is wrong with the input:
+
+<!-- typy-expect: accepted -->
+```python
+import base64
+import binascii
+
+token = base64.urlsafe_b64encode(b"\xfb\xff typed")
+print(token, base64.urlsafe_b64decode(token), base64.b32encode(b"ok"))
+try:
+    base64.b64decode("YQ")
+except binascii.Error as error:
+    print(error)
+```
+
+The parameters Python 3.13 to 3.15 add, such as `padded`, `wrapcol` and
+`ignorechars`, and `z85encode` and `z85decode` are planned for 0.13
+(LIB-32). `encode` and `decode`, which read and write binary files, need
+`typing.BinaryIO`, planned for 1.0 (LIB-19). CPython 3.15 also writes a
+`FutureWarning` when URL-safe data, or data decoded with `altchars`,
+holds `+` or `/`; TyPy decodes the same bytes and writes no warning.
+
+## The binascii module
+
+`import binascii` gives the functions of CPython's `binascii` module
+that `base64` uses, in typed Python (LIB-27): `b2a_base64` and
+`a2b_base64`, with `newline` and `strict_mode`, `hexlify` and `b2a_hex`,
+with `sep` and `bytes_per_sep`, `unhexlify` and `a2b_hex`, `crc32`, and
+the exceptions `Error` and `Incomplete`:
+
+<!-- typy-expect: accepted -->
+```python
+import binascii
+
+print(binascii.hexlify(b"\xb9\x01\xef", "-"), binascii.unhexlify("b901ef"))
+print(binascii.crc32(b"hello"), binascii.b2a_base64(b"hi", newline=False))
+```
+
+`a2b_uu`, `b2a_uu`, `a2b_qp`, `b2a_qp` and `crc_hqx` are planned for 0.13
+(LIB-31).
+
 ## The sys module
 
 `import sys` gives these names of CPython's `sys` module (LIB-04,
@@ -220,7 +422,7 @@ LIB-13):
 | `sys.maxsize`, `sys.maxunicode` | `2**63 - 1` and `1114111` |
 | `sys.byteorder`, `sys.platform` | `"little"` on every target; `"linux"` in a program built for Linux and `"darwin"` in one built for macOS |
 | `sys.getrecursionlimit()`, `sys.setrecursionlimit(n)` | Read and set the recursion limit, 1000 at first |
-| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.11.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
+| `sys.version`, `sys.hexversion`, `sys.version_info` | CPython 3.15.0, whose behaviour TyPy follows: `'3.15.0 (TyPy 0.12.0)'`, `0x030F00F0` and `(3, 15, 0, 'final', 0)` |
 
 An argument that is not valid UTF-8 keeps each stray byte as a
 surrogate, as CPython decodes it, so `b"a\xffb"` becomes `'a\udcffb'`,

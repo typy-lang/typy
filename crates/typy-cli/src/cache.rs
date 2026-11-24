@@ -5,7 +5,8 @@ use std::fmt::Write as _;
 use camino::Utf8PathBuf;
 use sha2::{Digest as _, Sha256};
 use typy_build::BuildRequest;
-use typy_source::{PythonFloor, SettingOverrides};
+use typy_diagnostics::WarningLevels;
+use typy_source::{MainSource, PythonFloor, SettingOverrides};
 
 /// Returns the cache directory: `$TYPY_HOME/cache`, else the user's cache directory, which is
 /// `$XDG_CACHE_HOME/typy` or `~/.cache/typy`. Its location never changes a build's output.
@@ -32,26 +33,38 @@ pub(crate) fn directory() -> Utf8PathBuf {
 
 /// Returns the SHA-256, in hexadecimal, of everything a build's output depends on: the compiler
 /// version and `compiler`, which tells one build of it from another, the mode, the target, the
-/// main file's name, the settings flags and `--deny-warnings`, and the path and text of every file of the program,
-/// `typy.toml` included (ADR-0015). Each part is preceded by its length, so no two different
+/// processor and its features, the main file's name, the settings flags, the level of each
+/// warning, which decides whether a build fails (CLI-27), and the path and text of every file
+/// of the program, `typy.toml` included (ADR-0015). Each part is preceded by its length, so no two different
 /// inputs run together into the same bytes.
 pub(crate) fn key(
     request: &BuildRequest,
     files: &[(String, String)],
     overrides: SettingOverrides,
-    deny_warnings: bool,
+    warning_levels: &WarningLevels,
     compiler: &[u8],
 ) -> String {
-    let name = request.main().file_name().unwrap_or("");
+    // A file counts by its name, as the program's paths count from its directory; a module
+    // or code counts as the command line gives it, `-m NAME` or `-c`, which no file name is.
+    let name = match request.main() {
+        MainSource::File(path) => path.file_name().unwrap_or("").to_owned(),
+        other => other.to_string(),
+    };
     let floor = overrides.python_floor.map_or("", PythonFloor::as_str);
+    // The processor and its features change the code, so they are part of the key (CLI-33).
+    let options = request.codegen_options();
+    let processor = options.processor.as_deref().unwrap_or("");
+    let levels = warning_levels.to_string();
     let mut parts: Vec<&[u8]> = vec![
         env!("CARGO_PKG_VERSION").as_bytes(),
         compiler,
         request.mode().name().as_bytes(),
         request.target().triple.as_str().as_bytes(),
+        processor.as_bytes(),
+        options.features.as_bytes(),
         name.as_bytes(),
         floor.as_bytes(),
-        if deny_warnings { b"deny" } else { b"" },
+        levels.as_bytes(),
     ];
     for (path, text) in files {
         parts.push(path.as_bytes());
@@ -103,77 +116,4 @@ fn file_identity(path: Option<&std::path::Path>) -> [u8; 24] {
 }
 
 #[cfg(test)]
-mod tests {
-    use typy_source::{PythonFloor, SettingOverrides};
-
-    /// The key without settings flags.
-    fn key(request: &BuildRequest, files: &[(String, String)], compiler: &[u8]) -> String {
-        super::key(request, files, SettingOverrides::default(), false, compiler)
-    }
-    use typy_build::{BuildMode, BuildRequest};
-
-    fn files(texts: &[(&str, &str)]) -> Vec<(String, String)> {
-        texts
-            .iter()
-            .map(|(path, text)| ((*path).to_owned(), (*text).to_owned()))
-            .collect()
-    }
-
-    #[test]
-    fn the_key_changes_with_each_input() {
-        let request = BuildRequest::new("app.py").unwrap();
-        let program = files(&[("app.py", "import tools\n"), ("tools.py", "x = 1\n")]);
-        let base = key(&request, &program, b"build");
-        assert_eq!(base.len(), 64);
-        assert_eq!(base, key(&request, &program, b"build"));
-        let others = [
-            key(
-                &request,
-                &files(&[("app.py", "import tools\n"), ("tools.py", "x = 2\n")]),
-                b"build",
-            ),
-            key(
-                &request,
-                &files(&[("app.py", "import tools\n"), ("other.py", "x = 1\n")]),
-                b"build",
-            ),
-            key(&request, &program, b"another build"),
-            key(
-                &request.clone().with_mode(BuildMode::Release),
-                &program,
-                b"build",
-            ),
-            key(&BuildRequest::new("other.py").unwrap(), &program, b"build"),
-            super::key(
-                &request,
-                &program,
-                SettingOverrides {
-                    python_floor: Some(PythonFloor::V3_15),
-                    ..SettingOverrides::default()
-                },
-                false,
-                b"build",
-            ),
-            super::key(
-                &request,
-                &program,
-                SettingOverrides::default(),
-                true,
-                b"build",
-            ),
-        ];
-        for other in others {
-            assert_ne!(base, other);
-        }
-        assert_eq!(
-            base,
-            key(
-                &BuildRequest::new("src/app.py").unwrap(),
-                &program,
-                b"build"
-            )
-        );
-        assert_eq!(super::compiler_identity(&request).len(), 48);
-        assert_eq!(super::file_identity(None), [0; 24]);
-    }
-}
+mod tests;

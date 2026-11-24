@@ -236,3 +236,17 @@ fn visit_defaults(parameters: &[typy_source::syntax::Parameter], visit: &mut dyn
         visit_expression(default, visit);
     }
 }
+
+/// Returns the blocks a statement holds, whose statements `visit_statement` reads but whose
+/// annotations it does not.
+pub(crate) fn nested_blocks(statement: &Stmt) -> Vec<&[Stmt]> {
+    match statement {
+        Stmt::If { body, orelse, .. }
+        | Stmt::While { body, orelse, .. }
+        | Stmt::For { body, orelse, .. } => vec![body, orelse],
+        Stmt::With { body, .. } => vec![body],
+        Stmt::Match { cases, .. } => cases.iter().map(|case| case.body.as_slice()).collect(),
+        Stmt::Try { .. } => statement.try_blocks(),
+        _ => Vec::new(),
+    }
+}

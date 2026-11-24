@@ -220,6 +220,7 @@ impl BodyChecker<'_> {
                         | Type::TupleOf(_)
                         | Type::Str
                         | Type::Bytes
+                        | Type::Bytearray
                         | Type::Range
                         | Type::Dict(..)
                         | Type::DictView(..)
@@ -308,6 +309,7 @@ impl BodyChecker<'_> {
             .iter()
             .map(|argument| {
                 let value = self.expression(argument);
+                let value = self.enum_value(value);
                 self.expect(&value, Type::Int, "an argument of `range`");
                 value
             })
@@ -355,7 +357,12 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn sequence(&mut self, expression: &Expr) -> TypedExpr {
-        Self::sequence_of(self.tuple_expression(expression))
+        // A loop over an enum class reads the list of its members (CLS-44), and one over a
+        // `frozendict` the dict it holds, which gives the same keys in the same order
+        // (DAT-18).
+        let value = self.tuple_expression(expression);
+        let value = self.frozendict_items(value);
+        Self::sequence_of(self.enum_members(value))
     }
 
     /// Returns the checked `value` as the sequence a loop reads, as `sequence` does.

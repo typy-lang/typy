@@ -1,10 +1,11 @@
-//! What one build asks for: the main file, the mode, the target, the stage to stop at and the
-//! output path.
+//! What one build asks for: the main module, the mode, the target, the stage to stop at and
+//! the output path.
 
 use std::fmt;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use typy_codegen::Target;
+use typy_codegen::{CodegenOptions, Target};
+use typy_source::MainSource;
 
 use crate::emit_stage::EmitStage;
 use crate::library_kind::LibraryKind;
@@ -30,28 +31,42 @@ impl std::error::Error for RequestError {}
 /// What one build asks for. The main file's existence is checked when it is loaded (E0105).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildRequest {
-    main: Utf8PathBuf,
+    main: MainSource,
     mode: BuildMode,
     target: Target,
-    emit: Option<EmitStage>,
+    /// The stages to write instead of an executable, in pipeline order, each once (CLI-29).
+    emit: Vec<EmitStage>,
     output: Option<Utf8PathBuf>,
     library: Option<LibraryKind>,
+    /// The processor code is generated for; `None` for the target's baseline (CLI-21).
+    processor: Option<String>,
+    /// The features beside the processor's, as LLVM writes them (CLI-30).
+    features: String,
 }
 
 impl BuildRequest {
-    /// Returns a debug build of `main` for the host, writing an executable.
+    /// Returns a debug build of the main file `main` for the host, writing an executable.
     pub fn new(main: impl Into<Utf8PathBuf>) -> Result<Self, RequestError> {
-        let main = main.into();
-        if main.extension() != Some("py") {
-            return Err(RequestError::NotPython(main));
+        Self::of_main(MainSource::File(main.into()))
+    }
+
+    /// Returns a debug build for the host of the program whose main module `main` gives,
+    /// writing an executable (CLI-28).
+    pub fn of_main(main: MainSource) -> Result<Self, RequestError> {
+        if let MainSource::File(path) = &main
+            && path.extension() != Some("py")
+        {
+            return Err(RequestError::NotPython(path.clone()));
         }
         Ok(Self {
             main,
-            mode: BuildMode::Debug,
+            mode: BuildMode::DEBUG,
             target: Target::host(),
-            emit: None,
+            emit: Vec::new(),
             output: None,
             library: None,
+            processor: None,
+            features: String::new(),
         })
     }
 
@@ -69,10 +84,13 @@ impl BuildRequest {
         self
     }
 
-    /// Stops the build after `stage` and writes its output instead of an executable.
+    /// Writes the output of `stage` instead of an executable, beside the stages asked for
+    /// before (CLI-04, CLI-29).
     #[must_use]
-    pub const fn with_emit(mut self, stage: EmitStage) -> Self {
-        self.emit = Some(stage);
+    pub fn with_emit(mut self, stage: EmitStage) -> Self {
+        if let Err(index) = self.emit.binary_search(&stage) {
+            self.emit.insert(index, stage);
+        }
         self
     }
 
@@ -90,16 +108,46 @@ impl BuildRequest {
         self
     }
 
+    /// Generates code for `processor`, or the target's baseline for `None`, with `features`
+    /// turned on or off beside the processor's (CLI-21, CLI-30).
+    #[must_use]
+    pub fn with_processor(mut self, processor: Option<String>, features: String) -> Self {
+        self.processor = processor;
+        self.features = features;
+        self
+    }
+
+    /// Returns what the build asks of code generation: the mode's optimisation, the processor
+    /// and its features.
+    #[must_use]
+    pub fn codegen_options(&self) -> CodegenOptions {
+        CodegenOptions {
+            optimization: self.mode.optimization(),
+            processor: self.processor.clone(),
+            features: self.features.clone(),
+        }
+    }
+
     /// Returns the kind of C library the build writes, or `None` for an executable.
     #[must_use]
     pub const fn library(&self) -> Option<LibraryKind> {
         self.library
     }
 
-    /// Returns the main file.
+    /// Returns where the main module comes from.
     #[must_use]
-    pub fn main(&self) -> &Utf8Path {
+    pub const fn main(&self) -> &MainSource {
         &self.main
+    }
+
+    /// Returns the main file's directory, where a library goes by default; empty for a main
+    /// module that is not a file.
+    #[must_use]
+    pub fn directory(&self) -> &Utf8Path {
+        match &self.main {
+            MainSource::File(path) => path.parent().unwrap_or(Utf8Path::new("")),
+            MainSource::Module(_) | MainSource::Code(_) => Utf8Path::new(""),
+        }
     }
 
     /// Returns the build mode.
@@ -114,10 +162,11 @@ impl BuildRequest {
         self.target
     }
 
-    /// Returns the stage the build stops after, if any.
+    /// Returns the stages whose output the build writes, in pipeline order; none for an
+    /// executable.
     #[must_use]
-    pub const fn emit(&self) -> Option<EmitStage> {
-        self.emit
+    pub fn emit(&self) -> &[EmitStage] {
+        &self.emit
     }
 
     /// Returns the output path given, if any.
@@ -126,63 +175,19 @@ impl BuildRequest {
         self.output.as_deref()
     }
 
-    /// Returns where the executable goes: the output path, or the main file without `.py`.
-    /// A library's files are named by `LibraryLayout`, after its module's version.
+    /// Returns where the executable goes: the output path, or the main file without `.py`,
+    /// or the program's name for a main module that is not a file. A library's files are
+    /// named by `LibraryLayout`, after its module's version.
     #[must_use]
     pub fn output_path(&self) -> Utf8PathBuf {
-        self.output
-            .clone()
-            .unwrap_or_else(|| self.main.with_extension(""))
+        self.output.clone().unwrap_or_else(|| match &self.main {
+            MainSource::File(path) => path.with_extension(""),
+            MainSource::Module(_) | MainSource::Code(_) => {
+                Utf8PathBuf::from(self.main.program_name())
+            }
+        })
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{BuildRequest, RequestError};
-    use crate::{BuildMode, EmitStage, LibraryKind};
-    use typy_codegen::{Target, TargetTriple};
-
-    #[test]
-    fn a_new_request_is_a_debug_build_of_an_executable_for_the_host() {
-        let request = BuildRequest::new("src/app.py").unwrap();
-        assert_eq!(request.main(), "src/app.py");
-        assert_eq!(request.mode(), BuildMode::Debug);
-        assert_eq!(request.target(), Target::host());
-        assert_eq!((request.emit(), request.output()), (None, None));
-        assert_eq!(request.output_path(), "src/app");
-    }
-
-    #[test]
-    fn every_setting_can_be_changed() {
-        let musl = Target {
-            triple: TargetTriple::X86_64LinuxMusl,
-        };
-        let request = BuildRequest::new("app.py")
-            .unwrap()
-            .with_mode(BuildMode::ReleaseSmall)
-            .with_target(musl)
-            .with_emit(EmitStage::Tyir)
-            .with_output("out/app");
-        assert_eq!(request.mode(), BuildMode::ReleaseSmall);
-        assert_eq!(request.target(), musl);
-        assert_eq!(request.emit(), Some(EmitStage::Tyir));
-        assert_eq!(request.output_path(), "out/app");
-    }
-
-    #[test]
-    fn a_request_may_ask_for_a_library() {
-        let request = BuildRequest::new("src/tools.py").unwrap();
-        assert_eq!(request.library(), None);
-        let request = request.with_library(LibraryKind::Static);
-        assert_eq!(request.library(), Some(LibraryKind::Static));
-    }
-
-    #[test]
-    fn a_main_file_that_is_not_python_is_refused() {
-        for path in ["app", "app.ty", "app.py.txt", ""] {
-            let error = BuildRequest::new(path).unwrap_err();
-            assert_eq!(error, RequestError::NotPython(path.into()));
-            assert_eq!(error.to_string(), format!("{path} is not a `.py` file"));
-        }
-    }
-}
+mod tests;

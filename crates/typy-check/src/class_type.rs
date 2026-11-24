@@ -36,6 +36,50 @@ pub(crate) const NAMED_TUPLE_FIELDS: &str = " (fields)";
 /// leaves the field as it is, and returns an instance of its own class (CLS-27, ADR-0088).
 pub(crate) const NAMED_TUPLE_REPLACE: &str = " (replace)";
 
+/// The hidden static method the compiler writes for an enum class, which returns the member
+/// whose value equals its argument or raises `ValueError`, as `Color(value)` does (CLS-44,
+/// ADR-0116).
+pub(crate) const ENUM_LOOKUP: &str = " (lookup)";
+
+/// The hidden static method of an enum class that returns the member a name names, an alias
+/// too, or raises `KeyError`, as `Color[name]` does.
+pub(crate) const ENUM_NAMED: &str = " (named)";
+
+/// The hidden static method of an enum class that returns a new list of its members, aliases
+/// left out, which a loop over the class, `len` and `in` read.
+pub(crate) const ENUM_MEMBERS: &str = " (members)";
+
+/// The hidden method of an `IntEnum` or a `StrEnum` that returns a member's value, which marks
+/// the class as one whose members the checker reads as their values where an `int` or a `str`
+/// is wanted.
+pub(crate) const ENUM_VALUE: &str = " (value)";
+
+/// The hidden static method of a `Flag` or an `IntFlag` that returns the member or composite
+/// of a value, made once and kept, or raises CPython's `ValueError` (CLS-44, ADR-0118).
+pub(crate) const ENUM_FLAG: &str = " (flag)";
+
+/// The hidden method of a flag that returns a new list of the members whose bits it holds, in
+/// definition order, which a loop over it, `len` and `in` read; it also marks the class as a
+/// flag.
+pub(crate) const ENUM_BITS: &str = " (bits)";
+
+/// The hidden static method of a flag that returns how many bits a value has, as
+/// `int.bit_length` does.
+pub(crate) const ENUM_FLAG_WIDTH: &str = " (width)";
+
+/// The hidden static method of a flag that writes a value in CPython's two's complement binary
+/// form, as its `ValueError` shows it.
+pub(crate) const ENUM_FLAG_BINARY: &str = " (binary)";
+
+/// The start of the hidden module variable, followed by the class's name, that keeps the
+/// composites of a flag by value.
+pub(crate) const ENUM_FLAGS: &str = " (flags) ";
+
+/// The start of the hidden name an enum class's member variables call to make each member,
+/// followed by the class's name: a new instance through `__init__`, where `Color(...)` finds a
+/// member instead.
+pub(crate) const ENUM_MEMBER: &str = " (member) ";
+
 /// The comparison and hash methods a class defines or inherits, which decide whether its
 /// instances can be ordered and hashed (CLS-07, ADR-0026), and whether it is a named tuple,
 /// whose instances are tuples (CLS-27).
@@ -177,89 +221,4 @@ impl fmt::Display for InstanceClass {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::InstanceClass;
-    use crate::typed::ClassId;
-
-    fn chain() -> (InstanceClass, InstanceClass, InstanceClass) {
-        let shape = InstanceClass::root(ClassId(0), "Shape");
-        let circle = InstanceClass {
-            id: ClassId(1),
-            name: "Circle".to_owned(),
-            ancestors: vec![(ClassId(0), "Shape".to_owned())],
-            operators: super::Operators::default(),
-            generic: None,
-            protocol: false,
-        };
-        let disc = InstanceClass {
-            id: ClassId(2),
-            name: "Disc".to_owned(),
-            ancestors: vec![
-                (ClassId(1), "Circle".to_owned()),
-                (ClassId(0), "Shape".to_owned()),
-            ],
-            operators: super::Operators::default(),
-            generic: None,
-            protocol: false,
-        };
-        (shape, circle, disc)
-    }
-
-    #[test]
-    fn a_class_derives_from_itself_and_each_ancestor_but_not_a_subclass() {
-        let (shape, circle, disc) = chain();
-        assert!(disc.derives_from(&disc));
-        assert!(disc.derives_from(&circle));
-        assert!(disc.derives_from(&shape));
-        assert!(!shape.derives_from(&circle));
-    }
-
-    #[test]
-    fn the_base_keeps_the_rest_of_the_chain() {
-        let (shape, circle, disc) = chain();
-        assert_eq!(disc.base(), Some(circle));
-        assert_eq!(shape.base(), None);
-    }
-
-    #[test]
-    fn the_common_base_is_the_nearest_shared_class() {
-        let (shape, circle, disc) = chain();
-        let square = InstanceClass {
-            id: ClassId(3),
-            name: "Square".to_owned(),
-            ancestors: vec![(ClassId(0), "Shape".to_owned())],
-            operators: super::Operators::default(),
-            generic: None,
-            protocol: false,
-        };
-        assert_eq!(disc.common_base(&circle), Some(circle.clone()));
-        assert_eq!(disc.common_base(&square), Some(shape));
-        assert_eq!(
-            square.common_base(&InstanceClass::root(ClassId(4), "Other")),
-            None
-        );
-    }
-
-    #[test]
-    fn a_class_with_eq_and_no_hash_has_no_hash_and_lt_orders() {
-        use super::Operators;
-        let root = Operators::default();
-        let offers = |operators: Operators| {
-            (
-                operators.hashable(),
-                operators.orders(),
-                operators.compares(),
-            )
-        };
-        assert_eq!(offers(root), (true, false, false));
-        let equal = Operators::of(["__eq__"], root);
-        assert_eq!(offers(equal), (false, false, true));
-        let hashed = Operators::of(["__eq__", "__hash__"], root);
-        assert!(hashed.hashable());
-        let child = Operators::of(["__lt__"], hashed);
-        assert_eq!(offers(child), (true, true, true));
-        let redefined = Operators::of(["__eq__"], hashed);
-        assert!(!redefined.hashable());
-        assert!(Operators::of(["__gt__"], equal).orders());
-    }
-}
+mod tests;

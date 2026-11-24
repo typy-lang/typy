@@ -20,6 +20,8 @@ pub enum Type {
     Str,
     /// `bytes`, an immutable sequence of integers from 0 to 255 (DAT-06).
     Bytes,
+    /// `bytearray`, a mutable sequence of integers from 0 to 255 (LIB-28, ADR-0108).
+    Bytearray,
     /// The type of `None` (DAT-04).
     NoneType,
     /// `tuple[A, B, ...]`: a fixed number of items, each with its own type (DAT-08).
@@ -119,6 +121,17 @@ pub enum Type {
     /// A declared abstract collection, such as `Sequence[int]`, held as the built-in types it
     /// stands for, which an expression's type is in its place (LIB-20, ADR-0086).
     Abstract(Box<crate::abstract_type::AbstractType>),
+    /// One constant of `typing.Literal`, such as `Literal['r']`, held as a value of its base
+    /// type, which an expression's type is in its place (TYP-28, ADR-0110).
+    Literal(Box<crate::literal_type::LiteralValue>),
+    /// `typing.Self` of the class whose instances are of the type held, in a method's
+    /// parameters and result; a value of it is held as one of those instances, which an
+    /// expression's type is in its place (TYP-30, ADR-0113).
+    SelfType(Box<Type>),
+    /// `TypeGuard[T]` or `TypeIs[T]` as a function's result, a `bool` whose call narrows its
+    /// first argument where it is tested; an expression's type is `bool` in its place
+    /// (TYP-31, ADR-0114).
+    Guard(Box<crate::guard_type::GuardType>),
     /// `object`: a value of any type, held as an object whose header says what it is, a value
     /// held by value boxed, and narrowed before any operation `object` does not define
     /// (TYP-23, ADR-0090).
@@ -145,6 +158,8 @@ pub enum TypeObjectOf {
     Str,
     /// `bytes`.
     Bytes,
+    /// `bytearray`.
+    Bytearray,
     /// The type of `None`, `NoneType`.
     NoneType,
     /// `list`, whatever its items.
@@ -226,11 +241,14 @@ impl TypeObjectOf {
     pub fn of(ty: &Type) -> Option<Self> {
         Some(match ty {
             Type::Abstract(collection) => return Self::of(&collection.members),
+            Type::Literal(value) => return Self::of(&value.base()),
+            Type::SelfType(own) => return Self::of(own),
             Type::Int => Self::Int,
             Type::Float => Self::Float,
-            Type::Bool => Self::Bool,
+            Type::Bool | Type::Guard(_) => Self::Bool,
             Type::Str => Self::Str,
             Type::Bytes => Self::Bytes,
+            Type::Bytearray => Self::Bytearray,
             Type::NoneType => Self::NoneType,
             Type::List(_) => Self::List,
             Type::Tuple(_) | Type::TupleOf(_) => Self::Tuple,
@@ -288,6 +306,7 @@ impl TypeObjectOf {
             "bool" => Self::Bool,
             "str" => Self::Str,
             "bytes" => Self::Bytes,
+            "bytearray" => Self::Bytearray,
             "list" => Self::List,
             "tuple" => Self::Tuple,
             "set" => Self::Set,
@@ -309,6 +328,7 @@ impl TypeObjectOf {
             Self::Bool => "bool",
             Self::Str => "str",
             Self::Bytes => "bytes",
+            Self::Bytearray => "bytearray",
             Self::NoneType => "NoneType",
             Self::List => "list",
             Self::Tuple => "tuple",
@@ -478,6 +498,21 @@ impl Type {
                 own == other || other.takes(&own.members)
             }
             (_, Self::Abstract(collection)) => collection.takes(self),
+            // A value of a literal type is a value of its base type; a value meets a declared
+            // literal type where the checker tests it, since an expression's type is never a
+            // literal (TYP-28, ADR-0110).
+            (Self::Literal(own), Self::Literal(other)) => own == other,
+            (Self::Literal(own), _) => own.base().is_assignable_to(target),
+            (_, Self::Literal(other)) => self.is_assignable_to(&other.base()),
+            // A value of `Self` is an instance of the method's class; a value meets a
+            // declared `Self` where the checker tests it (TYP-30, ADR-0113).
+            (Self::SelfType(own), Self::SelfType(other)) => own.is_assignable_to(other),
+            // A guard's value is a `bool` (TYP-31).
+            (Self::Guard(own), Self::Guard(other)) => own == other,
+            (Self::Guard(_), _) => Self::Bool.is_assignable_to(target),
+            (_, Self::Guard(_)) => self.is_assignable_to(&Self::Bool),
+            (Self::SelfType(own), _) => own.is_assignable_to(target),
+            (_, Self::SelfType(other)) => self.is_assignable_to(other),
             // A typing value written alike from an older floor may stand where one written
             // alike only from a newer floor is held (TYP-18).
             (Self::Typing(own), Self::Typing(target))
@@ -555,6 +590,16 @@ impl Type {
     pub fn matches(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
+            (Self::Literal(own), Self::Literal(literal)) => own == literal,
+            (Self::SelfType(own), _) => own.matches(other),
+            (Self::Guard(own), Self::Guard(guard)) => own == guard,
+            (Self::Guard(_), _) => Self::Bool.matches(other),
+            (_, Self::Guard(_)) => self.matches(&Self::Bool),
+            (_, Self::SelfType(own)) => self.matches(own),
+            // A value of literal types is held as a value of their base types (TYP-28).
+            _ if self.has_literal() || other.has_literal() => {
+                self.without_literal().matches(&other.without_literal())
+            }
             (Self::Abstract(own), _) => own.members.matches(other),
             (_, Self::Abstract(collection)) => self.matches(&collection.members),
             (Self::List(item), Self::List(other))
@@ -635,8 +680,30 @@ impl Type {
         }
     }
 
+    /// Returns the type with each `bytes` in it read as a bytearray: the result of a method of
+    /// `bytes` called on a bytearray, such as `split`, which gives a list of bytearrays.
+    #[must_use]
+    pub fn bytes_as_bytearray(self) -> Self {
+        match self {
+            Self::Bytes => Self::Bytearray,
+            Self::List(item) => Self::List(Box::new(item.bytes_as_bytearray())),
+            Self::Tuple(items) => {
+                Self::Tuple(items.into_iter().map(Self::bytes_as_bytearray).collect())
+            }
+            other => other,
+        }
+    }
+
+    /// Returns true for `bytes` and `bytearray`, which compare and combine with each other,
+    /// and which a function of `bytes` reads alike (LIB-28).
+    #[must_use]
+    pub const fn is_bytes_like(&self) -> bool {
+        matches!(self, Self::Bytes | Self::Bytearray)
+    }
+
     /// Returns true when `==` and `!=` accept a value of this type against one of `other`: the
-    /// same type, two numbers, or tuples whose items accept each other (EXP-06).
+    /// same type, two numbers, two bytes-like values, or tuples whose items accept each other
+    /// (EXP-06).
     #[must_use]
     pub fn can_test_equality(&self, other: &Self) -> bool {
         match (self, other) {
@@ -655,6 +722,7 @@ impl Type {
             | (Self::TupleOf(left), Self::TupleOf(right))
             | (Self::Set(left), Self::Set(right)) => left == right,
             (Self::Dict(..), Self::Dict(..)) => self == other,
+            (left, right) if left.is_bytes_like() && right.is_bytes_like() => true,
             // An instance is equal only to itself, so a class compares with its bases and its
             // subclasses, whose instances it may be (CLS-04).
             (Self::Instance(left), Self::Instance(right)) => {
@@ -715,6 +783,7 @@ impl Type {
     pub fn can_order(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Error, _) | (_, Self::Error) => true,
+            (left, right) if left.is_bytes_like() && right.is_bytes_like() => true,
             // Two lists or tuples of any length order item by item, so their items must order.
             (Self::TupleOf(left), Self::TupleOf(right)) | (Self::List(left), Self::List(right)) => {
                 left == right && left.can_order(right)
@@ -818,8 +887,8 @@ impl Type {
     }
 
     /// Returns true when a value of this type has a hash, so it may be an item of a set or a key
-    /// of a dict: not a list, a set, a dict or a view, which change, and not a tuple that holds
-    /// one (DAT-09, DAT-10).
+    /// of a dict: not a list, a set, a dict, a view or a bytearray, which change, and not a tuple
+    /// that holds one (DAT-09, DAT-10, ADR-0108).
     #[must_use]
     pub fn is_hashable(&self) -> bool {
         match self {
@@ -829,6 +898,7 @@ impl Type {
             | Self::Set(_)
             | Self::Dict(..)
             | Self::DictView(..)
+            | Self::Bytearray
             | Self::Iterable(_)
             | Self::CData(_)
             | Self::CDataClass(_) => false,
@@ -877,7 +947,7 @@ impl Type {
             }
             Self::DictView(view, key, value) => Some(view.item(key, value)),
             Self::Str => Some(Self::Str),
-            Self::Bytes | Self::Range => Some(Self::Int),
+            Self::Bytes | Self::Bytearray | Self::Range => Some(Self::Int),
             // A fixed tuple whose items have one type is held as a `tuple[T, ...]` first.
             Self::Tuple(items) => {
                 let (first, rest) = items.split_first()?;
@@ -958,6 +1028,10 @@ impl Type {
             }
             Self::Iterator(_) | Self::Iterable(_) | Self::Object => format!("an {self}"),
             Self::Parameter(parameter) => format!("a value of type {}", parameter.name),
+            // A union of literal types is written as one `Literal[...]` (TYP-28).
+            Self::Union(members) if matches!(members.first(), Some(Self::Literal(_))) => {
+                format!("a {self}")
+            }
             // The article reads with the first member, as in `an A | B`.
             Self::Union(members) => {
                 let rest: Vec<String> = members[1..].iter().map(ToString::to_string).collect();
@@ -982,12 +1056,18 @@ impl fmt::Display for Type {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Abstract(collection) => write!(formatter, "{collection}"),
+            Self::Literal(value) => {
+                crate::literal_type::write_literal(formatter, &[value.as_ref()])
+            }
+            Self::SelfType(_) => formatter.write_str("Self"),
+            Self::Guard(guard) => write!(formatter, "{guard}"),
             Self::Object => formatter.write_str("object"),
             Self::Int => formatter.write_str("int"),
             Self::Float => formatter.write_str("float"),
             Self::Bool => formatter.write_str("bool"),
             Self::Str => formatter.write_str("str"),
             Self::Bytes => formatter.write_str("bytes"),
+            Self::Bytearray => formatter.write_str("bytearray"),
             Self::NoneType => formatter.write_str("None"),
             Self::Tuple(items) if items.is_empty() => formatter.write_str("tuple[()]"),
             Self::Tuple(items) => {
@@ -1008,10 +1088,7 @@ impl fmt::Display for Type {
                 write!(formatter, "{}[{key}, {value}]", view.name())
             }
             Self::Optional(inner) => write!(formatter, "{inner} | None"),
-            Self::Union(members) => {
-                let text: Vec<String> = members.iter().map(ToString::to_string).collect();
-                formatter.write_str(&text.join(" | "))
-            }
+            Self::Union(members) => write_union(formatter, members),
             Self::Parameter(parameter) => formatter.write_str(&parameter.name),
             Self::Instance(class) => write!(formatter, "{class}"),
             Self::Exception(class) => write!(formatter, "{class}"),
@@ -1067,212 +1144,33 @@ impl fmt::Display for Type {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Type;
-
-    #[test]
-    fn an_int_is_not_assignable_to_a_float() {
-        assert!(!Type::Int.is_assignable_to(&Type::Float));
-        assert!(!Type::Float.is_assignable_to(&Type::Int));
-        assert!(!Type::Bool.is_assignable_to(&Type::Int));
-    }
-
-    #[test]
-    fn equal_types_and_error_are_assignable() {
-        for ty in [
-            Type::Int,
-            Type::Float,
-            Type::Bool,
-            Type::Str,
-            Type::NoneType,
-        ] {
-            assert!(ty.is_assignable_to(&ty));
-            assert!(Type::Error.is_assignable_to(&ty));
-            assert!(ty.is_assignable_to(&Type::Error));
-            assert!(ty.is_truth_testable());
-            assert!(ty.is_printable());
-        }
-    }
-
-    #[test]
-    fn instances_compare_by_identity_and_have_no_order() {
-        use crate::class_type::InstanceClass;
-        use crate::typed::ClassId;
-        let point = Type::instance(InstanceClass::root(ClassId(0), "Point"));
-        let item = Type::instance(InstanceClass::root(ClassId(1), "Item"));
-        assert!(point.can_test_equality(&point));
-        assert!(!point.can_test_equality(&item));
-        assert!(!point.can_order(&point));
-        assert!(!Type::Int.can_order(&point));
-        assert!(point.is_hashable());
-        assert!(point.is_assignable_to(&Type::optional(point.clone())));
-        assert_eq!(
-            (point.with_article(), item.with_article()),
-            ("a Point".to_owned(), "an Item".to_owned())
-        );
-        assert_eq!(Type::optional(item).to_string(), "Item | None");
-    }
-
-    #[test]
-    fn names_take_the_right_article() {
-        assert_eq!(Type::Int.with_article(), "an int");
-        assert_eq!(Type::Str.with_article(), "a str");
-        assert_eq!(Type::NoneType.with_article(), "None");
-    }
-
-    #[test]
-    fn only_int_and_float_are_numeric() {
-        let numeric: Vec<bool> = [
-            Type::Int,
-            Type::Float,
-            Type::Bool,
-            Type::Str,
-            Type::NoneType,
-        ]
+/// Writes the members of a union joined by `|`, the literal members as one `Literal[...]`
+/// where the first of them is (TYP-28).
+fn write_union(formatter: &mut fmt::Formatter<'_>, members: &[Type]) -> fmt::Result {
+    let literals: Vec<&crate::literal_type::LiteralValue> = members
         .iter()
-        .map(Type::is_numeric)
-        .collect::<Vec<_>>();
-        assert_eq!(numeric, [true, true, false, false, false]);
-    }
-
-    #[test]
-    fn types_are_written_with_their_python_names() {
-        let names: Vec<String> = [
-            Type::Int,
-            Type::Float,
-            Type::Bool,
-            Type::Str,
-            Type::NoneType,
-        ]
-        .iter()
-        .map(ToString::to_string)
+        .filter_map(|member| match member {
+            Type::Literal(value) => Some(value.as_ref()),
+            _ => None,
+        })
         .collect();
-        assert_eq!(names, ["int", "float", "bool", "str", "None"]);
-    }
-
-    #[test]
-    fn lists_sets_and_tuples_that_hold_them_have_no_hash() {
-        let list = Type::List(Box::new(Type::Int));
-        let set = Type::Set(Box::new(Type::Int));
-        let cases = [
-            (Type::Int, true),
-            (Type::Float, true),
-            (Type::Bytes, true),
-            (Type::NoneType, true),
-            (Type::Tuple(vec![Type::Int, Type::Str]), true),
-            (Type::TupleOf(Box::new(Type::Float)), true),
-            (list.clone(), false),
-            (set.clone(), false),
-            (Type::Tuple(vec![Type::Int, list]), false),
-            (Type::TupleOf(Box::new(set)), false),
-        ];
-        for (ty, hashable) in cases {
-            assert_eq!(ty.is_hashable(), hashable, "{ty}");
+    let mut written_literals = false;
+    for (index, member) in members.iter().enumerate() {
+        if matches!(member, Type::Literal(_)) && written_literals {
+            continue;
+        }
+        if index > 0 {
+            formatter.write_str(" | ")?;
+        }
+        if let Type::Literal(_) = member {
+            written_literals = true;
+            crate::literal_type::write_literal(formatter, &literals)?;
+        } else {
+            write!(formatter, "{member}")?;
         }
     }
-
-    #[test]
-    fn sets_compare_and_order_only_with_sets_of_their_item_type() {
-        let ints = Type::Set(Box::new(Type::Int));
-        let floats = Type::Set(Box::new(Type::Float));
-        assert_eq!(ints.to_string(), "set[int]");
-        assert!(ints.can_test_equality(&ints));
-        assert!(ints.can_order(&ints));
-        assert!(!ints.can_test_equality(&floats));
-        assert!(!ints.can_order(&floats));
-        assert!(ints.is_assignable_to(&ints));
-        assert!(!ints.is_assignable_to(&floats));
-        assert!(Type::Set(Box::new(Type::Error)).has_error());
-    }
-
-    #[test]
-    fn dicts_and_views_follow_their_key_and_value_types() {
-        use super::View;
-        let dict = |key: Type, value: Type| Type::Dict(Box::new(key), Box::new(value));
-        let ints = dict(Type::Int, Type::Int);
-        let view = |kind| Type::DictView(kind, Box::new(Type::Int), Box::new(Type::Str));
-        assert_eq!(ints.to_string(), "dict[int, int]");
-        assert_eq!(view(View::Items).to_string(), "dict_items[int, str]");
-        assert_eq!(view(View::Keys).to_string(), "dict_keys[int, str]");
-        assert_eq!(view(View::Values).to_string(), "dict_values[int, str]");
-        assert!(ints.is_assignable_to(&ints));
-        assert!(!ints.is_assignable_to(&dict(Type::Int, Type::Float)));
-        assert!(!ints.is_assignable_to(&dict(Type::Str, Type::Int)));
-        assert!(dict(Type::Error, Type::Int).has_error());
-        assert!(dict(Type::Int, Type::Error).has_error());
-        assert!(ints.can_test_equality(&ints));
-        assert!(!ints.can_test_equality(&dict(Type::Int, Type::Str)));
-        assert!(!view(View::Keys).can_test_equality(&view(View::Keys)));
-        assert!(!Type::Int.can_test_equality(&view(View::Keys)));
-        assert!(!ints.can_order(&ints));
-        assert!(!Type::Int.can_order(&view(View::Values)));
-        assert!(!ints.is_hashable());
-        assert!(!view(View::Keys).is_hashable());
-        let lists = |item: Type| Type::List(Box::new(item));
-        assert!(lists(Type::Int).can_order(&lists(Type::Int)));
-        assert!(!lists(ints.clone()).can_order(&lists(ints)));
-        assert_eq!(
-            [View::Keys, View::Values, View::Items].map(View::code),
-            [0, 1, 2]
-        );
-        assert_eq!(
-            View::Items.item(&Type::Int, &Type::Str),
-            Type::Tuple(vec![Type::Int, Type::Str])
-        );
-        assert_eq!(View::Values.item(&Type::Int, &Type::Str), Type::Str);
-    }
-
-    #[test]
-    fn tuples_are_written_compared_and_ordered_item_by_item() {
-        let pair = Type::Tuple(vec![Type::Int, Type::Str]);
-        let nones = Type::Tuple(vec![Type::NoneType, Type::Int]);
-        assert_eq!(Type::Tuple(Vec::new()).to_string(), "tuple[()]");
-        assert_eq!(pair.to_string(), "tuple[int, str]");
-        assert!(!pair.is_assignable_to(&Type::Tuple(vec![Type::Int])));
-        assert!(!pair.can_test_equality(&Type::Tuple(vec![Type::Int])));
-        assert!(pair.can_test_equality(&Type::Tuple(vec![Type::Float, Type::Str])));
-        assert!(nones.can_order(&nones));
-        assert!(!pair.can_order(&Type::Tuple(vec![Type::Int])));
-        assert!(Type::Int.can_order(&Type::Float));
-        assert!(!Type::Str.can_order(&Type::Int));
-        assert!(Type::Str.can_test_equality(&Type::Str));
-        assert!(!Type::Str.can_test_equality(&Type::Int));
-    }
-
-    #[test]
-    fn optional_types_join_none_and_keep_containers_exact() {
-        let optional = |inner: Type| Type::optional(inner);
-        let int = optional(Type::Int);
-        assert_eq!(int.to_string(), "int | None");
-        assert_eq!(optional(Type::NoneType), Type::NoneType);
-        assert_eq!(optional(int.clone()), int);
-        assert_eq!(optional(Type::Error), Type::Error);
-        assert!(Type::NoneType.is_assignable_to(&int));
-        assert!(Type::Int.is_assignable_to(&int));
-        assert!(!Type::Str.is_assignable_to(&int));
-        assert!(int.is_assignable_to(&int));
-        assert!(!int.is_assignable_to(&Type::Int));
-        assert!(!int.is_assignable_to(&optional(Type::Float)));
-        let list = |item: Type| Type::List(Box::new(item));
-        assert!(!list(Type::Int).is_assignable_to(&list(int.clone())));
-        assert!(list(int.clone()).matches(&list(int.clone())));
-        let view = |view, key: Type| Type::DictView(view, Box::new(key), Box::new(Type::Int));
-        assert!(view(super::View::Keys, Type::Str).matches(&view(super::View::Keys, Type::Str)));
-        assert!(!view(super::View::Keys, Type::Str).matches(&view(super::View::Values, Type::Str)));
-        assert!(!view(super::View::Keys, Type::Str).matches(&view(super::View::Keys, Type::Int)));
-        let pair = Type::Tuple(vec![Type::Int, Type::Str]);
-        assert!(!pair.matches(&Type::Tuple(vec![Type::Int])));
-        assert!(pair.is_assignable_to(&optional(pair.clone())));
-        assert!(optional(Type::Error).has_error());
-        assert!(Type::Optional(Box::new(Type::Error)).has_error());
-        assert!(int.is_hashable());
-        assert!(!int.can_order(&int));
-        // `None` equals only `None`, and two values compare as their base does (EXP-06).
-        assert!(int.can_test_equality(&int));
-        assert!(Type::Int.can_test_equality(&int));
-        assert!(int.can_test_equality(&Type::NoneType));
-        assert!(!int.can_test_equality(&Type::Str));
-        assert!(!int.can_test_equality(&optional(Type::Str)));
-    }
+    Ok(())
 }
+
+#[cfg(test)]
+mod tests;

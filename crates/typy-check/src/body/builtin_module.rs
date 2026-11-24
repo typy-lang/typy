@@ -15,9 +15,16 @@ use crate::types::Type;
 /// The standard library modules TyPy provides as built-in modules.
 const BUILTIN_MODULES: [&str; 3] = ["math", "sys", "ctypes"];
 
-/// Returns whether `module` is a built-in module of TyPy.
+/// The submodule of `math` from Python 3.15 that gives its functions of integers (LIB-26).
+pub(crate) const MATH_INTEGER: &str = "math.integer";
+
+/// The functions `math.integer` gives, each also a function of `math`.
+const INTEGER_FUNCTIONS: [&str; 6] = ["comb", "factorial", "gcd", "isqrt", "lcm", "perm"];
+
+/// Returns whether `module` is a built-in module of TyPy; a program reads `math.integer` only
+/// where its Python floor gives it, which its imports check.
 pub(crate) fn is_builtin_module(module: &str) -> bool {
-    BUILTIN_MODULES.contains(&module)
+    BUILTIN_MODULES.contains(&module) || module == MATH_INTEGER
 }
 
 /// A function of a built-in module.
@@ -104,6 +111,15 @@ impl Program {
         }
         if module == "ctypes" {
             return Self::ctypes_lookup(name, span);
+        }
+        // `math.integer` gives the functions of `math` that take integers (LIB-26, PEP 791).
+        if module == MATH_INTEGER && !INTEGER_FUNCTIONS.contains(&name) {
+            return Err(error(
+                425,
+                span,
+                format!("module `math.integer` has no name `{name}`"),
+                RuleId::LIB_26,
+            ));
         }
         match math_name(name) {
             None => Err(error(
@@ -214,12 +230,20 @@ impl Program {
         }
     }
 
+    /// Returns whether the program's Python floor gives `math.integer`, from 3.15 (LIB-26).
+    pub(crate) fn has_math_integer(&self) -> bool {
+        self.floor >= 15
+    }
+
     /// Returns what `from module import name` binds for a built-in module.
     pub(crate) fn builtin_from(
         &self,
         module: &str,
         alias: &Alias,
     ) -> Result<Imported, Box<Diagnostic>> {
+        if module == "math" && alias.name.name == "integer" && self.has_math_integer() {
+            return Ok(Imported::Module(math_integer()));
+        }
         Ok(
             match self.builtin_lookup(module, &alias.name.name, alias.name.span)? {
                 BuiltinName::Value(value) => Imported::ModuleValue(value),
@@ -227,4 +251,9 @@ impl Program {
             },
         )
     }
+}
+
+/// Returns the name of `math.integer` as a module name.
+pub(crate) fn math_integer() -> typy_source::ModuleName {
+    typy_source::ModuleName::new(MATH_INTEGER).unwrap_or_else(|_| typy_source::ModuleName::main())
 }

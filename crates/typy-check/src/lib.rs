@@ -14,13 +14,16 @@ mod exception;
 mod exception_arguments;
 mod exports;
 mod generic;
+mod guard_type;
 mod iterator_fits;
 mod library_version;
+mod literal_type;
 mod math;
 mod method;
 mod open;
 mod percent_format;
 mod protocol_fits;
+mod self_type;
 pub use protocol_fits::ProgramScope;
 mod subset;
 mod sys;
@@ -29,7 +32,9 @@ mod types;
 mod union_type;
 mod unprovided;
 
-pub use body::{COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, member_class, member_test};
+pub use body::{
+    COMPARISON_BRIDGES, EQUAL_BRIDGE, TRUTH_BRIDGE, is_built_in_module, member_class, member_test,
+};
 pub use builtin::Builtin;
 pub use check::TypeChecker;
 pub use check::builtin_iterators::built_in_class;
@@ -39,6 +44,8 @@ pub use ctypes::{CData, CType, ForeignFunction, ForeignLibrary, StructureClass, 
 pub use exception::{BuiltinException, ExceptionClass, ProgramException};
 pub use exports::{Export, RUNTIME_C_FUNCTIONS};
 pub use generic::TypeParameter;
+pub use guard_type::{GuardKind, GuardType};
+pub use literal_type::LiteralValue;
 pub use math::{MathFunction, MathShape};
 pub use method::Method;
 pub use open::OpenAccess;
@@ -47,12 +54,12 @@ pub use typed::{
     Argument, AssignTarget, Attribute, BuiltinValue, CDataExpr, CDataPlace, CapturedVariable,
     CastCheck, ClassId, Conversion, DictPart, EachMember, ExceptionPart, ExceptionValues,
     FStringPart, FileAttribute, FormattedValue, FunctionId, FunctionSignature, Generator,
-    GeneratorTypes, ImportBinding, InitCall, IsInstanceTest, KeyedOperation, LoopSource,
-    MemberTest, OpenOptions, OperatorCall, OperatorKind, PartOperation, Passed, PercentConversion,
-    PercentField, PercentNumber, PercentPart, PercentValue, PrintCall, RaiseCause, RuntimeKind,
-    SignatureParameter, SpreadKind, SpreadPart, Symbol, SymbolId, SymbolKind, TypedCase,
-    TypedClass, TypedConstant, TypedExpr, TypedExprKind, TypedFunction, TypedHandler, TypedModule,
-    TypedPattern, TypedProgram, TypedStmt, TypedTypeAlias, TypedTypingValue, UnpackedException,
-    WithProtocol, dump,
+    GeneratorTypes, GuardCall, ImportBinding, InitCall, IsInstanceTest, KeyedOperation,
+    LiteralOutcome, LiteralTest, LoopSource, MemberTest, OpenOptions, OperatorCall, OperatorKind,
+    PartOperation, Passed, PercentConversion, PercentField, PercentNumber, PercentPart,
+    PercentValue, PrintCall, RaiseCause, RuntimeKind, SignatureParameter, SpreadKind, SpreadPart,
+    Symbol, SymbolId, SymbolKind, TypedCase, TypedClass, TypedConstant, TypedExpr, TypedExprKind,
+    TypedFunction, TypedHandler, TypedModule, TypedPattern, TypedProgram, TypedStmt,
+    TypedTypeAlias, TypedTypingValue, UnpackedException, WithProtocol, dump,
 };
 pub use types::{BinaryKind, Type, TypeObjectOf, View};

@@ -66,6 +66,10 @@ impl BodyChecker<'_> {
             _ => None,
         };
         let target = member.as_ref().or(target);
+        // `frozendict(...)` takes the item types of the `frozendict` expected (DAT-18).
+        if let Some(made) = self.frozendict_expecting(expression, target) {
+            return Self::converted(made, expected);
+        }
         let value = match (expression, target) {
             // A `lambda`, and a built-in function, takes its parameter and result types from
             // the `Callable` expected (FUN-08).
@@ -93,6 +97,15 @@ impl BodyChecker<'_> {
                 Some(callable @ Type::Callable { .. }),
             ) => self.conditional((test, body, orelse), Some(callable), *span),
             _ => self.expression_for(expression, target),
+        };
+        // A value where a literal type is declared must be one of its values (TYP-28), and
+        // one where `Self` is the instance a method is called through (TYP-30).
+        let value = match expected {
+            Some(expected) if expected.has_literal() => self.checked_literal(value, expected),
+            Some(expected) if expected.has_self() => self.checked_self(value, expected),
+            // A member of an `IntEnum` or a `StrEnum` passes as its value (CLS-44).
+            Some(expected) => self.enum_value_for(value, expected),
+            None => value,
         };
         Self::converted(value, expected)
     }
@@ -155,8 +168,32 @@ impl BodyChecker<'_> {
             {
                 self.call_dict(arguments, keywords, target, *span)
             }
+            Expr::Tuple { elements, span } => self.tuple_display(elements, target, *span),
             other => self.expression(other),
         }
+    }
+
+    /// Returns a tuple display whose items each take the type expected at their place, as a
+    /// `lambda` in it needs (EXP-14) and an empty display does (TYP-05). Without a tuple of
+    /// as many items, or a `tuple[T, ...]`, expected, the items are checked as usual.
+    fn tuple_display(&mut self, elements: &[Expr], target: Option<&Type>, span: Span) -> TypedExpr {
+        let items: Vec<TypedExpr> = elements
+            .iter()
+            .enumerate()
+            .map(|(place, element)| {
+                let expected = match target {
+                    Some(Type::Tuple(items)) if items.len() == elements.len() => items.get(place),
+                    Some(Type::TupleOf(item)) => Some(item.as_ref()),
+                    _ => None,
+                };
+                match expected {
+                    Some(expected) => self.expression_expecting(element, Some(expected)),
+                    None => self.expression(element),
+                }
+            })
+            .collect();
+        let ty = Type::Tuple(items.iter().map(|item| item.ty.clone()).collect());
+        Self::typed(TypedExprKind::Tuple(items), ty, span)
     }
 
     /// Returns `value` as a `tuple[T, ...]` when that is the expected type and `value` is a
@@ -165,6 +202,15 @@ impl BodyChecker<'_> {
     pub(super) fn converted(value: TypedExpr, expected: Option<&Type>) -> TypedExpr {
         // An abstract collection holds a value as one of its built-in types; one of a member's
         // kind with items of a derived class is that member as it is (LIB-20, ADR-0086).
+        // A value of a literal type is held as a value of its base type (TYP-28).
+        let widened;
+        let expected = match expected {
+            Some(expected) if expected.has_literal() => {
+                widened = expected.without_literal();
+                Some(&widened)
+            }
+            other => other,
+        };
         let expected = match expected {
             None => return value,
             Some(Type::Abstract(collection)) => {
@@ -369,8 +415,9 @@ impl BodyChecker<'_> {
                     )
                     .with_rule(RuleId::TYP_05)
                     .with_help(
-                        "annotate the variable, such as `items: list[int] = []`; the item type \
-                         inferred from its first use is planned for TyPy 0.12 (TYP-27)",
+                        "annotate the variable, such as `items: list[int] = []`; a variable \
+                         of a function takes it from the first statement that adds to it, such \
+                         as `items.append(1)` (TYP-27)",
                     ),
                     span,
                 );
@@ -499,7 +546,7 @@ impl BodyChecker<'_> {
 
     /// Returns which empty collection an expression makes without an annotation: an empty list
     /// display, or `set()`.
-    fn empty_collection(&self, expression: &Expr) -> Option<Empty> {
+    pub(super) fn empty_collection(&self, expression: &Expr) -> Option<Empty> {
         if is_empty_list(expression) {
             return Some(Empty::List);
         }
@@ -581,7 +628,7 @@ impl BodyChecker<'_> {
 
 /// An empty collection that takes its type from where it is used.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Empty {
+pub(super) enum Empty {
     /// `[]`.
     List,
     /// `set()`.

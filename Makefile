@@ -15,7 +15,7 @@ MARKDOWN := "**/*.md" "\#.tmp/**" "\#target/**" "\#dist/**" "\#site/**"
 
 
 .PHONY: dev image shell runtime fmt fmt-check lint type test coverage sweep docs docs-lint ascii-check traceability test-int test-e2e test-all \
-	build dist bless bench-peers bench-compare corpus corpus-select corpus-check coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
+	build dist bless typeshed stdlib-signatures bench-peers bench-compare corpus corpus-select corpus-check coverage-branches miri fuzz runtime-size diagrams diagrams-check unicode-tables unicode-tables-check format-cases format-cases-check stdlib-names stdlib-names-check errno-texts errno-texts-check mutants mutants-package bench check hooks clean
 
 dev: ## Start the dev service, building its image the first time
 ifneq ($(EXEC),)
@@ -81,6 +81,12 @@ ascii-check: dev ## Fail on non-ASCII text in sources, documents and scripts
 traceability: dev ## Fail on requirements without tests, IDs that are not defined, and messages that plan a requirement for another release than the SRS
 	@$(EXEC) scripts/check-traceability.sh
 	@$(EXEC) python3.15 scripts/check-planned-releases.py
+
+typeshed: dev ## Fetch the standard library stubs of the typeshed revision crates/typy-stdlib/typeshed-revision pins, about 3 MB, once
+	@$(EXEC) scripts/typeshed.sh
+
+stdlib-signatures: typeshed ## Fail when a standard library module TyPy gives differs from typeshed's stub of it beyond the differences crates/typy-stdlib/signature-differences.toml lists (ADR-0097)
+	@$(EXEC) python3.15 scripts/check-stdlib-signatures.py
 
 diagrams: ## Render every PlantUML source to the SVG next to it
 	@$(COMPOSE) run --rm --quiet-pull diagrams -tsvg -nometadata -failfast2 $(DIAGRAMS)
@@ -167,7 +173,9 @@ errno-texts: dev ## Write the runtime's table of glibc's error texts, which OSEr
 errno-texts-check: dev ## Fail when the committed table of error texts differs from glibc's
 	@$(EXEC) python3.15 scripts/generate-errno-texts.py --check
 
-check: sweep fmt-check lint coverage-branches docs-lint docs ascii-check traceability diagrams-check unicode-tables-check format-cases-check stdlib-names-check errno-texts-check runtime-size ## Run the whole quality gate
+# The quickest checks run first, so a formatting, text or document mistake stops the gate in
+# seconds; Clippy and the build follow, and the tests with coverage, the longest step, run last.
+check: sweep fmt-check ascii-check docs-lint traceability stdlib-signatures docs unicode-tables-check format-cases-check stdlib-names-check errno-texts-check diagrams-check lint runtime-size coverage-branches ## Run the whole quality gate, quickest checks first
 
 hooks: ## Use the hooks in .githooks for this clone
 	git config core.hooksPath .githooks

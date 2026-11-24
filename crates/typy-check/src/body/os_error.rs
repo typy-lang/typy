@@ -236,8 +236,9 @@ fn projected(read: TypedExpr, member: &Type, field: Field, span: Span) -> TypedE
             let test = BodyChecker::typed(
                 TypedExprKind::Compare {
                     left: Box::new(item(read.clone(), 2)),
-                    operators: vec![CompareOperator::IsNot],
+                    operators: Box::new([CompareOperator::IsNot]),
                     comparators: vec![none()],
+                    narrowing: None,
                 },
                 Type::Bool,
                 span,

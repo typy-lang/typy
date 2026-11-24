@@ -45,18 +45,6 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             "int() accepts 1 positional sub-pattern (2 given): CPython raises `TypeError`",
         ),
         (
-            "def f(t: tuple[int]) -> None:\n    match t:\n        case (a, *rest, b):\n            \
-            print(a, rest, b)\n        case _:\n            pass\n",
-            "E0407",
-            "a sequence pattern of 2 items never matches a tuple[int]",
-        ),
-        (
-            "def f(x: int | str) -> None:\n    match x:\n        case [a]:\n            \
-            print(a)\n        case _:\n            pass\n",
-            "E0407",
-            "a sequence pattern never matches an int | str",
-        ),
-        (
             "from typing import Final\n\nN: Final = 0\nv: int | str = \"a\"\nmatch v:\n    \
             case str() as N:\n        print(N)\n    case _:\n        pass\n",
             "E0414",
@@ -107,7 +95,7 @@ fn a_pattern_a_target_or_an_import_cpython_refuses_is_refused() {
             "E0425",
             "TyPy's `typing` gives `Iterator`, `Iterable`, `Generator`, `Callable`, \
             `Optional`, `Union`, `List`, `Dict`, `Set`, `Tuple`, `Type`, `Final`, `ClassVar`, \
-            `Protocol`, `NamedTuple`, `Sequence`, `MutableSequence`, `Mapping`, \
+            `Protocol`, `NamedTuple`, `Literal`, `overload`, `Self`, `TypeGuard`, `TypeIs`, `Sequence`, `MutableSequence`, `Mapping`, \
             `MutableMapping`, `AbstractSet`, `MutableSet`, `Collection`, `Container`, \
             `Reversible`, `KeysView`, `ValuesView`, `ItemsView` and `cast`, not `Awaitable`",
         ),

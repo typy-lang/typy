@@ -35,7 +35,12 @@ impl BodyChecker<'_> {
                     }
                     return Some(self.not_callable((None, span), &Type::TypeObject(None), span));
                 }
-                Some(self.new_instance(class, arguments, keywords, span))
+                if let Some(refused) = self.protocol_called(class, arguments, span) {
+                    return Some(refused);
+                }
+                // CPython tests for abstract methods when the program runs (CLS-45).
+                let made = self.instance_made(class, arguments, keywords, span);
+                Some(self.abstract_made(class, made))
             }
             Type::CDataClass(class) => Some(self.cdata_new(class, arguments, keywords, span)),
             _ => None,
@@ -53,6 +58,9 @@ impl BodyChecker<'_> {
         // A nested function in reach is called directly by its name (FUN-04).
         if let Some(call) = self.nested_call(name, name_span, arguments, keywords, span) {
             return call;
+        }
+        if let Some(made) = self.enum_member_made(name, arguments, keywords, span) {
+            return made;
         }
         if let Some(symbol) = self.locals.get(name).copied() {
             return self.call_local(symbol, (name, name_span), arguments, keywords, span);
@@ -252,16 +260,42 @@ impl BodyChecker<'_> {
         if self.program.generic(function).is_some() {
             return self.generic_call(function, name, arguments, keywords, span);
         }
+        // A function with overloads takes the arguments the first that fits takes, and
+        // gives that overload's result (TYP-29).
+        if let Some(overloaded) =
+            self.overloaded_call(function, 0, name, (arguments, keywords), span)
+        {
+            return match overloaded {
+                Ok((bound, result)) => {
+                    let call = Self::typed(
+                        TypedExprKind::Call {
+                            function,
+                            arguments: bound,
+                            dispatch: false,
+                        },
+                        self.program.signatures[function.0 as usize].returns.clone(),
+                        span,
+                    );
+                    Self::overload_result(call, &result)
+                }
+                Err(error) => error,
+            };
+        }
         match self.bind_arguments(function, 0, name, arguments, keywords, span) {
-            Ok(bound) => Self::typed(
-                TypedExprKind::Call {
-                    function,
-                    arguments: bound,
-                    dispatch: false,
-                },
-                self.program.signatures[function.0 as usize].returns.clone(),
-                span,
-            ),
+            Ok(bound) => {
+                let returns = self.program.signatures[function.0 as usize].returns.clone();
+                let call = Self::typed(
+                    TypedExprKind::Call {
+                        function,
+                        arguments: bound,
+                        dispatch: false,
+                    },
+                    returns.clone(),
+                    span,
+                );
+                // A guard's call narrows its first argument where it is tested (TYP-31).
+                self.guarded_call(call, name, &returns)
+            }
             Err(error) => error,
         }
     }
@@ -340,6 +374,10 @@ impl BodyChecker<'_> {
         if super::call_expression::unpacking(arguments, keywords).is_some() {
             self.unpacking_calls.push(span);
         }
+        // A call not made through an instance, such as one through the class or `super()`,
+        // reads `Self` as the method's own class (TYP-30).
+        let own = super::self_call::through_own_class(signature);
+        let signature = own.as_ref().unwrap_or(signature);
         let parameters = &signature.parameters[skip.min(signature.parameters.len())..];
         let shape = Parameters::of(parameters);
         let mut bound: Vec<Argument> = Vec::new();

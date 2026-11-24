@@ -5,8 +5,13 @@ hide empty members
 skinparam nodesep 25
 
 package "typy_codegen" as CodegenCrate {
-    class CodeGenerator <<struct>> {
-        {field} +generate(module, target, mode) : Result<ObjectFile>
+    class "object()" as GenerateObject <<function>> {
+        {field} +object(module, target, options, lookup) : Result<ObjectFile>
+    }
+    class CodegenOptions <<struct>> {
+        +optimization : Optimization
+        +processor : Option<String>
+        +features : String
     }
     class Target <<struct>> {
         +triple : TargetTriple
@@ -19,21 +24,22 @@ package "typy_codegen" as CodegenCrate {
 
 package "typy_build" as BuildCrate {
     class BuildRequest <<struct>> {
-        +main : Utf8PathBuf
+        +main : MainSource
         +mode : BuildMode
         +target : Target
-        +emit : Option<EmitStage>
+        +emit : Vec<EmitStage>
         +output : Option<Utf8PathBuf>
-        +link : LinkPlan
-        +deny_warnings : bool
+        +library : Option<LibraryKind>
+        +processor : Option<String>
+        +features : String
+        {field} +codegen_options() : CodegenOptions
     }
-    enum BuildMode {
-        Debug
-        Release
-        ReleaseSmall
+    class BuildMode <<struct>> {
+        +optimization : Optimization
+        {field} +DEBUG, RELEASE, RELEASE_SMALL
     }
     class Linker <<struct>> {
-        {field} +link(object, plan, output) : Result<Artifact>
+        {field} +link(object, output) : Result<Artifact>
     }
     class Artifact <<struct>> {
         +path : Utf8PathBuf
@@ -42,12 +48,19 @@ package "typy_build" as BuildCrate {
 }
 
 class "typy_tyir::TyirModule" as TyirModule <<struct>>
+class "typy_source::MainSource" as MainSource <<enum>>
 
-CodeGenerator ..> TyirModule : reads
-CodeGenerator ..> ObjectFile : writes
+GenerateObject ..> TyirModule : reads
+GenerateObject ..> CodegenOptions : reads
+GenerateObject ..> ObjectFile : writes
 ObjectFile --> Target
+BuildRequest --> MainSource
 BuildRequest --> BuildMode
 BuildRequest --> Target
+BuildRequest ..> CodegenOptions : gives
 Linker ..> ObjectFile : reads
 Linker ..> Artifact : writes
+' The classes of other crates go below the rest, so the diagram stays narrow.
+Target -[hidden]down- TyirModule
+BuildMode -[hidden]down- MainSource
 @enduml

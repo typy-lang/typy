@@ -197,3 +197,39 @@ fn other_uses_of_math_give_their_codes() {
         assert_eq!(found[0].0, code, "{source}: {found:?}");
     }
 }
+
+#[test]
+fn lib_26_math_integer_gives_six_functions_from_the_floor_3_15() {
+    let source = "import math.integer\nimport math.integer as mi\nfrom math import integer\n\
+                  from math.integer import comb\n\
+                  print(math.integer.gcd(4, 6), mi.lcm(4, 6), integer.isqrt(17), comb(5, 2))\n\
+                  print(mi.factorial(5), mi.perm(5, 2), math.sqrt(4.0))\n";
+    assert_eq!(diagnostics_at(PythonFloor::V3_15, source), Vec::new());
+    let missing = diagnostics_at(
+        PythonFloor::V3_15,
+        "import math.integer as mi\nprint(mi.sqrt(4.0))\n",
+    );
+    assert_eq!(
+        missing,
+        [(
+            "E0425".to_owned(),
+            "module `math.integer` has no name `sqrt`".to_owned()
+        )]
+    );
+}
+
+#[test]
+fn lib_26_math_integer_is_no_module_below_the_floor_3_15() {
+    for source in [
+        "import math.integer\n",
+        "from math.integer import gcd\n",
+        "from math import integer\n",
+    ] {
+        let found = diagnostics_at(PythonFloor::V3_14, source);
+        assert_eq!(found.len(), 1, "{source}: {found:?}");
+        assert!(
+            matches!(found[0].0.as_str(), "E0206" | "E0425"),
+            "{source}: {found:?}"
+        );
+    }
+}

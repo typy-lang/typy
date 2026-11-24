@@ -30,6 +30,9 @@ pub enum ParameterType {
     Affixes,
     /// Any iterable of `str`, as the argument of `str.join`.
     Strings,
+    /// A `bytes`, a bytearray, or a list or a `tuple[int, ...]` of `int`s, as the argument of
+    /// `bytearray.extend` (LIB-28).
+    ByteValues,
     /// Any iterable of this item type, as the argument of `set.update`.
     Items(Type),
     /// A dict of these key and value types, or any iterable of `(key, value)` pairs of them, as
@@ -120,10 +123,28 @@ impl Method {
         MethodSignature { parameters, result }
     }
 
+    /// Returns the signature of a method of `bytes` called on a bytearray: it takes what the
+    /// method of `bytes` takes and gives a bytearray where that gives `bytes` (ADR-0108); `None`
+    /// for any other receiver or method.
+    fn bytearray_signature(self, receiver: &Type) -> Option<MethodSignature> {
+        if *receiver != Type::Bytearray || Self::of(&Type::Bytes, self.name()) != Some(self) {
+            return None;
+        }
+        let MethodSignature { parameters, result } = self.signature(&Type::Bytes);
+        Some(MethodSignature {
+            parameters,
+            result: result.bytes_as_bytearray(),
+        })
+    }
+
     /// Returns the signature of the method on a receiver of type `receiver`, which is the type
     /// `of` found the method on.
     #[must_use]
+    #[allow(clippy::too_many_lines, reason = "one arm per method, a table")]
     pub fn signature(self, receiver: &Type) -> MethodSignature {
+        if let Some(signature) = self.bytearray_signature(receiver) {
+            return signature;
+        }
         if let Type::Dict(key, value) = receiver {
             return self.dict_signature(receiver, key, value);
         }
@@ -132,6 +153,7 @@ impl Method {
         }
         let item = match receiver {
             Type::Set(item) => item.as_ref().clone(),
+            Type::Bytearray => Type::Int,
             _ => receiver.sequence_item().cloned().unwrap_or(Type::Error),
         };
         let line = || receiver.file_line().unwrap_or(Type::Str);
@@ -172,6 +194,14 @@ impl Method {
                     positional("index", Type::Int, true),
                     positional("object", item, true),
                 ],
+                Type::NoneType,
+            ),
+            Self::ListExtend if *receiver == Type::Bytearray => (
+                vec![positional_as(
+                    "iterable_of_ints",
+                    ParameterType::ByteValues,
+                    true,
+                )],
                 Type::NoneType,
             ),
             Self::ListExtend => (

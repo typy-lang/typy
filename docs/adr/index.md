@@ -102,8 +102,30 @@ supersedes it.
 | [ADR-0094](0094-bind-the-operations-of-an-any-value-when-the-program-runs.md) | Bind the operations of an `Any` value when the program runs | Accepted | 2026-11-21 |
 | [ADR-0095](0095-follow-each-cpython-version-from-its-final-release-to-its-end-of-life.md) | Follow each CPython version from its final release to its end of life | Accepted | 2026-11-21 |
 | [ADR-0096](0096-run-threads-in-parallel-over-shared-objects-with-biased-reference-counts.md) | Run threads in parallel over shared objects with biased reference counts | Accepted | 2026-11-21 |
-| [ADR-0097](0097-check-the-standard-librarys-signatures-against-typeshed.md) | Check the standard library's signatures against typeshed | Accepted | 2026-11-21 |
+| [ADR-0097](0097-check-the-standard-librarys-signatures-against-typeshed.md) | Check the standard library's signatures against typeshed | Superseded by ADR-0119 | 2026-11-21 |
 | [ADR-0098](0098-do-arithmetic-on-bool-as-cpython-does.md) | Do arithmetic on bool as CPython does | Accepted | 2026-11-21 |
 | [ADR-0099](0099-plan-star-star-in-calls-of-built-ins-for-1-0.md) | Plan `**` in calls of built-ins for 1.0 | Accepted | 2026-11-22 |
 | [ADR-0100](0100-build-the-runtime-for-speed-and-for-size-only-for-release-small.md) | Build the runtime for speed, and for size only for `--release-small` | Accepted | 2026-11-22 |
 | [ADR-0101](0101-keep-the-hash-of-a-str-in-the-object.md) | Keep the hash of a `str` in the object | Accepted | 2026-11-22 |
+| [ADR-0102](0102-do-arithmetic-on-inline-ints-in-place.md) | Do arithmetic on inline ints in place | Accepted | 2026-11-22 |
+| [ADR-0103](0103-compute-large-ints-up-to-1024-bits-in-fixed-width-storage.md) | Compute large ints up to 1024 bits in fixed-width storage | Accepted | 2026-11-22 |
+| [ADR-0104](0104-spell-common-options-as-flags-and-the-rest-as-c-key-value.md) | Spell common options as flags and the rest as `-C KEY=VALUE` | Accepted | 2026-11-23 |
+| [ADR-0105](0105-extend-typy-through-external-typy-name-commands.md) | Extend `typy` through external `typy-NAME` commands | Accepted | 2026-11-23 |
+| [ADR-0106](0106-pass-nothing-to-llvms-global-command-line.md) | Pass nothing to LLVM's global command line | Accepted | 2026-11-23 |
+| [ADR-0107](0107-read-list-items-and-divide-inline-values-in-place.md) | Read list items and divide inline values in place | Accepted | 2026-11-23 |
+| [ADR-0108](0108-hold-a-bytearray-in-a-growable-bytes-buffer.md) | Hold a bytearray in a growable bytes buffer it owns | Accepted | 2026-11-23 |
+| [ADR-0109](0109-keep-the-result-annotation-where-a-class-offers-the-result.md) | Keep the result annotation where a class offers the result | Accepted | 2026-11-23 |
+| [ADR-0110](0110-hold-a-literal-types-values-as-its-base-type.md) | Hold a literal type's values as its base type | Accepted | 2026-11-23 |
+| [ADR-0111](0111-leave-code-that-cannot-run-unchecked-and-uncompiled.md) | Leave code that cannot run unchecked and uncompiled | Accepted | 2026-11-23 |
+| [ADR-0112](0112-check-a-call-against-the-first-overload-that-takes-it.md) | Check a call against the first overload that takes it | Accepted | 2026-11-23 |
+| [ADR-0113](0113-read-self-as-the-class-a-call-is-made-through.md) | Read `Self` as the class a call is made through | Accepted | 2026-11-23 |
+| [ADR-0114](0114-test-what-a-type-guard-narrows-when-the-program-runs.md) | Test what a type guard narrows when the program runs | Accepted | 2026-11-23 |
+| [ADR-0115](0115-refuse-a-direct-call-of-an-abstract-method-that-gives-no-value.md) | Refuse a direct call of an abstract method that gives no value | Accepted | 2026-11-23 |
+| [ADR-0116](0116-make-enum-members-class-variables-and-the-class-calls-hidden-methods.md) | Make enum members class variables, and the class's calls hidden methods | Accepted | 2026-11-23 |
+| [ADR-0117](0117-read-an-int-or-str-enum-member-as-its-value-where-the-value-is-wanted.md) | Read an int or str enum member as its value where the value is wanted | Accepted | 2026-11-23 |
+| [ADR-0118](0118-make-each-flag-composite-once-and-keep-it-by-its-value.md) | Make each flag composite once and keep it by its value | Accepted | 2026-11-23 |
+| [ADR-0119](0119-provide-the-standard-library-modules-that-need-no-operating-system-first.md) | Provide the standard library modules that need no operating system first | Superseded by ADR-0121 | 2026-11-23 |
+| [ADR-0120](0120-check-a-comparison-of-a-type-parameter-in-each-copy.md) | Check a comparison of a type parameter in each copy | Accepted | 2026-11-23 |
+| [ADR-0121](0121-give-copy-from-the-compiler-in-0-13.md) | Give copy from the compiler in 0.13 | Accepted | 2026-11-23 |
+| [ADR-0122](0122-give-hash-as-the-hash-a-dict-keeps-a-key-by.md) | Give hash as the hash a dict keeps a key by | Accepted | 2026-11-23 |
+| [ADR-0123](0123-write-frozendict-as-a-class-every-module-of-the-floor-imports.md) | Write frozendict as a class every module of the floor imports | Accepted | 2026-11-24 |

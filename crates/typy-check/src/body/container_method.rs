@@ -237,8 +237,9 @@ impl BodyChecker<'_> {
             let same = Self::typed(
                 TypedExprKind::Compare {
                     left: Box::new(read(each, &each_type)),
-                    operators: vec![CompareOperator::Is],
+                    operators: Box::new([CompareOperator::Is]),
                     comparators: vec![read(held, &item.ty)],
+                    narrowing: None,
                 },
                 Type::Bool,
                 span,

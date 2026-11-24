@@ -1,5 +1,6 @@
 //! Checks one function body, or the module body: names, types and definite assignment.
 
+mod abstract_call;
 mod accessor;
 mod alias_value;
 mod arity_table;
@@ -28,12 +29,16 @@ mod delete;
 mod dict;
 mod dict_call;
 mod each_member;
+mod enum_call;
 mod foreign_call;
+mod frozendict;
 mod function_value;
 mod generator;
 mod generator_expression;
 mod generic_call;
 mod generic_copy;
+mod guard_call;
+mod hash_call;
 mod override_adapter;
 mod override_copy;
 mod protocol_method_value;
@@ -42,12 +47,14 @@ mod static_bridge;
 mod truth_bridge;
 pub use comparison_bridge::{COMPARISON_BRIDGES, EQUAL_BRIDGE};
 pub use each_member::{member_class, member_test};
+pub use frozendict::is_built_in_module;
 pub use truth_bridge::TRUTH_BRIDGE;
 mod exception;
 mod exception_creation;
 mod exception_part;
 mod exception_unpacking;
 mod expression;
+mod first_add;
 mod flow;
 mod fstring;
 mod import;
@@ -60,6 +67,7 @@ mod key_argument;
 mod lambda;
 mod list;
 mod list_call;
+mod literal_value;
 mod locals;
 mod loop_source;
 mod map_filter;
@@ -76,11 +84,13 @@ mod named;
 mod named_tuple;
 mod nested_function;
 mod nested_generic;
+mod number_call;
 mod open_call;
 mod open_options;
 mod operator;
 mod operator_method;
 mod os_error;
+mod overload_call;
 mod pattern_class;
 mod pattern_coverage;
 mod pattern_held_class;
@@ -91,6 +101,7 @@ mod program;
 mod protocol;
 mod rebound;
 mod round_call;
+mod self_call;
 mod set;
 mod slice;
 mod slice_object;
@@ -112,16 +123,19 @@ mod view_operator;
 mod yield_from;
 
 pub(crate) use builtin_module::ModuleFunction;
+pub(crate) use cast_call::can_test;
 pub(crate) use class_copy::{ClassCopies, GenericClass};
+pub(crate) use generator::has_yield;
 pub(crate) use generic_copy::{Generic, GenericCopy};
 pub(crate) use import::Imported;
 pub(crate) use module_context::ModuleContext;
+pub(crate) use name::frozendict_below_floor;
 pub(crate) use program::Program;
 pub(crate) use rebound::{Binding, Bound, binding_variable, rebound_planned};
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Span};
+use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId, Severity, Span};
 use typy_source::syntax::Stmt;
 
 use crate::check::Definition;
@@ -132,6 +146,34 @@ use crate::typed::{
 use crate::types::Type;
 use flow::Assigned;
 use program::id;
+
+/// How the result of the function being checked is known (TYP-26, ADR-0092).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ResultSource {
+    /// Its annotation gives it, or there is none to give.
+    Annotated,
+    /// Its `return` statements are being looked at, and each type they give is noted.
+    Inferring,
+    /// Its `return` statements gave it, so reaching its end returns the `None` it holds.
+    Inferred,
+}
+
+impl ResultSource {
+    /// Returns how the result of `function` is known.
+    fn of(program: &Program, function: FunctionId) -> Self {
+        if program
+            .inferring
+            .as_ref()
+            .is_some_and(|(inferred, _)| *inferred == function)
+        {
+            Self::Inferring
+        } else if program.inferred_results.contains(&function) {
+            Self::Inferred
+        } else {
+            Self::Annotated
+        }
+    }
+}
 
 /// Checks the statements of one body.
 pub(crate) struct BodyChecker<'program> {
@@ -150,6 +192,8 @@ pub(crate) struct BodyChecker<'program> {
     breaks: Vec<Vec<Assigned>>,
     reported_unassigned: BTreeSet<SymbolId>,
     returns: Option<Type>,
+    /// How the function's result is known (TYP-26).
+    result: ResultSource,
     /// The class and instance of the `__init__` being checked.
     initializing: Option<class::Initializing>,
     /// The types `isinstance` tests narrow variables to, which `Fact::Narrowed` names by
@@ -211,6 +255,8 @@ pub(crate) struct BodyChecker<'program> {
     used_cells: BTreeSet<SymbolId>,
     /// The calls with `*` or `**` that bound their arguments, by their spans (ADR-0073).
     unpacking_calls: Vec<Span>,
+    /// What the check knows and learns of the empty collections variables hold (TYP-27).
+    first_adds: first_add::FirstAdds,
 }
 
 impl<'program> BodyChecker<'program> {
@@ -232,6 +278,7 @@ impl<'program> BodyChecker<'program> {
             breaks: Vec::new(),
             reported_unassigned: BTreeSet::new(),
             returns,
+            result: ResultSource::Annotated,
             initializing: None,
             method: None,
             class_parameter: None,
@@ -256,6 +303,7 @@ impl<'program> BodyChecker<'program> {
             reading_function: false,
             used_cells: BTreeSet::new(),
             unpacking_calls: Vec::new(),
+            first_adds: first_add::FirstAdds::default(),
         }
     }
 
@@ -278,35 +326,48 @@ impl<'program> BodyChecker<'program> {
         closure: Option<nested_function::Closure>,
         diagnostics: &mut Diagnostics,
     ) {
-        let returns = definition.signature.returns.clone();
-        let mut checker = BodyChecker::new(program, diagnostics, Some(returns.clone()));
-        let mut parameters = Vec::new();
-        for ((name, span), parameter) in definition
-            .parameters
-            .iter()
-            .zip(&definition.signature.parameters)
-        {
-            let symbol = checker.program.add_symbol(
-                name,
-                SymbolKind::Parameter,
-                parameter.ty.clone(),
-                *span,
-            );
-            checker.locals.insert(name.clone(), symbol);
-            // A parameter of an abstract collection holds the built-in collection given, and
-            // takes another as its declared type says (LIB-20).
-            if parameter.ty.has_abstract() {
-                checker.declared.insert(symbol, parameter.ty.clone());
+        let overload_errors =
+            Self::check_against_overloads(program, function, definition, closure.as_ref());
+        let first_adds = Self::look_for_adds(program, function, definition, closure.as_ref());
+        let (pending, _) = Self::check_body_with(
+            program,
+            function,
+            definition,
+            closure,
+            first_adds,
+            diagnostics,
+        );
+        // An error the check against an overload found, and the check of the body did not,
+        // is reported with the overload (TYP-29).
+        for (error, label) in overload_errors {
+            if !diagnostics.iter().any(|reported| *reported == error) {
+                diagnostics.push(error.with_label(definition.span, label));
             }
-            checker
-                .types
-                .insert(symbol, parameter.ty.without_abstract());
-            checker
-                .assigned
-                .get_or_insert_with(BTreeSet::new)
-                .insert(flow::Fact::Assigned(symbol));
-            parameters.push(symbol);
         }
+        Self::check_nested(program, pending, diagnostics);
+    }
+
+    /// Checks the body of `function` knowing `first_adds` of its empty collections, and
+    /// returns the nested functions it defines, whose bodies are checked next, with what the
+    /// check learnt of its empty collections (TYP-27).
+    fn check_body_with(
+        program: &mut Program,
+        function: FunctionId,
+        definition: &Definition<'_>,
+        closure: Option<nested_function::Closure>,
+        first_adds: first_add::FirstAdds,
+        diagnostics: &mut Diagnostics,
+    ) -> (Vec<nested_function::Pending>, first_add::FirstAdds) {
+        // A result inferred after the definition was made is the program's (TYP-26).
+        let mut signature = definition.signature.clone();
+        if program.inferred_results.contains(&function) {
+            signature.returns = program.result_of(function);
+        }
+        let returns = signature.returns.clone();
+        let mut checker = BodyChecker::new(program, diagnostics, Some(returns.clone()));
+        checker.result = ResultSource::of(checker.program, function);
+        checker.first_adds = first_adds;
+        let parameters = checker.bind_parameters(definition);
         checker.class_parameter = checker.class_method_parameter(definition, parameters.first());
         if let (Some(class), true, Some(instance)) = (
             definition.class,
@@ -344,17 +405,20 @@ impl<'program> BodyChecker<'program> {
         let saved = checker.import_names_of(checked_body);
         let statements: Vec<&Stmt> = checked_body.iter().collect();
         checker.collect_locals(&statements);
-        let body = checker.statements(&statements);
+        let mut body = checker.statements(&statements);
+        checker.finish_first_adds();
         checker.restore_names(saved);
         checker.check_instance_complete(definition.span);
         if !protocol {
             checker.check_end(definition, &returns);
+            body.extend(checker.abstract_end(definition, &returns));
         }
         let generator = checker.generator.take();
         let named_targets = std::mem::take(&mut checker.named_targets);
         checker.settle_closures();
         let pending = std::mem::take(&mut checker.pending);
         let cells = checker.cell_variables();
+        let first_adds = std::mem::take(&mut checker.first_adds);
         let locals = checker.finish_locals();
         // A generic function is checked, never run: its copies run in its place, so it keeps
         // no body (ADR-0023). A protocol's method only says what a class that satisfies the
@@ -368,7 +432,7 @@ impl<'program> BodyChecker<'program> {
             name: definition.name.clone(),
             qualified_name: definition.qualified_name.clone(),
             module: program.module.clone(),
-            signature: definition.signature.clone(),
+            signature,
             parameters,
             locals: if generic { Vec::new() } else { locals },
             body: if generic { Vec::new() } else { body },
@@ -380,17 +444,123 @@ impl<'program> BodyChecker<'program> {
         if !cells.is_empty() {
             program.cells.insert(function, cells);
         }
-        Self::check_nested(program, pending, diagnostics);
+        (pending, first_adds)
+    }
+
+    /// Checks the body of `function` once for each of its overloads, as a look: the
+    /// parameters the overload names have its types and the result is the overload's.
+    /// Returns each error the looks found, once, with the overload it was checked against
+    /// (TYP-29, ADR-0112). Code another overload's types rule out is not checked (TYP-34).
+    fn check_against_overloads(
+        program: &mut Program,
+        function: FunctionId,
+        definition: &Definition<'_>,
+        closure: Option<&nested_function::Closure>,
+    ) -> Vec<(typy_diagnostics::Diagnostic, String)> {
+        let mut errors = Vec::new();
+        let Some(overloads) = program.overloads.get(&function).cloned() else {
+            return errors;
+        };
+        let implementation = definition.signature.clone();
+        let checked = program.functions[function.0 as usize].take();
+        let cells = program.cells.remove(&function);
+        for (position, overload) in overloads.iter().enumerate() {
+            let Ok(view) = crate::check::overload_fit::fit(overload, &implementation) else {
+                continue;
+            };
+            let mut looked = definition.clone();
+            looked.signature = crate::check::overload_fit::body_signature(&view, &implementation);
+            let snapshot = program.snapshot(program.module_first_class());
+            let returned = program
+                .inferring
+                .as_mut()
+                .map(|(_, types)| std::mem::take(types));
+            let looking = std::mem::replace(&mut program.overload_look, true);
+            let first_adds = Self::look_for_adds(program, function, &looked, closure);
+            let mut found = Diagnostics::new();
+            Self::check_body_with(
+                program,
+                function,
+                &looked,
+                closure.cloned(),
+                first_adds,
+                &mut found,
+            );
+            program.overload_look = looking;
+            if let (Some((_, types)), Some(returned)) = (program.inferring.as_mut(), returned) {
+                *types = returned;
+            }
+            program.undo(snapshot);
+            program.forget_function(function);
+            program.cells.remove(&function);
+            let label = format!(
+                "checked as overload {}, returning {}",
+                position + 1,
+                overload.returns
+            );
+            for error in found
+                .iter()
+                .filter(|diagnostic| diagnostic.severity() == Severity::Error)
+            {
+                if !errors.iter().any(|(known, _)| known == error) {
+                    errors.push((error.clone(), label.clone()));
+                }
+            }
+        }
+        program.functions[function.0 as usize] = checked;
+        if let Some(cells) = cells {
+            program.cells.insert(function, cells);
+        }
+        errors
+    }
+
+    /// Binds the parameters of `definition` as variables of the body, assigned and of their
+    /// declared types, and returns them in order.
+    fn bind_parameters(&mut self, definition: &Definition<'_>) -> Vec<SymbolId> {
+        let mut parameters = Vec::new();
+        for ((name, span), parameter) in definition
+            .parameters
+            .iter()
+            .zip(&definition.signature.parameters)
+        {
+            let symbol =
+                self.program
+                    .add_symbol(name, SymbolKind::Parameter, parameter.ty.clone(), *span);
+            self.locals.insert(name.clone(), symbol);
+            // A parameter of an abstract collection holds the built-in collection given, and
+            // takes another as its declared type says (LIB-20).
+            if parameter.ty.has_abstract() || parameter.ty.has_literal() || parameter.ty.has_self()
+            {
+                self.declared.insert(symbol, parameter.ty.clone());
+            }
+            self.types.insert(symbol, parameter.ty.value_type());
+            self.assigned
+                .get_or_insert_with(BTreeSet::new)
+                .insert(flow::Fact::Assigned(symbol));
+            parameters.push(symbol);
+        }
+        parameters
     }
 
     /// Reports a function that can reach its end without returning the value its annotation
     /// names; for a generator, the `R` of `Generator[Y, S, R]` (FUN-07).
     fn check_end(&mut self, definition: &Definition<'_>, returns: &Type) {
+        // A function whose result is inferred returns `None` when it can reach its end.
+        if self.result == ResultSource::Inferring && self.assigned.is_some() {
+            self.returned(Type::NoneType);
+        }
         let returns = match &self.generator {
             Some(types) => types.returns.clone(),
             None => returns.clone(),
         };
-        if self.assigned.is_none() || returns == Type::NoneType || returns == Type::Error {
+        // An abstract method whose body gives no value runs only where its result holds
+        // `None`, which it returns at its end; no call runs it where it does not (CLS-45).
+        if self.assigned.is_none()
+            || self.result == ResultSource::Inferred
+            || returns == Type::NoneType
+            || returns == Type::Error
+            || self.is_empty_abstract(definition)
+        {
             return;
         }
         self.diagnostics.push(
@@ -535,9 +705,14 @@ impl<'program> BodyChecker<'program> {
 
     pub(super) fn typed(kind: TypedExprKind, ty: Type, span: Span) -> TypedExpr {
         // A value of a declared abstract collection is the built-in collection it holds
-        // (LIB-20, ADR-0086).
-        let ty = if ty.has_abstract() {
-            ty.without_abstract()
+        // (LIB-20, ADR-0086), a value of a literal type a value of its base type (TYP-28,
+        // ADR-0110), and a value of `Self` an instance of the method's class (TYP-30).
+        let ty = if ty.has_abstract()
+            || ty.has_literal()
+            || ty.has_self()
+            || matches!(ty, Type::Guard(_))
+        {
+            ty.value_type()
         } else {
             ty
         };

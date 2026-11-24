@@ -19,15 +19,4 @@ const fn text_bytes<const LENGTH: usize>() -> [u8; LENGTH] {
 pub static TYPY_RUNTIME_VERSION: [u8; TEXT.len()] = text_bytes();
 
 #[cfg(test)]
-mod tests {
-    use super::TYPY_RUNTIME_VERSION;
-
-    #[test]
-    fn the_marker_names_the_package_version() {
-        let text = core::str::from_utf8(&TYPY_RUNTIME_VERSION).unwrap();
-        assert_eq!(
-            text,
-            format!("typy-runtime-version:{}\n", env!("CARGO_PKG_VERSION"))
-        );
-    }
-}
+mod tests;

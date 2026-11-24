@@ -36,7 +36,13 @@ impl BodyChecker<'_> {
                 }
             }
         }
-        let mut values: Vec<TypedExpr> = given.iter().map(|value| self.expression(value)).collect();
+        let mut values: Vec<TypedExpr> = given
+            .iter()
+            .map(|value| {
+                let value = self.expression(value);
+                self.enum_value(value)
+            })
+            .collect();
         // `round` of a `bool` is the `int` it is, with or without digits (DAT-19).
         if values.first().is_some_and(|value| value.ty == Type::Bool) {
             let value = values.remove(0);

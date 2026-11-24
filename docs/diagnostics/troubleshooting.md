@@ -177,29 +177,36 @@ print(double(2))
 
 ## E0204: function without a return annotation
 
-Every function needs a return annotation (TYP-01). Write `-> None` when it
-returns nothing. `__init__` may leave it out.
+A function defined at module level or an instance method without a
+return annotation returns what its `return` statements give (TYP-26).
+Every other function needs the annotation (TYP-01): a static or class
+method, a special method such as `__len__`, a property, a method that
+overrides another or that another overrides, a method of a generic class
+or of a protocol, a nested function, a generator, a function that calls
+itself, directly or through others, and a function a library exports
+(ADR-0109). A nested function's result is inferred from 0.13 on (TYP-33).
+Write `-> None` when it returns nothing. `__init__` may leave it out.
 
-This program gives E0204:
+This program gives E0204, since the function calls itself:
 
 <!-- typy-expect: rejected E0204 at 1:5 -->
 ```python
-def greet(name: str):
-    print("hello", name)
+def countdown(n: int):
+    return countdown(n - 1) if n > 0 else 0
 
 
-greet("Ada")
+print(countdown(3))
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-def greet(name: str) -> None:
-    print("hello", name)
+def countdown(n: int) -> int:
+    return countdown(n - 1) if n > 0 else 0
 
 
-greet("Ada")
+print(countdown(3))
 ```
 
 ## E0205: name is not defined
@@ -238,7 +245,7 @@ This program gives E0206:
 
 <!-- typy-expect: rejected E0206 at 1:1 -->
 ```python
-import json
+import hashlib
 ```
 
 This one is correct:
@@ -566,7 +573,8 @@ print(count, label)
 
 An argument does not match its parameter, an argument is missing or extra,
 or a keyword names no parameter (TYP-01). Pass a value of the parameter's
-type.
+type. A call that names a class with an abstract method it does not
+override is E0404 too, since the class has no instances (CLS-45).
 
 This program gives E0404:
 
@@ -713,26 +721,40 @@ print(row)
 
 ## E0410: empty collection without an annotation
 
-`[]`, `{}`, `set()` and `dict()` need their item types from an annotation
-or from where the value goes (TYP-05). Annotate the variable, such as
+`[]`, `{}`, `set()` and `dict()` need their item types from an annotation,
+from where the value goes (TYP-05), or, for a variable of a function, from
+the first statement of the function that adds to it (TYP-27). A read of
+the variable before that statement, a collection no statement of the
+function adds to, and a module variable need the annotation, such as
 `names: list[str] = []`.
 
-This program gives E0410:
+This program gives E0410, since `names` is read before a statement adds
+to it:
 
-<!-- typy-expect: rejected E0410 at 1:9 -->
+<!-- typy-expect: rejected E0410 at 2:13 -->
 ```python
-names = []
-names.append("Ada")
-print(names)
+def greeted() -> list[str]:
+    names = []
+    print(len(names))
+    names.append("Ada")
+    return names
+
+
+print(greeted())
 ```
 
 This one is correct:
 
 <!-- typy-expect: accepted -->
 ```python
-names: list[str] = []
-names.append("Ada")
-print(names)
+def greeted() -> list[str]:
+    names = []
+    names.append("Ada")
+    print(len(names))
+    return names
+
+
+print(greeted())
 ```
 
 ## E0411: `for` over a value that cannot be iterated
@@ -779,7 +801,8 @@ print("a,b".split(","))
 ## E0413: set item or dict key of a type without a hash
 
 A list, a set, a dict or a tuple that holds one cannot be a set item or a
-dict key (DAT-09, DAT-10). Use a tuple, a `str` or a number as the key.
+dict key (DAT-09, DAT-10), nor the argument of `hash` (LIB-34). Use a
+tuple, a `str` or a number as the key.
 
 This program gives E0413:
 
@@ -1332,6 +1355,183 @@ libc.abs.restype = ctypes.c_int
 print(libc.abs(-3))
 ```
 
+## E0431: value that is not one of a `Literal` type's constants
+
+A value where a `Literal` type is declared is one of its constants, or a
+variable, attribute or result declared of literal types within it
+(TYP-28). A value of the base type read from elsewhere, such as a `str`
+parameter, passes once a test narrows it.
+
+This program gives E0431:
+
+<!-- typy-expect: rejected E0431 at 9:20 -->
+```python
+from typing import Literal
+
+
+def open_as(mode: Literal["r", "w"]) -> str:
+    return mode
+
+
+def read(text: str) -> str:
+    return open_as(text)
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Literal
+
+
+def open_as(mode: Literal["r", "w"]) -> str:
+    return mode
+
+
+def read(text: str) -> str:
+    if text == "r":
+        return open_as(text)
+    return "-"
+
+
+print(read("r"))
+```
+
+## E0432: an overload that does not fit, or a call no overload takes
+
+A function with `@overload` signatures needs its implementation, the `def`
+of the same name without `@overload` after them; each overload's
+parameters are the implementation's of the same names, in the same order,
+with types the implementation's hold; and a call takes one of the
+overloads (TYP-29). The message names the overload and the reason.
+
+This program gives E0432, since no overload takes a `float`:
+
+<!-- typy-expect: rejected E0432 at 14:7 -->
+```python
+from typing import overload
+
+
+@overload
+def double(value: int) -> int: ...
+@overload
+def double(value: str) -> str: ...
+def double(value: int | str) -> int | str:
+    if isinstance(value, int):
+        return value * 2
+    return value + value
+
+
+print(double(1.5))
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import overload
+
+
+@overload
+def double(value: int) -> int: ...
+@overload
+def double(value: str) -> str: ...
+def double(value: int | str) -> int | str:
+    if isinstance(value, int):
+        return value * 2
+    return value + value
+
+
+print(double(21))
+```
+
+## E0433: an instance of the method's own class where `Self` is wanted
+
+Where a method declares `Self`, the value is the instance the method is
+called through: `self`, a parameter declared `Self`, or what a method that
+returns `Self` gives through them (TYP-30). A new instance of the class is
+not, since a call through a derived class would get it in place of an
+instance of that class. Return `self`, or declare the class itself.
+
+This program gives E0433:
+
+<!-- typy-expect: rejected E0433 at 6:16 -->
+```python
+from typing import Self
+
+
+class Shape:
+    def copy(self) -> Self:
+        return Shape()
+
+
+print(Shape().copy())
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+class Shape:
+    def copy(self) -> "Shape":
+        return Shape()
+
+
+print(type(Shape().copy()).__name__)
+```
+
+## E0434: abstract method written or called out of place
+
+`@abstractmethod` comes last, just above `def`: above `@property`,
+`@staticmethod`, `@classmethod` or a setter, CPython raises
+`AttributeError` when the class is defined (CLS-45). An abstract method
+whose body holds only a docstring, `pass` or `...` gives no value, so a
+call that runs that body directly, through `super()` or the class,
+returns `None` in CPython where its result may not hold `None`. Call the
+method through an instance, which runs its override, or give the
+abstract method a body that returns a value.
+
+This program gives E0434:
+
+<!-- typy-expect: rejected E0434 at 11:24 -->
+```python
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float: ...
+
+
+class Square(Shape):
+    def area(self) -> float:
+        return super().area() + 4.0
+
+
+print(Square().area())
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float:
+        return 0.0
+
+
+class Square(Shape):
+    def area(self) -> float:
+        return super().area() + 4.0
+
+
+print(Square().area())
+```
+
 ## E0701: C toolchain program not found
 
 TyPy links programs with the system C toolchain, which is not installed
@@ -1425,6 +1625,36 @@ Its cases cover every value, so the function needs no `return` after the
 `match`. A case with a guard covers nothing, since the guard may be false,
 and a set of cases that covers a member only together, such as `case []:`
 and `case [first, *rest]:` for a list, needs `case _:` as well.
+
+## W0402: pattern that never matches its subject's type
+
+No value of the subject's type matches the pattern, such as `int()` for a
+`str` or a sequence pattern of two items for a `tuple[int]`, so the case
+never runs (CST-06, TYP-34). TyPy neither checks nor compiles the case,
+as CPython runs the program. Remove the case, or write a pattern of the
+subject's type.
+
+This program gives W0402 and still runs:
+
+<!-- typy-expect: accepted -->
+```python
+word = "text"
+match word:
+    case int(number):
+        print(number + 1)
+    case str():
+        print("a str")
+```
+
+This one is correct:
+
+<!-- typy-expect: accepted -->
+```python
+word = "text"
+match word:
+    case str():
+        print("a str")
+```
 
 ## W0301: assertion that is always true
 

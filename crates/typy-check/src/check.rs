@@ -1,5 +1,6 @@
 //! Checks a project and builds its typed program (detailed design section 7.2).
 
+mod abstract_class;
 mod annotation;
 pub(crate) mod builtin_iterators;
 mod callable_annotation;
@@ -18,15 +19,20 @@ mod generic_class;
 mod generic_copies;
 #[cfg(test)]
 mod generic_tests;
+mod imported_name;
+mod inference;
+mod literal_annotation;
 mod module_imports;
 mod module_scope;
 pub(crate) mod not_implemented;
+pub(crate) mod overload_fit;
+mod overloads;
 mod overriding;
 mod protocol;
 pub(crate) mod subclass_variables;
 pub(crate) mod type_alias;
 mod visit;
-pub(crate) use visit::{visit_expression, visit_statement};
+pub(crate) use visit::{nested_blocks, visit_expression, visit_statement};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -101,10 +107,21 @@ impl TypeChecker {
         // each module once read (ADR-0047).
         let mut foreign = BTreeMap::new();
         let mut structures = Vec::new();
+        let mut overloads = BTreeMap::new();
+        let mut abstracts = BTreeMap::new();
         let expanded: Vec<(Module, BTreeMap<String, type_alias::Alias>)> = project
             .modules_in_order()
             .map(|module| {
-                let mut module = dataclasses.expand(module, &mut diagnostics);
+                // `ABC` and `@abstractmethod` leave the module, and the checker keeps what
+                // they mark (CLS-45).
+                let (read, marks) = abstract_class::read(module, &mut diagnostics);
+                let mut module =
+                    dataclasses.expand(read.as_ref().unwrap_or(module), &mut diagnostics);
+                abstracts.insert(module.name.as_str().to_owned(), marks);
+                // The overloads of a function leave the module, and the checker reads their
+                // signatures (TYP-29).
+                let gathered = overloads::gather(&mut module.syntax.body, &mut diagnostics);
+                overloads.insert(module.name.as_str().to_owned(), gathered);
                 // A decorated function binds what its decorators return (FUN-06, ADR-0082).
                 decorators::expand(&mut module.syntax.body);
                 // A module that calls `map` or `filter` gets their classes (LIB-23, ADR-0089).
@@ -139,6 +156,8 @@ impl TypeChecker {
             project,
             modules: &modules,
             aliases: &aliases,
+            overloads: &overloads,
+            abstracts: &abstracts,
             dataclasses: &dataclasses,
             foreign: &foreign,
             structures: &structures,
@@ -223,6 +242,10 @@ struct Checked<'project> {
     project: &'project Project,
     modules: &'project [Module],
     aliases: &'project [BTreeMap<String, type_alias::Alias>],
+    /// The overloads of each module's functions and methods, by the module's name (TYP-29).
+    overloads: &'project BTreeMap<String, overloads::Overloads>,
+    /// What `ABC` and `@abstractmethod` mark in each module, by the module's name (CLS-45).
+    abstracts: &'project BTreeMap<String, abstract_class::AbstractMarks>,
     dataclasses: &'project dataclass::Dataclasses,
     /// The `ctypes` declarations of each module, by its name.
     foreign: &'project BTreeMap<String, ctypes_declarations::ModuleDeclarations>,
@@ -278,12 +301,35 @@ impl Checked<'_> {
                 .cloned()
                 .unwrap_or_default();
             copies.begin_module(module.name.as_str());
+            // A library exports the functions its main module's `__all__` names (CLI-09).
+            let exported =
+                if project.settings().library && module.name == project.main_module().name {
+                    inference::exported_names(&module.syntax.body)
+                } else {
+                    BTreeSet::new()
+                };
+            let stubs = self
+                .overloads
+                .get(module.name.as_str())
+                .cloned()
+                .unwrap_or_default();
+            let marks = self
+                .abstracts
+                .get(module.name.as_str())
+                .cloned()
+                .unwrap_or_default();
+            let gathered = Gathered {
+                overloads: &stubs,
+                dataclasses: &frozen,
+                abstracts: &marks,
+            };
             let (waiting, checked) = check_module(
                 &mut program,
-                (module, aliases, &mut copies),
+                (module, aliases, &mut copies, &exported, gathered),
                 (&path, &definitions),
-                self.floor_defers,
-                &frozen,
+                // `from __future__ import annotations` defers one module's annotations as the
+                // floor defers every module's (LIB-29).
+                self.floor_defers || module.syntax.defers_annotations,
                 diagnostics,
             );
             deferred.extend(waiting);
@@ -396,14 +442,15 @@ fn known_classes<'known>(
 
 fn check_module<'tree>(
     program: &mut Program,
-    (module, aliases, copies): (
+    (module, aliases, copies, exported, gathered): (
         &'tree Module,
         &BTreeMap<String, type_alias::Alias>,
         &mut class::ClassMethodCopies<'tree>,
+        &BTreeSet<String>,
+        Gathered<'_>,
     ),
     (path, earlier): (&str, &ModuleDefinitions<'tree>),
     floor_defers: bool,
-    dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,
     diagnostics: &mut Diagnostics,
 ) -> (Vec<Deferred<'tree>>, (Vec<Definition<'tree>>, usize)) {
     let tree = &module.syntax;
@@ -422,27 +469,30 @@ fn check_module<'tree>(
         (&class_ids, &annotations),
         diagnostics,
     );
-    let mut definitions = collect_functions(
+    let (mut definitions, function_overloads) = collect_functions(
         &tree.body,
-        first_class,
+        (first_class, first_function),
         &FunctionScope {
             classes: &class_ids,
             instances: &instances,
             names: &annotations,
             copies: &program.class_copies,
         },
-        floor_defers,
+        (floor_defers, gathered.overloads),
         diagnostics,
     );
-    let (mut class_infos, methods) = collect_members(
+    let (mut class_infos, methods, method_overloads) = collect_members(
         &known_classes(program, &class_ids, &instances),
         &classes,
-        &annotations,
+        (&annotations, gathered.overloads),
         floor_defers,
         (first_function + definitions.len(), copies),
         diagnostics,
     );
-    mark_dataclasses(&mut class_infos, dataclasses);
+    program
+        .overloads
+        .extend(function_overloads.into_iter().chain(method_overloads));
+    mark_classes(program, &mut class_infos, &classes, gathered);
     let mut variables = imports.variables.clone();
     module_variables(&tree.body, &mut variables);
     class_value_variables(&classes, (&annotations, program), &mut variables);
@@ -460,6 +510,7 @@ fn check_module<'tree>(
         methods.as_slice(),
     );
     check_bindings(&tree.body, &imports, defined, &variables, diagnostics);
+    let module_functions = definitions.len();
     definitions.extend(methods);
 
     program.begin_module(
@@ -472,30 +523,32 @@ fn check_module<'tree>(
         instances,
     );
     program.make_class_copies();
+    // An overload its implementation does not take is reported once (TYP-29).
+    overloads::check_fits(program, &definitions, first_function, diagnostics);
     program.note_protocol_fits(None);
     program.note_iterator_classes(None);
     program.import_names(&imports.functions, annotations);
     program.import_module_functions(&imports.module_functions);
     program.declare_module_variables(&module_variable_spans, &definitions);
     program.set_rebound(imports.rebound());
-    let module_body: Vec<&Stmt> = tree
-        .body
-        .iter()
-        .filter(|statement| !matches!(statement, Stmt::FunctionDef { .. }))
-        .collect();
-    // Each `__init__` is checked first, since it gives the attributes it assigns their
-    // types; the module body comes next, since it gives the module variables theirs, and
-    // the other functions last. An `__init__` reads a module variable with the type a
-    // first look at the module body gives it, whose diagnostics are dropped and whose other
-    // effects are undone, so the cost of a module does not grow with the modules before it.
-    let snapshot = program.snapshot(first_class);
-    BodyChecker::check_module(program, &module_body, &mut Diagnostics::new());
-    program.keep_module_types(snapshot);
-    let others = check_initializers(program, &definitions, first_function, diagnostics);
-    // The attributes `__init__` gives now have their types, which a protocol may name.
-    program.note_protocol_fits(None);
-    program.end_first_look();
-    let body = BodyChecker::check_module(program, &module_body, diagnostics);
+    let module_body = module_statements(&tree.body);
+    // Each `__init__` comes first, as it types the attributes it assigns, then the module
+    // body, which types the module variables, then the other functions.
+    let at = (module_functions, first_function, first_class);
+    let before_look = first_look(
+        program,
+        (&module_body, &tree.body),
+        (&mut definitions, at),
+        exported,
+        diagnostics,
+    );
+    let (body, others) = check_module_body(
+        program,
+        (module, &module_body),
+        (&definitions, first_function, first_class),
+        before_look,
+        diagnostics,
+    );
     let deferred = check_bodies(
         program,
         others,
@@ -531,6 +584,72 @@ fn check_initializers<'definitions, 'tree>(
         program.type_arguments.clear();
     }
     others
+}
+
+/// Returns the statements of the module body that run when the module is imported: every one
+/// but a `def`, whose function is checked on its own.
+fn module_statements(body: &[Stmt]) -> Vec<&Stmt> {
+    body.iter()
+        .filter(|statement| !matches!(statement, Stmt::FunctionDef { .. }))
+        .collect()
+}
+
+/// Checks each `__init__`, then the module body after the first look, started with the
+/// import of the packages that hold the module `-m` runs (CLI-28); returns the body's function
+/// and the other definitions. The results of the methods without an annotation are inferred
+/// between the two, and when any is, the module variables take their types again from
+/// `before_look`, so one assigned a call of such a method takes its result (TYP-26).
+fn check_module_body<'definitions, 'tree>(
+    program: &mut Program,
+    (module, module_body): (&Module, &[&Stmt]),
+    inferred_in: (&'definitions [Definition<'tree>], usize, usize),
+    before_look: Vec<Type>,
+    diagnostics: &mut Diagnostics,
+) -> (FunctionId, Vec<(usize, &'definitions Definition<'tree>)>) {
+    let (definitions, first_function, _) = inferred_in;
+    let others = check_initializers(program, definitions, first_function, diagnostics);
+    // The attributes `__init__` gives now have their types, which a protocol may name.
+    program.note_protocol_fits(None);
+    if inference::infer_methods(program, inferred_in, diagnostics) {
+        program.set_module_types(before_look);
+    }
+    program.end_first_look();
+    let body = BodyChecker::check_module(program, module_body, diagnostics);
+    let start = typy_diagnostics::Span::empty(module.file, typy_diagnostics::TextOffset(0));
+    program.initialise_first(body, &module.enclosing_packages(), start);
+    (body, others)
+}
+
+/// Looks at the module body with its diagnostics dropped and its effects undone but the types
+/// it gives the module variables, which the `__init__` methods read, so the cost of a module
+/// does not grow with the modules before it. The results of the
+/// module's functions without a result annotation are inferred after the look, and the body
+/// is looked at again when any was, from the types before the first look, so a variable
+/// assigned a call of one takes its result (TYP-26).
+fn first_look(
+    program: &mut Program,
+    (module_body, tree_body): (&[&Stmt], &[Stmt]),
+    (definitions, at): (&mut [Definition<'_>], (usize, usize, usize)),
+    exported: &BTreeSet<String>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<Type> {
+    let (module_functions, first_function, first_class) = at;
+    let inferred_in = (definitions, module_functions, first_function, first_class);
+    let before_look = program.module_types();
+    let snapshot = program.snapshot(first_class);
+    BodyChecker::check_module(program, module_body, &mut Diagnostics::new());
+    let inferred = inference::infer_results(program, tree_body, inferred_in, exported, diagnostics);
+    let snapshot = if inferred {
+        program.undo(snapshot);
+        program.set_module_types(before_look.clone());
+        let again = program.snapshot(first_class);
+        BodyChecker::check_module(program, module_body, &mut Diagnostics::new());
+        again
+    } else {
+        snapshot
+    };
+    program.keep_module_types(snapshot);
+    before_look
 }
 
 /// Checks the bodies of the module's functions after the module body, then the copies of
@@ -738,6 +857,30 @@ fn derive_module_bases(
 }
 
 /// Notes in each dataclass's information what its expansion wrote (CLS-05, CST-06).
+/// What the readings before the check took out of one module: its overloads (TYP-29), its
+/// dataclasses' options (CLS-05), and what `ABC` and `@abstractmethod` mark (CLS-45).
+#[derive(Clone, Copy)]
+struct Gathered<'module> {
+    overloads: &'module overloads::Overloads,
+    dataclasses: &'module BTreeMap<String, dataclass::DataclassInfo>,
+    abstracts: &'module abstract_class::AbstractMarks,
+}
+
+/// Gives a module's classes what the readings before the check found: the options of each
+/// dataclass (CLS-05), and the abstract methods of each class (CLS-45).
+fn mark_classes(
+    program: &Program,
+    infos: &mut [ClassInfo],
+    classes: &[class::ClassStatement<'_>],
+    gathered: Gathered<'_>,
+) {
+    mark_dataclasses(infos, gathered.dataclasses);
+    let copies = program.class_copies.borrow();
+    let root_of = |class| copies.copy(class).map(|copy| copy.root);
+    let earlier = (program.classes(), &root_of as &dyn Fn(_) -> _);
+    abstract_class::mark_abstract(infos, classes, earlier, gathered.abstracts);
+}
+
 fn mark_dataclasses(
     infos: &mut [ClassInfo],
     dataclasses: &BTreeMap<String, dataclass::DataclassInfo>,

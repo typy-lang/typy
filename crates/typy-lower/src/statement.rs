@@ -53,6 +53,7 @@ impl FunctionLowerer<'_> {
                     }
                     typy_check::AssignTarget::Item { list, .. } => match &list.ty {
                         typy_check::Type::List(item) => item.as_ref().clone(),
+                        typy_check::Type::Bytearray => typy_check::Type::Int,
                         _ => unreachable!("the checker allows an item target only on a list"),
                     },
                     typy_check::AssignTarget::Entry { dict, .. } => match &dict.ty {

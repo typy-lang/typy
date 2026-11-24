@@ -149,6 +149,9 @@ impl BodyChecker<'_> {
             Ok(call) => return call,
             Err(receiver) => receiver,
         };
+        // A member of an `IntEnum` or a `StrEnum` has the methods of its value (CLS-44).
+        let receiver = self.enum_receiver(receiver, &name.name);
+        let receiver = self.frozendict_receiver(receiver, &name.name);
         if name.name == "fromkeys"
             && let Type::TypeObject(Some(of)) = &receiver.ty
             && **of == crate::types::TypeObjectOf::Dict
@@ -189,7 +192,7 @@ impl BodyChecker<'_> {
         let Some(bound) = self.bind(method, &signature, arguments, keywords, span) else {
             return Self::invalid_call(span);
         };
-        let text = if receiver.ty == Type::Bytes || receiver.ty.binary_kind().is_some() {
+        let text = if receiver.ty.is_bytes_like() || receiver.ty.binary_kind().is_some() {
             Type::Bytes
         } else {
             Type::Str
@@ -451,7 +454,22 @@ impl BodyChecker<'_> {
                 if method == Method::GeneratorSend {
                     return self.sent_value(value, ty);
                 }
+                // A method that reads bytes takes a bytearray as it takes `bytes` (LIB-28).
+                if *ty == Type::Bytes && value.ty == Type::Bytearray {
+                    return value;
+                }
                 self.expect(&value, ty.clone(), &what);
+                value
+            }
+            ParameterType::ByteValues => {
+                let value = self.expression(argument);
+                let ints = |item: &Type| matches!(item, Type::Int | Type::Error);
+                let fits = value.ty.is_bytes_like()
+                    || value.ty == Type::Error
+                    || matches!(&value.ty, Type::List(item) | Type::TupleOf(item) if ints(item));
+                if !fits {
+                    self.expect(&value, Type::Bytes, &what);
+                }
                 value
             }
             ParameterType::Exception => self.exception_operand(argument, "`throw`"),
@@ -469,7 +487,9 @@ impl BodyChecker<'_> {
                     } else {
                         text.clone()
                     };
-                    self.expect(&value, wanted, &what);
+                    if !(wanted == Type::Bytes && value.ty == Type::Bytearray) {
+                        self.expect(&value, wanted, &what);
+                    }
                 }
                 value
             }

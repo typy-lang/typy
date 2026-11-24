@@ -3,6 +3,7 @@
 
 mod allocator;
 mod cli;
+mod command_line;
 mod common;
 mod files;
 mod generators;

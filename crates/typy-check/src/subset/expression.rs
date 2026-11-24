@@ -44,20 +44,9 @@ impl Walker {
                 self.expression(condition);
             }
         }
+        // An element that unpacks, from Python 3.15, reads as one more clause, which the
+        // parser writes (EXP-23).
         for expression in made {
-            // An element that unpacks, from Python 3.15 (PEP 798), which the parser accepts
-            // only at that floor.
-            if let Expr::Starred { span, .. } = expression {
-                self.report(
-                    *span,
-                    planned(
-                        "`*` and `**` in comprehension elements",
-                        "0.12",
-                        RuleId::EXP_23,
-                    ),
-                );
-                continue;
-            }
             self.expression(expression);
         }
         self.comprehension_names.pop();
@@ -247,7 +236,7 @@ impl Walker {
             // A generic class or type alias of the module, given its type arguments (GEN-01),
             // or a name of another module, which the checker reads (SMT-12).
             Expr::Subscript { value, index, .. }
-                if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id) || self.generic_aliases.contains(id) || self.imported.contains(id))
+                if matches!(value.as_ref(), Expr::Name { id, .. } if self.generic_classes.contains(id) || self.generic_aliases.contains(id) || self.imported.contains(id) || id == "frozendict")
                     || matches!(value.as_ref(), Expr::Attribute { value: module, .. } if matches!(module.as_ref(), Expr::Name { id, .. } if self.imported_modules.contains(id))) =>
             {
                 match index.as_ref() {

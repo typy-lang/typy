@@ -60,6 +60,13 @@ impl BodyChecker<'_> {
                         _ => None,
                     };
                     let spec = field.spec.as_ref().map(|spec| self.fstring_parts(spec));
+                    // A member of an `IntEnum` or a `StrEnum` formats as its value, by its
+                    // value's `__format__` (CLS-44).
+                    let value = if conversion.is_none() && spec.is_some() {
+                        self.enum_value(value)
+                    } else {
+                        value
+                    };
                     checked.push(FStringPart::Field(Box::new(FormattedValue {
                         value,
                         conversion,

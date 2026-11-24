@@ -6,6 +6,210 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-24
+
+### Added
+
+- `frozendict` from the Python floor 3.15: an immutable mapping made
+  from what `dict` takes, with `get`, `keys`, `values`, `items`,
+  `copy`, `|`, `==`, CPython's text and hash, and read as a dict by
+  `dict()`, `**`, `update` and `|` (DAT-18, ADR-0123).
+- The builtin `hash`: the hash a set or a dict keeps a value by,
+  CPython's for numbers, `None` and tuples of them, and what `__hash__`
+  returns for an instance (LIB-34, ADR-0122).
+- The standard library module `textwrap`, written in typed Python with
+  the results of CPython 3.15: `TextWrapper`, `wrap`, `fill`, `shorten`,
+  `dedent` and `indent`, splitting words and hyphenated words as
+  CPython's regular expression does (LIB-27).
+- The standard library modules `base64` and `binascii`, written in typed
+  Python with the results and messages of CPython 3.15: the Base64,
+  Base32, Base16, Ascii85 and Base85 encoders and decoders, and the
+  `binascii` functions they use. The parameters and functions Python 3.13
+  to 3.15 add are planned for 0.13 (LIB-27, LIB-32).
+- The standard library modules `heapq` and `string`, written in typed
+  Python: the heap functions, `merge`, `nlargest` and `nsmallest`, and
+  the constants, `capwords` and `Template`; `key` of `heapq` and
+  `string.Formatter` are planned for 0.13 (LIB-27).
+- The standard library module `bisect`, written in typed Python that
+  CPython also runs and given from the compiler, without `key`, which is
+  planned for 0.13; a test compares its signatures with typeshed's
+  (LIB-27, ADR-0119).
+- A generic function compares values of its type parameters with `<`,
+  `==` and the other comparisons, also through `sorted`, `min` and `max`;
+  each copy checks the comparison with its own types (GEN-18, ADR-0120).
+- From the Python floor 3.15, a comprehension element that unpacks:
+  `[*row for row in rows]`, `{*row ...}`, `(*row ...)` and
+  `{**table for table in tables}` (EXP-23).
+- `math.integer` from the Python floor 3.15, with `comb`, `factorial`,
+  `gcd`, `isqrt`, `lcm` and `perm`, read as `math.integer`, through an
+  alias or by `from` (LIB-26).
+- `enum.Flag` and `enum.IntFlag`: members of one bit each combine with
+  `|`, `&`, `^` and `~` into composites made once, named, iterated and
+  refused as CPython 3.12 to 3.15 do (CLS-44, ADR-0118).
+- `enum.IntEnum` and `enum.StrEnum`, whose members are also their `int`
+  or `str` values in arithmetic, comparisons, indexes, f-string formats,
+  `str` methods and where an `int` or a `str` is declared, and show
+  their own `repr` (CLS-44, ADR-0117).
+- `enum.Enum` and `enum.auto`: an enum class's members are its instances,
+  with `name` and `value`, aliases where two members share a value, and
+  CPython's `repr` and `str`. `Color(value)` and `Color[name]` find a
+  member, raising CPython's `ValueError` and `KeyError`, and a loop,
+  `len` and `in` read the members. A member defined twice, or a class
+  derived from an enum class with members, is E0404. Other forms of enum
+  class are planned for 0.13 (CLS-44, CLS-47, ADR-0116).
+- `abc.ABC` and `@abstractmethod`: a class derived from `ABC` has
+  instances only once every abstract method is overridden. A call that
+  names a class with one left is E0404, and one through a value such as
+  `cls()` raises CPython's `TypeError`. An abstract method may have an
+  empty body, and a call through `super()` or the class that would run
+  it where its result does not hold `None` is E0434, as is
+  `@abstractmethod` above `@property`, `@staticmethod` or `@classmethod`
+  (CLS-45, ADR-0093, ADR-0115).
+- `typing.TypeGuard[T]` and `typing.TypeIs[T]` as a module function's
+  result: a test of a call narrows its first argument, a variable, to `T`,
+  and for `TypeIs` to the rest where it is false. A result the argument's
+  class does not bear out raises `TypeError`. Other guards are planned for
+  0.13 (TYP-31, TYP-37, ADR-0114).
+- `typing.Self` in the parameters and the result of an instance or a class
+  method, as the class the method is called through: a method a derived
+  class inherits returns that class's instances through it. Another
+  instance of the class where `Self` is declared is E0433, and `Self`
+  elsewhere is planned for 0.13 (TYP-30, TYP-36, ADR-0113).
+- `typing.overload` on module functions and instance methods: a call
+  takes the first overload whose parameters take its arguments, which
+  gives its result, the body is checked against every overload, and an
+  overload its implementation does not fit, or a call no overload takes,
+  is E0432. Other forms of `@overload` are planned for 0.13 (TYP-29,
+  TYP-35, ADR-0112).
+- Code that cannot run is neither checked nor compiled: a statement after
+  `return`, `raise`, `break` or `continue`, and a branch a test of
+  `True`, `False`, `isinstance`, an `assert` or a class pattern rules out
+  by the types. A program with such code, which CPython runs, is accepted
+  (TYP-34, ADR-0111).
+- `typing.Literal` of `int`, `str`, `bytes` and `bool` constants and
+  `None`: a constant passes where it is declared when it is one of its
+  values, any other value is E0431, and `==`, `!=`, `in`, `not in` and
+  `match` narrow a variable to the constants it is compared with. A
+  `match` with a case for each value covers a variable of literal types
+  (TYP-28, ADR-0110).
+- A variable of a function assigned an empty `[]`, `{}`, `set()`,
+  `list()` or `dict()` without an annotation takes its types from the
+  first statement of the function that adds to it: `append`, `insert` or
+  `extend` of a list, `add` or `update` of a set, and `items[key] = value`,
+  `setdefault` or `update` of a dict. A read before that statement is
+  E0410 (TYP-27, ADR-0092).
+- A function defined at module level, and an instance method, may leave
+  out its return annotation: it returns what its `return` statements give,
+  their union, with `None` when it can reach its end. A static, class or
+  special method, a property, a method that overrides or is overridden, a
+  method of a generic class or of a protocol, a nested function, a
+  generator, a function that calls itself and a function a library
+  exports keep the annotation, E0204 with the reason. A nested function's
+  result is inferred from 0.13 on (TYP-26, TYP-33, ADR-0092, ADR-0109).
+- The builtins `divmod`, `pow`, also with a modulus, `bin`, `hex`, `oct`
+  and `format`, as CPython gives them; `bin`, `hex` and `oct` are values
+  of their own too, as `key=hex` (LIB-28).
+- `bytearray`, a `bytes` that changes in place, with every method of
+  `bytes`, the list methods that change it, item and slice assignment,
+  `del`, `+=` and `*=` (LIB-28, ADR-0108).
+- `from __future__ import annotations` is accepted and defers the module's
+  annotations, so an annotation may name a class defined further down
+  under any Python floor; the other features of `__future__` that Python
+  3 already has are accepted too, and a misplaced or unknown future import
+  is E0103, as in CPython (LIB-29).
+- `typy print WHAT` writes what `typy` would use, one fact a line in the
+  form of `typy.toml`: the supported `targets`, a target's processors
+  (`target-cpus`), the `host`, the `paths` of the compiler, its runtime
+  archives and its cache, a project's `settings` with the command line
+  applied, and the `version` of `typy`, its runtime and LLVM (CLI-25).
+- `typy NAME ARGS`, for a NAME that is not a command of `typy`, runs the
+  program `typy-NAME` found on `PATH`, as `git` and `cargo` run theirs,
+  with `TYPY` naming the compiler that ran it (CLI-32, ADR-0105).
+- `--timings` writes how long each stage of a command took, `-v` writes
+  each command `typy` runs, such as the C linker with its arguments, and
+  `--save-temps` keeps a build's object file beside its output, as `app.o`
+  for `app` (CLI-22 to CLI-24).
+- `-O0`, `-O1`, `-O2`, `-O3`, `-Os` and `-Oz` choose a build's
+  optimisation level, `--release` being `-O2` and `--release-small` `-Oz`;
+  `--target-cpu NAME` builds for a processor, `native` for this machine's;
+  and `-C KEY=VALUE` takes `opt-level`, `target-cpu` and `target-feature`,
+  which `typy -C help` lists (CLI-20, CLI-21, CLI-30, ADR-0104, ADR-0106).
+- `-W CODE`, `-A CODE` and `-D CODE` report a warning as a warning, not at
+  all, or as an error that fails the command, with `warnings` naming every
+  warning and the last option for a code deciding (CLI-27).
+- `--color auto|always|never` colours diagnostics written as text, as
+  `rustc` colours its own; `auto`, the default, colours them on a terminal
+  when `NO_COLOR` is not set (CLI-26).
+- `typy run -c CODE` builds and runs code, and `typy run -m MODULE` a module
+  of the project in the current directory, after the packages that hold
+  it, as `python -c` and `python -m` run them (CLI-28).
+- `--emit` takes several stages separated by commas, each written beside
+  the output as `app.ll`, `app.s` or `app.o`, from one compilation; the
+  new stages `llvm-ir-unoptimised` and `llvm-bc` give the LLVM IR before
+  optimisation and the optimised bitcode (CLI-29).
+
+### Changed
+
+- `import` of a module a later release plans names that release, where it
+  was E0206: `itertools`, `collections`, `datetime`, `pathlib`, `os.path`,
+  `fractions`, `re` and `warnings` in 0.13, and `json`, `functools`,
+  `argparse`, `logging` and `csv` in 0.14 (LIB-35, LIB-36, LIB-38).
+- The hash of an instance is what its `__hash__` returns when that fits
+  64 bits, as in CPython, rather than that value modulo `2**61 - 1`; a
+  set of such instances may iterate in another order (ADR-0122).
+- `copy` is planned for 0.13 rather than 0.12, given by the compiler, as
+  `copy.copy` and `copy.deepcopy` read each object's class (LIB-33,
+  ADR-0121).
+- `statistics`, `time` and `random` are planned for 0.13 rather than 0.12,
+  as they reach the operating system through the private module `_typy`
+  (LIB-30, ADR-0119).
+- An `isinstance` test that `None` passes shows an optional is not `None`
+  where the test fails (TYP-07).
+- A class, sequence or mapping pattern the subject's type never matches is
+  the warning W0402 instead of the error E0407, and its case is neither
+  checked nor compiled, as CPython runs it (CST-06, TYP-34).
+- `list[i]` and `list[i] = x` on lists of `int`, `float`, `bool`, `str`
+  and other objects, `//` and `%` of integers that fit in 63 bits,
+  `float()` of one, and `/` of two floats run in place in the generated
+  code, and the runtime is called only where they may raise or where an
+  item needs a reference count. The benchmark suite's geometric mean
+  falls from 5.1 to 3.9 times C's time, inside NFR-22: spectralnorm runs
+  2.2 times faster and fannkuchredux 3.6 times (ADR-0107).
+- With `--deny-warnings`, each warning is reported as an error, such as
+  `error[W0101]`, with `"severity":"error"` in JSON, so the output says
+  why the command failed. A tool that read `"severity":"warning"` to find
+  the cause of a denied build reads the `W` code instead.
+
+- `int` arithmetic, comparisons and reference counts on values that fit in
+  63 bits run in place in the generated code, and the runtime is called
+  only for larger integers. The benchmark suite's geometric mean falls from
+  7.6 to 5.3 times C's time: mandelbrot runs 2.6 times faster and
+  recursion 2.3 times (NFR-22, ADR-0102).
+- Arithmetic on integers outside the inline range reads its operands in
+  place and keeps up to 1024 bits in fixed-width storage rather than arrays
+  from `malloc`, and division divides by a reciprocal rather than a 128-bit
+  division: from 5.0 to 1.5 times CPython 3.15's time at 512 bits, and from
+  5.3 to 1.8 times at 1024 bits (ADR-0103).
+
+### Fixed
+
+- Passing a value of a union such as `int | str` where an `object` is
+  declared stopped the compiler with an internal error; the value is now
+  held as an object of its member's type (TYP-23).
+- `typing.cast(T, value)` of a `T | None` value that holds an `int`, a
+  `float` or a `bool` ended the program with a crash; it now tests only
+  that the value is not `None` (TYP-24).
+- A parameter with a `bytes` default, such as `separator: bytes = b", "`,
+  was treated as one without a default, so a call that left it out was
+  refused with E0404; the call now passes the default (EXP-16).
+- A generator expression that read a variable its function assigns only
+  after it stopped the compiler with an internal error; it is now E0306,
+  as for a `lambda`, which asks to assign the variable first (TYP-12).
+- A `lambda` in a tuple display, such as `("double", lambda x: x * 2)`
+  where a `tuple[str, Callable[[int], int]]` is expected, was refused
+  with E0203; each item of the display now takes the type expected at
+  its place (EXP-14).
+
 ## [0.11.0] - 2026-11-22
 
 ### Added
@@ -1781,7 +1985,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/typy-lang/typy/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/typy-lang/typy/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/typy-lang/typy/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/typy-lang/typy/compare/v0.8.0...v0.9.0

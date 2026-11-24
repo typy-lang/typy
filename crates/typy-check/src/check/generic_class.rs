@@ -238,7 +238,7 @@ fn names_type_parameter(method: &super::Definition<'_>, names: &[&str]) -> bool 
         if let Stmt::AnnAssign { annotation, .. } = statement {
             found |= annotation_names(annotation, names);
         }
-        pending.extend(nested_blocks(statement).into_iter().flatten());
+        pending.extend(super::visit::nested_blocks(statement).into_iter().flatten());
     }
     found
 }
@@ -253,18 +253,4 @@ pub(super) fn annotation_names(annotation: &Expr, names: &[&str]) -> bool {
     };
     super::visit::visit_expression(annotation, &mut visit);
     found
-}
-
-/// Returns the blocks a statement holds, whose statements `visit_statement` reads but whose
-/// annotations it does not.
-fn nested_blocks(statement: &Stmt) -> Vec<&[Stmt]> {
-    match statement {
-        Stmt::If { body, orelse, .. }
-        | Stmt::While { body, orelse, .. }
-        | Stmt::For { body, orelse, .. } => vec![body, orelse],
-        Stmt::With { body, .. } => vec![body],
-        Stmt::Match { cases, .. } => cases.iter().map(|case| case.body.as_slice()).collect(),
-        Stmt::Try { .. } => statement.try_blocks(),
-        _ => Vec::new(),
-    }
 }

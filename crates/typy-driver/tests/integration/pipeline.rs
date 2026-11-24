@@ -5,6 +5,7 @@ use typy_build::{ArtifactKind, BuildRequest, EmitStage};
 use typy_codegen::{Target, TargetTriple};
 use typy_diagnostics::SourceLookup;
 use typy_driver::{Emission, Failure, Outcome, Pipeline, Sources};
+use typy_source::MainSource;
 
 /// A directory holding `app.py` with `source`.
 pub(crate) fn program(source: &str) -> (tempfile::TempDir, Utf8PathBuf) {
@@ -35,9 +36,15 @@ fn codes(failure: &Failure) -> Vec<String> {
 pub(crate) fn emit(main: &Utf8Path, stage: EmitStage) -> Emission {
     let request = BuildRequest::new(main).unwrap().with_emit(stage);
     match pipeline().run(&request).map(|success| success.outcome) {
-        Ok(Outcome::Emitted(emission)) => emission,
+        Ok(Outcome::Emitted(emitted)) => only(emitted),
         other => panic!("{other:?}"),
     }
+}
+
+/// Returns the output of the one stage a build wrote.
+pub(crate) fn only(emitted: Vec<(EmitStage, Emission)>) -> Emission {
+    let [(_, emission)] = <[_; 1]>::try_from(emitted).unwrap();
+    emission
 }
 
 pub(crate) fn text(emission: Emission) -> String {
@@ -53,7 +60,7 @@ const SOURCE: &str = "s = \"a\"\ns = s + \"b\"\nprint(s, 1 + 2)\n";
 fn a_correct_program_checks() {
     let (_guard, main) = program(SOURCE);
     match pipeline()
-        .check(&main, Target::host())
+        .check(&MainSource::File(main.clone()), Target::host())
         .map(|success| success.outcome)
     {
         Ok(Outcome::Checked(Sources::Project(project))) => {
@@ -66,7 +73,9 @@ fn a_correct_program_checks() {
 #[test]
 fn a_wrong_program_fails_with_its_diagnostics_and_files() {
     let (_guard, main) = program("x: int = \"a\"\n");
-    let failure = pipeline().check(&main, Target::host()).unwrap_err();
+    let failure = pipeline()
+        .check(&MainSource::File(main.clone()), Target::host())
+        .unwrap_err();
     assert_eq!(codes(&failure), ["E0402"]);
     assert!(matches!(failure.sources, Sources::Project(_)));
 }
@@ -75,7 +84,10 @@ fn a_wrong_program_fails_with_its_diagnostics_and_files() {
 fn a_missing_main_file_fails_with_the_files_it_tried() {
     let (_guard, main) = program("");
     let failure = pipeline()
-        .check(&main.with_file_name("absent.py"), Target::host())
+        .check(
+            &MainSource::File(main.with_file_name("absent.py")),
+            Target::host(),
+        )
         .unwrap_err();
     assert_eq!(codes(&failure), ["E0105"]);
     assert!(matches!(failure.sources, Sources::Unloaded(_)));
@@ -207,7 +219,7 @@ fn lib_22_sys_platform_names_the_operating_system_of_each_target() {
             .with_emit(EmitStage::Tyir)
             .with_target(Target { triple });
         let tyir = match pipeline().run(&request).map(|success| success.outcome) {
-            Ok(Outcome::Emitted(emission)) => text(emission),
+            Ok(Outcome::Emitted(emitted)) => text(only(emitted)),
             other => panic!("{triple}: {other:?}"),
         };
         let platform = if triple.is_macos() { "darwin" } else { "linux" };
@@ -216,4 +228,29 @@ fn lib_22_sys_platform_names_the_operating_system_of_each_target() {
             "{triple}: {tyir}"
         );
     }
+}
+
+#[test]
+fn cli_29_several_stages_come_from_one_run_in_pipeline_order() {
+    let (_guard, main) = program(SOURCE);
+    let request = BuildRequest::new(&main)
+        .unwrap()
+        .with_emit(EmitStage::Obj)
+        .with_emit(EmitStage::Tyir)
+        .with_emit(EmitStage::LlvmBc);
+    let Ok(Outcome::Emitted(emitted)) = pipeline().run(&request).map(|success| success.outcome)
+    else {
+        panic!("no stages were written");
+    };
+    let stages: Vec<EmitStage> = emitted.iter().map(|(stage, _)| *stage).collect();
+    assert_eq!(stages, [EmitStage::Tyir, EmitStage::LlvmBc, EmitStage::Obj]);
+    assert!(matches!(&emitted[0].1, Emission::Text(text) if text.contains("fn ")));
+    // LLVM wraps the bitcode of an Apple target in a header of its own, as clang does.
+    let magic: &[u8] = if cfg!(target_os = "macos") {
+        &[0xde, 0xc0, 0x17, 0x0b]
+    } else {
+        b"BC\xc0\xde"
+    };
+    assert!(matches!(&emitted[1].1, Emission::Bytes(bytes) if bytes.starts_with(magic)));
+    assert!(matches!(&emitted[2].1, Emission::Bytes(bytes) if !bytes.is_empty()));
 }

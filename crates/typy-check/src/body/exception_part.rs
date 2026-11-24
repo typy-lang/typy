@@ -256,8 +256,9 @@ impl BodyChecker<'_> {
         let at_most_one = Self::typed(
             TypedExprKind::Compare {
                 left: Box::new(length),
-                operators: vec![CompareOperator::LtE],
+                operators: Box::new([CompareOperator::LtE]),
                 comparators: vec![number(1)],
+                narrowing: None,
             },
             Type::Bool,
             span,

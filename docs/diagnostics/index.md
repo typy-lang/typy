@@ -11,9 +11,12 @@ TyPy reports every problem it finds in one run, each as a diagnostic.
 | A diagnostic that refuses valid Python names the rule the program falls outside | DIA-03 |
 | One root cause gives one error | DIA-04 |
 | `--error-format=json` writes each diagnostic as one JSON object per line | DIA-05 |
-| Warnings never fail a build unless `--deny-warnings` is given | DIA-07 |
+| Warnings never fail a build unless `--deny-warnings`, or `-D` for their code, is given | DIA-07 |
+| `-W`, `-A` and `-D CODE` report a warning as a warning, not at all, or as an error | CLI-27 |
+| `--color` colours diagnostics written as text; by default only on a terminal | CLI-26 |
 | A warning where CPython warns while compiling: W0101, W0301 | DIA-08 |
 | A warning for a `match` that leaves members of its subject's type unmatched: W0401 | CST-07 |
+| A warning for a pattern its subject's type never matches, whose case never runs: W0402 | CST-06, TYP-34 |
 | A code is never reused | DIA-06 |
 
 [Troubleshooting](troubleshooting.md) explains every code.
@@ -25,7 +28,8 @@ probably not what you meant. TyPy warns where CPython 3.12 to 3.15 give a
 `SyntaxWarning` while compiling: an invalid escape sequence, W0101, and an
 assertion that is always true, W0301. It also warns, as type checkers do,
 about a `match` that leaves members of its subject's type unmatched,
-W0401 (ADR-0033). This program builds,
+W0401 (ADR-0033), and about a pattern its subject's type never matches,
+W0402 (TYP-34). This program builds,
 runs and prints `\d`, with a warning that shows `"\\d"` as the fix:
 
 <!-- typy-expect: accepted -->
@@ -34,8 +38,16 @@ print("\d")
 ```
 
 `typy check`, `build` and `run` exit with status 0 when there are only
-warnings. With `--deny-warnings` they exit with status 1 and write no
-executable, which suits CI.
+warnings. With `--deny-warnings` they report each warning as an error,
+such as `error[W0101]`, exit with status 1 and write no executable, which
+suits CI. `-D CODE` does the same for one warning, `-A CODE` stops it from
+being reported, and `-W CODE` reports it as a warning again; `warnings`
+names every warning, and the last option for a code decides:
+
+```sh
+typy check app.py -A W0301
+typy build app.py -D warnings -A W0401
+```
 
 ## Diagnostics as JSON
 

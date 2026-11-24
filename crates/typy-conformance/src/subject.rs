@@ -62,7 +62,7 @@ pub(crate) fn judge_accepted(
     let Ok(directory_path) = Utf8PathBuf::from_path_buf(directory.path().to_owned()) else {
         return Verdict::Invalid("the temporary directory's path is not UTF-8".to_owned());
     };
-    for mode in [BuildMode::Debug, BuildMode::Release] {
+    for mode in [BuildMode::DEBUG, BuildMode::RELEASE] {
         let request = match BuildRequest::new(case.path.clone()) {
             Ok(request) => request
                 .with_mode(mode)
@@ -122,15 +122,18 @@ pub(crate) fn judge_sanitized(
         Ok(request) => request.with_emit(EmitStage::Obj),
         Err(error) => return Verdict::Invalid(error.to_string()),
     };
-    let object = match pipeline.run(&request).map(|success| success.outcome) {
-        Ok(Outcome::Emitted(Emission::Bytes(bytes))) => bytes,
-        Ok(_) => return Verdict::Fail("no object file was emitted".to_owned()),
+    let emitted = match pipeline.run(&request).map(|success| success.outcome) {
+        Ok(Outcome::Emitted(emitted)) => emitted,
+        Ok(_) => Vec::new(),
         Err(failure) => {
             return Verdict::Fail(format!(
                 "TyPy rejected the program: {}",
                 describe(&failure).join("; ")
             ));
         }
+    };
+    let Some((_, Emission::Bytes(object))) = emitted.into_iter().next() else {
+        return Verdict::Fail("no object file was emitted".to_owned());
     };
     let object_path = root.join("program.o");
     let executable = root.join("sanitized");
@@ -195,7 +198,8 @@ pub(crate) fn judge_rejected(
     line: u32,
     column: u32,
 ) -> Verdict {
-    let Err(failure) = pipeline.check(&case.path, target) else {
+    let Err(failure) = pipeline.check(&typy_source::MainSource::File(case.path.clone()), target)
+    else {
         return Verdict::Fail("TyPy accepted the program".to_owned());
     };
     let mut diagnostics = failure.diagnostics.iter();

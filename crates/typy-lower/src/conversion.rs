@@ -22,6 +22,9 @@ impl FunctionLowerer<'_> {
             TyirType::Object(TypeId::BYTES) => {
                 self.call_runtime(RuntimeFunction::BytesRepr, vec![lowered.value], span)
             }
+            TyirType::Object(TypeId::BYTEARRAY) => {
+                self.call_runtime(RuntimeFunction::BytearrayRepr, vec![lowered.value], span)
+            }
             TyirType::Object(TypeId::SET) => {
                 self.call_runtime(RuntimeFunction::SetRepr, vec![lowered.value], span)
             }

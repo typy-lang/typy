@@ -79,6 +79,7 @@ impl BodyChecker<'_> {
             otherwise: None,
             members,
             held: Vec::new(),
+            guard: None,
         };
         Self::typed(TypedExprKind::IsInstance(Box::new(test)), Type::Bool, span)
     }
@@ -279,6 +280,7 @@ impl BodyChecker<'_> {
                 otherwise,
                 members,
                 held: Vec::new(),
+                guard: None,
             })),
             Type::Bool,
             span,
@@ -316,6 +318,7 @@ impl BodyChecker<'_> {
                     TypeObjectOf::Tuple,
                     TypeObjectOf::Str,
                     TypeObjectOf::Bytes,
+                    TypeObjectOf::Bytearray,
                     TypeObjectOf::Range,
                     TypeObjectOf::Dict,
                     TypeObjectOf::View(View::Keys),
@@ -534,6 +537,7 @@ impl BodyChecker<'_> {
                 otherwise: None,
                 members: Vec::new(),
                 held: Vec::new(),
+                guard: None,
             })),
             Type::Bool,
             span,
@@ -567,6 +571,7 @@ impl BodyChecker<'_> {
                 TypeObjectOf::Bool => vec![Type::Bool],
                 TypeObjectOf::Str => vec![Type::Str],
                 TypeObjectOf::Bytes => vec![Type::Bytes],
+                TypeObjectOf::Bytearray => vec![Type::Bytearray],
                 TypeObjectOf::NoneType => vec![Type::NoneType],
                 TypeObjectOf::Type => vec![Type::TypeObject(None)],
                 TypeObjectOf::Range => vec![Type::Range],
@@ -609,7 +614,7 @@ impl BodyChecker<'_> {
 
     /// Returns the position of `narrowed` in the function's table of narrowed types, adding
     /// it when it is not there yet.
-    fn narrowing_index(&mut self, narrowed: Type) -> u32 {
+    pub(super) fn narrowing_index(&mut self, narrowed: Type) -> u32 {
         let position = self
             .narrowings
             .iter()

@@ -9,25 +9,6 @@ use crate::function::FunctionEmitter;
 use crate::runtime::{Internal, internal_function};
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
-    pub(super) fn call_internal(
-        &mut self,
-        function: Internal,
-        arguments: &[ValueId],
-    ) -> Result<BasicValueEnum<'ctx>, CodegenError> {
-        let callee = internal_function(self.shared.context, self.shared.module, function);
-        let arguments = self.arguments(arguments)?;
-        match self
-            .builder
-            .build_call(callee, &arguments, "")?
-            .try_as_basic_value()
-        {
-            inkwell::values::ValueKind::Basic(value) => Ok(value),
-            inkwell::values::ValueKind::Instruction(_) => {
-                Err(CodegenError(format!("{function:?} returns no value")))
-            }
-        }
-    }
-
     /// Returns a value a runtime function gives as generated code holds it: a `bool` from the
     /// byte C's `_Bool` is, and a `float` the function may raise beside from its bits
     /// (ADR-0053).
@@ -77,8 +58,9 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         };
         let function = match (ty, increment) {
             (TyirType::Tuple(id), _) => return self.count_tuple(id, value, increment),
-            (TyirType::Int, true) => Internal::IntIncrement,
-            (TyirType::Int, false) => Internal::IntDecrement,
+            (TyirType::Int, _) => {
+                return self.count_int_in_place(value.into_int_value(), increment);
+            }
             (_, true) => Internal::Increment,
             (_, false) => Internal::Decrement,
         };

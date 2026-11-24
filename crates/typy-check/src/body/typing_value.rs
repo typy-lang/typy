@@ -261,19 +261,25 @@ impl BodyChecker<'_> {
         self.program.annotation_names.get(id).copied()
     }
 
-    /// Returns E0202 for `cast`, `NamedTuple`, `dataclass` or `field` read as a value: each is
-    /// a function, which TyPy reads only where it is called or a class names it as its base.
+    /// Returns E0202 for `cast`, `overload`, `NamedTuple`, `dataclass`, `field`, `ABC` or
+    /// `abstractmethod` read as a value, which TyPy reads only where it is called, decorates or
+    /// a class names it as its base.
     fn function_of_typing(&mut self, expression: &Expr) -> Option<TypedExpr> {
         let name = self.standard_name_of(expression)?;
         if !matches!(
             name,
-            AnnotationName::Cast | AnnotationName::NamedTuple | AnnotationName::Dataclasses
+            AnnotationName::Cast
+                | AnnotationName::NamedTuple
+                | AnnotationName::Dataclasses
+                | AnnotationName::Overload
+                | AnnotationName::AbstractClasses
+                | AnnotationName::EnumClasses
         ) {
             return None;
         }
         let span = expression.span();
-        let message = "this function of `typing` or `dataclasses` is read only where it is \
-                       called or a class names it, not as a value";
+        let message = "this name of `typing`, `dataclasses`, `abc` or `enum` is read only where \
+                       it is called, decorates or a class names it, not as a value";
         Some(
             self.error(
                 Diagnostic::new(DiagnosticCode::error(202), span, message)
@@ -422,6 +428,35 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Adds the values `Literal[...]` writes in `written` to `values`, flattening a nested
+    /// `Literal[...]` and leaving out a value written before, as CPython does; `None` when
+    /// one is no constant `Literal` takes.
+    fn literal_values(&self, written: &[Expr], values: &mut Vec<String>) -> Option<()> {
+        for each in written {
+            let text = match each {
+                Expr::Constant {
+                    value: Constant::None,
+                    ..
+                } => "None".to_owned(),
+                Expr::Subscript { value, index, .. }
+                    if self.standard_name_of(value) == Some(AnnotationName::Literal) =>
+                {
+                    let inner: Vec<Expr> = match index.as_ref() {
+                        Expr::Tuple { elements, .. } => elements.clone(),
+                        other => vec![other.clone()],
+                    };
+                    self.literal_values(&inner, values)?;
+                    continue;
+                }
+                other => crate::literal_type::LiteralValue::of_written(other)?.to_string(),
+            };
+            if !values.contains(&text) {
+                values.push(text);
+            }
+        }
+        Some(())
+    }
+
     /// Returns the parts of each of `elements`, or `None` when one is no type.
     fn parts(&mut self, elements: &[Expr]) -> Option<Vec<Part>> {
         elements.iter().map(|each| self.part(each)).collect()
@@ -497,6 +532,17 @@ impl BodyChecker<'_> {
             Expr::Tuple { elements, .. } if !elements.is_empty() => elements.clone(),
             other => vec![other.clone()],
         };
+        // `Literal[...]` takes constants, not types (TYP-28).
+        if let Base::Named(NamedText {
+            module: "typing",
+            name: "Literal",
+            ..
+        }) = base
+        {
+            let mut values = Vec::new();
+            self.literal_values(&written, &mut values)?;
+            return Some(literal_part(&values));
+        }
         let arguments = self.parts(&written)?;
         match base {
             Base::Optional => {
@@ -590,6 +636,9 @@ fn named_text(name: AnnotationName) -> Option<NamedText> {
         }),
         AnnotationName::ClassVar => typing("ClassVar"),
         AnnotationName::Final => typing("Final"),
+        AnnotationName::Literal => typing("Literal"),
+        AnnotationName::SelfType => typing("Self"),
+        AnnotationName::Guard(kind) => typing(kind.name()),
         AnnotationName::Optional => typing("Optional"),
         AnnotationName::Union => NamedText {
             module: "typing",
@@ -614,6 +663,9 @@ fn named_text(name: AnnotationName) -> Option<NamedText> {
         AnnotationName::Cast
         | AnnotationName::NamedTuple
         | AnnotationName::Dataclasses
+        | AnnotationName::Overload
+        | AnnotationName::AbstractClasses
+        | AnnotationName::EnumClasses
         | AnnotationName::Rebound => return None,
     })
 }
@@ -650,6 +702,19 @@ fn generic(prefix: &str, arguments: &[Part], text: fn(&Part) -> &str) -> Part {
         format!("{prefix}[{}]", written.join(", ")),
         format!("{prefix}[{}]", keys.join(", ")),
         floor,
+        PartKind::Value,
+    )
+}
+
+/// Returns `typing.Literal[...]` of the values, written as `repr` writes them; CPython finds
+/// two equal whatever the order of their values (TYP-28).
+fn literal_part(values: &[String]) -> Part {
+    let mut keys: Vec<&str> = values.iter().map(String::as_str).collect();
+    keys.sort_unstable();
+    Part::new(
+        format!("typing.Literal[{}]", values.join(", ")),
+        format!("typing.Literal{{{}}}", keys.join(", ")),
+        OLDEST,
         PartKind::Value,
     )
 }

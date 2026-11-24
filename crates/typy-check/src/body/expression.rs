@@ -114,6 +114,16 @@ impl BodyChecker<'_> {
                 let right = self.refuse_class(right);
                 let left = Self::version_tuple(left);
                 let right = Self::version_tuple(right);
+                // A member of an `IntEnum` or a `StrEnum` is its value here (CLS-44).
+                let (left, right) = self.enum_operands(*operator, (left, right));
+                // A `frozendict` merged into a dict is the dict it holds (DAT-18).
+                let right = if *operator == typy_source::syntax::BinaryOperator::BitOr
+                    && matches!(left.ty, Type::Dict(..))
+                {
+                    self.frozendict_items(right)
+                } else {
+                    right
+                };
                 // An instance's class may define the operator's method (CLS-07).
                 let (left, right) = match self.operator_binary(*operator, left, right, span) {
                     super::operator_method::Comparison::Called(call) => return call,
@@ -141,6 +151,16 @@ impl BodyChecker<'_> {
                 operator, operand, ..
             } => {
                 let operand = self.expression(operand);
+                // `~` of a flag makes a flag (CLS-44).
+                let operand = match operator {
+                    typy_source::syntax::UnaryOperator::Not => operand,
+                    typy_source::syntax::UnaryOperator::Invert
+                        if self.flag_bits(&operand).is_some() =>
+                    {
+                        operand
+                    }
+                    _ => self.enum_value(operand),
+                };
                 if let Some(call) = super::operator_method::unary_name(*operator)
                     .and_then(|name| self.operator_unary(name, &operand, span))
                 {
@@ -218,6 +238,16 @@ impl BodyChecker<'_> {
                 ..
             } => {
                 let operands = self.comparison_operands(left, comparators, operators);
+                let operands = self.enum_containers(operators, operands);
+                let operands = self.enum_values_compared(operators, operands);
+                // What the comparison shows of a variable, read before a `bool` is compared as
+                // an `int` (TYP-28).
+                let narrowing = match (operators.as_slice(), operands.as_slice()) {
+                    ([operator], [left, right]) => {
+                        self.literal_test(*operator, left, right).map(Box::new)
+                    }
+                    _ => None,
+                };
                 let operands = Self::objects_compared(operators, operands);
                 let mut operands = Self::numbers_compared(operators, operands);
                 let mut comparators = operands.split_off(1);
@@ -260,8 +290,9 @@ impl BodyChecker<'_> {
                 Self::typed(
                     TypedExprKind::Compare {
                         left: Box::new(left),
-                        operators: operators.clone(),
+                        operators: operators.as_slice().into(),
                         comparators,
+                        narrowing,
                     },
                     Type::Bool,
                     span,
@@ -298,6 +329,10 @@ impl BodyChecker<'_> {
                 if let Type::CData(class) = value.ty.clone() {
                     return self.cdata_item((value, &class), index, span);
                 }
+                // An enum class finds a member by its name (CLS-44).
+                if let Some(found) = self.enum_named(&value, index, span) {
+                    return found;
+                }
                 // An instance's class may define `__getitem__` (CLS-07).
                 let value = match self.item_call(value, index, span) {
                     Ok(call) => return call,
@@ -321,9 +356,15 @@ impl BodyChecker<'_> {
                 // A slice object slices a built-in sequence as its bounds do (CLS-23).
                 let typed_index = if matches!(
                     value.ty,
-                    Type::Str | Type::Bytes | Type::List(_) | Type::TupleOf(_) | Type::Range
+                    Type::Str
+                        | Type::Bytes
+                        | Type::Bytearray
+                        | Type::List(_)
+                        | Type::TupleOf(_)
+                        | Type::Range
                 ) {
                     let index = self.expression(index);
+                    let index = self.enum_value(index);
                     if index.ty == Type::Slice {
                         return self.sliced_by_object(value, index, span);
                     }
@@ -348,7 +389,7 @@ impl BodyChecker<'_> {
                         span,
                     );
                 }
-                if matches!(value.ty, Type::Bytes | Type::Range) {
+                if matches!(value.ty, Type::Bytes | Type::Bytearray | Type::Range) {
                     self.expect(&index, Type::Int, "an index");
                     return Self::typed(
                         TypedExprKind::Index {

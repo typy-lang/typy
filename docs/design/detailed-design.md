@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy detailed design |
-| Version | 2.102 |
+| Version | 2.135 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-22 |
+| Last updated | 2026-11-24 |
 
 ## 1. Purpose and scope
 
@@ -41,6 +41,8 @@ crates/
                               syntax/ (tree, statement, expression,
                               operator, node_kind, dump),
                               parse/ (statement, expression, operator)
+  typy-stdlib/                lib/ (the modules in Python), src/ (lib),
+                              typeshed-revision, signature-differences.toml
   typy-check/src/             types, builtin, method, unprovided, check/
                               (definition, annotation, module_scope,
                               definition_order, visit), subset/ (feature,
@@ -106,9 +108,12 @@ The code is organised so that it stays easy to change as it grows:
   `pub(crate)` for the crate, `pub` only for the API.
 - A source file stays under about 400 lines. A longer file is split by
   responsibility before more is added to it.
-- Unit tests sit with their module, in `#[cfg(test)] mod tests`, or in
-  `name/tests.rs` when they are long. Tests that need only the public API
-  are integration tests in the crate's `tests/` folder.
+- Unit tests sit beside their module in `name/tests.rs`, declared with
+  `#[cfg(test)] mod tests;`, and the crate root's in `src/tests.rs`. Code
+  scanning leaves test files out, since a test's checks of results it
+  knows to succeed read to its path-insensitive queries as null pointers,
+  and an inline test module would bring them back in. Tests that need only
+  the public API are integration tests in the crate's `tests/` folder.
 
 ### 3.2 Code rules
 
@@ -188,9 +193,13 @@ in `docs/requirements/srs.md`.
 | `help` | `Option<String>` | `None` | A hint, shown after `help:`, when no fix is certain |
 | `fix` | `Option<Fix>` | `None` | Set only when the fix is certain (DIA-02) |
 | `rule` | `Option<RuleId>` | `None` | Required when the diagnostic rejects valid Python (DIA-03) |
+| `denied` | `bool` | `false` | Set by `denied()` for a warning that `-D` makes an error (CLI-27) |
 
 `Diagnostic::new(code, span, message)` makes a located diagnostic and
 `Diagnostic::without_location(code, message)` one without a span.
+`severity()` is the code's severity, or `Error` once the diagnostic is
+denied; a denied warning keeps its `W` code, so its output reads
+`error[W0301]`.
 
 `Fix` holds a `Span` and the `replacement: String` for it. `Label` holds a
 `Span` and a `text: String`.
@@ -203,6 +212,30 @@ in `docs/requirements/srs.md`.
 | `has_errors()` | True when any diagnostic has severity `Error` |
 | `iter()` | The diagnostics in the order they were added |
 | `into_sorted(lookup)` | Returns them sorted by file path, line, column and code; those without a location come first |
+
+`WarningLevel` is what the command line makes of a warning: `Warn`, the
+default, `Allow` or `Deny`, written `warn`, `allow` and `deny`.
+`WarningSelector` is what one `-W`, `-A` or `-D` names: `All`, from the
+text `warnings`, or `Code`, the code of a warning the registry lists as
+active. `WarningSelector::parse` refuses any other text with a
+`SelectorError`, whose message lists the warning codes.
+
+`WarningLevels` holds the level of every warning code.
+
+| Field | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `every` | `WarningLevel` | `Warn` | The level of a code not set apart |
+| `codes` | `Vec<(DiagnosticCode, WarningLevel)>` | empty | Codes whose level differs from `every`, sorted by code, each once |
+
+| Method | Behaviour |
+| --- | --- |
+| `set(selector, level)` | For `All`, sets `every` and clears `codes`; for one code, gives it `level`, kept in `codes` only when it differs from `every`. So the last call that names a code decides its level |
+| `level(code)` | The code's level |
+| `apply(&diagnostics)` | Returns the diagnostics with allowed warnings removed and denied ones marked `denied`; errors are kept as they are |
+
+Options that give each code the same level give equal values, and
+`Display` writes them in one form, such as `deny W0101=allow`, so
+`typy run` keys its cache with it.
 
 `SourceLookup` is the trait the renderers use to turn a `Span` into text.
 `typy-source::Project` implements it.
@@ -233,6 +266,12 @@ The gutter is as wide as the line number. A span that runs past its first
 line is marked to the end of that line. Each label is written as
 `= LINE:COLUMN: text`. A certain fix follows as `help: write it as` and the
 corrected line.
+
+`render_coloured` writes the same text with ANSI escape sequences, as
+`rustc` colours its own (CLI-26): the severity and code, and the marker,
+in bold red for an error and bold yellow for a warning, the message and
+`help` in bold, and the arrow, the line numbers and the gutter in bold
+blue. Without the escape sequences its text is `render_text`'s.
 
 A diagnostic without a location is written as its header, then its rule and
 its help:
@@ -321,6 +360,10 @@ it enforces and its status. `typy explain` reads the same table.
 | E0428 | Copies of a generic function without end | GEN-03 |
 | E0429 | Module or export that a C library cannot have | FFI-05, CLI-09 |
 | E0430 | `ctypes` declaration TyPy cannot compile | FFI-01, FFI-02, FFI-03 |
+| E0431 | Value that is not one of the constants its `Literal` type names | TYP-28 |
+| E0432 | `@overload` without an implementation, one its implementation does not accept, or a call no overload takes | TYP-29 |
+| E0433 | Value of a method's own class where `Self` is wanted | TYP-30 |
+| E0434 | `@abstractmethod` above another method decorator, or a direct call of an abstract method that gives no value | CLS-45 |
 | E0701 | C toolchain program not found | A-01 |
 | E0702 | Link failed | A-01 |
 | E0703 | Runtime archive missing, or from another TyPy version | None |
@@ -328,6 +371,7 @@ it enforces and its status. `typy explain` reads the same table.
 | W0101 | Invalid escape sequence | DIA-08 |
 | W0301 | Assertion that is always true, of a tuple with items | DIA-08 |
 | W0401 | `match` that leaves members of the subject's type unmatched | CST-07 |
+| W0402 | Pattern that never matches its subject's type, whose case never runs | CST-06, TYP-34 |
 
 ## 5. typy-source
 
@@ -392,6 +436,7 @@ not an identifier.
 | `file` | `FileId` | none | Its `SourceFile` |
 | `syntax` | `SyntaxTree` | none | Built by `parse` |
 | `is_package` | `bool` | none | Read from an `__init__.py` (MOD-02); `package()` gives the package a relative import starts from |
+| `spec_name` | `Option<ModuleName>` | `None` | For the main module `-m` runs, its own name, such as `tools.report`; `package()` is then that name's parent, and `enclosing_packages()` the packages above it, outermost first (CLI-28) |
 
 `Project`
 
@@ -407,9 +452,24 @@ not an identifier.
 
 `Project::load(main_path, settings) -> Result<Project, LoadFailure>` reads
 and parses the main file and every module its imports reach, and returns
-every diagnostic of every file together. `LoadFailure` holds the
-`Diagnostics` and the files they point into, and implements
-`SourceLookup`, so a failed load can still be rendered. The checker reads
+every diagnostic of every file together. `Project::load_main(main,
+settings)` does the same for a `MainSource` (CLI-28):
+
+| `MainSource` | Main module | Root |
+| --- | --- | --- |
+| `File(path)` | The file | The file's directory |
+| `Module(name)` | The module `locate` finds for `name`, or for a package its `__main__` module, as `__main__` with `spec_name` set; a missing module, or a package without `__main__.py`, is E0206 without a location | `.` |
+| `Code(code)` | The code, as the file `<string>`, `CODE_PATH`, read from memory, so diagnostics name it as CPython does | `.` |
+
+The loader gives the main module of `Module` an import of each package
+above it, at its first byte, so the packages load and initialise before
+it; the checker starts that module's body with a `TypedStmt::Import` of
+them that binds no name (`Program::initialise_first`), so they run first
+at run time, as `python -m` imports them. `MainSource::program_name` names
+the executable: the file's name without `.py`, the module's name, or `c`.
+
+`LoadFailure` holds the `Diagnostics` and the files they point into, and
+implements `SourceLookup`, so a failed load can still be rendered. The checker reads
 the declarations of `builtins` from `typy-stdlib` (section 6).
 
 `loader.rs` finds the imports of each module at any depth, in function and
@@ -446,7 +506,12 @@ display, `Expr::Dict`, a dict display whose `keys` hold `None` for a `**`
 item, as CPython's `ast.Dict` does, and `Expr::ListComp`, `SetComp` and
 `DictComp`, whose clauses are `Comprehension` values as CPython's
 `ast.comprehension`; 0.9 converts `Expr::GeneratorExp` with the same
-parts (EXP-15), and `Expr::Starred`, a `*value` item (EXP-17).
+parts (EXP-15), and `Expr::Starred`, a `*value` item (EXP-17). From the
+Python floor 3.15, a comprehension element that unpacks, which the parser
+accepts only there, is converted as PEP 798 defines it (EXP-23): `unpacked`
+adds a clause over `*iterable` whose hidden target, `" (unpacked)"`, is the
+element, and `{**mapping for ...}` adds one over `mapping.items()` whose
+hidden key and value are the element's.
 `elif` chains become nested `If` nodes, as
 in CPython's `ast`. An integer literal keeps its value as decimal digits,
 so literals of any size survive conversion (DAT-01).
@@ -464,7 +529,13 @@ target version, 3.12 in 0.1. Each entry of `Parsed::errors()` and
 `Parsed::unsupported_syntax_errors()` becomes an E0103 diagnostic, so
 syntax that the floor version does not accept is refused (STD-01). The
 parser reads PEP 810 lazy imports and marks them `is_lazy`, which the
-syntax tree keeps (MOD-06). `typy_source::lazy_modules` reads a module's
+syntax tree keeps (MOD-06). `parse/future.rs` checks `from __future__`
+imports as CPython's compiler does: each at the start of the module, after
+any docstring, names a feature CPython defines, never `braces`, and is
+not lazy, E0103 otherwise, and `barry_as_FLUFL` is E0202. The imports at
+the start bind nothing TyPy reads, so the tree leaves them out and keeps
+`SyntaxTree::defers_annotations`, true for `annotations` (LIB-29).
+`typy_source::lazy_modules` reads a module's
 `__lazy_modules__` list, and `typy_source::is_lazy` says whether an import
 statement is lazy by its keyword or by that list (MOD-07); the loader
 orders the modules of lazy imports as it orders imports inside a
@@ -500,9 +571,34 @@ that is not a literal.
 ## 6. typy-stdlib
 
 `typy-stdlib` holds the Python sources of the standard library modules
-TyPy implements (ADR-0007), embedded in the `typy` binary with
-`include_str!`, and the declarations of the private `_typy` module. It is
-created with the first module written in Python, `sys` and `math` in 0.3.
+TyPy gives, in `crates/typy-stdlib/lib`, embedded in the `typy` binary
+with `include_str!` (ADR-0007, ADR-0119). `source(name)` gives a module's
+text and `names()` lists them; 0.12 gives `base64`, `binascii`,
+`bisect`, `heapq`, `string` and `textwrap` (LIB-27), and the private
+`_frozendict`, which writes `frozendict` (DAT-18, ADR-0123). A module
+gives the results and messages of CPython 3.15, as ADR-0029 says, with
+the parameters Python 3.12 has; what later versions add is planned for
+0.13 (LIB-32). After a module of the Python floor 3.15 is parsed,
+`built_in_import::add_built_in_imports` gives it `from _frozendict import
+frozendict` when its text holds that word and its module level binds no
+such name; the checker's `body/frozendict.rs` reads a `frozendict` as its
+`_items` dict where a mapping is read. The loader
+looks for an imported module in the program's directories first, as
+CPython looks in the script's directory first, then asks `embedded`,
+which returns a `Location` holding the text under the path
+`<typy-stdlib>/name.py`; `ProjectLoader::read` reads it as any module
+of the program, so the checker, lowering and the build treat it alike. A
+module is typed Python that CPython also runs.
+`scripts/check-stdlib-signatures.py` compares each public module with
+typeshed's stub of it at the revision `typeshed-revision` pins: the
+public names,
+following `from X import *`, `sys.version_info` blocks at the floor 3.12
+and plain aliases, and each function's parameters across the stub's
+overloads, by name, how each is passed and whether it may be left out,
+and its result where the stub writes a plain type; a difference kept on
+purpose is listed in `signature-differences.toml` with its reason
+(ADR-0097). The private module `_typy` comes with `statistics`, `time`
+and `random` in 0.13 (LIB-30).
 
 `math` is not written in Python either (ADR-0018): its functions take an
 `int` or a `float` and some any number of arguments, which the 0.3
@@ -510,6 +606,12 @@ subset cannot declare. `crates/typy-check/src/math.rs` lists each name:
 a constant with its value, or a function with its `MathShape`, which
 gives the types of its arguments and its result, and the Python version
 that added it, so a name newer than the program's floor is E0425.
+From the Python floor 3.15, `MATH_INTEGER` names the built-in module
+`math.integer`, whose names are the six functions `INTEGER_FUNCTIONS`
+lists, each the function of `math` (LIB-26); `has_math_integer` decides
+`import math.integer`, which binds `math` without an alias, `from math
+import integer` and `from math.integer import ...`, and `module_of`
+reads `math.integer` through `math`.
 `import math` binds a built-in module object, which runs no code and
 prints as `<module 'math' (built-in)>`; `TypedProgram::builtin_modules`
 lists the ones a program imports, after its own modules. A call is
@@ -614,6 +716,32 @@ needs generics (0.4), so ADR-0007's "written around it" applies: each
 builtin is a `Builtin` value that `typy-check` types from its own table and
 `typy-lower` lowers to runtime calls (section 7.3). A builtin moves to
 `builtins.py` when the features it needs arrive.
+
+The builtins of LIB-28 follow the same path through `body/number_call.rs`.
+`pow(a, b)` is checked as the expression `a ** b`, so it keeps the rule of
+EXP-04, and `pow` takes `base`, `exp` and `mod` by name. `divmod` lowers
+to `//` and `%` of the same operands, `bin`, `hex` and `oct` to the
+f-string formatter of their argument with the specification `#b`, `#x` or
+`#o`, and `format` to that formatter with its specification.
+`pow(a, b, m)` calls `typy_rt_int_power_modulo`, which reduces each step
+modulo `m`, gives the result the sign of `m` and inverts the base by the
+extended Euclidean algorithm for a negative exponent.
+
+`bytearray` is the type `Type::Bytearray`, `TyirType::BYTEARRAY` in TyIR
+(ADR-0108). `Method::of` gives it the list methods that change a list,
+with `int` items, and every method of `bytes`, whose signature
+`bytearray_signature` takes from `bytes` with each `bytes` of the result
+read as a bytearray; `extend` takes `ParameterType::ByteValues`. A
+parameter of type `bytes` takes a bytearray too, and `is_bytes_like`
+lets the two compare, combine with `+` and test `in`. `typy-lower`'s
+`bytearray.rs` passes a bytearray to a function of `bytes` as its buffer,
+`bytes_view`, which `typy_rt_bytearray_buffer` lends, and gives a `bytes`
+result to `typy_rt_bytearray_adopt` when it owns it, so the result becomes
+the buffer of the new bytearray, or to `_from_bytes` otherwise; the lists
+of `split` and `partition` are turned into bytearrays in place by
+`typy_rt_bytearray_convert_list`. A loop reads a bytearray by position,
+with its length read at each step, and a variable of the type starts as
+null.
 
 ## 7. typy-check
 
@@ -1101,6 +1229,149 @@ its keys does not read (LIB-20, ADR-0086). Only declared types are
 abstract: `BodyChecker::typed` gives every expression the type
 `without_abstract` makes, a variable's current type is its members while
 `declared` keeps the collection, and lowering maps it to its members.
+`TypeGuard[T]` and `TypeIs[T]` name `AnnotationName::Guard`, read as
+`Type::Guard` of a `GuardType` when `guard_type::tested_by_class` takes `T`
+(TYP-31, ADR-0114); it stands in declared results only, a `bool` as a value.
+`guarded_call`, from `call_function`, makes a call of a guard whose first
+argument is a variable the `isinstance` test of that variable against `T`,
+with the call as its `GuardCall`, and drops the test's `otherwise` for
+`TypeGuard`. Lowering runs the call, then the test, and calls
+`typy_rt_guard_failed` when a `TypeGuard` call is true and the test false,
+or a `TypeIs` call and the test differ; the call's result is the test's.
+`typing.Self` names `AnnotationName::SelfType`, which reads the type
+`self_type::SELF_PARAMETER` gives in the annotation scope (TYP-30,
+ADR-0113): `method_definition` gives an instance method of a class that is
+neither generic nor a protocol `Type::SelfType` of its instances, and
+`ClassMethodCopies::make` gives each copy of a class method its own class.
+`SelfType` stands in declared types only: `value_type` and
+`Program::finish` read it as the class. `checked_self` refuses, with E0433,
+a value where `Self` is declared that `is_self` does not find to be `self`,
+a parameter declared `Self` or a `Self` result through one of them.
+`method_call_by_signature` reads a call through an instance with `Self`
+as the instance's type, converts each argument to the compiled
+parameter's type, and reads the result through `tested_as`; `bind_to`
+reads `Self` as the own class in any other call. `refuse_nested_self`
+refuses `Self` inside another type, planned for 0.13 (TYP-36).
+`check/overloads.rs` takes the `@overload` definitions out of a module and
+its classes before decorators are expanded, keeping them by the name of
+the implementation that follows, and refuses the forms TYP-35 plans with
+E0201 (TYP-29, ADR-0112). `collect_functions` and `collect_members` read
+their signatures in the scope of the implementation into
+`Program::overloads`, a parameter written with a default, often `...`,
+marked as one a call may leave out. `overloads::check_fits` reports with
+E0432 each overload `overload_fit::fit` refuses, one whose result
+`body::can_test` cannot tell from the implementation's others, and a
+derived class's override of an overloaded method. `overloaded_call`,
+from `call_function` and `instance_method_call`, binds the arguments to
+the view `fit` gives of each overload in turn, keeping the first binding
+with no error, retargets them to the implementation's parameters, and
+`overload_result` reads the call's result through `tested_as`, the checked
+cast of `typing.cast`. `check_against_overloads` checks the body once more
+for each overload as a look with `body_signature`, keeping the errors the
+check of the body did not report, labelled with the overload, while
+`Program::overload_look` lets `test_reach` decide code by a `LiteralTest`'s
+`may_hold` and `may_fail`.
+`check/abstract_class.rs` reads the classes of `abc` before the dataclass
+expansion (CLS-45, ADR-0093, ADR-0115). `read` takes `ABC` out of each
+class's bases and the last `@abstractmethod` out of each function's
+decorators, finding both through `imported_name::ImportedName`, which
+also finds `typing.overload`, and keeps in `AbstractMarks`, by the span
+of each name, the classes that named `ABC` and the methods it marked;
+`@abstractmethod` above `@property`, `@staticmethod`, `@classmethod` or a
+setter is E0434 and taken out. `mark_abstract` gives each class's
+`ClassInfo` three fields as `ABCMeta` would: `abstract_base`, set when the
+class or an ancestor named `ABC`; `abstract_methods`, its own marked
+methods and each of its base's that its body does not define again,
+sorted; and `empty_abstract`, its own marked methods that take the
+instance and whose bodies `gives_no_value` finds to hold only a
+docstring, `pass` or `...`. A base that is a copy of a generic class is
+read through the class it is copied from. An exception class keeps none,
+as `BaseException` makes its instances without the test. In
+`body/abstract_call.rs`, `abstract_called` refuses, with E0404, a call
+that names a class with abstract methods left, from `new_instance`;
+`call_class_value` calls `instance_made` and `abstract_made`, which
+makes the call through a `type[C]` value, such as `cls()`, a `Sequence`
+of its arguments ending in `raise TypeError` with CPython's message.
+`check_end` lets an empty abstract method reach its end, which returns
+`None` where its result holds `None`, and `abstract_end` adds
+`raise NotImplementedError` where it does not. `empty_abstract_run`
+refuses, with E0434, `super_method`, `unbound_call` and
+`class_method_value` of such a method, which `Program::runs_empty_abstract`
+finds as the nearest class defining the name.
+`check/dataclass/enum_class.rs` expands a class whose base is `enum.Enum`
+into an ordinary class before the checker reads it (CLS-44, ADR-0093,
+ADR-0116). `expand_enum` reads each `name = value` of the body as a
+member, its value a `LiteralValue` or what `next_value` gives `auto()`,
+and an alias when its value `equals` an earlier member's; it writes each
+member's class variable as a call of `ENUM_MEMBER` followed by the class
+name, or the class variable of the member an alias names, then the body
+the class wrote, then `__init__`, `name`, `value`, `__repr__`, `__str__`
+and the static methods `ENUM_LOOKUP`, `ENUM_NAMED` and `ENUM_MEMBERS`,
+whose names `class_type.rs` holds. `Dataclasses::enums` notes each enum
+class, so a class derived from one is reported. In `body/enum_call.rs`,
+`enum_member_made` reads the member call as `instance_made`;
+`new_instance` calls `enum_lookup`, the subscript `enum_named`, and
+`sequence`, `len` and `enum_containers`, for `in`, read an enum class as
+`enum_members`; each calls its method through `static_call`. An
+`IntEnum` or a `StrEnum` also gets `__str__`, `__hash__` and `__bool__`
+of the value, the order methods between members, and the hidden method
+`ENUM_VALUE`, which marks it (ADR-0117). `enum_value` reads a member of
+such a class as its `_value_`: for the operands of a binary or unary
+operator, `enum_values_compared` for a comparison but beside `is` and
+left of `in` over a container of members, an index of a sequence, the
+builtins of numbers and text, `range`, `round` and `call_number_builtin`,
+an f-string field with a format specification, `enum_value_for` in
+`expression_expecting` where the expected type takes the value and not
+the member, and `enum_receiver` for a method its class does not have.
+A `Flag` or an `IntFlag` takes its methods from `enum_class/flag.rs`
+(ADR-0118): `source` writes the operators, `__contains__`, `__len__`,
+`__repr__`, `__str__` and the hidden methods `ENUM_FLAG`, which follows
+CPython's `Flag._missing_` for members of one bit each and keeps each
+composite in the module variable `composites` writes after the class,
+`ENUM_BITS`, which lists the members a flag holds, and
+`ENUM_FLAG_WIDTH` and `ENUM_FLAG_BINARY`, which write the bits of its
+`ValueError`; `rename_hidden` gives the names the source writes their
+hidden forms, and `Dataclasses::following` places the variable after the
+class. `enum_members` reads a flag as its `ENUM_BITS` list, and
+`enum_operands` keeps a flag the operand of `|`, `&` and `^`, as the
+unary arm does for `~`.
+`BodyChecker::statements` stops at the first statement no path reaches,
+`assigned` being `None` there, so a statement that cannot run is neither
+checked nor compiled (TYP-34, ADR-0111). `flow::test_reach` says whether a
+test may hold and may fail: a constant `bool`, and an `IsInstanceTest`
+whose `always`, `none_matches`, `checks` and `held` show the outcome, with
+`not`, `and` and `or` combined. An `if` starts a branch its test rules
+out unreachable, an `assert` whose test never holds leaves what follows
+unreachable, and `flow::pattern_reach` does the same for a `case`. A
+class, sequence or mapping pattern no value of the subject's type matches
+is the test `False` from `never_matches`, with W0402, so its case is
+unreached.
+`Literal[...]` names `AnnotationName::Literal`, which
+`check/literal_annotation.rs` reads as the union of `Type::Literal` of a
+`LiteralValue` each, an `int` as canonical decimal digits, or `None`
+(TYP-28, ADR-0110). As with abstract collections, only declared types are
+literal: `BodyChecker::typed` gives an expression the base type through
+`value_type`, `known_type` gives a variable declared of literal types its
+declaration, and `Program::finish` gives symbols, signatures and
+attributes `without_literal`. `expression_expecting` calls
+`checked_literal`, which reads what a value is known to be with
+`literal_of`: a constant's own value, a variable's narrowed or declared
+literal type, an attribute's or a called function's declared one; a value
+that `takes_literals_of` refuses is E0431, and `default_value` tests a
+default alike. `is_assignable_to` and `matches` let a value of the base
+type pass where a literal type is declared, and `Type::union` keeps a base
+type over its literal types by `takes_literals_of`. A comparison with
+constants records a `LiteralTest` in `TypedExprKind::Compare`, made by
+`literal_test` before a `bool` is compared as an `int`: the positions of
+the narrowed types when it holds and fails, and whether an optional is not
+`None`; `test_facts` turns it into `Fact::Narrowed`, `narrowed_type` meets
+two literal narrowings of one variable, and `narrowed_read` holds a
+literal narrowing as its base type, so a read changes only by `Unwrap`.
+A `match` covers a subject of literal types through `literal_of`, a value
+pattern covering the member of an equal constant, and a case of
+alternatives that are each one test leaves the facts of all failing to
+the next case. A `Literal[...]` read as a value is a typing value, written
+as CPython writes it and equal whatever the order of its values.
 `AbstractType::takes` and `member_for` decide assignability, with a
 derived class's instances for the items of a collection that
 `reads_only`, a dict of any other part for a member that reads one part,
@@ -1231,6 +1502,20 @@ item of a display has the first item's type, or E0409. An empty display has
 a type only where the context gives one, through
 `expression_expecting(expr, expected)`: an annotated or already typed
 variable, a `return`, or an argument; anywhere else it is E0410 (TYP-05).
+A variable of a function assigned an empty display, `list()`, `set()` or
+`dict()` takes its types from the first statement that adds to it
+(TYP-27). `body/first_add.rs` does this with looks: `look_for_adds` checks
+a body that assigns one, found by a scan of its statements, as a look that
+`Program::undo` reverses, with `FirstAdds::looking` set. The assignment
+gives the variable a collection of the error type and notes it as
+waiting; `add_to_empty` and `set_in_empty` give it the type of what
+`append`, `insert`, `extend`, `add`, `update`, `setdefault` or
+`items[key] = value` adds, by the span of the empty collection; a read
+of a waiting variable, a type with an error, or no such statement notes
+E0410. A look that found a type is followed by another, since one
+collection's type may give another's. The check after the looks gives
+each empty collection the type found as its expected type, or the error
+type with the look's E0410, so the typed body needs no rewriting.
 `Method::of(receiver, name)` lists the methods of the built-in types; any
 other name is E0412 (LIB-03). On a list they are `append`, `pop`, `insert`,
 `extend`, `remove`, `index`, `count`, `clear`, `copy`, `reverse` and `sort`;
@@ -1817,7 +2102,9 @@ signature after it, never in its own class. Any other use is E0306, with a
 help that quotes the name. A quoted annotation, `"Node | None"`, which the
 parser reads into `Expr::Quoted`, may name any class, and a program whose
 floor is 3.14 or later may name any class bare, since those versions
-evaluate annotations only when they are read. `collect_members` gives each
+evaluate annotations only when they are read, and so may a module whose
+tree `defers_annotations`, from `from __future__ import annotations`
+(LIB-29). `collect_members` gives each
 class its `ClassInfo`: the attributes the class body declares with an
 annotation, then those `__init__` assigns on its first parameter, in source
 order, and its methods. A method is a `Definition` whose first parameter is
@@ -2633,7 +2920,7 @@ and E0206 otherwise (LIB-08). For each module it runs:
    one waits. A function or a class bound by two is called through its
    binding variable (MOD-11, MOD-12, ADR-0036). The subset walker reports
    CPython's `SyntaxError`s for `lazy` inside a function or a `try`, and
-   with `*` or `__future__`, as E0103;
+   with `*`, as E0103, and the parser one from `__future__`;
    a class body holds only methods, so one there is E0202.
    `format % values` with a string literal on the left is checked by
    `body/percent.rs` (LIB-10). `percent_format::parse` reads the format
@@ -2679,7 +2966,41 @@ gives the module variables theirs, then the other functions. An
 module body gives it. That check runs on the program itself, and
 `Program::snapshot` and `keep_module_types` undo all it did but those
 types, dropping its diagnostics, so a module costs the same however many
-modules come before it; one whose type needs an attribute is E0424. Parallel checking
+modules come before it; one whose type needs an attribute is E0424.
+
+A function of the module without a result annotation gets the error type
+from `definition` and no E0204. After the first check of the module
+body, `check/inference.rs` infers each such result (TYP-26, ADR-0092). It
+orders the functions so each comes after the ones it calls, from the
+names their bodies read (`referenced_functions`); one on a cycle of
+calls, a generator (`has_yield`) and one the library's `__all__` lists
+keep the annotation, E0204 with the reason. Each other body is checked
+with its diagnostics dropped, `Program::inferring` noting the type of
+each `return` value and `None` where the end can be reached, and
+`Program::undo` removes what the check added. The union of the types,
+`Type::union`, becomes the result, through `Program::set_result`, which
+also notes the function in `inferred_results`, whose end may then return
+the `None` its optional result holds. The module body is then checked
+again from the types before the first check, so a variable assigned a
+call of such a function takes its result.
+
+An instance method of a class that is neither generic nor a protocol, and
+not a special method, gets the error type too, and
+`ClassInfo::inferred_methods` notes it. Its result is inferred after the `__init__`
+methods are checked, since its body reads the attributes they type, by
+`infer_methods`. `Program::overriding` keeps the annotation, E0204, of a
+method that overrides one of a base or that a class of the module
+overrides. The others are looked at again while a look infers a result,
+since a method calls another through its instance, which no name shows: a
+look whose result still has the error type, without an error of its own,
+waits, and one still waiting when no look makes progress calls itself.
+When any method's result was inferred, the module variables take their
+types from before the first look again, so the module body types them
+from the inferred results. The body check takes an inferred result from
+`Program::result_of`. A static or class method, a special method, a
+property and a nested function keep their annotations (ADR-0109);
+`function_definition` gives a nested function's E0204 the release that
+infers it (TYP-33). Parallel checking
 (architecture section 7.5) is added when the build-time benchmarks of
 NFR-04 call for it.
 
@@ -3233,18 +3554,33 @@ refuses any other. `is_macos` chooses the Mach-O steps of linking.
 `Target` holds a triple, and `Target::host()` returns the triple `typy` was
 built for.
 
-`Optimization` is `None`, `Speed` or `Size`, for the three build modes.
-LLVM 23 has no `Oz` pipeline, so `Size` runs the `O2` pipeline with every
-function marked `minsize` and `optsize`.
+`Optimization` is `None`, `Basic`, `Speed`, `Aggressive`, `Small` or
+`Size`, the levels `-O0`, `-O1`, `-O2`, `-O3`, `-Os` and `-Oz` (CLI-20);
+`Optimization::parse` reads the letter after `-O`. Each runs LLVM's pipeline
+of its level; LLVM 23 has no `Os` or `Oz` pipeline, so `Small` runs `O2`
+with every function marked `optsize`, and `Size` with every function marked
+`minsize` and `optsize`. `CodegenOptions` holds the level, the processor,
+`None` for the triple's baseline `TargetTriple::cpu`, and the features
+beside it, as LLVM writes them; the target machine of each build takes the
+processor and the features, and nothing reaches LLVM's global command line
+(ADR-0106). `host_processor` and `host_features` give this machine's, for
+`--target-cpu native` (CLI-21), and `write_processor_help` makes LLVM list
+a triple's processors on standard error.
 
 | Function | Returns |
 | --- | --- |
-| `object(module, target, optimization, lookup)` | The `ObjectFile`: its target and its bytes |
-| `llvm_ir(module, target, optimization, lookup)` | The optimised LLVM IR as text, for `--emit=llvm-ir` |
-| `assembly(module, target, optimization, lookup)` | Assembly text, for `--emit=asm` |
+| `object(module, target, options, lookup)` | The `ObjectFile`: its target and its bytes |
+| `llvm_ir(module, target, options, lookup)` | The optimised LLVM IR as text, for `--emit=llvm-ir` |
+| `assembly(module, target, options, lookup)` | Assembly text, for `--emit=asm` |
+| `outputs(module, target, options, lookup, wanted)` | The bytes of each `CodegenOutput` in `wanted`, in its order, from one LLVM module (CLI-29) |
 
 Each declares every function first, emits each one, verifies the LLVM
-module, runs the pipeline and writes the output. A tuple is an LLVM struct
+module, runs the pipeline and writes the output. `CodegenOutput` is
+`UnoptimisedIr`, written before the pipeline runs, `LlvmIr` and `Bitcode`,
+written after it, and `Assembly` and `Object`. LLVM's code generator
+changes the module it writes, so each machine code output but the last is
+written from a copy of the module, and `object`, `llvm_ir` and `assembly`
+each give the bytes `outputs` gives for the same output. A tuple is an LLVM struct
 of its items that have a value, so an item of type `None` takes no field and
 the empty tuple is `{}`. `abi::storage_order` orders the fields by
 decreasing `alignment`, 8 bytes for an `int`, a `float` and an object, 1 for
@@ -3266,13 +3602,15 @@ file names and lines of traceback entries. Every error is internal, E9001.
 The crate has one module per responsibility: the target, the optimisation
 level, the shared layout, static objects, the calling convention, runtime
 declarations, function setup, operation dispatch, constants, arithmetic,
-comparisons, calls and counting, terminators, and emission.
+comparisons, operations on inline ints in place, list items, division and
+conversion in place, calls and counting, terminators, and emission.
 
 ### 10.2 Contract with the runtime
 
 | Item | Form |
 | --- | --- |
-| `int` | A 64-bit word. An inline value has its lowest bit set and holds the number shifted left by one; any other word is the address of a large integer. Every `int` argument of a runtime function is such a word |
+| `int` | A 64-bit word. An inline value has its lowest bit set and holds the number shifted left by one; any other word is the address of a large integer. Every `int` argument of a runtime function is such a word. The generated code does `+`, `-`, `*`, unary `-`, `~`, `&`, `\|`, `^` and the comparisons of two inline words in place, with LLVM's overflow intrinsics, and calls the runtime for a large integer or a result outside the inline range; a reference count of an `int` word calls the runtime only for a large integer (ADR-0102). `//` and `%` of two inline words, with a divisor other than zero and other than `-2**62 // -1`, and `float()` of an inline word, are done in place too, and so is `/` of two floats whose divisor is not zero; the runtime takes every other case and raises (ADR-0107) |
+| List items | `ListObject` is `#[repr(C)]`: `length` at offset 8, `kind` at 24 and `items` at 32, which a runtime test pins. `list[i]` with an inline `i` inside the list, counted from the end when negative, loads the slot in place when the kind is below 5, a word item; `list[i] = x` stores in place when the kind is below 3 and, for `int` items, both the new and the replaced word are inline. Every other read and write calls `typy_rt_list_get`, `typy_rt_list_set` or `typy_rt_list_set_moved` (ADR-0107) |
 | `float`, `bool`, objects | A double, an `i1`, a pointer. A `bool` returned by the runtime is one byte, and a `bool` argument is declared `zeroext i1`, as Rust declares it (ADR-0053) |
 | Object header | 8 bytes: `reference_count: u32`, then `type_id: u32`. A count of `u32::MAX` marks an immortal object, whose header the runtime never writes |
 | Type IDs | `str` is 1, an exception is 2, a large integer is 3, a list is 4, a `tuple[T, ...]` is 5, a `bytes` is 6, a set is 7, a dict is 8, a view of a dict is 9, a type object is 10 and an instance of a class is 11 |
@@ -3447,23 +3785,38 @@ escapes `"`, the backslash and control characters.
 
 ## 11. typy-build
 
-`BuildMode` is `Debug`, `Release` or `ReleaseSmall`, and
-`BuildMode::optimization()` gives the codegen `Optimization` of CLI-05.
-`EmitStage` is `Ast`, `TypedAst`, `Tyir`, `TyirMem`, `LlvmIr`, `Asm` or
-`Obj`; `EmitStage::parse` accepts the lower-case names of CLI-04.
+`BuildMode` holds an `Optimization`: `BuildMode::DEBUG`, `RELEASE` and
+`RELEASE_SMALL` are `-O0`, `-O2` and `-Oz`, the modes of CLI-05, and
+`BuildMode::of` makes the others (CLI-20). `is_debug` holds for `-O0`, which
+keeps debug information, `runtime_directory` names `typy-small` for `-Os`
+and `-Oz`, and `name` gives `debug`, `release`, `release-small`, `O1`, `O3`
+or `Os` for the cache key.
+`EmitStage` is `Ast`, `TypedAst`, `Tyir`, `TyirMem`, `LlvmIrUnoptimised`,
+`LlvmIr`, `LlvmBc`, `Asm` or `Obj`, ordered as the pipeline runs them;
+`EmitStage::parse` accepts the lower-case names of CLI-04 and CLI-29, and
+`codegen_output` gives the `CodegenOutput` of each stage from
+`llvm-ir-unoptimised` on. `path_beside(output)` names a stage's file
+beside the output, its name up to the first dot with the stage's
+extension: `ll`, `unoptimised.ll`, `bc`, `s` and `o`, as `rustc --emit`
+names them, and the stage's name for the others. `--save-temps` names its
+object file the same way.
 
 `BuildRequest`
 
 | Field | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `main` | `Utf8PathBuf` | none | Ends in `.py`, or `BuildRequest::new` returns `RequestError::NotPython`; that the file exists is checked when it is loaded (E0105) |
-| `mode` | `BuildMode` | `Debug` | `--release` and `--release-small` are exclusive |
+| `main` | `MainSource` | none | A file ends in `.py`, or `BuildRequest::new` and `of_main` return `RequestError::NotPython`; that the file exists is checked when it is loaded (E0105). `directory()` is the file's directory, empty for a module or code |
+| `mode` | `BuildMode` | `DEBUG` | Two flags that give two levels are wrong usage (CLI-30) |
 | `target` | `Target` | `Target::host()` | Supported (section 10.1) |
-| `emit` | `Option<EmitStage>` | `None` | When set, no executable is written |
-| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it; a library's files are named by `LibraryLayout` |
+| `emit` | `Vec<EmitStage>` | empty | In pipeline order, each stage once; `with_emit` adds one. When any is set, no executable is written (CLI-29) |
+| `output` | `Option<Utf8PathBuf>` | `None` | `output_path()` defaults an executable's to the main file without `.py`, next to it, or to the program's name for a module or code; a library's files are named by `LibraryLayout` |
 | `library` | `Option<LibraryKind>` | `None` | `Static` or `Shared` builds a C library instead of an executable (CLI-09) |
+| `processor` | `Option<String>` | `None` | A processor of the target, checked by the command line; `None` for the baseline (CLI-21) |
+| `features` | `String` | empty | Features beside the processor's, as LLVM writes them (CLI-30) |
 
-Each field has a `with_` method that returns the changed request.
+Each field has a `with_` method that returns the changed request;
+`with_processor` sets the processor and the features together, and
+`codegen_options` gives the `CodegenOptions` of the request.
 
 `RuntimeArchive::beside(executable, triple, mode)` opens
 `<prefix>/lib/typy/<triple>/libtypy_runtime.a` for a compiler at
@@ -3560,16 +3913,18 @@ gives E0702 with the directory. None of them has a source location. An
 
 `Pipeline::new(compiler)` takes the path of the `typy` executable, which
 finds the runtime archives (section 11). `with_overrides` adds the
-settings of the command line (CLI-07) and `with_deny_warnings` makes
-warnings fail (DIA-07); the pipeline holds nothing else, so one pipeline
-runs any number of builds, and the conformance suite runs many in one
-process. Each method returns a `Success`, the `Outcome` with the
-`Warnings` of loading and checking the program, or a `Failure`.
+settings of the command line (CLI-07), `with_warning_levels` the level of
+each warning (DIA-07, CLI-27), and `with_verbose` and `with_save_temps`
+what CLI-23 and CLI-24 ask; beside these it holds only the time each stage
+took, so one pipeline runs any number of builds, and the conformance
+suite runs many in one process. Each method returns a `Success`, the
+`Outcome` with the `Warnings` of loading and checking the program, or a
+`Failure`.
 
 | Method | Behaviour |
 | --- | --- |
-| `check(main, target)` | Loads and checks the program for the target, whose operating system `ProjectSettings::platform` takes, and returns `Outcome::Checked` with its `Sources` (CLI-03, LIB-22) |
-| `run(request)` with `emit` set | Runs the stages up to that stage and returns `Outcome::Emitted` with an `Emission`: `Text` for every stage but `obj`, `Bytes` for `obj` (CLI-04). `ast` needs only a program that parses; every later stage needs one that checks |
+| `check(main, target)` | Loads and checks the program whose `MainSource` is `main` for the target, whose operating system `ProjectSettings::platform` takes, and returns `Outcome::Checked` with its `Sources` (CLI-03, LIB-22) |
+| `run(request)` with `emit` set | Runs the stages up to the last stage asked for and returns `Outcome::Emitted` with each stage and its `Emission`, in pipeline order: `Bytes` for `llvm-bc` and `obj`, `Text` for the others (CLI-04, CLI-29). Code generation runs once, through `typy_codegen::outputs`, for every stage from `llvm-ir-unoptimised` on. `ast` needs only a program that parses; every later stage needs one that checks |
 | `run(request)` without `emit` | Opens the runtime archive, then loads, checks, lowers, generates the object and links it, and returns `Outcome::Executable` with the `Artifact` |
 | `run(request)` with `library` set | Loads the main file as a library, so its module is named after its file, then links with `link_library` into the layout of `-o`, or `LibraryLayout::beside` the main file with the module's name and release, and writes beside the library the C header `NAME.h`, and the binding `NAME_binding.py` and its stub `NAME_binding.pyi`, which load the soname of the shared library of the build's release, also for a static build (CLI-09, CLI-13, FFI-05, FFI-08) |
 
@@ -3584,9 +3939,10 @@ Warnings come from two places (ADR-0017, ADR-0033). `parse_with_warnings`
 scans the parser's tokens for invalid escapes, W0101, and
 `Project::warnings` keeps them; the subset walker gives W0301, the body
 checker W0401, and `TypedProgram::warnings` keeps the checker's. After
-checking, the pipeline joins them. With `deny_warnings` set, any warning
-makes a `Failure` before lowering, so no
-code is generated; otherwise `Warnings` holds them with the project's
+checking, the pipeline joins them and applies its `WarningLevels`, which
+drop allowed warnings and mark denied ones as errors (CLI-27). When any
+is denied, the warnings make a `Failure` before lowering, so no code is
+generated; otherwise `Warnings` holds them with the project's
 `Sources`, and with `Sources::None` when there are none, so a clean build
 copies nothing.
 
@@ -3595,12 +3951,16 @@ copies nothing.
 | Item | Design |
 | --- | --- |
 | Arguments | Parsed with `clap`; the commands `check FILE`, `build FILE` and `run FILE [-- ARGS]` in 0.1, `explain` in 0.3. Each of the three takes `--python-floor VERSION`, which becomes `SettingOverrides` for `Pipeline::with_overrides`. `build` takes `--emit=STAGE` and `-o PATH`; `build` and `run` take `--release` or `--release-small`, never both. `build` and `check` take `--lib static` or `--lib shared`, which sets `SettingOverrides::library` and the request's `library` (CLI-09). A main file that is not a `.py` file is wrong usage |
-| Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text` and written to standard error with a blank line between two of them, or with `render_json` one per line. The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` output goes to `-o`, or to standard output without it. A file that cannot be written gives E0106 |
+| Output | `Reporter` writes diagnostics in the `--error-format` the command line chose, a global flag: sorted, rendered with `render_text`, or `render_coloured` when the global `--color` asks for colour, and written to standard error with a blank line between two of them, or with `render_json` one per line. `output::colours` decides: `always`, `never`, or for `auto` when standard error is a terminal and `NO_COLOR` is not set or is empty (CLI-26). The panic guard and internal errors use the same reporter, so a tool reading JSON also gets E9001 as JSON (UC-10). `--emit` takes stages separated by commas, and may be given again. The output of one stage goes to `-o`, or to standard output without it; several stages go each to `EmitStage::path_beside` the output path, `-o` or the main file without `.py` (CLI-29). A file that cannot be written gives E0106 |
 | `typy explain CODE` | Prints the section of `docs/diagnostics/troubleshooting.md` for the code, embedded in the binary with `include_str!`, so the page and the command never disagree: its heading and prose, its samples indented by four spaces without their fences and `typy-expect` comments, links as their text, then the rule from the registry (CLI-10, UC-04). A retired code says so and names its replacement. A text that is not a code, or a code the registry lacks, is wrong usage, status 2. Every section of a code whose cause is one program file holds a program that gives it and the corrected program, which the documentation test runs; the codes about files, settings, the C toolchain and imports between modules show their files as text, and E0429, which only a library build gives, shows modules that are correct as programs |
 | Exit status | `ExitStatus` is `Success = 0`, `ProgramErrors = 1`, `Usage = 2` and `Internal = 101` (CLI-06); a failure with any `E9xxx` diagnostic is `Internal`. `typy run` exits with the program's status, or 128 plus the signal that ended it |
 | Panic guard | The command runs on a thread of its own with a 512 MiB stack (ADR-0020), inside `std::panic::catch_unwind`, with a panic hook that records the location in a thread-local; a panic becomes E9001 with the location and message, and exit status 101 |
-| Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes `--deny-warnings` |
-| `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error |
+| Warnings | `Reporter::warnings` writes the warnings of a `Success` before the command's output. `--deny-warnings` is a global flag. `arguments::Levels` holds `-W`, `-A` and `-D CODE`, flattened into `typy` itself and into `check`, `build` and `run`, since clap drops a global option's values from before the command when the command has its own. `Arguments::global` turns them into `WarningLevels`: `--deny-warnings` first as `-D warnings`, then the options before the command, then those after it, each in the order clap's `indices_of` gives (CLI-27). `Pipeline::with_warning_levels` takes them. `typy run` checks a program whose build it takes from the cache, so its warnings show on every run, and the cache key includes the levels |
+| `typy print WHAT` | `command::print` writes one fact a line, in `typy.toml`'s form (CLI-25): `targets` from `TargetTriple::ALL` with `builds_on` the host; `target-cpus` the triple's baseline `TargetTriple::cpu`, `native` with `typy_codegen::host_processor` for the host, and the processors LLVM lists, which it writes only to standard error, so `print` runs its own `typy` with the hidden command `llvm-processor-help` and reads them from the child; `paths` from `RuntimeArchive::path_beside` and the cache directory; `settings` from `ProjectSettings::read` with the command line's overrides, refused as `typy check` refuses them; and `version` |
+| Code generation flags | `arguments::Generation` holds `--release`, `--release-small`, `-O LEVEL`, `--target-cpu` and each `-C KEY=VALUE` of `build` and `run`; `Generation::choice` gives one level and one processor, and two flags that give two values are wrong usage, while two that give one agree (CLI-20, CLI-30, ADR-0104). `command::generation::resolve` turns `native` into `host_processor` and `host_features`, only when the build is for the host, and checks any other name against `print::known_processors` (CLI-21). `main` answers `-C help` in any of its spellings before the command is parsed, from `CODEGEN_KEYS`, so it needs no file. The `run` cache key adds the processor and the features to the mode's name (CLI-33) |
+| Inspection | `-v` and `--timings` are global options, and `--save-temps` an option of `build` and `run` (ADR-0104). `Pipeline::with_verbose` passes `-v` to `Linker::with_verbose` and `Toolchain::with_verbose`, whose `run` writes `typy_build::command_line` of each tool before running it; `typy run -v` writes the program's command too (CLI-23). `Pipeline::timed` records each stage it runs, `load`, `check`, `lower`, `generate` and `link`, behind a `Mutex` of the pipeline, which the conformance suite shares between threads; `command::write_timings` writes them and their total after the command, also when it fails (CLI-22). `Pipeline::with_save_temps` writes the object a build generated beside its output, named after the output up to its first dot, E0106 when it cannot (CLI-24) |
+| External commands | clap's external subcommand gives `typy NAME ARGS` for any NAME that is not a command; `command::external` accepts a NAME of letters, digits, `-` and `_` only, so it never names a path, finds the first executable `typy-NAME` in `PATH`, and runs it with ARGS, `TYPY` set to `typy`'s own path, its streams and status passed through as `typy run` passes a program's; otherwise exit status 2 (CLI-32, ADR-0105) |
+| `typy run` | Builds into `cache/<key>/<name>`, where the cache is `$TYPY_HOME/cache`, else `$XDG_CACHE_HOME/typy` or `~/.cache/typy`, and `key` is the SHA-256 of the compiler version, the mode, the target, the main file's name and its text, each preceded by its length; a module counts as `-m NAME` and code as `-c`, and the code is the text of the file `<string>`. A build already in the cache is run again without compiling. The executable gets the arguments after `--` and the same standard input, output and error. `arguments::Main` is a clap group that takes one of FILE, `-c CODE` and `-m MODULE` and gives the `MainSource` (CLI-28); for code the program's `argv[0]` is `-c`, and for a module the full path of its file, set with `CommandExt::arg0`, as CPython sets `sys.argv[0]` |
 | Logging | `--log-level` arrives in 0.3 with UC-10; the 0.1 compiler has no log events |
 
 The pipeline is created with the path of the running executable, so an
@@ -3623,6 +3983,7 @@ and a `typy` in `<target>/debug/` finds the archives `make runtime` stages.
 | `ExceptionKind` | One variant per exception class the runtime raises | Names its class: `ExceptionKind::ValueError.class()` is `typy_rt_exception_ValueError` |
 | `TracebackEntry` | `function: *const u8`, `file: *const u8`, `line: u32` | One per frame passed through |
 | `ListObject` | Header, `length: usize`, `capacity: usize`, `kind: u32`, `words: u32`, `items: *mut u64`, `tuple: *const TupleType` | The items live in a buffer of their own, `words` eight-byte words each, so the list keeps its address as it grows; `kind` is an `ItemKind`: `Int`, `Float`, `Bool`, `Object`, `NoneValue` or `Tuple`, and `tuple` is the descriptor of tuple items or null |
+| `BytearrayObject` | Header, `buffer: *mut StrObject`, `capacity: usize` | A `bytearray`, under the type ID 37 (ADR-0108). The buffer is a `bytes` of the bytearray's length whose memory holds `capacity` bytes and a zero after them; it is never hashed or given to the program, and a runtime test pins the layout |
 | `SetObject` | Header, `fill: usize`, `used: usize`, `mask: usize`, `finger: usize`, `kind: u32`, `words: u32`, `tuple: *const TupleType`, `table: *mut u64`, `states: *mut u8` | A table of `mask + 1` slots, a power of two and at least eight, in one allocation with a state byte per slot after it: empty, active or dummy. A slot is a hash word followed by the item's words. `fill` counts the active and dummy slots, `used` the active ones, and `finger` is where `pop` starts, as in CPython's `PySetObject` |
 | `DictObject` | Header, `used: usize`, `filled: usize`, `usable: usize`, `log2: u32`, `key_kind: u32`, `value_kind: u32`, `key_words: u32`, `key_tuple`, `value_tuple`, `indices: *mut i64`, `entries: *mut u64`, `live: *mut u8` | CPython's combined table: the entries in insertion order, each a hash word, the key's words and the value's words, with a byte that says whether it holds an item, and `2**log2` index slots that hold an entry's position, -1 when empty or -2 when its entry was removed. `used` counts the items, `filled` the entries written, holes included, and `usable` the entries left before a resize. A new dict has no table, `log2` 0 |
 | `ViewObject` | Header, `kind: u32`, padding, `dict: *mut DictObject` | A view of a dict under the type ID 9: 0 shows the keys, 1 the values, 2 the items. It holds a reference to its dict, so the dict lives as long as the view |
@@ -3647,7 +4008,7 @@ and a `typy` in `<target>/debug/` finds the archives `make runtime` stages.
 | `library` | `typy_rt_library_load(module)` records the stack limit, keeps `['']` for `sys.argv`, runs the module bodies and flushes standard output; `_unload` flushes it and closes the files; `_enter` records the stack limit for the calling thread, `_leave` flushes standard output; `_raised(exception)` exits with a `SystemExit`'s status, or reports any other exception as uncaught and aborts (ADR-0044). `stack::record_limit` reads `getrlimit` once and measures from the current stack pointer |
 | `allocator` | `allocate`, `reallocate` and `free` over the program object's hooks `typy_rt_heap_allocate`, `typy_rt_heap_reallocate` and `typy_rt_heap_free` (section 10.5), asking for at least one byte. Running out of memory prints `MemoryError` and aborts. The unit tests define the hooks over `malloc`, `realloc` and `free`, since they link no program object |
 | `refcount` | `typy_rt_increment` and `typy_rt_decrement`, not atomic (A-03). A decrement to zero calls the type's `drop`, then frees the memory |
-| `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05). `typy_rt_int_from_int64` and `typy_rt_int_into_int64` convert a C `int64_t` for an export, the second dropping the word and raising `OverflowError: Python int too large to convert to C int64_t` outside its range (FFI-05) |
+| `int` | Addition, subtraction, multiplication, floor division, modulo, power, negation, comparison, conversion to and from `str` and `float`, all with Python's results (EXP-02, EXP-05). `typy_rt_int_from_int64` and `typy_rt_int_into_int64` convert a C `int64_t` for an export, the second dropping the word and raising `OverflowError: Python int too large to convert to C int64_t` outside its range (FFI-05). The arithmetic of large integers works on `int::limbs::Limbs`, which holds up to 16 limbs, 1024 bits, in place and moves to `malloc` only past them (ADR-0103) |
 | `float` | Division, floor division, modulo and power with the special cases of CPython's `float_divmod` and `float_pow`. `int / int`, `float(int)` and `float(str)` round once to the nearest double, ties to even, by CPython's `long_true_divide` method on exact integers. `int(float)` and `int` against `float` comparisons are exact. `round` rounds half to even on the exact value: `round(x)` to an integer, `round(x, n)` by rounding `x * 10**n` exactly and reading the result back with one correct rounding, as CPython's `_Py_dg_dtoa` and `_Py_dg_strtod` do, so `round(2.675, 2)` is `2.67`. Beyond 323 digits a `float` rounds to itself and below -308 to zero; a result too large raises `OverflowError: rounded value too large to represent`. `round` of an `int` with negative `ndigits` gives the even multiple of `10**-ndigits`, as `long_round` does. `repr` writes the shortest digits that read back as the same double, found exactly with large integers, and breaks an exact tie toward the even digit as CPython does; the layout is positional when the decimal exponent is from -4 to 15, otherwise scientific with a sign and at least two exponent digits, and `inf`, `-inf`, `nan` and `-0.0` are written as CPython writes them (DAT-02) |
 | `libm` | `floor`, `fmod`, `pow` and `ldexp` from the C maths library, which is why every link passes `-lm` |
 | `math` | The functions behind the `math` module (LIB-05, ADR-0018), one `typy_rt_math_*` symbol each. A function of the C library runs inside CPython 3.15's `math_1` or `math_2` checks: a NaN from a number is `ValueError`, with the function's 3.15 message such as `expected a nonnegative input, got -1.0`, or `math domain error`, and an infinity from a finite number `OverflowError: math range error` where the function can overflow. `pow`, `fmod`, `remainder`, `ldexp`, `ulp`, `nextafter`, `fma`, `isclose`, `hypot` and `dist`, with CPython's `vector_norm`, `gamma` and `lgamma`, with its Lanczos sum and its multiply-adds fused on AArch64 as the oracle's Clang build fuses them there, `fsum`, with Shewchuk's partials, and `sumprod`, with its machine-integer path, its triple-length path and the exact total it falls back to, are ported from `mathmodule.c`; `prod` of an `int` start keeps the exact product until its first `float` item, and each reads the member a union item holds (LIB-15), and `fmax` and `fmin` keep `x` when the two are equal, as the oracle's Clang build does. A logarithm of an `int` too large for a `float` is that of its top 55 bits, rounded once, plus its bit count times the logarithm of 2, by `fma`, as 3.15 does. `factorial` multiplies by halves, `isqrt` runs Newton's method from a power of two, `comb` and `perm` take exact running quotients, and `gcd` is Euclid's; each refuses what CPython refuses, with its message and its limit of a C `long`. The C functions are named with `#[link(name = "m")]`, so a Rust test binary of the runtime also calls the C library before `compiler_builtins` |
@@ -3678,6 +4039,7 @@ and a `typy` in `<target>/debug/` finds the archives `make runtime` stages.
 | `sys` | `typy_rt_sys_argv` builds the list once from the arguments of `main`, decoded as UTF-8 with each stray byte as U+DC80 to U+DCFF, as CPython's `surrogateescape` does. `typy_rt_input` writes the prompt, flushes standard output, then reads a line through `sys.stdin`'s reader without its `\n`, and raises `EOFError: EOF when reading a line` when nothing is left. `typy_rt_sys_getrecursionlimit` and `typy_rt_sys_setrecursionlimit` keep the limit, checked as a C `int` of at least 1. `exit_status` gives the status of an uncaught exception: for a `SystemExit` or a subclass, 0 for no code or `None`, the low byte of an `int`, 255 for one outside `i128` as CPython 3.15 gives, and 1 after writing any other value to standard error, all without a traceback; 1 with the report for any other exception |
 | `exception` | Defines the built-in exception classes with CPython's bases: `BaseException`, with `SystemExit` and `Exception`; under `Exception` `ArithmeticError` with `OverflowError` and `ZeroDivisionError`, `LookupError` with `IndexError` and `KeyError`, `RuntimeError` with `NotImplementedError` and `RecursionError`, `ValueError` with `UnicodeError` and its `UnicodeDecodeError` and `UnicodeEncodeError`, `OSError` with its fifteen subclasses and `io.UnsupportedOperation`, which `derives_from` also counts as a `ValueError`, its second base in CPython, and `AssertionError`, `AttributeError`, `EOFError`, `StopIteration` and `TypeError` (EXC-02, EXC-10). Each hashes by identity and writes its objects with `typy_rt_exception_repr` and `typy_rt_exception_str`. `str` is the runtime's message, or from the arguments: empty for none, the `str` of one, its `repr` for a `KeyError`, and the `repr` of the tuple of several; `repr` is the class name and the arguments between parentheses, with no comma after one, and a runtime message stands for the one argument (EXC-08). `typy_rt_exception_matches` walks the chain of bases (EXC-01). The exception being handled is one value, which `typy_rt_exception_enter` sets and returns the one before and `typy_rt_exception_leave` restores; every exception raised meanwhile, by the runtime or through `typy_rt_exception_raise`, takes it as its context, unless it is that exception, and a link back to the raised exception in the context's chain is cut first, as CPython's `_PyErr_SetObject` does. `typy_rt_exception_set_cause` sets the cause, or none, and suppresses the context (EXC-04). The runtime creates its exceptions with CPython's message for each operation. Where the oracle versions word a message differently, the runtime uses the wording of the newest, CPython 3.15 (OI-14): `division by zero` for every division and modulo of `int` and `float`, and `zero to a negative power` for `0.0 ** -1.0`. A conformance test cannot check such a message, because the oracles disagree on it, so the runtime's unit tests check it. It adds `TracebackEntry` values, and it prints an uncaught exception as CPython does: the oldest exception of its chain first, each followed by `The above exception was the direct cause of the following exception:` for a cause or `During handling of the above exception, another exception occurred:` for a context that `from` did not suppress, each exception shown once; for each, `Traceback (most recent call last):` when it was raised, one line per entry, an entry repeated in a row shown at most three times and the rest counted as `[Previous line repeated N more times]`, as CPython's `TB_RECURSIVE_CUTOFF` does, then `Type: message`, or `Type` alone when the message is empty, with the module before the class name unless it is `__main__`, and `<exception str() failed>` when `str` raises (STD-05). The report calls `str` through the class, so a program that raises nothing links none of the code that writes arguments (NFR-01) |
 | `bytes` | A `bytes` is a `str` object of one byte per code point under the type ID 6, so it shares the string algorithms; `typy_rt_bytes_concat`, `_repeat`, `_slice`, `_length`, `_compare` and `_contains` call them and keep the result a `bytes`. `_get` gives an item as an `int`, with `IndexError: index out of range` outside; `_contains_byte` raises `ValueError: byte must be in range(0, 256)` for an `int` outside; `_zeros` and `_from_list` build one, `bytes must be in range(0, 256)` and `negative count` as CPython words them; `_repr` writes `b'...'` in double quotes when the bytes hold a single quote and no double quote, and escapes every byte outside 0x20 to 0x7e as `\xhh` |
+| `bytearray` | `typy_rt_bytearray_new`, `_from_bytes`, `_from_list` and `_adopt` make one; `_adopt` takes a new `bytes` as the buffer when the caller holds its only reference and copies it otherwise, so no two bytearrays share a buffer. `_buffer` lends the buffer to the functions of `bytes`, and `_to_bytes` copies it. `_get`, `_set` and `_delete` take an item, the value checked before the position as CPython checks it; `_slice`, `_set_slice` and `_delete_slice` a slice, an extended one taking as many bytes as it selects; `_append`, `_extend`, `_extend_list`, `_insert`, `_pop`, `_remove`, `_reverse`, `_clear` and `_copy` are the list methods; `_concat`, `_repeat`, `_repeat_in_place` and `_contains_byte` the operators; and `_repr` writes `bytearray(b'...')`. Growing doubles the capacity. Extending or assigning a bytearray from its own buffer reads the bytes before the buffer can move. The type object has no hash, since a bytearray can change |
 | `bytes` methods | The string algorithms read the type ID of the object they are given: on a `bytes`, whitespace is only space, `\t`, `\n`, `\v`, `\f` and `\r`, line breaks are `\n`, `\r` and `\r\n`, a missing `index` raises `subsection not found`, a fill of the wrong length raises CPython 3.15's `center(): argument 2 must be a byte string of length 1, not a bytes object of length 2` (OI-14), and every text they build is a `bytes`. `typy_rt_bytes_search` and the other `bytes_` symbols forward to them under `bytes` signatures; `_case`, `_test` and `_hex` are ASCII only, as CPython's are |
 | `codec` | `typy_rt_str_encode` and `typy_rt_bytes_decode` with the codecs and handlers above. A run of code points the codec cannot encode, surrogates for `utf-8` or those past its range for `ascii` and `latin-1`, is one error, and UTF-8 is decoded as CPython's decoder does: a lead byte outside `C2` to `F4` is an invalid start byte, a byte outside the range its lead allows ends an invalid continuation, and data that runs out is an unexpected end of data; `replace` gives one U+FFFD for each error range. The messages of `UnicodeEncodeError` and `UnicodeDecodeError` are CPython's, such as `'utf-8' codec can't decode byte 0xff in position 0: invalid start byte` |
 | `tuple` | A list of tuples stores each tuple inline, in the words its descriptor gives, and the list's header keeps the descriptor. A `TupleType` holds the item size, a multiple of eight bytes and at least eight, the number of items, and a `Field` for each: its `ItemKind` code, its byte offset, and a nested tuple's descriptor. A `bool` field is one byte and `None` takes none. `retain`, `release`, `equal`, `order` and `repr` walk the fields, so the compiler emits data and no code: tuples order as CPython orders them, by the first pair of items that are not equal, and `repr` writes `(1,)` for one item |

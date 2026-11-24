@@ -128,16 +128,17 @@ pub(super) struct FunctionScope<'known> {
     pub(super) copies: &'known std::cell::RefCell<crate::body::ClassCopies>,
 }
 
-/// Collects the module's functions in source order, with their signatures (TYP-01). Each
-/// signature may name the classes whose `class` statements come before its `def`, and the
-/// classes of the modules checked before it, numbered below `first_class`.
+/// Collects the module's functions in source order, with their signatures (TYP-01), and the
+/// signatures of the overloads of each that has them, by its ID (TYP-29). Each signature may
+/// name the classes whose `class` statements come before its `def`, and the classes of the
+/// modules checked before it, numbered below `first_class`.
 pub(super) fn collect_functions<'tree>(
     statements: &'tree [Stmt],
-    first_class: usize,
+    (first_class, first_function): (usize, usize),
     known: &FunctionScope<'_>,
-    floor_defers: bool,
+    (floor_defers, stubs): (bool, &super::overloads::Overloads),
     diagnostics: &mut Diagnostics,
-) -> Vec<Definition<'tree>> {
+) -> (Vec<Definition<'tree>>, super::overloads::Overloaded) {
     let FunctionScope {
         classes,
         instances,
@@ -145,6 +146,7 @@ pub(super) fn collect_functions<'tree>(
         copies,
     } = *known;
     let mut functions: Vec<Definition<'tree>> = Vec::new();
+    let mut overloads = Vec::new();
     let mut classes_before = u32::try_from(first_class).unwrap_or(u32::MAX);
     for statement in statements {
         if matches!(statement, Stmt::ClassDef { .. }) {
@@ -182,12 +184,50 @@ pub(super) fn collect_functions<'tree>(
             .map(|parameter| (parameter.name.clone(), Type::parameter(parameter.clone())))
             .collect();
         scope.parameters = &in_scope;
-        let mut made = definition(&parts, None, &scope, diagnostics);
+        // A function of the module without a result annotation takes the result its
+        // `return` statements give, which `inference` finds before any call is checked
+        // (TYP-26, ADR-0092).
+        let mut made = definition(&parts, (None, true), &scope, diagnostics);
         made.type_parameters = type_parameters;
         super::protocol::protocol_parameters(&mut made, false, diagnostics);
+        let signatures =
+            overload_signatures(stubs.of_function(&made.name), None, &scope, diagnostics);
+        if !signatures.is_empty() {
+            let id =
+                FunctionId(u32::try_from(first_function + functions.len()).unwrap_or(u32::MAX));
+            overloads.push((id, signatures));
+        }
         functions.push(made);
     }
-    functions
+    (functions, overloads)
+}
+
+/// Returns the signature of each overload `stubs` defines, read in `scope`, of a method of
+/// `owner` when there is one (TYP-29).
+pub(super) fn overload_signatures(
+    stubs: &[Stmt],
+    owner: Option<&Owner>,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<FunctionSignature> {
+    stubs
+        .iter()
+        .filter_map(FunctionParts::of)
+        .map(|parts| {
+            let mut signature = definition(&parts, (owner, false), scope, diagnostics).signature;
+            // An overload's default, often `...`, only says a call may leave the parameter
+            // out; the implementation's default is the value.
+            for (parameter, written) in signature.parameters.iter_mut().zip(parts.parameters) {
+                if written.default.is_some()
+                    && parameter.default.is_none()
+                    && parameter.default_call.is_none()
+                {
+                    parameter.default = Some(TypedConstant::None);
+                }
+            }
+            signature
+        })
+        .collect()
 }
 
 /// Returns the type parameters of a generic function, each with its bound or its
@@ -272,21 +312,29 @@ fn instance_parameter(
     instance
 }
 
-/// Returns the definition of a function, or of a method of `owner`, whose first parameter is
-/// the instance and needs no annotation.
-/// Returns the definition of a function that is no method, such as a nested function, its
-/// annotations read in `scope` (FUN-04).
+/// Returns the definition of a nested function, its annotations read in `scope` (FUN-04). Its
+/// result is not inferred until 0.13, so a missing result annotation is E0204 (TYP-33).
 pub(crate) fn function_definition<'tree>(
     parts: &FunctionParts<'tree>,
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Definition<'tree> {
-    definition(parts, None, scope, diagnostics)
+    if parts.returns.is_none() {
+        let reason = (
+            "the result of a nested function is inferred from TyPy 0.13 on (TYP-33)",
+            "write its result type, such as `-> int`",
+        );
+        missing_result(&parts.name.name, parts.name.span, Some(reason), diagnostics);
+    }
+    definition(parts, (None, true), scope, diagnostics)
 }
 
+/// Returns the definition of a function, or of a method of `owner`. A function whose result
+/// may be inferred, `infers`, takes the error type for a missing result annotation, which the
+/// inference replaces; any other is E0204 without one.
 pub(super) fn definition<'tree>(
     parts: &FunctionParts<'tree>,
-    owner: Option<&Owner>,
+    (owner, infers): (Option<&Owner>, bool),
     scope: &AnnotationScope<'_>,
     diagnostics: &mut Diagnostics,
 ) -> Definition<'tree> {
@@ -333,6 +381,13 @@ pub(super) fn definition<'tree>(
             .as_ref()
             .filter(|_| default_call.is_none())
             .and_then(|default| default_value(default, &ty, diagnostics));
+        // A guard is a function's result, not a parameter's type (TYP-31).
+        let ty = if let Type::Guard(guard) = &ty {
+            diagnostics.push(misplaced_guard(guard.kind, parameter.name.span));
+            Type::Error
+        } else {
+            ty
+        };
         signature_parameters.push(SignatureParameter {
             name: parameter.name.name.clone(),
             ty,
@@ -347,7 +402,8 @@ pub(super) fn definition<'tree>(
         Some(annotation) => annotation_type(annotation, scope, diagnostics),
         // `__init__` returns `None`, so it may leave its return annotation out, as mypy allows.
         None if initializer => Type::NoneType,
-        None => missing_result(name, parts.name.span, diagnostics),
+        None if infers => Type::Error,
+        None => missing_result(name, parts.name.span, None, diagnostics),
     };
     if initializer && !returns.matches(&Type::NoneType) {
         diagnostics.push(
@@ -423,7 +479,8 @@ fn default_value(
         Constant::Float(value) => TypedConstant::Float(*value),
         Constant::Str(value) => TypedConstant::Str(value.clone()),
         Constant::StrPoints(points) => TypedConstant::StrPoints(points.clone()),
-        Constant::Complex { .. } | Constant::Bytes(_) | Constant::Ellipsis => return None,
+        Constant::Bytes(value) => TypedConstant::Bytes(value.clone()),
+        Constant::Complex { .. } | Constant::Ellipsis => return None,
     };
     if !constant.ty().is_assignable_to(ty) {
         let mut diagnostic = Diagnostic::new(
@@ -444,6 +501,19 @@ fn default_value(
             diagnostic = diagnostic.with_fix(*span, format!("{digits}.0"));
         }
         diagnostics.push(diagnostic);
+    } else if ty.has_literal()
+        && let Some(value) = crate::literal_type::LiteralValue::of_constant(&constant)
+        && !Type::literal(value.clone()).takes_literals_of(ty)
+    {
+        // A parameter of literal types takes only their values (TYP-28).
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(431),
+                *span,
+                format!("the default value is `{value}`, and the parameter is {ty}"),
+            )
+            .with_rule(RuleId::TYP_28),
+        );
     }
     Some(constant)
 }
@@ -462,20 +532,45 @@ pub(crate) fn exit_parameter(index: usize) -> Type {
     })
 }
 
-/// Returns the error type after reporting a function without a result annotation; a result
-/// inferred from its `return` statements is planned (TYP-26, ADR-0092).
-fn missing_result(name: &str, span: Span, diagnostics: &mut Diagnostics) -> Type {
+/// Returns the error type after reporting a function without a result annotation whose
+/// result is not inferred, with the reason and the help when one is given (TYP-26,
+/// ADR-0092).
+pub(super) fn missing_result(
+    name: &str,
+    span: Span,
+    reason: Option<(&str, &str)>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let message = match reason {
+        Some((reason, _)) => {
+            format!("function `{name}` has no return annotation, and {reason}")
+        }
+        None => format!("function `{name}` has no return annotation"),
+    };
+    let help = match reason {
+        Some((_, help)) => help,
+        None => {
+            "write its result type, such as `-> int`; TyPy infers the result of a function \
+             defined at module level and of an instance method, not of this one"
+        }
+    };
     diagnostics.push(
-        Diagnostic::new(
-            DiagnosticCode::error(204),
-            span,
-            format!("function `{name}` has no return annotation"),
-        )
-        .with_rule(RuleId::TYP_01)
-        .with_help(
-            "write `-> None` if it returns nothing; a result inferred from the `return` \
-             statements is planned for TyPy 0.12 (TYP-26)",
-        ),
+        Diagnostic::new(DiagnosticCode::error(204), span, message)
+            .with_rule(RuleId::TYP_01)
+            .with_help(help),
     );
     Type::Error
+}
+
+/// Returns E0408 for `TypeGuard[T]` or `TypeIs[T]` written other than as a function's result.
+fn misplaced_guard(kind: crate::guard_type::GuardKind, span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(408),
+        span,
+        format!(
+            "`{}[...]` is written as a function's result, which narrows its first argument",
+            kind.name()
+        ),
+    )
+    .with_rule(RuleId::TYP_31)
 }

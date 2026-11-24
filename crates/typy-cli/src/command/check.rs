@@ -14,7 +14,7 @@ pub(super) fn check(
     target: Target,
     reporter: Reporter,
 ) -> ExitStatus {
-    match pipeline.check(file, target) {
+    match pipeline.check(&typy_source::MainSource::File(file.to_owned()), target) {
         Ok(success) => {
             reporter.warnings(success.warnings);
             ExitStatus::Success

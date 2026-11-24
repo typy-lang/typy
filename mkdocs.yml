@@ -2,7 +2,7 @@
 # the Markdown under docs/ (DOC-05, ADR-0050). Every setting here is one that
 # Material for MkDocs 9.8 also reads, so either tool builds the site from
 # this file. scripts/build-docs.sh builds it in strict mode into site/.
-site_name: TyPy 0.11 documentation
+site_name: TyPy 0.12 documentation
 site_url: https://typy-lang.org/
 site_description: >-
   TyPy compiles a strict, typed subset of standard Python ahead of time to
@@ -85,6 +85,7 @@ nav:
   - Home: index.md
   - What's new:
       - whatsnew/index.md
+      - What's new in TyPy 0.12: whatsnew/0.12.md
       - What's new in TyPy 0.11: whatsnew/0.11.md
       - What's new in TyPy 0.10: whatsnew/0.10.md
       - What's new in TyPy 0.9: whatsnew/0.9.md
@@ -126,6 +127,7 @@ nav:
       - "Research: values whose type is known late": research/static-and-dynamic-values.md
       - "Research: threads and data races": research/threads-and-data-races.md
       - "Research: newer Python and a typed standard library": research/newer-python-and-a-typed-standard-library.md
+      - "Research: the command lines of compilers": research/compiler-command-lines.md
       - Requirements specification: requirements/srs.md
       - Use case model: modeling/use-case-model.md
       - Domain model: modeling/domain-model.md
@@ -233,6 +235,28 @@ nav:
           - adr/0099-plan-star-star-in-calls-of-built-ins-for-1-0.md
           - adr/0100-build-the-runtime-for-speed-and-for-size-only-for-release-small.md
           - adr/0101-keep-the-hash-of-a-str-in-the-object.md
+          - adr/0102-do-arithmetic-on-inline-ints-in-place.md
+          - adr/0103-compute-large-ints-up-to-1024-bits-in-fixed-width-storage.md
+          - adr/0104-spell-common-options-as-flags-and-the-rest-as-c-key-value.md
+          - adr/0105-extend-typy-through-external-typy-name-commands.md
+          - adr/0106-pass-nothing-to-llvms-global-command-line.md
+          - adr/0107-read-list-items-and-divide-inline-values-in-place.md
+          - adr/0108-hold-a-bytearray-in-a-growable-bytes-buffer.md
+          - adr/0109-keep-the-result-annotation-where-a-class-offers-the-result.md
+          - adr/0110-hold-a-literal-types-values-as-its-base-type.md
+          - adr/0111-leave-code-that-cannot-run-unchecked-and-uncompiled.md
+          - adr/0112-check-a-call-against-the-first-overload-that-takes-it.md
+          - adr/0113-read-self-as-the-class-a-call-is-made-through.md
+          - adr/0114-test-what-a-type-guard-narrows-when-the-program-runs.md
+          - adr/0115-refuse-a-direct-call-of-an-abstract-method-that-gives-no-value.md
+          - adr/0116-make-enum-members-class-variables-and-the-class-calls-hidden-methods.md
+          - adr/0117-read-an-int-or-str-enum-member-as-its-value-where-the-value-is-wanted.md
+          - adr/0118-make-each-flag-composite-once-and-keep-it-by-its-value.md
+          - adr/0119-provide-the-standard-library-modules-that-need-no-operating-system-first.md
+          - adr/0120-check-a-comparison-of-a-type-parameter-in-each-copy.md
+          - adr/0121-give-copy-from-the-compiler-in-0-13.md
+          - adr/0122-give-hash-as-the-hash-a-dict-keeps-a-key-by.md
+          - adr/0123-write-frozendict-as-a-class-every-module-of-the-floor-imports.md
       - Detailed design: design/detailed-design.md
       - Test plan: testing/test-plan.md
       - Benchmark report: testing/benchmark-report.md

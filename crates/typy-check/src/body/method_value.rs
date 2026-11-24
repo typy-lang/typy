@@ -124,6 +124,11 @@ impl BodyChecker<'_> {
             .program
             .method(class, &name.name)
             .unwrap_or(FunctionId(0));
+        // The function the class holds runs the abstract method's own body when called (CLS-45).
+        let returns = self.program.signatures[method.0 as usize].returns.clone();
+        if let Some(refused) = self.empty_abstract_run(class, &name.name, &returns, name.span) {
+            return self.error(refused, span);
+        }
         let value = match self.adapted_callable(method, 0, span) {
             Some((parameters, returns)) => self.adapted_function_value(
                 (class, method),

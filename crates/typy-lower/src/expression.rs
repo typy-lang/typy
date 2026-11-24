@@ -228,6 +228,7 @@ impl FunctionLowerer<'_> {
                 left,
                 operators,
                 comparators,
+                ..
             } => self.comparison_chain(left, operators, comparators, span),
             TypedExprKind::IfExp { test, body, orelse } => {
                 self.conditional(test, body, orelse, ty, span)
@@ -480,11 +481,13 @@ impl FunctionLowerer<'_> {
             TyirType::Object(typy_tyir::TypeId::LIST) => return self.list_truth(lowered, span),
             TyirType::Object(
                 typy_tyir::TypeId::BYTES
+                | typy_tyir::TypeId::BYTEARRAY
                 | typy_tyir::TypeId::SET
                 | typy_tyir::TypeId::DICT
                 | typy_tyir::TypeId::DICT_VIEW,
             ) => {
                 let function = match lowered.ty {
+                    TyirType::BYTEARRAY => RuntimeFunction::BytearrayLength,
                     TyirType::SET => RuntimeFunction::SetLength,
                     TyirType::DICT => RuntimeFunction::DictLength,
                     TyirType::VIEW => RuntimeFunction::DictViewLength,

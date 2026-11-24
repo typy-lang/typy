@@ -23,6 +23,7 @@ impl BodyChecker<'_> {
         keywords: &[Keyword],
         span: Span,
     ) -> TypedExpr {
+        self.add_to_empty(function, arguments, keywords, span);
         let Some(at) = unpacking(arguments, keywords) else {
             return self.call_expression(function, arguments, keywords, span);
         };

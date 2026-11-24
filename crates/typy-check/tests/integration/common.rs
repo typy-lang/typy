@@ -89,3 +89,26 @@ pub(crate) fn dump(source: &str) -> String {
     let _ = std::fs::remove_dir_all(&root);
     text
 }
+
+/// Returns each warning of the accepted one-module program `source`, as its code and message.
+pub(crate) fn warnings(source: &str) -> Vec<String> {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static NEXT: AtomicU32 = AtomicU32::new(0);
+    let base = Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
+    let root = base.join(format!(
+        "typy-check-warnings-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("app.py"), source).unwrap();
+    let project = Project::load(&root.join("app.py"), ProjectSettings::new(root.clone())).unwrap();
+    let checked = TypeChecker::check(&project);
+    let _ = std::fs::remove_dir_all(&root);
+    checked
+        .expect("the program is accepted")
+        .warnings
+        .iter()
+        .map(|warning| format!("{}: {}", warning.code(), warning.message()))
+        .collect()
+}

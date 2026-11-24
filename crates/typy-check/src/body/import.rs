@@ -5,7 +5,7 @@ use typy_diagnostics::{Diagnostic, DiagnosticCode, RuleId, Span};
 use typy_source::syntax::{Alias, Expr, Identifier, Stmt};
 use typy_source::{ModuleName, absolute_name};
 
-use super::builtin_module::{BuiltinName, ModuleFunction, is_builtin_module};
+use super::builtin_module::{BuiltinName, MATH_INTEGER, ModuleFunction, is_builtin_module};
 use crate::check::{ANNOTATION_MODULES, AnnotationName, annotation_name};
 
 use super::{BodyChecker, Program};
@@ -137,6 +137,9 @@ impl Program {
                     for alias in names {
                         let found = annotation_name(base.as_str(), &alias.name.name)
                             .ok_or_else(|| Box::new(not_given(&base, alias)))?;
+                        if let Some(refused) = self.newer_than_floor(&base, alias) {
+                            return Err(Box::new(refused));
+                        }
                         let bound = alias.as_name.as_ref().unwrap_or(&alias.name);
                         resolved.names.push((
                             bound.name.clone(),
@@ -145,6 +148,10 @@ impl Program {
                         ));
                     }
                     return Ok(resolved);
+                }
+                // `math.integer` is a submodule from Python 3.15; below, `math` is no package.
+                if base.as_str() == MATH_INTEGER && !self.has_math_integer() {
+                    return Err(Box::new(not_a_package(&base, *span)));
                 }
                 if is_builtin_module(base.as_str()) && !self.loaded.contains(base.as_str()) {
                     return self.builtin_names(base.as_str(), names, resolved);
@@ -191,9 +198,35 @@ impl Program {
         }
         names
             .iter()
-            .filter(|alias| annotation_name(base.as_str(), &alias.name.name).is_none())
-            .map(|alias| not_given(&base, alias))
+            .filter_map(|alias| {
+                if annotation_name(base.as_str(), &alias.name.name).is_none() {
+                    return Some(not_given(&base, alias));
+                }
+                self.newer_than_floor(&base, alias)
+            })
             .collect()
+    }
+
+    /// Returns the error for a name of `typing` newer than the program's Python floor:
+    /// `TypeIs` is there from Python 3.13 (TYP-31).
+    fn newer_than_floor(&self, module: &ModuleName, alias: &Alias) -> Option<Diagnostic> {
+        let name = &alias.name.name;
+        if module.as_str() != "typing" || name != "TypeIs" || self.floor >= 13 {
+            return None;
+        }
+        Some(
+            Diagnostic::new(
+                DiagnosticCode::error(425),
+                alias.name.span,
+                format!("module `typing` has no name `{name}` before Python 3.13"),
+            )
+            .with_rule(RuleId::TYP_31)
+            .with_help(format!(
+                "the program's Python floor is 3.{}; set `python-floor = \"3.13\"` in typy.toml \
+                 to use it, or use `TypeGuard`",
+                self.floor
+            )),
+        )
     }
 
     /// Returns the type alias `name` of a module, as an importing module reads it.
@@ -254,16 +287,14 @@ impl Program {
         if !is_builtin_module(module.top().as_str()) || self.loaded.contains(module.as_str()) {
             return Ok(None);
         }
-        // `math.integer` is a submodule from Python 3.15 (PEP 791), planned for 0.12.
-        if module.as_str() == "math.integer" && self.floor >= 15 {
-            return Err(Box::new(
-                Diagnostic::new(
-                    DiagnosticCode::error(201),
-                    span,
-                    "the module `math.integer` is planned for TyPy 0.12 (LIB-26)",
-                )
-                .with_rule(RuleId::LIB_26),
-            ));
+        // `math.integer` is a submodule from Python 3.15 (PEP 791); `import math.integer`
+        // binds `math`, through which `math.integer` reads it (LIB-26).
+        if module.as_str() == MATH_INTEGER && self.has_math_integer() {
+            let (bound, value) = match &alias.as_name {
+                Some(as_name) => (as_name.name.clone(), module.clone()),
+                None => ("math".to_owned(), module.top()),
+            };
+            return Ok(Some((bound, Imported::Module(value), alias.name.span)));
         }
         if module.parent().is_some() {
             return Err(Box::new(not_a_package(module, span)));
@@ -364,12 +395,18 @@ impl Program {
         }
         // The modules a later release gives (ADR-0093, ADR-0097).
         let planned = match top {
+            // `os.path` comes with the modules of LIB-35, the rest of `os` later.
+            "os" if module.as_str() == "os.path" => Some(("0.13", RuleId::LIB_35)),
             "os" => Some(("1.0", RuleId::LIB_07)),
-            "enum" => Some(("0.12", RuleId::CLS_44)),
-            "abc" => Some(("0.12", RuleId::CLS_45)),
-            "textwrap" | "base64" | "heapq" | "bisect" | "statistics" | "time" | "random"
-            | "copy" | "string" => Some(("0.12", RuleId::LIB_27)),
-            "__future__" => Some(("0.12", RuleId::LIB_29)),
+            "itertools" | "collections" | "datetime" | "pathlib" | "fractions" | "re" => {
+                Some(("0.13", RuleId::LIB_35))
+            }
+            "warnings" => Some(("0.13", RuleId::LIB_38)),
+            "json" | "functools" | "argparse" | "logging" | "csv" => Some(("0.14", RuleId::LIB_36)),
+            // These reach the operating system through `_typy` (ADR-0119).
+            "statistics" | "time" | "random" => Some(("0.13", RuleId::LIB_30)),
+            // `copy` reads each object's class, so the compiler gives it (ADR-0121).
+            "copy" => Some(("0.13", RuleId::LIB_33)),
             _ => None,
         };
         Err(Box::new(match planned {
@@ -393,8 +430,8 @@ impl Program {
             )
             .with_rule(RuleId::LIB_08)
             .with_help(
-                "TyPy provides `math`, `sys`, `dataclasses`, `typing`, `collections.abc` and \
-                 `types`",
+                "TyPy provides `math`, `sys`, `dataclasses`, `abc`, `enum`, `typing`, \
+                 `collections.abc` and `types`",
             ),
         }))
     }
@@ -412,7 +449,7 @@ fn not_a_package(module: &ModuleName, span: Span) -> Diagnostic {
 }
 
 /// Returns the error for a name of `typing`, `collections.abc`, `types` or `dataclasses` that
-/// TyPy does not give: one a later release gives, such as `Any`, `cast`, `Literal` or some
+/// TyPy does not give: one a later release gives, such as `Any`, `TypedDict` or some
 /// abstract collections, names that release, and any other name is not given (LIB-17).
 fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let name = &alias.name.name;
@@ -442,10 +479,6 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
     let typing = module.as_str() == "typing";
     let planned = match name.as_str() {
         "Sized" | "Hashable" | "MappingView" => Some(("0.14", RuleId::LIB_24)),
-        "Literal" if typing => Some(("0.12", RuleId::TYP_28)),
-        "overload" if typing => Some(("0.12", RuleId::TYP_29)),
-        "Self" if typing => Some(("0.12", RuleId::TYP_30)),
-        "TypeGuard" | "TypeIs" if typing => Some(("0.12", RuleId::TYP_31)),
         "Any" if typing => Some(("0.13", RuleId::TYP_25)),
         "TypedDict" | "Required" | "NotRequired" | "ReadOnly" if typing => {
             Some(("0.13", RuleId::TYP_32))
@@ -460,6 +493,21 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
         )
         .with_rule(rule);
     }
+    // The other names of `enum`, such as `unique` and `member`, come with the forms of enum
+    // class they serve (CLS-47).
+    if module.as_str() == "enum" {
+        return Diagnostic::new(
+            DiagnosticCode::error(201),
+            alias.name.span,
+            format!("`enum.{name}` is planned for TyPy 0.13 (CLS-47)"),
+        )
+        .with_rule(RuleId::CLS_47);
+    }
+    let rule = if module.as_str() == "abc" {
+        RuleId::CLS_45
+    } else {
+        RuleId::LIB_17
+    };
     Diagnostic::new(
         DiagnosticCode::error(425),
         alias.name.span,
@@ -468,7 +516,7 @@ fn not_given(module: &ModuleName, alias: &Alias) -> Diagnostic {
             listed(given_names(module.as_str()))
         ),
     )
-    .with_rule(RuleId::LIB_17)
+    .with_rule(rule)
 }
 
 /// Returns the names TyPy gives of `typing`, `collections.abc` or `dataclasses`, each of
@@ -494,6 +542,8 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "ItemsView",
         ],
         "dataclasses" => &["dataclass", "field"],
+        "abc" => &["ABC", "abstractmethod"],
+        "enum" => &["Enum", "IntEnum", "StrEnum", "Flag", "IntFlag", "auto"],
         _ => &[
             "Iterator",
             "Iterable",
@@ -510,6 +560,11 @@ fn given_names(module: &str) -> &'static [&'static str] {
             "ClassVar",
             "Protocol",
             "NamedTuple",
+            "Literal",
+            "overload",
+            "Self",
+            "TypeGuard",
+            "TypeIs",
             "Sequence",
             "MutableSequence",
             "Mapping",
@@ -536,19 +591,7 @@ fn listed(names: &[&str]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn each_name_a_refusal_lists_is_one_the_module_gives() {
-        for module in ["typing", "collections.abc", "dataclasses"] {
-            for name in super::given_names(module) {
-                assert!(
-                    crate::check::annotation_name(module, name).is_some(),
-                    "{module}.{name}"
-                );
-            }
-        }
-    }
-}
+mod tests;
 
 /// Returns the error for a relative import that names no module, with CPython's message.
 fn imports_nothing(span: Span, message: &str) -> Diagnostic {
@@ -947,7 +990,8 @@ impl BodyChecker<'_> {
                 value, attribute, ..
             } => {
                 let child = format!("{}.{}", self.module_of(value)?, attribute.name);
-                self.program.loaded.contains(&child).then_some(child)
+                let builtin = child == MATH_INTEGER && self.program.has_math_integer();
+                (builtin || self.program.loaded.contains(&child)).then_some(child)
             }
             _ => None,
         }

@@ -8,11 +8,13 @@ value.
 
 | Item | Rule |
 | --- | --- |
-| Annotations on every function parameter, except `self`, and on every return | TYP-01 |
+| Annotations on every function parameter, except `self`, and on every return TYP-26 does not infer | TYP-01 |
+| A module function or an instance method without a return annotation returns what its `return` statements give | TYP-26 |
 | A variable without an annotation takes the type of its first assignment | TYP-02 |
 | Assigning a value of another type to a variable is refused | TYP-03 |
 | Inference stays inside one function | TYP-04 |
 | An empty `[]`, `{}`, `set()` or `dict()` needs an annotation or a typed context | TYP-05 |
+| A variable of a function assigned an empty `[]`, `{}`, `set()`, `list()` or `dict()` takes its types from the first statement that adds to it | TYP-27 |
 | `list[T]`, `dict[K, V]`, `set[T]`, `tuple[A, B]`, `tuple[T, ...]` and `T \| None` | TYP-06 |
 | An `int` is refused where a `float` is declared, since CPython keeps it an `int` | TYP-09 |
 | A value whose type neither an annotation nor inference gives is refused | TYP-10 |
@@ -28,6 +30,7 @@ value.
 | `TracebackType` and `ModuleType` from `types` | CST-10, MOD-10 |
 | `Callable[[A, ...], R]` from `typing` or `collections.abc`, the type of a function value; see [Functions as values](functions.md#functions-as-values) | FUN-05, NFR-19 |
 | `object`: a value of any type, narrowed by `isinstance`, a class pattern or `type(x) is C` before an operation `object` does not define; see [Objects](#objects) | TYP-23 |
+| `Literal` of `int`, `str`, `bytes` and `bool` constants and `None`, narrowed by `==`, `in` and `match`; see [Literal types](#literal-types) | TYP-28 |
 
 ## Objects
 
@@ -65,6 +68,105 @@ narrows to `int | bool`, since a `bool` is an `int` and stays a `bool`;
 `isinstance(x, list)`, is E0201: its items would be of type `Any`, which
 is planned for 0.13 (TYP-25). Sorting a list of `object` items is E0407,
 as an `object` has no order.
+
+## Literal types
+
+`typing.Literal` names constants as a type: `Literal['r', 'w']` holds
+`'r'` and `'w'`, and a value of it is a `str` (TYP-28, ADR-0110). Its
+values are `int`, `str`, `bytes` and `bool` constants, a negative `int`
+such as `-1`, `None`, and other `Literal` types. A constant passes where
+a literal type is declared when it is one of its values, and so does a
+variable, an attribute or a function's result declared of literal types
+within it. Any other value is E0431, even of the right base type:
+
+<!-- typy-expect: rejected E0431 at 9:9 -->
+```python
+from typing import Literal
+
+
+def open_as(mode: Literal["r", "w"]) -> str:
+    return mode
+
+
+text = "r"
+open_as(text)
+```
+
+A test narrows a variable to the constants it is compared with: `==` and
+`!=` with one constant, `in` and `not in` with a tuple, a list or a set of
+them, and the cases of a `match`. A variable of literal types narrows to
+its other values where the test fails, and a `match` with a case for each
+of its values covers it:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Literal
+
+type Mode = Literal["r", "w"]
+
+
+def open_as(mode: Mode) -> str:
+    match mode:
+        case "r":
+            return "read"
+        case "w":
+            return "write"
+
+
+def parse(text: str) -> Mode | None:
+    if text in ("r", "w"):
+        return text
+    return None
+
+
+print(open_as("r"), parse("w"), parse("x"))
+```
+
+A narrowing never changes how a value is held, so a variable of literal
+types of two base types, such as `Literal['r', 1]`, is narrowed by
+`isinstance` and not by `==`. A literal type inside another type, such as
+`list[Literal['r']]`, is tested for each item a display writes; a `list`
+declared otherwise passes for it, since its items are held alike.
+
+## Type guards
+
+A module function whose result is `TypeGuard[T]` or `TypeIs[T]` returns a
+`bool`, and a test of a call of it narrows its first argument, when that
+is a variable, to `T` where the call is true (TYP-31, ADR-0114). For
+`TypeIs` the variable narrows to the rest of its type where the call is
+false; a false `TypeGuard` call shows nothing.
+
+<!-- typy-expect: accepted -->
+```python
+from typing import TypeGuard
+
+
+def is_text(value: object) -> TypeGuard[str]:
+    return isinstance(value, str)
+
+
+def shown(value: int | str) -> str:
+    if is_text(value):
+        return value.upper()
+    return "not text"
+
+
+print(shown("a"), shown(2))
+```
+
+`TypeIs` is in `typing` from Python 3.13, so it needs the Python floor
+3.13 or later, set with `python-floor = "3.13"` in `typy.toml`; below it,
+importing it is E0425, as CPython 3.12 raises `ImportError`.
+
+TyPy reads a narrowed variable as a value of `T`, so the call also tests
+the argument as `isinstance` would: a `TypeGuard` call that returns
+`True` for a value that is not a `T`, and a `TypeIs` call whose result
+differs from the test, raise `TypeError` that names the function, where
+CPython goes on with the value. `T` is a type a test of the value's class
+tells apart: a number, `str`, `bytes`, `None`, a range, a slice, an
+instance of a class that is neither generic nor a protocol, or a union of
+these. A guard of another type, such as `list[int]`, and a method whose
+result is a guard are planned for 0.13 (TYP-37).
 
 ## Casts
 
@@ -262,13 +364,34 @@ These forms are planned, and each is E0201 until its release:
 
 | Form | Release | Requirement |
 | --- | --- | --- |
-| A result inferred from `return` statements, and an empty collection's item type from its first use | 0.12 | TYP-26, TYP-27 |
-| `Literal`, `@overload`, `Self`, `TypeGuard` and `TypeIs` | 0.12 | TYP-28 to TYP-31 |
 | `typing.Any`, bound when the program runs | 0.13 | TYP-25 |
 | `TypedDict`, `Required`, `NotRequired` and `ReadOnly` | 0.13 | TYP-32 |
 
-A missing return annotation stays E0204 and an empty `[]` E0410 until
-0.12, and their help names the release.
+A function defined at module level, and an instance method, returns what
+its `return` statements give when it has no return annotation (TYP-26).
+A nested function needs the annotation until 0.13 (TYP-33).
+
+A variable of a function assigned an empty `[]`, `{}`, `set()`, `list()`
+or `dict()` without an annotation takes its types from the first statement
+of the function that adds to it (TYP-27): `append`, `insert` or `extend`
+of a list, `add` or `update` of a set, and `items[key] = value`,
+`setdefault` or `update` of a dict.
+
+<!-- typy-expect: accepted -->
+```python
+def lengths(words: list[str]):
+    found = {}
+    for word in words:
+        found[word] = len(word)
+    return found
+
+
+print(lengths(["one", "three"]))
+```
+
+A read of the variable before that statement, a collection no statement
+of the function adds to, and a module variable need the annotation,
+E0410.
 
 ## Abstract collections
 

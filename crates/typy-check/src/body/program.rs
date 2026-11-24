@@ -14,7 +14,23 @@ use crate::types::Type;
 
 /// The program being built: symbols, finished functions, and what every body may refer to.
 #[derive(Clone)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each flag is a separate fact of the check, set and read alone"
+)]
 pub(crate) struct Program {
+    /// The function whose result is being inferred from its `return` statements, and the
+    /// types of the values they return, `None` for one that ends without a value (TYP-26).
+    pub(crate) inferring: Option<(FunctionId, Vec<Type>)>,
+    /// The signatures of the `@overload` definitions of each function and method that has
+    /// them, in source order, which calls are checked against (TYP-29).
+    pub(crate) overloads: BTreeMap<FunctionId, Vec<FunctionSignature>>,
+    /// Whether a body is being checked against one of its function's overloads, where a
+    /// test of literal types decides which code runs (TYP-29).
+    pub(crate) overload_look: bool,
+    /// The functions whose results were inferred, whose end may return `None`, which the
+    /// result holds (TYP-26).
+    pub(crate) inferred_results: BTreeSet<FunctionId>,
     pub(super) module: String,
     pub(super) symbols: Vec<Symbol>,
     pub(super) functions: Vec<Option<TypedFunction>>,
@@ -213,6 +229,10 @@ impl Program {
             assigned_in_functions: BTreeSet::new(),
             final_variables: BTreeMap::new(),
             provisional: false,
+            inferring: None,
+            overloads: BTreeMap::new(),
+            overload_look: false,
+            inferred_results: BTreeSet::new(),
             classes: Vec::new(),
             class_modules: Vec::new(),
             class_ids: BTreeMap::new(),
@@ -295,6 +315,15 @@ impl Program {
     /// Returns how many classes the modules checked so far define, the first ID of the next.
     pub(crate) fn class_count(&self) -> usize {
         self.classes.len()
+    }
+
+    /// Returns the ID of the first class of the module being checked, from which a look at a
+    /// body undoes what it changed.
+    pub(crate) fn module_first_class(&self) -> usize {
+        self.class_modules
+            .iter()
+            .position(|module| *module == self.module)
+            .unwrap_or(self.classes.len())
     }
 
     /// Returns how many functions the modules checked so far define, the first ID of the next.
@@ -660,6 +689,34 @@ impl Program {
         self.annotation_modules = annotations.standard;
     }
 
+    /// Starts the module body `body` by initialising `packages`, outermost first, as CPython
+    /// imports the packages that hold the module `-m` runs before it runs (CLI-28).
+    pub(crate) fn initialise_first(
+        &mut self,
+        body: FunctionId,
+        packages: &[typy_source::ModuleName],
+        span: Span,
+    ) {
+        if packages.is_empty() {
+            return;
+        }
+        let Some(Some(function)) = self.functions.get_mut(body.0 as usize) else {
+            return;
+        };
+        function.body.insert(
+            0,
+            TypedStmt::Import {
+                modules: packages
+                    .iter()
+                    .map(|package| package.as_str().to_owned())
+                    .collect(),
+                pending: Vec::new(),
+                bindings: Vec::new(),
+                span,
+            },
+        );
+    }
+
     /// Ends checking a module whose body is the function `body`, and keeps its names for
     /// the modules that import it.
     pub(crate) fn end_module(&mut self, body: FunctionId) {
@@ -718,6 +775,13 @@ impl Program {
     }
 
     /// Returns the method `name` of a class, its own or the nearest base's.
+    /// Returns the method `name` a base of `class` defines, when it has overloads (TYP-29).
+    pub(crate) fn overloaded_base_method(&self, class: ClassId, name: &str) -> Option<FunctionId> {
+        let base = self.classes.get(class.0 as usize)?.base?;
+        self.method(base, name)
+            .filter(|method| self.overloads.contains_key(method))
+    }
+
     pub(super) fn method(&self, class: ClassId, name: &str) -> Option<FunctionId> {
         // A method of a protocol is reached through its dispatcher (ADR-0041).
         if self.is_protocol(class) && self.classes[class.0 as usize].method(name).is_some() {
@@ -825,11 +889,97 @@ impl Program {
     /// Undoes a first look at the module body but the types it gave the module variables,
     /// which the `__init__` methods read until the module body is checked again.
     pub(crate) fn keep_module_types(&mut self, snapshot: Snapshot) {
-        let found: Vec<Type> = self
-            .module_symbols
+        let found = self.module_types();
+        self.undo(snapshot);
+        self.set_module_types(found);
+        self.provisional = true;
+        // The variables now have their types, which the getters of class variables give.
+        self.add_class_variable_getters();
+    }
+
+    /// Returns the methods of the classes from `first_class` on whose results are inferred,
+    /// each with its class and where its name stands (TYP-26).
+    pub(crate) fn inferred_methods(&self, first_class: usize) -> Vec<(FunctionId, ClassId, Span)> {
+        self.classes[first_class..]
+            .iter()
+            .flat_map(|info| {
+                info.inferred_methods
+                    .iter()
+                    .map(move |(id, span)| (*id, info.id, *span))
+            })
+            .collect()
+    }
+
+    /// Returns why the method `name` of `class` keeps its result annotation, when it does: it
+    /// overrides a method of a base, or a class from `first_class` on overrides it, so its
+    /// result is part of an interface (TYP-26, ADR-0092).
+    pub(crate) fn overriding(
+        &self,
+        class: ClassId,
+        name: &str,
+        first_class: usize,
+    ) -> Option<String> {
+        let info = &self.classes[class.0 as usize];
+        let mut base = info.base;
+        while let Some(current) = base {
+            let base_info = &self.classes[current.0 as usize];
+            if base_info.method(name).is_some() {
+                return Some(format!("it overrides `{}.{name}`", base_info.name));
+            }
+            base = base_info.base;
+        }
+        let derives = |mut current: Option<ClassId>| {
+            while let Some(each) = current {
+                if each == class {
+                    return true;
+                }
+                current = self.classes[each.0 as usize].base;
+            }
+            false
+        };
+        self.classes[first_class..]
+            .iter()
+            .find(|other| other.id != class && derives(other.base) && other.method(name).is_some())
+            .map(|other| format!("`{}.{name}` overrides it", other.name))
+    }
+
+    /// Returns the result of the function `id`, which may have been inferred (TYP-26).
+    pub(crate) fn result_of(&self, id: FunctionId) -> Type {
+        self.signatures[id.0 as usize].returns.clone()
+    }
+
+    /// Gives the function `id` the result `returns`, which its `return` statements gave
+    /// (TYP-26).
+    pub(crate) fn set_result(&mut self, id: FunctionId, returns: Type) {
+        self.signatures[id.0 as usize].returns = returns;
+        self.inferred_results.insert(id);
+    }
+
+    /// Forgets the body of `id` that a look at it made, which the function's own check makes
+    /// again.
+    pub(crate) fn forget_function(&mut self, id: FunctionId) {
+        self.functions[id.0 as usize] = None;
+    }
+
+    /// Returns the type of each module variable, in the order of `module_symbols`.
+    pub(crate) fn module_types(&self) -> Vec<Type> {
+        self.module_symbols
             .values()
             .map(|symbol| self.symbols[symbol.0 as usize].ty.clone())
-            .collect();
+            .collect()
+    }
+
+    /// Gives each module variable its type of `types`, as `module_types` gave them.
+    pub(crate) fn set_module_types(&mut self, types: Vec<Type>) {
+        let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
+        for (symbol, ty) in symbols.into_iter().zip(types) {
+            self.symbols[symbol.0 as usize].ty = ty;
+        }
+    }
+
+    /// Undoes what checking a body added since `snapshot`: the symbols, functions,
+    /// signatures, classes and copies it made.
+    pub(crate) fn undo(&mut self, snapshot: Snapshot) {
         self.symbols.truncate(snapshot.symbols);
         let first_new = FunctionId(id(snapshot.functions));
         self.lazy_imports
@@ -847,13 +997,6 @@ impl Program {
         self.protocol_values = snapshot.protocol_values;
         crate::protocol_fits::reset(&self.protocol_values.fits);
         crate::iterator_fits::reset(&self.protocol_values.iterations);
-        let symbols: Vec<SymbolId> = self.module_symbols.values().copied().collect();
-        for (symbol, ty) in symbols.into_iter().zip(found) {
-            self.symbols[symbol.0 as usize].ty = ty;
-        }
-        self.provisional = true;
-        // The variables now have their types, which the getters of class variables give.
-        self.add_class_variable_getters();
     }
 
     /// Ends the first look: the module body is checked next, and gives the final types.
@@ -907,9 +1050,13 @@ impl Program {
                             .enumerate()
                             .map(|(position, attribute)| Attribute {
                                 name: attribute.name.clone(),
+                                // An attribute declared of a literal type holds a value of
+                                // its base type (TYP-28).
                                 ty: self
                                     .attribute_ty(class.id, position)
-                                    .unwrap_or(crate::types::Type::Error),
+                                    .map_or(crate::types::Type::Error, |ty| {
+                                        ty.without_declared_forms()
+                                    }),
                             })
                             .collect()
                     },
@@ -960,9 +1107,20 @@ impl Program {
         let classes = self.typed_classes();
         let adapters = self.override_adapters();
         let protocol_methods = self.protocol_values.bound_methods.clone();
+        // A literal type is a refinement the checker reads; a value of one is a value of its
+        // base type, which is all the program holds (TYP-28, ADR-0110).
+        for symbol in &mut self.symbols {
+            symbol.ty = symbol.ty.without_declared_forms();
+        }
+        let functions: Vec<crate::typed::TypedFunction> = self
+            .functions
+            .into_iter()
+            .flatten()
+            .map(crate::typed::TypedFunction::without_literals)
+            .collect();
         TypedProgram {
             symbols: self.symbols,
-            functions: self.functions.into_iter().flatten().collect(),
+            functions,
             classes,
             modules: self.modules,
             lazy_imports: self.lazy_imports,

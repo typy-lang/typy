@@ -1,9 +1,7 @@
 //! The forms of typed Python a later release gives: each refusal names the release and the
 //! requirement that plan it (ADR-0090 to ADR-0097).
 
-use typy_source::PythonFloor;
-
-use crate::common::{messages, messages_at};
+use crate::common::messages;
 
 fn planned(name: &str, release: &str, rule: &str) -> (String, String, String) {
     (
@@ -24,18 +22,13 @@ fn planned_module(name: &str, release: &str, rule: &str) -> (String, String, Str
 #[test]
 fn each_typing_form_of_a_later_release_names_it() {
     let found = messages(
-        "from typing import Any, Literal, overload, Self, TypeGuard, TypeIs\n\
+        "from typing import Any\n\
          from typing import TypedDict, Required, NotRequired, ReadOnly\n",
     );
     assert_eq!(
         found,
         [
             planned("typing.Any", "0.13", "TYP-25"),
-            planned("typing.Literal", "0.12", "TYP-28"),
-            planned("typing.overload", "0.12", "TYP-29"),
-            planned("typing.Self", "0.12", "TYP-30"),
-            planned("typing.TypeGuard", "0.12", "TYP-31"),
-            planned("typing.TypeIs", "0.12", "TYP-31"),
             planned("typing.TypedDict", "0.13", "TYP-32"),
             planned("typing.Required", "0.13", "TYP-32"),
             planned("typing.NotRequired", "0.13", "TYP-32"),
@@ -47,19 +40,17 @@ fn each_typing_form_of_a_later_release_names_it() {
 #[test]
 fn each_standard_library_module_of_a_later_release_names_it() {
     let cases = [
-        ("enum", "0.12", "CLS-44"),
-        ("abc", "0.12", "CLS-45"),
-        ("textwrap", "0.12", "LIB-27"),
-        ("base64", "0.12", "LIB-27"),
-        ("heapq", "0.12", "LIB-27"),
-        ("bisect", "0.12", "LIB-27"),
-        ("statistics", "0.12", "LIB-27"),
-        ("time", "0.12", "LIB-27"),
-        ("random", "0.12", "LIB-27"),
-        ("copy", "0.12", "LIB-27"),
-        ("string", "0.12", "LIB-27"),
+        ("statistics", "0.13", "LIB-30"),
+        ("time", "0.13", "LIB-30"),
+        ("random", "0.13", "LIB-30"),
+        ("copy", "0.13", "LIB-33"),
         ("os", "1.0", "LIB-07"),
-        ("__future__", "0.12", "LIB-29"),
+        ("os.path", "0.13", "LIB-35"),
+        ("itertools", "0.13", "LIB-35"),
+        ("re", "0.13", "LIB-35"),
+        ("warnings", "0.13", "LIB-38"),
+        ("json", "0.14", "LIB-36"),
+        ("functools", "0.14", "LIB-36"),
     ];
     for (module, release, rule) in cases {
         assert_eq!(
@@ -71,11 +62,7 @@ fn each_standard_library_module_of_a_later_release_names_it() {
 }
 
 #[test]
-fn future_annotations_is_planned_for_0_12_and_doctest_for_after_1_0() {
-    assert_eq!(
-        messages("from __future__ import annotations\n"),
-        [planned_module("__future__", "0.12", "LIB-29")]
-    );
+fn doctest_is_planned_for_after_1_0() {
     assert_eq!(
         messages("import doctest\n"),
         [(
@@ -84,17 +71,6 @@ fn future_annotations_is_planned_for_0_12_and_doctest_for_after_1_0() {
             "LIB-08".to_owned(),
         )]
     );
-}
-
-#[test]
-fn each_builtin_of_0_12_names_it() {
-    for name in ["divmod", "bin", "hex", "oct", "pow", "format", "bytearray"] {
-        assert_eq!(
-            messages(&format!("value = {name}\n")),
-            [planned(name, "0.12", "LIB-28")],
-            "{name}"
-        );
-    }
 }
 
 #[test]
@@ -108,39 +84,6 @@ fn any_as_a_type_is_planned_for_0_13() {
             "TYP-25".to_owned(),
         )]
     );
-}
-
-#[test]
-fn the_values_of_a_literal_are_not_read_as_annotations() {
-    let found = messages(
-        "from typing import Literal\ndef open_as(mode: Literal['r', 'w']) -> str:\n    \
-         return mode\n",
-    );
-    assert!(
-        found.contains(&planned("typing.Literal", "0.12", "TYP-28")),
-        "{found:?}"
-    );
-    assert!(
-        found
-            .iter()
-            .all(|(_, message, _)| !message.contains("written as strings")),
-        "{found:?}"
-    );
-}
-
-#[test]
-fn frozendict_and_math_integer_are_planned_from_the_floor_3_15() {
-    assert_eq!(
-        messages_at("value = frozendict()\n", PythonFloor::V3_15),
-        [planned("frozendict", "0.12", "DAT-18")]
-    );
-    assert_eq!(
-        messages_at("import math.integer\n", PythonFloor::V3_15),
-        [planned_module("math.integer", "0.12", "LIB-26")]
-    );
-    // Below 3.15 CPython has neither, so TyPy says what CPython says.
-    assert_eq!(messages("value = frozendict()\n")[0].0, "E0205");
-    assert_eq!(messages("import math.integer\n")[0].0, "E0206");
 }
 
 #[test]

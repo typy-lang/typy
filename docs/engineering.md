@@ -12,11 +12,12 @@ TyPy and what each release accepts.
 | 1 | [Research: values whose type is known late](research/static-and-dynamic-values.md) | Approved |
 | 1 | [Research: threads and data races](research/threads-and-data-races.md) | Approved |
 | 1 | [Research: newer Python and a typed standard library](research/newer-python-and-a-typed-standard-library.md) | Approved |
+| 1 | [Research: the command lines of compilers](research/compiler-command-lines.md) | Approved |
 | 2 | [Software requirements specification](requirements/srs.md) | Approved |
 | 3 | [Use case model](modeling/use-case-model.md) | Approved |
 | 4 | [Domain model](modeling/domain-model.md) | Approved |
 | 5 | [Software architecture](architecture/architecture.md) | Approved |
-| 6 | [Architecture decision records](adr/index.md) | 98 records: 89 Accepted, 1 Proposed, 8 Superseded |
+| 6 | [Architecture decision records](adr/index.md) | 106 records: 97 Accepted, 1 Proposed, 8 Superseded |
 | 7 | [Detailed design](design/detailed-design.md) | Approved |
 | 8 | [Test plan](testing/test-plan.md) | Draft |
 | 9 | [Development guide](development/development-guide.md) | Draft |

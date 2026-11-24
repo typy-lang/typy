@@ -17,6 +17,7 @@
 | `send`, `throw` and `close` of a `Generator[Y, S, R]`, and `received = yield value` | SMT-11, FUN-07 |
 | `yield from` any iterable, and `return value` of a `Generator[Y, S, R]` | SMT-11, FUN-07 |
 | A generator freed while suspended closes, running its `finally` blocks | FUN-11 |
+| `@overload` signatures of a module function or an instance method; see [Overloads](#overloads) | TYP-29 |
 
 A function value is the `key` of `sorted`, `list.sort`, `min` and `max`;
 see [Ordering by a key](../library/functions-and-modules.md#ordering-by-a-key).
@@ -90,6 +91,55 @@ through it passes its arguments by position: `increment(value=2)` is
 E0404. A generic function cannot be decorated, since it is no one value
 (E0202). Decorators of methods are planned for 0.14 (FUN-15), and class
 decorators other than `@dataclass` for 1.0 (CLS-38).
+
+## Overloads
+
+`@overload` of `typing` gives a function, or an instance method, several
+signatures and one body (TYP-29, ADR-0112). The `@overload` definitions
+come first, with `...` as their bodies, and the implementation, the `def`
+of the same name without `@overload`, follows them. A call takes the
+first overload whose parameters take its arguments, which gives the
+result's type; the implementation runs, and its result is tested to be of
+the overload's type. A call no overload takes is E0432.
+
+<!-- typy-expect: accepted -->
+```python
+from typing import overload
+
+
+@overload
+def double(value: int) -> int: ...
+@overload
+def double(value: str) -> str: ...
+def double(value: int | str) -> int | str:
+    if isinstance(value, int):
+        return value * 2
+    return value + value
+
+
+number: int = double(21)
+text: str = double("ab")
+print(number + 1, text.upper())
+```
+
+The body is checked once for each overload too, with the types the
+overload gives its parameters and its result; a branch those types rule
+out, such as the `str` branch for the `int` overload, is not checked
+(TYP-34). A parameter an overload leaves out is checked at the type the
+implementation declares.
+
+Each overload fits its implementation, or it is E0432: its parameters are
+the implementation's of the same names, in the same order and passed
+alike, with types the implementation's hold, and a parameter an overload
+leaves out, or that a call of it may leave out, has a default in the
+implementation. The implementation's result holds each overload's, in a
+form a test of the value's class tells apart; `list[int] | list[str]`
+gives no such test.
+
+Overloads of static, class and special methods, inside functions and
+blocks, with decorated or generic implementations, in generic and protocol
+classes, on a method a derived class overrides, and calls of an overloaded
+function that unpack with `*` or `**` are planned for 0.13 (TYP-35).
 
 ## Variable numbers of arguments
 
@@ -766,10 +816,36 @@ def greet(name: str, punctuation: str = "!") -> str:
 print(fib(20), greet("world"), greet("you", punctuation="?"))
 ```
 
-A function needs a return annotation, `-> None` when it returns nothing:
+A function defined at module level, and an instance method, may leave its
+return annotation out:
+it returns what its `return` statements give, their union when they give
+several types, and `None` among them when it can reach its end (TYP-26):
+
+<!-- typy-expect: accepted -->
+```python
+def label(value: int):
+    if value > 10:
+        return "big"
+    return "small"
+
+
+def first(values: list[int]):
+    for value in values:
+        return value
+
+
+print(label(20).upper(), first([]))
+```
+
+A static or class method, a special method such as `__len__`, a property,
+a method that overrides another or that another overrides, a nested
+function, a generator, a function that calls itself, directly or through
+others, and a function a library exports need the annotation, `-> None`
+when they return nothing, E0204 otherwise (ADR-0109). A nested function's
+result is inferred from 0.13 on (TYP-33):
 
 <!-- typy-expect: rejected E0204 at 1:5 -->
 ```python
 def show(value: int):
-    print(value)
+    yield value
 ```

@@ -32,6 +32,8 @@ pub struct Diagnostic {
     help: Option<String>,
     fix: Option<Fix>,
     rule: Option<RuleId>,
+    /// Whether `-D` made the warning an error (CLI-27).
+    denied: bool,
 }
 
 impl Diagnostic {
@@ -60,6 +62,7 @@ impl Diagnostic {
             help: None,
             fix: None,
             rule: None,
+            denied: false,
         }
     }
 
@@ -97,16 +100,28 @@ impl Diagnostic {
         self
     }
 
+    /// Returns the warning reported as an error, as `-D` asks (CLI-27). Its code stays the
+    /// warning's.
+    #[must_use]
+    pub fn denied(mut self) -> Self {
+        self.denied = true;
+        self
+    }
+
     /// Returns the code.
     #[must_use]
     pub fn code(&self) -> DiagnosticCode {
         self.code
     }
 
-    /// Returns the severity the code gives.
+    /// Returns the severity the code gives, or `Error` for a warning `-D` denied.
     #[must_use]
     pub fn severity(&self) -> Severity {
-        self.code.severity()
+        if self.denied {
+            Severity::Error
+        } else {
+            self.code.severity()
+        }
     }
 
     /// Returns the primary span, or `None` for a diagnostic about no place in the source.
@@ -147,38 +162,4 @@ impl Diagnostic {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::Diagnostic;
-    use crate::code::DiagnosticCode;
-    use crate::span::{FileId, Span, TextOffset};
-
-    fn at(file: u32, start: u32) -> Span {
-        Span::new(FileId(file), TextOffset(start), TextOffset(start + 1)).unwrap()
-    }
-
-    #[test]
-    fn builder_methods_set_every_detail() {
-        let diagnostic = Diagnostic::new(DiagnosticCode::error(402), at(0, 0), "message")
-            .with_label(at(0, 4), "label")
-            .with_help("hint")
-            .with_fix(at(0, 4), "new")
-            .with_rule(crate::rule::RuleId::TYP_03);
-        assert_eq!(diagnostic.labels().len(), 1);
-        assert_eq!(diagnostic.help(), Some("hint"));
-        assert_eq!(
-            diagnostic.fix().map(|fix| fix.replacement.as_str()),
-            Some("new")
-        );
-        assert_eq!(diagnostic.rule(), Some(crate::rule::RuleId::TYP_03));
-        assert_eq!(diagnostic.span(), Some(at(0, 0)));
-    }
-
-    #[test]
-    fn a_diagnostic_may_have_no_location() {
-        let diagnostic = Diagnostic::without_location(DiagnosticCode::error(702), "link failed");
-        assert_eq!(
-            (diagnostic.span(), diagnostic.message()),
-            (None, "link failed")
-        );
-    }
-}
+mod tests;

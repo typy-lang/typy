@@ -3,7 +3,7 @@
 use super::{
     typy_rt_int_absolute, typy_rt_int_add, typy_rt_int_compare, typy_rt_int_floor_divide,
     typy_rt_int_modulo, typy_rt_int_multiply, typy_rt_int_negate, typy_rt_int_power,
-    typy_rt_int_subtract,
+    typy_rt_int_power_modulo, typy_rt_int_subtract,
 };
 use crate::int::value::Integer;
 use crate::word::inline;
@@ -126,5 +126,42 @@ fn a_negative_exponent_raises_value_error() {
         let result = typy_rt_int_power(word(2), word(-1));
         assert!(!result.exception.is_null());
         assert_eq!((*result.exception).kind(), crate::ExceptionKind::ValueError);
+    }
+}
+
+#[test]
+fn a_power_with_a_modulus_gives_cpythons_results() {
+    // Each expected value is CPython 3.15's `pow` of the same arguments.
+    let cases: [(i128, i128, i128, i128); 10] = [
+        (3, -1, 7, 5),
+        (2, 3, -5, -2),
+        (-2, 3, 5, 2),
+        (5, 0, 1, 0),
+        (5, 0, -1, 0),
+        (0, 0, 3, 1),
+        (7, -3, -11, -5),
+        (2, 10, 1000, 24),
+        (
+            1 << 100,
+            (1 << 100) + 1,
+            100_000_000_000_000_000_007,
+            11_356_992_892_152_762_190,
+        ),
+        (3_i128.pow(70), -1, (1 << 64) + 13, 710_720_645_773_686_734),
+    ];
+    for (base, exponent, modulus, expected) in cases {
+        // SAFETY: the words are live `int` words.
+        let result = unsafe { typy_rt_int_power_modulo(word(base), word(exponent), word(modulus)) };
+        assert!(result.exception.is_null(), "{base} {exponent} {modulus}");
+        assert_eq!(value(result.value), expected, "{base} {exponent} {modulus}");
+    }
+}
+
+#[test]
+fn a_zero_modulus_or_a_base_without_an_inverse_raises() {
+    for (base, exponent, modulus) in [(2, 10, 0), (2, -1, 4), (0, -1, 5), (6, -2, 9)] {
+        // SAFETY: the words are live `int` words.
+        let result = unsafe { typy_rt_int_power_modulo(word(base), word(exponent), word(modulus)) };
+        assert!(!result.exception.is_null(), "{base} {exponent} {modulus}");
     }
 }

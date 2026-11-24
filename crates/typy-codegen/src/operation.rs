@@ -303,7 +303,10 @@ pub(crate) fn drops_objects(function: RuntimeFunction) -> bool {
             TyirType::Int | TyirType::Float | TyirType::Bool | TyirType::Unit => false,
             TyirType::Object(id) => !matches!(
                 *id,
-                typy_tyir::TypeId::STR | typy_tyir::TypeId::BYTES | typy_tyir::TypeId::TYPE
+                typy_tyir::TypeId::STR
+                    | typy_tyir::TypeId::BYTES
+                    | typy_tyir::TypeId::BYTEARRAY
+                    | typy_tyir::TypeId::TYPE
             ),
             _ => true,
         })

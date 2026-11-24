@@ -159,6 +159,25 @@ impl FunctionLowerer<'_> {
             self.release(right, span);
             return Some(current);
         }
+        // `+=` and `*=` change a bytearray in place, as `list` does (ADR-0108).
+        if current.ty == TyirType::BYTEARRAY {
+            if operator == BinaryOperator::Add {
+                let added = self.bytes_view(right, span);
+                self.call_runtime(
+                    RuntimeFunction::BytearrayExtend,
+                    vec![current.value, added.value],
+                    span,
+                );
+            } else {
+                self.call_runtime(
+                    RuntimeFunction::BytearrayRepeatInPlace,
+                    vec![current.value, right.value],
+                    span,
+                );
+            }
+            self.release(right, span);
+            return Some(current);
+        }
         if !matches!(result, Type::List(_)) {
             return None;
         }

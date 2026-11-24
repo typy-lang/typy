@@ -6,11 +6,11 @@
 	.type	__typy_main,@function
 __typy_main:
 	.cfi_startproc
-	subq	$616, %rsp
-	.cfi_def_cfa_offset 624
-	movq	$1, 608(%rsp)
-	movq	$1, 600(%rsp)
-	movq	$1, 592(%rsp)
+	subq	$1144, %rsp
+	.cfi_def_cfa_offset 1152
+	movq	$1, 1136(%rsp)
+	movq	$1, 1128(%rsp)
+	movq	$1, 1120(%rsp)
 	movq	$1, typy.global.8(%rip)
 	movq	$1, typy.global.0(%rip)
 	leaq	.Ltypy.str.0(%rip), %rax
@@ -20,152 +20,126 @@ __typy_main:
 	movq	$1, typy.global.6(%rip)
 	movl	$467, %edi
 	callq	typy_rt_chr@PLT
-	movq	%rdx, 576(%rsp)
+	movq	%rdx, 1104(%rsp)
 	cmpq	$0, %rdx
-	movq	%rax, 584(%rsp)
+	movq	%rax, 1112(%rsp)
 	jne	.LBB0_49
-	movq	584(%rsp), %rsi
-	movq	%rsi, 560(%rsp)
+	movq	1112(%rsp), %rsi
+	movq	%rsi, 1088(%rsp)
 	leaq	.Ltypy.str.1(%rip), %rdi
 	callq	typy_rt_str_concat@PLT
-	movq	560(%rsp), %rdi
-	movq	%rax, 568(%rsp)
+	movq	1088(%rsp), %rdi
+	movq	%rax, 1096(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	568(%rsp), %rax
+	movq	1096(%rsp), %rax
 	movq	typy.global.4(%rip), %rdi
 	movq	%rax, typy.global.4(%rip)
 	callq	typy_rt_decrement@PLT
 	movb	$1, typy.global.5(%rip)
-	movl	$1, %edi
-	callq	typy_rt_int_increment@PLT
-	movq	typy.global.6(%rip), %rdi
-	movq	$1, typy.global.6(%rip)
-	callq	typy_rt_int_decrement@PLT
-	movb	$1, typy.global.7(%rip)
-	movl	$1, %edi
-	callq	typy_rt_int_increment@PLT
-	movq	608(%rsp), %rdi
-	movq	$1, 608(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	movq	typy.global.4(%rip), %rdi
-	callq	typy_rt_str_length@PLT
-	movq	600(%rsp), %rdi
-	movq	%rax, 600(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	movl	$3, %edi
-	callq	typy_rt_int_increment@PLT
-	movq	592(%rsp), %rdi
-	movq	$3, 592(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	jmp	.LBB0_4
+	movb	$1, %al
+	testb	$1, %al
+	jne	.LBB0_51
+	jmp	.LBB0_50
 .LBB0_3:
-	movq	552(%rsp), %rax
-	addq	$616, %rsp
+	movq	1080(%rsp), %rax
+	addq	$1144, %rsp
 	.cfi_def_cfa_offset 8
 	retq
 .LBB0_4:
-	.cfi_def_cfa_offset 624
-	movq	608(%rsp), %rdi
-	movq	600(%rsp), %rsi
-	movl	$5, %edx
-	callq	typy_rt_int_compare@PLT
-	cmpb	$0, %al
-	je	.LBB0_7
-	movq	608(%rsp), %rdi
-	movq	%rdi, 520(%rsp)
-	callq	typy_rt_int_increment@PLT
-	movq	520(%rsp), %rax
-	movq	typy.global.0(%rip), %rdi
-	movq	%rax, typy.global.0(%rip)
-	callq	typy_rt_int_decrement@PLT
-	movb	$1, typy.global.1(%rip)
-	movq	typy.global.6(%rip), %rax
-	movq	%rax, 528(%rsp)
-	movq	typy.global.4(%rip), %rdi
-	movq	typy.global.0(%rip), %rsi
-	callq	typy_rt_str_index@PLT
-	movq	%rdx, 536(%rsp)
-	cmpq	$0, %rdx
-	movq	%rax, 544(%rsp)
-	jne	.LBB0_50
-	jmp	.LBB0_9
+	.cfi_def_cfa_offset 1152
+	movq	1136(%rsp), %rax
+	movq	%rax, 1064(%rsp)
+	movq	1128(%rsp), %rcx
+	movq	%rcx, 1072(%rsp)
+	andq	%rcx, %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_64
+	jmp	.LBB0_65
+.LBB0_5:
+	movq	1136(%rsp), %rax
+	movq	%rax, 1056(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_68
+	jmp	.LBB0_67
 .LBB0_6:
-	movq	608(%rsp), %rdi
-	movq	592(%rsp), %rsi
-	callq	typy_rt_int_add@PLT
-	movq	608(%rsp), %rdi
-	movq	%rax, 608(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	jmp	.LBB0_4
+	movq	1136(%rsp), %rax
+	movq	%rax, 1040(%rsp)
+	movq	1120(%rsp), %rcx
+	movq	%rcx, 1048(%rsp)
+	andq	%rcx, %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_72
+	jmp	.LBB0_73
 .LBB0_7:
 	jmp	.LBB0_8
 .LBB0_8:
-	movq	typy.global.6(%rip), %rdi
-	movl	$801, %esi
-	movl	$9, %edx
-	callq	typy_rt_int_compare@PLT
-	cmpb	$0, %al
+	movq	typy.global.6(%rip), %rax
+	movq	%rax, 1032(%rsp)
+	andq	$801, %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
 	setne	%al
-	movb	%al, 519(%rsp)
-	jmp	.LBB0_13
+	testb	$1, %al
+	jne	.LBB0_77
+	jmp	.LBB0_78
 .LBB0_9:
-	movq	544(%rsp), %rdi
-	movq	%rdi, 488(%rsp)
+	movq	1000(%rsp), %rdi
+	movq	%rdi, 1008(%rsp)
 	callq	typy_rt_ord@PLT
-	movq	%rdx, 496(%rsp)
+	movq	%rdx, 1016(%rsp)
 	cmpq	$0, %rdx
-	movq	%rax, 504(%rsp)
-	jne	.LBB0_51
+	movq	%rax, 1024(%rsp)
+	jne	.LBB0_80
 	jmp	.LBB0_11
 .LBB0_10:
-	movq	472(%rsp), %rax
-	movq	%rax, 480(%rsp)
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	480(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	976(%rsp), %rdx
+	movq	%rdx, 984(%rsp)
+	movq	1136(%rsp), %rax
+	movq	%rax, 992(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_82
+	jmp	.LBB0_81
 .LBB0_11:
-	.cfi_def_cfa_offset 624
-	movq	488(%rsp), %rdi
-	movq	504(%rsp), %rax
-	movq	%rax, 456(%rsp)
+	movq	1008(%rsp), %rdi
+	movq	1024(%rsp), %rax
+	movq	%rax, 968(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	528(%rsp), %rdi
-	movq	456(%rsp), %rsi
-	callq	typy_rt_int_add@PLT
-	movq	456(%rsp), %rdi
-	movq	%rax, 464(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	movq	464(%rsp), %rax
-	movq	typy.global.6(%rip), %rdi
-	movq	%rax, typy.global.6(%rip)
-	callq	typy_rt_int_decrement@PLT
-	movb	$1, typy.global.7(%rip)
-	jmp	.LBB0_6
+	movq	960(%rsp), %rax
+	movq	968(%rsp), %rcx
+	andq	%rcx, %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_87
+	jmp	.LBB0_88
 .LBB0_12:
-	movq	488(%rsp), %rdi
-	movq	440(%rsp), %rax
-	movq	%rax, 448(%rsp)
+	movq	1008(%rsp), %rdi
+	movq	936(%rsp), %rax
+	movq	%rax, 944(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	448(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	1136(%rsp), %rax
+	movq	%rax, 952(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_95
+	jmp	.LBB0_94
 .LBB0_13:
-	.cfi_def_cfa_offset 624
-	movb	519(%rsp), %al
+	movb	935(%rsp), %al
 	testb	$1, %al
 	jne	.LBB0_14
 	jmp	.LBB0_15
@@ -173,552 +147,1327 @@ __typy_main:
 	movq	typy.global.4(%rip), %rdi
 	leaq	.Ltypy.str.2(%rip), %rsi
 	callq	typy_rt_str_concat@PLT
-	movq	%rax, 432(%rsp)
+	movq	%rax, 920(%rsp)
 	jmp	.LBB0_16
 .LBB0_15:
 	leaq	.Ltypy.str.3(%rip), %rdi
 	callq	typy_rt_increment@PLT
 	leaq	.Ltypy.str.3(%rip), %rax
-	movq	%rax, 432(%rsp)
+	movq	%rax, 920(%rsp)
 .LBB0_16:
-	movq	432(%rsp), %rax
+	movq	920(%rsp), %rax
 	movq	typy.global.2(%rip), %rdi
 	movq	%rax, typy.global.2(%rip)
 	callq	typy_rt_decrement@PLT
 	movb	$1, typy.global.3(%rip)
 	movq	typy.global.2(%rip), %rdi
-	movq	%rdi, 408(%rsp)
+	movq	%rdi, 896(%rsp)
 	callq	typy_rt_increment@PLT
 	movq	typy.global.2(%rip), %rdi
 	callq	typy_rt_str_repr@PLT
-	movq	%rax, 400(%rsp)
+	movq	%rax, 888(%rsp)
 	movq	typy.global.2(%rip), %rdi
 	callq	typy_rt_str_length@PLT
-	movq	408(%rsp), %rdi
-	movq	%rax, 416(%rsp)
+	movq	896(%rsp), %rdi
+	movq	%rax, 904(%rsp)
 	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 424(%rsp)
+	movq	%rax, 912(%rsp)
 	cmpq	$0, %rax
-	jne	.LBB0_52
+	jne	.LBB0_100
 	leaq	.Ltypy.str.5(%rip), %rdi
 	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 392(%rsp)
+	movq	%rax, 880(%rsp)
 	cmpq	$0, %rax
-	jne	.LBB0_53
+	jne	.LBB0_101
 	jmp	.LBB0_19
 .LBB0_18:
-	movq	408(%rsp), %rdi
-	movq	376(%rsp), %rax
-	movq	%rax, 384(%rsp)
+	movq	896(%rsp), %rdi
+	movq	864(%rsp), %rax
+	movq	%rax, 872(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	400(%rsp), %rdi
+	movq	888(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	384(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
-.LBB0_19:
-	.cfi_def_cfa_offset 624
-	movq	400(%rsp), %rdi
-	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 368(%rsp)
+	movq	904(%rsp), %rax
+	andq	$1, %rax
 	cmpq	$0, %rax
-	jne	.LBB0_54
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_103
+	jmp	.LBB0_102
+.LBB0_19:
+	movq	888(%rsp), %rdi
+	callq	typy_rt_write_stdout_checked@PLT
+	movq	%rax, 856(%rsp)
+	cmpq	$0, %rax
+	jne	.LBB0_110
 	jmp	.LBB0_21
 .LBB0_20:
-	movq	408(%rsp), %rdi
-	movq	352(%rsp), %rax
-	movq	%rax, 360(%rsp)
+	movq	896(%rsp), %rdi
+	movq	840(%rsp), %rax
+	movq	%rax, 848(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	400(%rsp), %rdi
+	movq	888(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	360(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	904(%rsp), %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_112
+	jmp	.LBB0_111
 .LBB0_21:
-	.cfi_def_cfa_offset 624
 	leaq	.Ltypy.str.5(%rip), %rdi
 	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 344(%rsp)
+	movq	%rax, 832(%rsp)
 	cmpq	$0, %rax
-	jne	.LBB0_55
+	jne	.LBB0_119
 	jmp	.LBB0_23
 .LBB0_22:
-	movq	408(%rsp), %rdi
-	movq	328(%rsp), %rax
-	movq	%rax, 336(%rsp)
+	movq	896(%rsp), %rdi
+	movq	816(%rsp), %rax
+	movq	%rax, 824(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	400(%rsp), %rdi
+	movq	888(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	336(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	904(%rsp), %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_121
+	jmp	.LBB0_120
 .LBB0_23:
-	.cfi_def_cfa_offset 624
-	movq	416(%rsp), %rdi
+	movq	904(%rsp), %rdi
 	callq	typy_rt_int_to_str@PLT
-	movq	%rdx, 312(%rsp)
+	movq	%rdx, 800(%rsp)
 	cmpq	$0, %rdx
-	movq	%rax, 320(%rsp)
-	jne	.LBB0_56
+	movq	%rax, 808(%rsp)
+	jne	.LBB0_128
 	jmp	.LBB0_25
 .LBB0_24:
-	movq	408(%rsp), %rdi
-	movq	296(%rsp), %rax
-	movq	%rax, 304(%rsp)
+	movq	896(%rsp), %rdi
+	movq	784(%rsp), %rax
+	movq	%rax, 792(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	400(%rsp), %rdi
+	movq	888(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	304(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
-.LBB0_25:
-	.cfi_def_cfa_offset 624
-	movq	320(%rsp), %rdi
-	movq	%rdi, 280(%rsp)
-	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 288(%rsp)
+	movq	904(%rsp), %rax
+	andq	$1, %rax
 	cmpq	$0, %rax
-	jne	.LBB0_57
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_130
+	jmp	.LBB0_129
+.LBB0_25:
+	movq	808(%rsp), %rdi
+	movq	%rdi, 768(%rsp)
+	callq	typy_rt_write_stdout_checked@PLT
+	movq	%rax, 776(%rsp)
+	cmpq	$0, %rax
+	jne	.LBB0_137
 	jmp	.LBB0_27
 .LBB0_26:
-	movq	408(%rsp), %rdi
-	movq	264(%rsp), %rax
-	movq	%rax, 272(%rsp)
+	movq	896(%rsp), %rdi
+	movq	752(%rsp), %rax
+	movq	%rax, 760(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	400(%rsp), %rdi
+	movq	888(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	272(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	904(%rsp), %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_139
+	jmp	.LBB0_138
 .LBB0_27:
-	.cfi_def_cfa_offset 624
-	movq	280(%rsp), %rdi
+	movq	768(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
 	leaq	.Ltypy.str.4(%rip), %rdi
 	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 256(%rsp)
+	movq	%rax, 744(%rsp)
 	cmpq	$0, %rax
-	jne	.LBB0_58
+	jne	.LBB0_146
 	jmp	.LBB0_29
 .LBB0_28:
-	movq	408(%rsp), %rdi
-	movq	240(%rsp), %rax
-	movq	%rax, 248(%rsp)
+	movq	896(%rsp), %rdi
+	movq	728(%rsp), %rax
+	movq	%rax, 736(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	400(%rsp), %rdi
+	movq	888(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	280(%rsp), %rdi
-	callq	typy_rt_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	248(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	904(%rsp), %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_148
+	jmp	.LBB0_147
 .LBB0_29:
-	.cfi_def_cfa_offset 624
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	400(%rsp), %rdi
-	callq	typy_rt_decrement@PLT
-	movq	408(%rsp), %rdi
-	callq	typy_rt_decrement@PLT
-	movq	typy.global.4(%rip), %rax
-	movq	%rax, 208(%rsp)
-	movl	$3, %edi
-	callq	typy_rt_int_negate@PLT
-	movq	208(%rsp), %rdi
-	movq	%rax, %rsi
-	movq	%rsi, 216(%rsp)
-	callq	typy_rt_str_index@PLT
-	movq	%rdx, 224(%rsp)
-	cmpq	$0, %rdx
-	movq	%rax, 232(%rsp)
-	jne	.LBB0_59
-	jmp	.LBB0_33
+	movq	904(%rsp), %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_156
+	jmp	.LBB0_155
 .LBB0_30:
-	movq	408(%rsp), %rdi
-	movq	192(%rsp), %rax
-	movq	%rax, 200(%rsp)
+	movq	896(%rsp), %rdi
+	movq	712(%rsp), %rax
+	movq	%rax, 720(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	400(%rsp), %rdi
+	movq	888(%rsp), %rdi
 	callq	typy_rt_decrement@PLT
-	movq	416(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	200(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	904(%rsp), %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_162
+	jmp	.LBB0_161
 .LBB0_31:
-	.cfi_def_cfa_offset 624
-	movb	191(%rsp), %al
+	movb	711(%rsp), %al
 	testb	$1, %al
 	jne	.LBB0_42
 	jmp	.LBB0_43
 .LBB0_32:
-	movb	189(%rsp), %al
-	movb	%al, 190(%rsp)
+	movb	709(%rsp), %al
+	movb	%al, 710(%rsp)
 	testb	$1, %al
 	jne	.LBB0_38
 	jmp	.LBB0_37
 .LBB0_33:
-	movq	216(%rsp), %rdi
-	movq	232(%rsp), %rax
-	movq	%rax, 160(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	movq	160(%rsp), %rdi
-	callq	typy_rt_ord@PLT
-	movq	%rdx, 168(%rsp)
-	cmpq	$0, %rdx
-	movq	%rax, 176(%rsp)
-	jne	.LBB0_60
-	jmp	.LBB0_35
-.LBB0_34:
-	movq	216(%rsp), %rdi
-	movq	144(%rsp), %rax
-	movq	%rax, 152(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	152(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
-.LBB0_35:
-	.cfi_def_cfa_offset 624
-	movq	160(%rsp), %rdi
-	movq	176(%rsp), %rax
-	movq	%rax, 128(%rsp)
-	callq	typy_rt_decrement@PLT
-	movq	128(%rsp), %rdi
-	movl	$467, %esi
-	movl	$1, %edx
-	callq	typy_rt_int_compare@PLT
-	movq	128(%rsp), %rdi
-	cmpb	$0, %al
+	movq	688(%rsp), %rax
+	movq	680(%rsp), %rcx
+	movq	%rcx, 696(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
 	setne	%al
-	movb	%al, 143(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	movb	143(%rsp), %al
-	movb	%al, 189(%rsp)
-	jmp	.LBB0_32
-.LBB0_36:
-	movq	160(%rsp), %rdi
-	movq	112(%rsp), %rax
-	movq	%rax, 120(%rsp)
+	testb	$1, %al
+	jne	.LBB0_170
+	jmp	.LBB0_169
+.LBB0_34:
+	movq	688(%rsp), %rax
+	movq	664(%rsp), %rdx
+	movq	%rdx, 672(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_173
+	jmp	.LBB0_172
+.LBB0_35:
+	movq	696(%rsp), %rdi
+	movq	648(%rsp), %rax
+	movq	%rax, 656(%rsp)
 	callq	typy_rt_decrement@PLT
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	120(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	656(%rsp), %rax
+	andq	$467, %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_180
+	jmp	.LBB0_181
+.LBB0_36:
+	movq	696(%rsp), %rdi
+	movq	624(%rsp), %rdx
+	movq	%rdx, 632(%rsp)
+	callq	typy_rt_decrement@PLT
+	movq	1136(%rsp), %rax
+	movq	%rax, 640(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_186
+	jmp	.LBB0_185
 .LBB0_37:
-	.cfi_def_cfa_offset 624
-	movb	190(%rsp), %al
-	movb	%al, 191(%rsp)
+	movb	710(%rsp), %al
+	movb	%al, 711(%rsp)
 	jmp	.LBB0_31
 .LBB0_38:
-	movq	typy.global.6(%rip), %rdi
-	movl	$5, %esi
-	callq	typy_rt_int_modulo@PLT
-	movq	%rdx, 96(%rsp)
-	cmpq	$0, %rdx
-	movq	%rax, 104(%rsp)
-	jne	.LBB0_61
-	jmp	.LBB0_40
+	movq	typy.global.6(%rip), %rcx
+	movq	%rcx, 616(%rsp)
+	movq	%rcx, %rax
+	andq	$5, %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	movabsq	$-9223372036854775807, %rdx
+	cmpq	%rdx, %rcx
+	sete	%cl
+	andb	$0, %cl
+	xorb	$-1, %cl
+	andb	$-1, %al
+	andb	%cl, %al
+	testb	$1, %al
+	jne	.LBB0_191
+	jmp	.LBB0_192
 .LBB0_39:
-	movb	95(%rsp), %al
-	movb	%al, 191(%rsp)
+	movb	615(%rsp), %al
+	movb	%al, 711(%rsp)
 	jmp	.LBB0_31
 .LBB0_40:
-	movq	104(%rsp), %rdi
-	movq	%rdi, 80(%rsp)
-	movl	$1, %edx
-	movq	%rdx, %rsi
-	callq	typy_rt_int_compare@PLT
-	movq	80(%rsp), %rdi
-	cmpb	$0, %al
+	movq	592(%rsp), %rax
+	movq	%rax, 600(%rsp)
+	andq	$1, %rax
+	andq	$1, %rax
+	cmpq	$0, %rax
 	setne	%al
-	movb	%al, 94(%rsp)
-	callq	typy_rt_int_decrement@PLT
-	movb	94(%rsp), %al
-	movb	%al, 95(%rsp)
-	jmp	.LBB0_39
+	testb	$1, %al
+	jne	.LBB0_195
+	jmp	.LBB0_196
 .LBB0_41:
-	movq	64(%rsp), %rax
-	movq	%rax, 72(%rsp)
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	72(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	568(%rsp), %rax
+	movq	%rax, 576(%rsp)
+	movq	1136(%rsp), %rax
+	movq	%rax, 584(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_201
+	jmp	.LBB0_200
 .LBB0_42:
-	.cfi_def_cfa_offset 624
 	leaq	.Ltypy.str.6(%rip), %rax
-	movq	%rax, 56(%rsp)
+	movq	%rax, 560(%rsp)
 	jmp	.LBB0_44
 .LBB0_43:
 	leaq	.Ltypy.str.7(%rip), %rax
-	movq	%rax, 56(%rsp)
+	movq	%rax, 560(%rsp)
 	jmp	.LBB0_44
 .LBB0_44:
-	movq	56(%rsp), %rdi
+	movq	560(%rsp), %rdi
 	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 48(%rsp)
+	movq	%rax, 552(%rsp)
 	cmpq	$0, %rax
-	jne	.LBB0_62
+	jne	.LBB0_206
 	leaq	.Ltypy.str.4(%rip), %rdi
 	callq	typy_rt_write_stdout_checked@PLT
-	movq	%rax, 40(%rsp)
+	movq	%rax, 544(%rsp)
 	cmpq	$0, %rax
-	jne	.LBB0_63
+	jne	.LBB0_207
 	jmp	.LBB0_47
 .LBB0_46:
-	movq	24(%rsp), %rax
-	movq	%rax, 32(%rsp)
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	32(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	520(%rsp), %rax
+	movq	%rax, 528(%rsp)
+	movq	1136(%rsp), %rax
+	movq	%rax, 536(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_209
+	jmp	.LBB0_208
 .LBB0_47:
-	.cfi_def_cfa_offset 624
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	xorl	%eax, %eax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	1136(%rsp), %rax
+	movq	%rax, 512(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_215
+	jmp	.LBB0_214
 .LBB0_48:
-	.cfi_def_cfa_offset 624
-	movq	8(%rsp), %rax
-	movq	%rax, 16(%rsp)
-	movq	608(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	600(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	592(%rsp), %rdi
-	callq	typy_rt_int_decrement@PLT
-	movq	16(%rsp), %rax
-	addq	$616, %rsp
-	.cfi_def_cfa_offset 8
-	retq
+	movq	488(%rsp), %rax
+	movq	%rax, 496(%rsp)
+	movq	1136(%rsp), %rax
+	movq	%rax, 504(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_221
+	jmp	.LBB0_220
 .LBB0_49:
-	.cfi_def_cfa_offset 624
-	movq	576(%rsp), %rdi
+	movq	1104(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$1, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	576(%rsp), %rax
-	movq	%rax, 552(%rsp)
+	movq	1104(%rsp), %rax
+	movq	%rax, 1080(%rsp)
 	jmp	.LBB0_3
 .LBB0_50:
-	movq	536(%rsp), %rdi
-	leaq	.Ltypy.cstr.0(%rip), %rsi
-	leaq	.Ltypy.cstr.1(%rip), %rdx
-	movl	$4, %ecx
-	callq	typy_rt_traceback_add@PLT
-	movq	536(%rsp), %rax
-	movq	%rax, 472(%rsp)
-	jmp	.LBB0_10
+	movl	$1, %edi
+	callq	typy_rt_int_increment@PLT
 .LBB0_51:
-	movq	496(%rsp), %rdi
+	movq	typy.global.6(%rip), %rax
+	movq	%rax, 480(%rsp)
+	movq	$1, typy.global.6(%rip)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_53
+	movq	480(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_53:
+	movb	$1, typy.global.7(%rip)
+	movb	$1, %al
+	testb	$1, %al
+	jne	.LBB0_55
+	movl	$1, %edi
+	callq	typy_rt_int_increment@PLT
+.LBB0_55:
+	movq	1136(%rsp), %rax
+	movq	%rax, 472(%rsp)
+	movq	$1, 1136(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_57
+	movq	472(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_57:
+	movq	typy.global.4(%rip), %rdi
+	callq	typy_rt_str_length@PLT
+	movq	%rax, %rcx
+	movq	1128(%rsp), %rax
+	movq	%rax, 464(%rsp)
+	movq	%rcx, 1128(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_59
+	movq	464(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_59:
+	movb	$1, %al
+	testb	$1, %al
+	jne	.LBB0_61
+	movl	$3, %edi
+	callq	typy_rt_int_increment@PLT
+.LBB0_61:
+	movq	1120(%rsp), %rax
+	movq	%rax, 456(%rsp)
+	movq	$3, 1120(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_63
+	movq	456(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_63:
+	jmp	.LBB0_4
+.LBB0_64:
+	movq	1064(%rsp), %rax
+	movq	1072(%rsp), %rcx
+	cmpq	%rcx, %rax
+	setl	%al
+	movb	%al, 455(%rsp)
+	jmp	.LBB0_66
+.LBB0_65:
+	movq	1072(%rsp), %rsi
+	movq	1064(%rsp), %rdi
+	movl	$5, %edx
+	callq	typy_rt_int_compare@PLT
+	cmpb	$0, %al
+	setne	%al
+	movb	%al, 455(%rsp)
+.LBB0_66:
+	movb	455(%rsp), %al
+	testb	$1, %al
+	jne	.LBB0_5
+	jmp	.LBB0_7
+.LBB0_67:
+	movq	1056(%rsp), %rdi
+	callq	typy_rt_int_increment@PLT
+.LBB0_68:
+	movq	1056(%rsp), %rcx
+	movq	typy.global.0(%rip), %rax
+	movq	%rax, 440(%rsp)
+	movq	%rcx, typy.global.0(%rip)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_70
+	movq	440(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_70:
+	movb	$1, typy.global.1(%rip)
+	movq	typy.global.6(%rip), %rax
+	movq	%rax, 960(%rsp)
+	movq	typy.global.4(%rip), %rdi
+	movq	typy.global.0(%rip), %rsi
+	callq	typy_rt_str_index@PLT
+	movq	%rdx, 432(%rsp)
+	cmpq	$0, %rdx
+	movq	%rax, 1000(%rsp)
+	je	.LBB0_9
+	movq	432(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$4, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	496(%rsp), %rax
-	movq	%rax, 440(%rsp)
+	movq	432(%rsp), %rax
+	movq	%rax, 976(%rsp)
+	jmp	.LBB0_10
+.LBB0_72:
+	movq	1040(%rsp), %rax
+	movq	1048(%rsp), %rcx
+	subq	$1, %rcx
+	addq	%rcx, %rax
+	seto	%cl
+	xorb	$-1, %cl
+	testb	$1, %cl
+	movq	%rax, 424(%rsp)
+	jne	.LBB0_74
+.LBB0_73:
+	movq	1048(%rsp), %rsi
+	movq	1040(%rsp), %rdi
+	callq	typy_rt_int_add@PLT
+	movq	%rax, 424(%rsp)
+.LBB0_74:
+	movq	424(%rsp), %rcx
+	movq	1136(%rsp), %rax
+	movq	%rax, 416(%rsp)
+	movq	%rcx, 1136(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_76
+	movq	416(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_76:
+	jmp	.LBB0_4
+.LBB0_77:
+	movq	1032(%rsp), %rax
+	cmpq	$801, %rax
+	setg	%al
+	movb	%al, 415(%rsp)
+	jmp	.LBB0_79
+.LBB0_78:
+	movq	1032(%rsp), %rdi
+	movl	$801, %esi
+	movl	$9, %edx
+	callq	typy_rt_int_compare@PLT
+	cmpb	$0, %al
+	setne	%al
+	movb	%al, 415(%rsp)
+.LBB0_79:
+	movb	415(%rsp), %al
+	movb	%al, 935(%rsp)
+	jmp	.LBB0_13
+.LBB0_80:
+	movq	1016(%rsp), %rdi
+	leaq	.Ltypy.cstr.0(%rip), %rsi
+	leaq	.Ltypy.cstr.1(%rip), %rdx
+	movl	$4, %ecx
+	callq	typy_rt_traceback_add@PLT
+	movq	1016(%rsp), %rax
+	movq	%rax, 936(%rsp)
 	jmp	.LBB0_12
-.LBB0_52:
-	movq	424(%rsp), %rdi
-	leaq	.Ltypy.cstr.0(%rip), %rsi
-	leaq	.Ltypy.cstr.1(%rip), %rdx
-	movl	$6, %ecx
-	callq	typy_rt_traceback_add@PLT
-	movq	424(%rsp), %rax
-	movq	%rax, 376(%rsp)
-	jmp	.LBB0_18
-.LBB0_53:
+.LBB0_81:
+	movq	992(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_82:
+	movq	1128(%rsp), %rax
+	movq	%rax, 400(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_84
+	movq	400(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_84:
+	movq	1120(%rsp), %rax
+	movq	%rax, 392(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_86
 	movq	392(%rsp), %rdi
-	leaq	.Ltypy.cstr.0(%rip), %rsi
-	leaq	.Ltypy.cstr.1(%rip), %rdx
-	movl	$6, %ecx
-	callq	typy_rt_traceback_add@PLT
-	movq	392(%rsp), %rax
-	movq	%rax, 352(%rsp)
-	jmp	.LBB0_20
-.LBB0_54:
+	callq	typy_rt_int_decrement@PLT
+.LBB0_86:
+	movq	984(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_87:
+	.cfi_def_cfa_offset 1152
+	movq	960(%rsp), %rax
+	movq	968(%rsp), %rcx
+	subq	$1, %rcx
+	addq	%rcx, %rax
+	seto	%cl
+	xorb	$-1, %cl
+	testb	$1, %cl
+	movq	%rax, 384(%rsp)
+	jne	.LBB0_89
+.LBB0_88:
+	movq	968(%rsp), %rsi
+	movq	960(%rsp), %rdi
+	callq	typy_rt_int_add@PLT
+	movq	%rax, 384(%rsp)
+.LBB0_89:
+	movq	968(%rsp), %rax
+	movq	384(%rsp), %rcx
+	movq	%rcx, 376(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_91
+	movq	968(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_91:
+	movq	376(%rsp), %rcx
+	movq	typy.global.6(%rip), %rax
+	movq	%rax, 368(%rsp)
+	movq	%rcx, typy.global.6(%rip)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_93
 	movq	368(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_93:
+	movb	$1, typy.global.7(%rip)
+	jmp	.LBB0_6
+.LBB0_94:
+	movq	952(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_95:
+	movq	1128(%rsp), %rax
+	movq	%rax, 360(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_97
+	movq	360(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_97:
+	movq	1120(%rsp), %rax
+	movq	%rax, 352(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_99
+	movq	352(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_99:
+	movq	944(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_100:
+	.cfi_def_cfa_offset 1152
+	movq	912(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$6, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	368(%rsp), %rax
-	movq	%rax, 328(%rsp)
-	jmp	.LBB0_22
-.LBB0_55:
+	movq	912(%rsp), %rax
+	movq	%rax, 864(%rsp)
+	jmp	.LBB0_18
+.LBB0_101:
+	movq	880(%rsp), %rdi
+	leaq	.Ltypy.cstr.0(%rip), %rsi
+	leaq	.Ltypy.cstr.1(%rip), %rdx
+	movl	$6, %ecx
+	callq	typy_rt_traceback_add@PLT
+	movq	880(%rsp), %rax
+	movq	%rax, 840(%rsp)
+	jmp	.LBB0_20
+.LBB0_102:
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_103:
+	movq	1136(%rsp), %rax
+	movq	%rax, 344(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_105
 	movq	344(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_105:
+	movq	1128(%rsp), %rax
+	movq	%rax, 336(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_107
+	movq	336(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_107:
+	movq	1120(%rsp), %rax
+	movq	%rax, 328(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_109
+	movq	328(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_109:
+	movq	872(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_110:
+	.cfi_def_cfa_offset 1152
+	movq	856(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$6, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	344(%rsp), %rax
-	movq	%rax, 296(%rsp)
-	jmp	.LBB0_24
-.LBB0_56:
+	movq	856(%rsp), %rax
+	movq	%rax, 816(%rsp)
+	jmp	.LBB0_22
+.LBB0_111:
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_112:
+	movq	1136(%rsp), %rax
+	movq	%rax, 320(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_114
+	movq	320(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_114:
+	movq	1128(%rsp), %rax
+	movq	%rax, 312(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_116
 	movq	312(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_116:
+	movq	1120(%rsp), %rax
+	movq	%rax, 304(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_118
+	movq	304(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_118:
+	movq	848(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_119:
+	.cfi_def_cfa_offset 1152
+	movq	832(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$6, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	312(%rsp), %rax
-	movq	%rax, 264(%rsp)
-	jmp	.LBB0_26
-.LBB0_57:
+	movq	832(%rsp), %rax
+	movq	%rax, 784(%rsp)
+	jmp	.LBB0_24
+.LBB0_120:
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_121:
+	movq	1136(%rsp), %rax
+	movq	%rax, 296(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_123
+	movq	296(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_123:
+	movq	1128(%rsp), %rax
+	movq	%rax, 288(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_125
 	movq	288(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_125:
+	movq	1120(%rsp), %rax
+	movq	%rax, 280(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_127
+	movq	280(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_127:
+	movq	824(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_128:
+	.cfi_def_cfa_offset 1152
+	movq	800(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$6, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	288(%rsp), %rax
-	movq	%rax, 240(%rsp)
-	jmp	.LBB0_28
-.LBB0_58:
+	movq	800(%rsp), %rax
+	movq	%rax, 752(%rsp)
+	jmp	.LBB0_26
+.LBB0_129:
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_130:
+	movq	1136(%rsp), %rax
+	movq	%rax, 272(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_132
+	movq	272(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_132:
+	movq	1128(%rsp), %rax
+	movq	%rax, 264(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_134
+	movq	264(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_134:
+	movq	1120(%rsp), %rax
+	movq	%rax, 256(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_136
 	movq	256(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_136:
+	movq	792(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_137:
+	.cfi_def_cfa_offset 1152
+	movq	776(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$6, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	256(%rsp), %rax
-	movq	%rax, 192(%rsp)
+	movq	776(%rsp), %rax
+	movq	%rax, 728(%rsp)
+	jmp	.LBB0_28
+.LBB0_138:
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_139:
+	movq	1136(%rsp), %rax
+	movq	%rax, 248(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_141
+	movq	248(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_141:
+	movq	1128(%rsp), %rax
+	movq	%rax, 240(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_143
+	movq	240(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_143:
+	movq	1120(%rsp), %rax
+	movq	%rax, 232(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_145
+	movq	232(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_145:
+	movq	760(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_146:
+	.cfi_def_cfa_offset 1152
+	movq	744(%rsp), %rdi
+	leaq	.Ltypy.cstr.0(%rip), %rsi
+	leaq	.Ltypy.cstr.1(%rip), %rdx
+	movl	$6, %ecx
+	callq	typy_rt_traceback_add@PLT
+	movq	744(%rsp), %rax
+	movq	%rax, 712(%rsp)
 	jmp	.LBB0_30
-.LBB0_59:
+.LBB0_147:
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_148:
+	movq	768(%rsp), %rdi
+	callq	typy_rt_decrement@PLT
+	movq	1136(%rsp), %rax
+	movq	%rax, 224(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_150
 	movq	224(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_150:
+	movq	1128(%rsp), %rax
+	movq	%rax, 216(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_152
+	movq	216(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_152:
+	movq	1120(%rsp), %rax
+	movq	%rax, 208(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_154
+	movq	208(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_154:
+	movq	736(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_155:
+	.cfi_def_cfa_offset 1152
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_156:
+	movq	888(%rsp), %rdi
+	callq	typy_rt_decrement@PLT
+	movq	896(%rsp), %rdi
+	callq	typy_rt_decrement@PLT
+	movq	typy.global.4(%rip), %rax
+	movq	%rax, 200(%rsp)
+	movb	$1, %al
+	testb	$1, %al
+	jne	.LBB0_157
+	jmp	.LBB0_158
+.LBB0_157:
+	movl	$2, %eax
+	subq	$3, %rax
+	seto	%cl
+	xorb	$-1, %cl
+	testb	$1, %cl
+	movq	%rax, 192(%rsp)
+	jne	.LBB0_159
+.LBB0_158:
+	movl	$3, %edi
+	callq	typy_rt_int_negate@PLT
+	movq	%rax, 192(%rsp)
+.LBB0_159:
+	movq	200(%rsp), %rdi
+	movq	192(%rsp), %rsi
+	movq	%rsi, 688(%rsp)
+	callq	typy_rt_str_index@PLT
+	movq	%rdx, 184(%rsp)
+	cmpq	$0, %rdx
+	movq	%rax, 680(%rsp)
+	je	.LBB0_33
+	movq	184(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$7, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	224(%rsp), %rax
-	movq	%rax, 144(%rsp)
+	movq	184(%rsp), %rax
+	movq	%rax, 664(%rsp)
 	jmp	.LBB0_34
-.LBB0_60:
+.LBB0_161:
+	movq	904(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_162:
+	movq	1136(%rsp), %rax
+	movq	%rax, 176(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_164
+	movq	176(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_164:
+	movq	1128(%rsp), %rax
+	movq	%rax, 168(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_166
 	movq	168(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_166:
+	movq	1120(%rsp), %rax
+	movq	%rax, 160(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_168
+	movq	160(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_168:
+	movq	720(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_169:
+	.cfi_def_cfa_offset 1152
+	movq	688(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_170:
+	movq	696(%rsp), %rdi
+	callq	typy_rt_ord@PLT
+	movq	%rdx, 152(%rsp)
+	cmpq	$0, %rdx
+	movq	%rax, 648(%rsp)
+	je	.LBB0_35
+	movq	152(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$7, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	168(%rsp), %rax
-	movq	%rax, 112(%rsp)
+	movq	152(%rsp), %rax
+	movq	%rax, 624(%rsp)
 	jmp	.LBB0_36
-.LBB0_61:
-	movq	96(%rsp), %rdi
+.LBB0_172:
+	movq	688(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_173:
+	movq	1136(%rsp), %rax
+	movq	%rax, 144(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_175
+	movq	144(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_175:
+	movq	1128(%rsp), %rax
+	movq	%rax, 136(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_177
+	movq	136(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_177:
+	movq	1120(%rsp), %rax
+	movq	%rax, 128(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_179
+	movq	128(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_179:
+	movq	672(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_180:
+	.cfi_def_cfa_offset 1152
+	movq	656(%rsp), %rax
+	cmpq	$467, %rax
+	sete	%al
+	movb	%al, 127(%rsp)
+	jmp	.LBB0_182
+.LBB0_181:
+	movq	656(%rsp), %rdi
+	movl	$467, %esi
+	movl	$1, %edx
+	callq	typy_rt_int_compare@PLT
+	cmpb	$0, %al
+	setne	%al
+	movb	%al, 127(%rsp)
+.LBB0_182:
+	movq	656(%rsp), %rax
+	movb	127(%rsp), %cl
+	movb	%cl, 126(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_184
+	movq	656(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_184:
+	movb	126(%rsp), %al
+	movb	%al, 709(%rsp)
+	jmp	.LBB0_32
+.LBB0_185:
+	movq	640(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_186:
+	movq	1128(%rsp), %rax
+	movq	%rax, 112(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_188
+	movq	112(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_188:
+	movq	1120(%rsp), %rax
+	movq	%rax, 104(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_190
+	movq	104(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_190:
+	movq	632(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_191:
+	.cfi_def_cfa_offset 1152
+	movq	616(%rsp), %rax
+	sarq	%rax
+	movl	$2, %ecx
+	cqto
+	idivq	%rcx
+	movq	%rdx, %rax
+	cmpq	$0, %rax
+	setne	%sil
+	movq	%rax, %rdx
+	xorq	$2, %rdx
+	cmpq	$0, %rdx
+	setl	%cl
+	andb	%cl, %sil
+	xorl	%ecx, %ecx
+	movl	$2, %edx
+	testb	$1, %sil
+	cmovneq	%rdx, %rcx
+	addq	%rcx, %rax
+	shlq	%rax
+	orq	$1, %rax
+	xorl	%ecx, %ecx
+	movl	%ecx, %edx
+	movq	%rax, 88(%rsp)
+	movq	%rdx, 96(%rsp)
+	jmp	.LBB0_193
+.LBB0_192:
+	movq	616(%rsp), %rdi
+	movl	$5, %esi
+	callq	typy_rt_int_modulo@PLT
+	movq	%rax, 88(%rsp)
+	movq	%rdx, 96(%rsp)
+.LBB0_193:
+	movq	88(%rsp), %rax
+	movq	96(%rsp), %rcx
+	movq	%rcx, 80(%rsp)
+	cmpq	$0, %rcx
+	movq	%rax, 592(%rsp)
+	je	.LBB0_40
+	movq	80(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$7, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	96(%rsp), %rax
-	movq	%rax, 64(%rsp)
+	movq	80(%rsp), %rax
+	movq	%rax, 568(%rsp)
 	jmp	.LBB0_41
-.LBB0_62:
-	movq	48(%rsp), %rdi
+.LBB0_195:
+	movq	600(%rsp), %rax
+	cmpq	$1, %rax
+	sete	%al
+	movb	%al, 79(%rsp)
+	jmp	.LBB0_197
+.LBB0_196:
+	movq	600(%rsp), %rdi
+	movl	$1, %edx
+	movq	%rdx, %rsi
+	callq	typy_rt_int_compare@PLT
+	cmpb	$0, %al
+	setne	%al
+	movb	%al, 79(%rsp)
+.LBB0_197:
+	movq	600(%rsp), %rax
+	movb	79(%rsp), %cl
+	movb	%cl, 78(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_199
+	movq	600(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_199:
+	movb	78(%rsp), %al
+	movb	%al, 615(%rsp)
+	jmp	.LBB0_39
+.LBB0_200:
+	movq	584(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_201:
+	movq	1128(%rsp), %rax
+	movq	%rax, 64(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_203
+	movq	64(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_203:
+	movq	1120(%rsp), %rax
+	movq	%rax, 56(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_205
+	movq	56(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_205:
+	movq	576(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_206:
+	.cfi_def_cfa_offset 1152
+	movq	552(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$7, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	48(%rsp), %rax
-	movq	%rax, 24(%rsp)
+	movq	552(%rsp), %rax
+	movq	%rax, 520(%rsp)
 	jmp	.LBB0_46
-.LBB0_63:
-	movq	40(%rsp), %rdi
+.LBB0_207:
+	movq	544(%rsp), %rdi
 	leaq	.Ltypy.cstr.0(%rip), %rsi
 	leaq	.Ltypy.cstr.1(%rip), %rdx
 	movl	$7, %ecx
 	callq	typy_rt_traceback_add@PLT
-	movq	40(%rsp), %rax
-	movq	%rax, 8(%rsp)
+	movq	544(%rsp), %rax
+	movq	%rax, 488(%rsp)
 	jmp	.LBB0_48
+.LBB0_208:
+	movq	536(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_209:
+	movq	1128(%rsp), %rax
+	movq	%rax, 48(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_211
+	movq	48(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_211:
+	movq	1120(%rsp), %rax
+	movq	%rax, 40(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_213
+	movq	40(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_213:
+	movq	528(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_214:
+	.cfi_def_cfa_offset 1152
+	movq	512(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_215:
+	movq	1128(%rsp), %rax
+	movq	%rax, 32(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_217
+	movq	32(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_217:
+	movq	1120(%rsp), %rax
+	movq	%rax, 24(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_219
+	movq	24(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_219:
+	xorl	%eax, %eax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
+.LBB0_220:
+	.cfi_def_cfa_offset 1152
+	movq	504(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_221:
+	movq	1128(%rsp), %rax
+	movq	%rax, 16(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_223
+	movq	16(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_223:
+	movq	1120(%rsp), %rax
+	movq	%rax, 8(%rsp)
+	andq	$1, %rax
+	cmpq	$0, %rax
+	setne	%al
+	testb	$1, %al
+	jne	.LBB0_225
+	movq	8(%rsp), %rdi
+	callq	typy_rt_int_decrement@PLT
+.LBB0_225:
+	movq	496(%rsp), %rax
+	addq	$1144, %rsp
+	.cfi_def_cfa_offset 8
+	retq
 .Lfunc_end0:
 	.size	__typy_main, .Lfunc_end0-__typy_main
 	.cfi_endproc

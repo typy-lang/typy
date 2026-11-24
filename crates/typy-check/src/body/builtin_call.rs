@@ -27,6 +27,9 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Bytes {
             return self.call_bytes(arguments, keywords, span);
         }
+        if builtin == Builtin::Bytearray {
+            return self.call_bytearray(arguments, keywords, span);
+        }
         if builtin == Builtin::Tuple {
             return self.call_tuple(arguments, keywords, None, span);
         }
@@ -51,6 +54,20 @@ impl BodyChecker<'_> {
         if builtin == Builtin::Round {
             return self.call_round(arguments, keywords, span);
         }
+        if builtin == Builtin::Hash {
+            return self.hash_call(arguments, keywords, span);
+        }
+        if matches!(
+            builtin,
+            Builtin::Divmod
+                | Builtin::Pow
+                | Builtin::Bin
+                | Builtin::Hex
+                | Builtin::Oct
+                | Builtin::Format
+        ) {
+            return self.call_number_builtin(builtin, arguments, keywords, span);
+        }
         if builtin == Builtin::Iter {
             return self.call_iter(arguments, keywords, span);
         }
@@ -67,6 +84,30 @@ impl BodyChecker<'_> {
             .iter()
             .map(|argument| {
                 let value = self.expression(argument);
+                // `len` of an enum class is its number of members, and a member of an `IntEnum`
+                // or a `StrEnum` is its value to the builtins of numbers and text (CLS-44).
+                let value = if matches!(
+                    builtin,
+                    Builtin::Len
+                        | Builtin::Range
+                        | Builtin::Abs
+                        | Builtin::Int
+                        | Builtin::Float
+                        | Builtin::Bool
+                        | Builtin::Chr
+                        | Builtin::Ord
+                ) && !(builtin == Builtin::Len && self.flag_bits(&value).is_some())
+                {
+                    // `len` of a flag counts its bits through `__len__`, unknown ones too.
+                    let value = if builtin == Builtin::Len {
+                        self.enum_members(value)
+                    } else {
+                        value
+                    };
+                    self.enum_value(value)
+                } else {
+                    value
+                };
                 if builtin == Builtin::Len {
                     self.tuple_view(value)
                 } else {
@@ -180,12 +221,20 @@ impl BodyChecker<'_> {
         let types: Vec<Type> = values.iter().map(|value| value.ty.clone()).collect();
         let result = match builtin {
             Builtin::Print
+            | Builtin::Hash
             | Builtin::Bytes
+            | Builtin::Bytearray
             | Builtin::List
             | Builtin::Tuple
             | Builtin::Set
             | Builtin::Dict
             | Builtin::Round
+            | Builtin::Divmod
+            | Builtin::Pow
+            | Builtin::Bin
+            | Builtin::Hex
+            | Builtin::Oct
+            | Builtin::Format
             | Builtin::Iter
             | Builtin::Next
             | Builtin::Open
@@ -261,6 +310,7 @@ impl BodyChecker<'_> {
                         | Type::Dict(..)
                         | Type::DictView(..)
                         | Type::Bytes
+                        | Type::Bytearray
                 ) {
                     self.expect(&values[0], Type::Str, "the argument of `len`");
                 }

@@ -107,3 +107,103 @@ fn a_call_its_callee_does_not_take_is_refused_with_the_reason() {
         );
     }
 }
+
+#[test]
+fn lib_28_numeric_builtins_take_what_cpython_takes() {
+    let accepted = [
+        "print(divmod(7, 2), divmod(7.5, 2), divmod(True, 3))\n",
+        "print(pow(2, 10), pow(2.0, -1), pow(base=2, exp=3), pow(2, 3, 5), pow(2, 3, mod=None))\n",
+        "print(bin(5), hex(True), oct(-8), format(1.5), format(\"x\", \">3\"))\n",
+        "from collections.abc import Callable\n\nshow: Callable[[int], str] = hex\nprint(show(1), bin)\n",
+    ];
+    for source in accepted {
+        assert_eq!(app(source), Vec::<String>::new(), "{source}");
+    }
+    let refused = [
+        (
+            "print(bin(1.5))\n",
+            "E0404",
+            "the argument of `bin` must be an int, and this is a float",
+        ),
+        (
+            "print(divmod(\"a\", 2))\n",
+            "E0401",
+            "`divmod` is not defined for str and int",
+        ),
+        (
+            "print(format(3, 4))\n",
+            "E0404",
+            "the format specification of `format` must be a str, and this is an int",
+        ),
+        (
+            "print(hex(x=3))\n",
+            "E0404",
+            "hex() takes no keyword arguments: CPython raises `TypeError`",
+        ),
+        (
+            "print(pow(2, 3, 4.0))\n",
+            "E0404",
+            "the modulus of a `pow` with a modulus must be an int, and this is a float",
+        ),
+        (
+            "print(pow(2, exp=3, base=1))\n",
+            "E0404",
+            "argument for pow() given by name ('base') and position (1): CPython raises `TypeError`",
+        ),
+        (
+            "print(pow(2, 3, modulo=5))\n",
+            "E0404",
+            "pow() got an unexpected keyword argument 'modulo': CPython raises `TypeError`",
+        ),
+        (
+            "print(pow(base=2))\n",
+            "E0404",
+            "pow() missing required argument 'exp' (pos 2): CPython raises `TypeError`",
+        ),
+        (
+            "print(pow(2, 3, 4, 5))\n",
+            "E0404",
+            "`pow` takes 2 to 3 arguments, and 4 are given",
+        ),
+        (
+            "print(divmod(1))\n",
+            "E0404",
+            "`divmod` takes 2 arguments, and 1 are given",
+        ),
+        (
+            "print(hex(undefined))\n",
+            "E0205",
+            "`undefined` is not defined",
+        ),
+        (
+            "print(pow(2, 3, undefined))\n",
+            "E0205",
+            "`undefined` is not defined",
+        ),
+        (
+            "print(pow(2))\n",
+            "E0404",
+            "pow() missing required argument 'exp' (pos 2): CPython raises `TypeError`",
+        ),
+        (
+            "print(pow(exp=2))\n",
+            "E0404",
+            "pow() missing required argument 'base' (pos 1): CPython raises `TypeError`",
+        ),
+        (
+            "n = 3\nprint(pow(2, n))\n",
+            "E0302",
+            "the exponent of `int ** int` must be a non-negative integer literal, because CPython \
+             returns a float for a negative exponent",
+        ),
+    ];
+    for (source, code, message) in refused {
+        let found = messages(source);
+        assert!(
+            found
+                .iter()
+                .any(|(each, text, _)| each == code && text == message),
+            "{source}\n{found:?}"
+        );
+    }
+}

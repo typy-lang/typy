@@ -1,0 +1,281 @@
+//! Gathers the `@overload` signatures of functions and methods (TYP-29, ADR-0112). Each
+//! `def` decorated with `typing.overload` before the `def` of the same name without it, its
+//! implementation, leaves the module or the class body and is kept by name, so the checker
+//! reads its signature and no program runs it.
+
+use std::collections::BTreeMap;
+
+use typy_diagnostics::{Diagnostic, DiagnosticCode, Diagnostics, RuleId};
+use typy_source::syntax::{Identifier, Stmt};
+
+use super::definition::{Definition, FunctionParts};
+use super::imported_name::ImportedName;
+use crate::body::Program;
+use crate::typed::FunctionId;
+
+/// The signatures of the overloads of each function or method that has them, by its ID.
+pub(crate) type Overloaded = Vec<(FunctionId, Vec<crate::typed::FunctionSignature>)>;
+
+/// The overloads of one module: for each function, and each method by its class's name,
+/// the `def` statements of its overloads in source order.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Overloads {
+    functions: BTreeMap<String, Vec<Stmt>>,
+    methods: BTreeMap<(String, String), Vec<Stmt>>,
+}
+
+impl Overloads {
+    /// Returns the overloads of the module function `name`.
+    pub(crate) fn of_function(&self, name: &str) -> &[Stmt] {
+        self.functions.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    /// Returns the overloads of the method `name` of the class `class`.
+    pub(crate) fn of_method(&self, class: &str, name: &str) -> &[Stmt] {
+        self.methods
+            .get(&(class.to_owned(), name.to_owned()))
+            .map_or(&[], Vec::as_slice)
+    }
+}
+
+/// Takes the overloads out of a module's body and of its classes' bodies, and reports an
+/// overload without an implementation, and one in a form a later release gives.
+pub(crate) fn gather(body: &mut Vec<Stmt>, diagnostics: &mut Diagnostics) -> Overloads {
+    let names = ImportedName::of(body, "typing", "overload");
+    let mut overloads = Overloads::default();
+    if names.is_empty() {
+        return overloads;
+    }
+    for (name, stubs) in gather_block(body, &names, None, diagnostics) {
+        overloads.functions.insert(name, stubs);
+    }
+    for statement in body.iter_mut() {
+        match statement {
+            Stmt::ClassDef {
+                name, body: inner, ..
+            } => {
+                let class = name.name.clone();
+                for (method, stubs) in gather_block(inner, &names, Some(&class), diagnostics) {
+                    overloads.methods.insert((class.clone(), method), stubs);
+                }
+                for member in inner.iter() {
+                    if let Stmt::FunctionDef { body: method, .. } = member {
+                        refuse_nested(method, &names, diagnostics);
+                    }
+                }
+            }
+            Stmt::FunctionDef { body: inner, .. } => refuse_nested(inner, &names, diagnostics),
+            other => {
+                for block in super::nested_blocks(other) {
+                    refuse_nested(block, &names, diagnostics);
+                }
+            }
+        }
+    }
+    overloads
+}
+
+/// Takes the overloads out of one block, a module's or a class's body, and returns them by
+/// the name of their implementation, which must follow them.
+fn gather_block(
+    body: &mut Vec<Stmt>,
+    names: &ImportedName,
+    class: Option<&str>,
+    diagnostics: &mut Diagnostics,
+) -> Vec<(String, Vec<Stmt>)> {
+    let mut gathered = Vec::new();
+    let mut waiting: Vec<Stmt> = Vec::new();
+    for mut statement in std::mem::take(body) {
+        if let Stmt::FunctionDef {
+            name,
+            decorators,
+            type_parameters,
+            ..
+        } = &mut statement
+            && decorators.iter().any(|decorator| names.names(decorator))
+        {
+            let others = decorators
+                .iter()
+                .filter(|decorator| !names.names(decorator))
+                .count();
+            check_stub(
+                (name, others, type_parameters.is_empty()),
+                class,
+                diagnostics,
+            );
+            decorators.clear();
+            let stub = statement;
+            if waiting
+                .first()
+                .is_some_and(|first| name_of(first) != name_of(&stub))
+            {
+                diagnostics.push(no_implementation(&waiting[0]));
+                waiting.clear();
+            }
+            waiting.push(stub);
+            continue;
+        }
+        if let Some(first) = waiting.first() {
+            if let Some(parts) =
+                FunctionParts::of(&statement).filter(|parts| parts.name.name == name_of(first))
+            {
+                check_implementation(&parts, class, diagnostics);
+                gathered.push((name_of(first).to_owned(), std::mem::take(&mut waiting)));
+            } else {
+                diagnostics.push(no_implementation(first));
+                waiting.clear();
+            }
+        }
+        body.push(statement);
+    }
+    if let Some(first) = waiting.first() {
+        diagnostics.push(no_implementation(first));
+    }
+    gathered
+}
+
+/// Reports an overload, by its name, its number of other decorators and whether it has no
+/// type parameters, in a form a later release gives: another decorator, type parameters, or
+/// a special method.
+fn check_stub(
+    (name, others, plain): (&Identifier, usize, bool),
+    class: Option<&str>,
+    diagnostics: &mut Diagnostics,
+) {
+    if others > 0 || !plain {
+        diagnostics.push(planned_form(
+            name.span,
+            "with another decorator or type parameters",
+        ));
+    } else if class.is_some() && is_special(&name.name) {
+        diagnostics.push(planned_form(name.span, "on a special method"));
+    }
+}
+
+/// Reports an implementation in a form a later release gives: decorated, generic, or a
+/// special method.
+fn check_implementation(
+    parts: &FunctionParts<'_>,
+    class: Option<&str>,
+    diagnostics: &mut Diagnostics,
+) {
+    if !parts.decorators.is_empty() || !parts.type_parameters.is_empty() {
+        diagnostics.push(planned_form(
+            parts.name.span,
+            "with a decorated or generic implementation",
+        ));
+    } else if class.is_some() && is_special(&parts.name.name) {
+        diagnostics.push(planned_form(parts.name.span, "on a special method"));
+    }
+}
+
+/// Reports each overload in a block of a function, a class method's body or a block such as
+/// an `if`, which a later release gives.
+fn refuse_nested(body: &[Stmt], names: &ImportedName, diagnostics: &mut Diagnostics) {
+    for statement in body {
+        if let Stmt::FunctionDef {
+            name, decorators, ..
+        } = statement
+            && decorators.iter().any(|decorator| names.names(decorator))
+        {
+            diagnostics.push(planned_form(name.span, "inside a function or a block"));
+        }
+        if let Stmt::FunctionDef { body: inner, .. } | Stmt::ClassDef { body: inner, .. } =
+            statement
+        {
+            refuse_nested(inner, names, diagnostics);
+        }
+        for block in super::nested_blocks(statement) {
+            refuse_nested(block, names, diagnostics);
+        }
+    }
+}
+
+fn name_of(statement: &Stmt) -> &str {
+    match statement {
+        Stmt::FunctionDef { name, .. } => &name.name,
+        _ => "",
+    }
+}
+
+fn is_special(name: &str) -> bool {
+    name.strip_prefix("__")
+        .and_then(|rest| rest.strip_suffix("__"))
+        .is_some_and(|middle| !middle.is_empty())
+}
+
+/// Returns E0432 for overloads that no implementation follows.
+fn no_implementation(first: &Stmt) -> Diagnostic {
+    let (name, span) = match first {
+        Stmt::FunctionDef { name, .. } => (name.name.as_str(), name.span),
+        other => ("", other.span()),
+    };
+    Diagnostic::new(
+        DiagnosticCode::error(432),
+        span,
+        format!("the overloads of `{name}` have no implementation"),
+    )
+    .with_rule(RuleId::TYP_29)
+    .with_help(format!(
+        "after the `@overload` definitions, write `def {name}(...)` without `@overload`, \
+         whose body runs for every call"
+    ))
+}
+
+/// Returns E0201 for an overload in a form planned for 0.13 (TYP-35).
+fn planned_form(span: typy_diagnostics::Span, form: &str) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(201),
+        span,
+        format!("`@overload` {form} is planned for TyPy 0.13 (TYP-35)"),
+    )
+    .with_rule(RuleId::TYP_35)
+}
+
+/// Reports each overload its implementation does not fit, one whose result no test tells
+/// apart from the implementation's others, and an override of a method with overloads,
+/// which a later release gives (TYP-29, TYP-35).
+pub(super) fn check_fits(
+    program: &Program,
+    definitions: &[Definition<'_>],
+    first_function: usize,
+    diagnostics: &mut Diagnostics,
+) {
+    for (index, definition) in definitions.iter().enumerate() {
+        let id = FunctionId(u32::try_from(first_function + index).unwrap_or(u32::MAX));
+        for (position, overload) in program.overloads.get(&id).into_iter().flatten().enumerate() {
+            let reason = match super::overload_fit::fit(overload, &definition.signature) {
+                Err(reason) => reason,
+                Ok(_)
+                    if !crate::body::can_test(
+                        &definition.signature.returns.value_type(),
+                        &overload.returns.value_type(),
+                    ) =>
+                {
+                    format!(
+                        "no test tells its result, {}, from the implementation's others when \
+                         the program runs",
+                        overload.returns
+                    )
+                }
+                Ok(_) => continue,
+            };
+            diagnostics.push(super::overload_fit::unfit(
+                &definition.name,
+                position,
+                &reason,
+                definition.span,
+            ));
+        }
+        if let Some(class) = definition.class
+            && program
+                .overloaded_base_method(class, &definition.name)
+                .is_some()
+        {
+            diagnostics.push(planned_form(
+                definition.span,
+                "on a method a derived class overrides",
+            ));
+        }
+    }
+}

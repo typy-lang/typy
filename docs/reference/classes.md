@@ -12,12 +12,15 @@ class body or assigned in `__init__`, and has one type.
 | A class derived from one class of the program, with its attributes and methods, overriding them | CLS-04 |
 | Class variables and attribute defaults given a value in the class body | CLS-11 |
 | `@staticmethod`, `@classmethod`, and `@property` with its setter | CLS-06 |
+| `typing.Self` in an instance or a class method's parameters and result; see [The class a method is called through](#the-class-a-method-is-called-through) | TYP-30 |
 | `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__`, `__ge__` and `__hash__` | CLS-07 |
 | `__add__`, `__radd__` and the other arithmetic, bitwise and unary methods | CLS-07 |
 | `NotImplemented`, returned by an operator or comparison method to give way | CLS-21 |
 | `__len__`, `__getitem__`, `__setitem__`, `__delitem__`, `__contains__` and `__bool__` | CLS-07 |
 | `@dataclass`, with `eq`, `order`, `frozen`, `match_args` and `field(default=...)` | CLS-05, CST-06 |
 | A class derived from `typing.NamedTuple`, whose instances are tuples of its fields | CLS-27 |
+| A class derived from `abc.ABC`, with `@abstractmethod`; see [Abstract classes](#abstract-classes) | CLS-45 |
+| A class derived from `enum.Enum`, `IntEnum`, `StrEnum`, `Flag` or `IntFlag`, with its members; see [Enum classes](#enum-classes) | CLS-44 |
 | `__str__` and `__repr__`, used by `print`, `str`, `repr`, f-strings and containers | CLS-08 |
 | A type object for every type, with `object` as the root | CLS-10 |
 | `type(x)`, class and built-in type names as values, `__name__` | CLS-12 |
@@ -420,6 +423,47 @@ the base keeps its own (CLS-25). Assigning it through a variable that
 holds such a subclass, such as `cls` in a class method, is planned for
 0.14 (CLS-31).
 
+## The class a method is called through
+
+`Self` of `typing`, in the parameters and the result of an instance or a
+class method, is the class the method is called through (TYP-30,
+ADR-0113). A method inherited by a derived class returns that class's
+instances through it, and a `Self` parameter takes them:
+
+<!-- typy-expect: accepted -->
+```python
+from typing import Self
+
+
+class Shape:
+    def __init__(self, size: float) -> None:
+        self.size = size
+
+    def grown(self, factor: float) -> Self:
+        self.size = self.size * factor
+        return self
+
+    @classmethod
+    def unit(cls) -> Self:
+        return cls(1.0)
+
+
+class Circle(Shape):
+    def label(self) -> str:
+        return f"circle {self.size}"
+
+
+print(Circle(1.0).grown(2.0).label(), Circle.unit().label())
+```
+
+In the body, `self`, a parameter declared `Self` and what a method that
+returns `Self` gives through them are of `Self`; another instance of the
+class is E0433, since a call through a derived class would get it in place
+of an instance of that class. A class method's `cls` makes its own class,
+so `cls(...)` is of `Self`. `Self` in a static method, in a generic or a
+protocol class, in an attribute's annotation and inside another type, such
+as `list[Self]`, is planned for 0.13 (TYP-36).
+
 ## Comparison methods
 
 `__eq__`, `__ne__`, `__lt__`, `__le__`, `__gt__` and `__ge__` give a
@@ -799,6 +843,199 @@ class derived from a named tuple with `__new__`, `__init__` or
 attributes of its own, and one that defines `__len__`, `__getitem__`,
 `__iter__` or `__contains__` are planned for 1.0 (CLS-41), and a named
 tuple where a plain tuple is expected also for 1.0 (CLS-42).
+
+## Abstract classes
+
+A class derived from `abc.ABC` marks a method `@abstractmethod`, and a
+class derived from it overrides the method (CLS-45). An instance is made
+only of a class that overrides every abstract method it has, so a call
+through an instance always runs an override:
+
+<!-- typy-expect: accepted -->
+```python
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self) -> float: ...
+
+    @property
+    @abstractmethod
+    def sides(self) -> int: ...
+
+    def describe(self) -> str:
+        return f"{self.area():.1f} with {self.sides} sides"
+
+    @classmethod
+    def make(cls) -> "Shape":
+        return cls()
+
+
+class Square(Shape):
+    def area(self) -> float:
+        return 4.0
+
+    @property
+    def sides(self) -> int:
+        return 4
+
+
+print(Square().describe(), Square.make().describe())
+try:
+    Shape.make()
+except TypeError as error:
+    print(error)
+```
+
+A call that names a class with an abstract method left, such as
+`Shape()`, is E0404. Through a value that holds the class, such as
+`cls()` in a class method called through `Shape`, it raises CPython's
+`TypeError` when the program runs. `@abstractmethod` comes last, just
+above `def`: above `@property`, `@staticmethod` or `@classmethod`
+CPython raises `AttributeError` when the class is defined, and TyPy
+refuses it with E0434.
+
+An abstract method's body may hold only a docstring, `pass` or `...`.
+CPython returns `None` when such a body runs, so where the method's
+result does not hold `None`, a call that runs the body directly is
+E0434: `super().area()`, `Shape.area(square)`, and `Shape.area` read as
+a value. A call through an instance runs the override. An abstract
+static or class method, which a call through the class runs, gives a
+value or raises, as other functions do (E0405). Without `ABC` among the
+class's ancestors, `@abstractmethod` changes nothing, as in CPython.
+`ABC` and `abstractmethod` are the names of `abc` TyPy gives;
+`ABCMeta` as a metaclass, and `ABC` as a type or a value, are refused.
+
+## Enum classes
+
+A class derived from `enum.Enum` names its members in its body, each a
+constant or `auto()` (CLS-44). A member is an instance of the class, with
+`name` and `value`; a member whose value another member has already is
+an alias of that member. The class finds a member by its value with a
+call and by its name with a subscript, and a loop, `len` and `in` read
+its members, aliases left out:
+
+<!-- typy-expect: accepted -->
+```python
+from enum import Enum, auto
+
+
+class Color(Enum):
+    RED = 1
+    GREEN = auto()
+    BLUE = auto()
+    CRIMSON = 1
+
+    def label(self) -> str:
+        return self.name.lower()
+
+
+def warmth(color: Color) -> str:
+    match color:
+        case Color.RED:
+            return "warm"
+        case _:
+            return "cool"
+
+
+print(Color.RED, repr(Color.GREEN), Color.BLUE.value)
+print(Color(2), Color["CRIMSON"] is Color.RED, len(Color))
+print([color.label() for color in Color], warmth(Color.BLUE))
+try:
+    Color(7)
+except ValueError as error:
+    print(error)
+```
+
+Members compare and hash as themselves, so they serve as dict keys and
+`match` cases. A member's value is an `int`, `str`, `bytes` or `bool`
+constant, or `auto()`, which gives one more than the largest value
+before it, or `1` for the first member; `value` has the union of the
+members' value types. `Color(value)` takes a value of that type, and a
+value no member has raises CPython's `ValueError`; `Color[name]` raises
+`KeyError` for a name no member has.
+
+A member of an `IntEnum` or a `StrEnum` is also its value, an `int` or a
+`str`: arithmetic, comparisons, an index, the builtins of numbers and
+text, a parameter or a variable declared `int` or `str`, the methods of
+`str`, and an f-string field with a format specification read its value,
+while `repr` still shows the member (ADR-0117). `auto()` of a `StrEnum`
+gives the member's name in lower case:
+
+<!-- typy-expect: accepted -->
+```python
+from enum import IntEnum, StrEnum, auto
+
+
+class Level(IntEnum):
+    LOW = auto()
+    HIGH = 10
+
+
+class Mode(StrEnum):
+    READ = auto()
+    WRITE = "w"
+
+
+def double(n: int) -> int:
+    return n * 2
+
+
+print(repr(Level.HIGH), Level.HIGH + 1, double(Level.LOW), [7, 8][Level.LOW])
+print(sorted([Level.HIGH, Level.LOW]), f"{Level.HIGH:04}", Level.LOW == 1)
+print(repr(Mode.READ), Mode.READ, Mode.READ.upper(), Mode.WRITE == "w")
+```
+
+A list of members is not a list of their values, so
+`", ".join(list(Mode))` is E0404; `[m.value for m in Mode]` gives the
+values.
+
+The members of a `Flag` or an `IntFlag` are bits, each one bit or
+`auto()`, which gives the bit above the highest one before it. `|`, `&`,
+`^` and `~` give a member, or a composite named by the members whose bits
+it holds; each composite is made once, so `is` holds between two of the
+same value, as in CPython (ADR-0118). A loop over a flag, `in` and `len`
+read its bits. A `Flag` of a value with bits no member has raises
+CPython's `ValueError`, and an `IntFlag` keeps them, and is also its
+`int` value as an `IntEnum` is:
+
+<!-- typy-expect: accepted -->
+```python
+from enum import Flag, IntFlag, auto
+
+
+class Perm(Flag):
+    READ = auto()
+    WRITE = auto()
+    RUN = auto()
+
+
+class Bits(IntFlag):
+    LOW = 1
+    HIGH = 2
+
+
+both = Perm.READ | Perm.WRITE
+print(repr(both), both, both.name, list(both), Perm.RUN in both)
+print(repr(~Perm.READ), both is Perm(3), repr(Perm(0)), len(both))
+print(repr(Bits.LOW | 8), Bits.HIGH + 1, repr(~Bits.LOW))
+try:
+    Perm(8)
+except ValueError as error:
+    print(error)
+```
+
+What CPython refuses when the class statement runs is E0404, such as a
+member defined twice, a class derived from an enum class with members,
+or a `StrEnum` member whose value is not a `str`. `auto()` after a value
+that is not an `int` is E0202, as CPython 3.12 gives `1` with a warning
+and 3.13 raises `TypeError`. Members
+of other values, annotated members, members assigned with several
+targets or a tuple of names, `__init__`, `__new__`, `_missing_`,
+other bases, decorators such as `@unique`, flag members of other than
+one bit, and classes derived from an enum class without members are
+planned for 0.13 (CLS-47).
 
 ## Attributes are declared
 

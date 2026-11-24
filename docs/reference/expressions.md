@@ -19,6 +19,7 @@ order.
 | Truth tests of numbers, strings, containers, optional values and instances | EXP-10 |
 | `x if c else y` with branches of one type | EXP-11 |
 | List, set and dict comprehensions, each with its own scope | EXP-12 |
+| `*iterable` and `**mapping` as comprehension elements, from the Python floor 3.15 | EXP-23 |
 | `*iterable` in list, set and tuple displays and `**dict` in dict displays | EXP-17 |
 | Assignment expressions `name := value`, as CPython scopes them | EXP-13 |
 | `lambda` where a `Callable` is expected | EXP-14 |
@@ -31,9 +32,16 @@ assigns the variable of the function or module around it. A test of
 `(name := value) is not None` narrows `name`, as a test of the variable
 does. CPython's syntax errors are E0103: rebinding a name the
 comprehension binds, `:=` in a comprehension's source, and `__debug__`
-as the name. A comprehension element that unpacks, such as
-`[*row for row in rows]`, which needs the Python floor 3.15, is E0201,
-planned for 0.12 (EXP-23).
+as the name.
+
+From the Python floor 3.15, a comprehension element may unpack, as PEP
+798 defines it (EXP-23): `[*row for row in rows]` and
+`{*row for row in rows}` put each item of each `row` in the result,
+`(*row for row in rows)` gives each item, and
+`{**table for table in tables}` puts each key and value of each `table`
+in the dict, a later one replacing an earlier one. Each reads as one more
+`for` clause over the unpacked value. Below that floor it is CPython's
+syntax error, E0103.
 
 <!-- typy-expect: accepted -->
 ```python
@@ -50,7 +58,7 @@ A `lambda` is a function of one expression, made each time the
 expression runs, as in CPython. Its parameters have no annotations, so
 they take their types, by position, from the `Callable` its context
 expects: an annotated variable, a parameter, a function's result, an
-item of a typed list or dict, either branch of a conditional, or the
+item of a typed list, tuple or dict, either branch of a conditional, or the
 `key` of `sorted`, `list.sort`, `min` and `max`, which passes each item.
 Its result takes the expected type, or the type of its body where no
 context gives one. A `lambda` reads the variables around it as a nested
@@ -115,8 +123,10 @@ print(",".join(str(value) for value in range(3)))
 The item type is that of the element, or the item type of the iterable
 or iterator the context expects, such as `Iterator[int | None]`. A
 generator expression reads the variables around it as a nested function
-does, so one assigned after it is read with its later value. An
-assignment expression inside one is planned for 1.0 (EXP-18). One inside
+does, so one assigned again after it is read with its later value. One
+first assigned after it is E0306, as for a `lambda`, since its body is
+checked where it stands (TYP-12). An assignment expression inside one is
+planned for 1.0 (EXP-18). One inside
 a generic function is made in each copy of the function (FUN-10).
 
 ## Unpacking in displays

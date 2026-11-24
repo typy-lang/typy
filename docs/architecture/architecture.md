@@ -3,10 +3,10 @@
 | Field | Value |
 | --- | --- |
 | Document | TyPy software architecture |
-| Version | 1.7 |
+| Version | 1.9 |
 | Status | Approved |
 | Owner | typy-lang contributors |
-| Last updated | 2026-11-17 |
+| Last updated | 2026-11-23 |
 
 ## 1. Purpose
 
@@ -226,7 +226,8 @@ NFR-06 requires byte-identical output, so these rules apply in every crate:
 key or a value of the wrong type stops the command with exit status 2
 before any other work (UC-11). Settings are then immutable for the rest of
 the command. No environment variable changes the output, except
-`TYPY_HOME` (CLI-11).
+`TYPY_HOME`, and `NO_COLOR`, which only takes the colour from diagnostics
+on a terminal (CLI-11, CLI-26).
 
 ### 7.4 Logging
 

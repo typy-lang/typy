@@ -15,6 +15,8 @@ impl TypeId {
     pub const LIST: Self = Self(4);
     /// `bytes`, which the runtime stores as a `str` object of one byte per code point.
     pub const BYTES: Self = Self(6);
+    /// `bytearray`, a mutable sequence of bytes held in a `bytes` buffer (ADR-0108).
+    pub const BYTEARRAY: Self = Self(37);
     /// A `set`, whatever its item type.
     pub const SET: Self = Self(7);
     /// A `dict`, whatever its key and value types.
@@ -125,6 +127,8 @@ impl TyirType {
     pub const LIST: Self = Self::Object(TypeId::LIST);
     /// `bytes`.
     pub const BYTES: Self = Self::Object(TypeId::BYTES);
+    /// `bytearray`.
+    pub const BYTEARRAY: Self = Self::Object(TypeId::BYTEARRAY);
     /// A set.
     pub const SET: Self = Self::Object(TypeId::SET);
     /// A dict.
@@ -215,49 +219,7 @@ impl fmt::Display for TyirType {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{TupleTypeId, TyirType, TypeId};
-
-    #[test]
-    fn types_are_written_by_name() {
-        let names: Vec<String> = [
-            TyirType::Int,
-            TyirType::Float,
-            TyirType::Bool,
-            TyirType::Unit,
-            TyirType::STR,
-            TyirType::EXCEPTION,
-            TyirType::SET,
-            TyirType::DICT,
-            TyirType::VIEW,
-            TyirType::Object(TypeId(300)),
-            TyirType::Tuple(TupleTypeId(4)),
-            TyirType::Optional(super::OptionalBase::Int),
-            TyirType::Optional(super::OptionalBase::Tuple(TupleTypeId(2))),
-        ]
-        .iter()
-        .map(ToString::to_string)
-        .collect();
-        assert_eq!(
-            names,
-            [
-                "int",
-                "float",
-                "bool",
-                "unit",
-                "str",
-                "exception",
-                "set",
-                "dict",
-                "view",
-                "object#300",
-                "tuple#4",
-                "optional int",
-                "optional tuple#2"
-            ]
-        );
-    }
-}
+mod tests;
 
 /// A type object a program names (CLS-12): one of the runtime's, or a class's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -294,6 +256,7 @@ pub enum RuntimeType {
     Bool,
     Str,
     Bytes,
+    Bytearray,
     NoneType,
     List,
     Tuple,
@@ -318,6 +281,7 @@ impl RuntimeType {
             Self::Bool => "typy_rt_type_bool",
             Self::Str => "typy_rt_type_str",
             Self::Bytes => "typy_rt_type_bytes",
+            Self::Bytearray => "typy_rt_type_bytearray",
             Self::NoneType => "typy_rt_type_none",
             Self::List => "typy_rt_type_list",
             Self::Tuple => "typy_rt_type_tuple",

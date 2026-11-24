@@ -8,6 +8,7 @@ use typy_source::syntax::{Constant, Expr};
 
 use crate::abstract_type::AbstractCollection;
 use crate::exception::{BuiltinException, ExceptionClass};
+use crate::guard_type::GuardKind;
 use crate::typed::ClassId;
 use crate::types::Type;
 
@@ -75,6 +76,12 @@ pub(crate) enum AnnotationName {
     /// `dataclasses.dataclass` and `dataclasses.field`, which the dataclass expansion reads
     /// (CLS-05).
     Dataclasses,
+    /// `abc.ABC` and `abc.abstractmethod`, which the reading of abstract classes takes out of
+    /// the module (CLS-45).
+    AbstractClasses,
+    /// The classes of `enum` and `enum.auto`, which the expansion of enum classes takes out of
+    /// the module (CLS-44).
+    EnumClasses,
     /// `typing.Protocol`, the base of a protocol class (GEN-04).
     Protocol,
     /// `typing.cast`, a function a call checks when the program runs (TYP-24).
@@ -97,6 +104,16 @@ pub(crate) enum AnnotationName {
     /// An abstract collection of `typing` or `collections.abc`, such as `Sequence`, held as
     /// the union of the built-in types CPython registers with it (LIB-20, ADR-0086).
     Abstract(AbstractCollection, Origin),
+    /// `typing.Literal`, whose values are constants (TYP-28).
+    Literal,
+    /// `typing.overload`, the decorator of an overload, which the checker reads before
+    /// anything else (TYP-29).
+    Overload,
+    /// `typing.Self`, the class a method is called through (TYP-30).
+    SelfType,
+    /// `typing.TypeGuard` and `typing.TypeIs`, a function's result that narrows its
+    /// argument (TYP-31).
+    Guard(crate::guard_type::GuardKind),
 }
 
 /// The module a name of both `typing` and `collections.abc` comes from: the class of
@@ -107,9 +124,17 @@ pub(crate) enum Origin {
     Abc,
 }
 
-/// The modules that give names for annotations only in 0.3.
-pub(crate) const ANNOTATION_MODULES: [&str; 4] =
-    ["typing", "collections.abc", "types", "dataclasses"];
+/// The modules that give names for annotations only in 0.3, and `abc` and `enum` from 0.12,
+/// whose names the readings of abstract and enum classes take out of the module (CLS-44,
+/// CLS-45).
+pub(crate) const ANNOTATION_MODULES: [&str; 6] = [
+    "typing",
+    "collections.abc",
+    "types",
+    "dataclasses",
+    "abc",
+    "enum",
+];
 
 /// Returns the annotation name `name` of the module `module`, if TyPy 0.3 gives it.
 pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName> {
@@ -132,15 +157,24 @@ pub(crate) fn annotation_name(module: &str, name: &str) -> Option<AnnotationName
         ("typing", "Final") => Some(AnnotationName::Final),
         ("typing", "Protocol") => Some(AnnotationName::Protocol),
         ("typing", "cast") => Some(AnnotationName::Cast),
+        ("typing", "overload") => Some(AnnotationName::Overload),
+        ("typing", "Self") => Some(AnnotationName::SelfType),
+        ("typing", "TypeGuard") => Some(AnnotationName::Guard(GuardKind::TypeGuard)),
+        ("typing", "TypeIs") => Some(AnnotationName::Guard(GuardKind::TypeIs)),
         ("typing", "NamedTuple") => Some(AnnotationName::NamedTuple),
         ("typing", "Optional") => Some(AnnotationName::Optional),
         ("typing", "Union") => Some(AnnotationName::Union),
+        ("typing", "Literal") => Some(AnnotationName::Literal),
         ("typing", "List") => Some(AnnotationName::Builtin("list")),
         ("typing", "Dict") => Some(AnnotationName::Builtin("dict")),
         ("typing", "Set") => Some(AnnotationName::Builtin("set")),
         ("typing", "Tuple") => Some(AnnotationName::Builtin("tuple")),
         ("typing", "Type") => Some(AnnotationName::Builtin("type")),
         ("dataclasses", "dataclass" | "field") => Some(AnnotationName::Dataclasses),
+        ("abc", "ABC" | "abstractmethod") => Some(AnnotationName::AbstractClasses),
+        ("enum", "Enum" | "IntEnum" | "StrEnum" | "Flag" | "IntFlag" | "auto") => {
+            Some(AnnotationName::EnumClasses)
+        }
         ("typing" | "collections.abc", _) => AbstractCollection::named(module, name)
             .map(|collection| AnnotationName::Abstract(collection, origin(module))),
         _ => None,
@@ -270,6 +304,16 @@ fn standard_annotation(
         {
             union_annotation(name, index, scope, diagnostics)
         }
+        Expr::Subscript { value, index, .. }
+            if standard_name(value, scope) == Some(AnnotationName::Literal) =>
+        {
+            super::literal_annotation::literal_annotation(index, scope, diagnostics)
+        }
+        Expr::Subscript { value, index, .. }
+            if let Some(AnnotationName::Guard(kind)) = standard_name(value, scope) =>
+        {
+            guard_annotation(kind, index, scope, diagnostics)
+        }
         Expr::Subscript { value, .. }
             if standard_name(value, scope) == Some(AnnotationName::ClassVar) =>
         {
@@ -298,9 +342,11 @@ fn bare_standard(
     match name {
         AnnotationName::ClassVar => class_var_elsewhere(annotation, diagnostics),
         AnnotationName::Final => final_elsewhere(annotation, diagnostics),
-        AnnotationName::Dataclasses | AnnotationName::Cast => {
-            not_a_type(&name, annotation.span(), diagnostics)
-        }
+        AnnotationName::Dataclasses
+        | AnnotationName::Cast
+        | AnnotationName::Overload
+        | AnnotationName::AbstractClasses
+        | AnnotationName::EnumClasses => not_a_type(&name, annotation.span(), diagnostics),
         AnnotationName::Protocol => {
             diagnostics.push(
                 Diagnostic::new(
@@ -379,7 +425,87 @@ fn bare_standard(
             diagnostics.push(generator_form(annotation.span()));
             Type::Error
         }
+        AnnotationName::Literal => {
+            diagnostics.push(super::literal_annotation::literal_form(annotation.span()));
+            Type::Error
+        }
+        AnnotationName::SelfType => self_annotation(annotation, scope, diagnostics),
+        AnnotationName::Guard(kind) => guard_form(kind, annotation, diagnostics),
     }
+}
+
+/// Returns the error type after reporting `TypeGuard` or `TypeIs` without the type it
+/// narrows to.
+fn guard_form(kind: GuardKind, annotation: &Expr, diagnostics: &mut Diagnostics) -> Type {
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(408),
+            annotation.span(),
+            format!(
+                "a `{}` annotation names the type it narrows to, such as `{}[int]`",
+                kind.name(),
+                kind.name()
+            ),
+        )
+        .with_rule(RuleId::TYP_31),
+    );
+    Type::Error
+}
+
+/// Returns the type `TypeGuard[T]` or `TypeIs[T]` names, or the error type, reported, for a
+/// `T` whose values no test of their class tells apart, such as `list[int]`, which TyPy
+/// gives in 0.13 (TYP-37).
+fn guard_annotation(
+    kind: GuardKind,
+    index: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    let target = annotation_type(index, scope, diagnostics);
+    if target.has_error() {
+        return Type::Error;
+    }
+    if !crate::guard_type::tested_by_class(&target) {
+        diagnostics.push(
+            Diagnostic::new(
+                DiagnosticCode::error(201),
+                index.span(),
+                format!(
+                    "`{}` of {}, whose values a test of their class does not tell apart, is \
+                     planned for TyPy 0.13 (TYP-37)",
+                    kind.name(),
+                    target.with_article()
+                ),
+            )
+            .with_rule(RuleId::TYP_37),
+        );
+        return Type::Error;
+    }
+    Type::guard(kind, target)
+}
+
+/// Returns the type `Self` names: the class a method is called through, in the parameters
+/// and the result of an instance or a class method (TYP-30). Anywhere else it is E0201,
+/// planned for 0.13 (TYP-36).
+fn self_annotation(
+    annotation: &Expr,
+    scope: &AnnotationScope<'_>,
+    diagnostics: &mut Diagnostics,
+) -> Type {
+    if let Some(own) = scope.parameters.get(crate::self_type::SELF_PARAMETER) {
+        return own.clone();
+    }
+    diagnostics.push(
+        Diagnostic::new(
+            DiagnosticCode::error(201),
+            annotation.span(),
+            "`Self` outside the parameters and the result of an instance or a class method \
+             of a class that is neither generic nor a protocol is planned for TyPy 0.13 \
+             (TYP-36)",
+        )
+        .with_rule(RuleId::TYP_36),
+    );
+    Type::Error
 }
 
 /// Returns E0408 for an abstract collection without the types of its items, or with another
@@ -762,6 +888,12 @@ pub(crate) fn annotation_type(
             }
             Type::Set(Box::new(item))
         }
+        // A module of the Python floor 3.15 imports `frozendict` (DAT-18).
+        Expr::Subscript { value, .. } if matches!(value.as_ref(), Expr::Name { id, .. } if id == "frozendict") =>
+        {
+            diagnostics.push(crate::body::frozendict_below_floor(value.span()));
+            Type::Error
+        }
         other => {
             diagnostics.push(
                 Diagnostic::new(
@@ -855,6 +987,7 @@ fn named_type(
         "bool" => Type::Bool,
         "str" => Type::Str,
         "bytes" => Type::Bytes,
+        "bytearray" => Type::Bytearray,
         "range" => Type::Range,
         "slice" => Type::Slice,
         // A value of any type, narrowed before use, as Java holds `Object` (TYP-23, ADR-0090).
@@ -899,6 +1032,11 @@ fn named_type(
         }
         _ if let Some(class) = BuiltinException::named(id) => {
             Type::Exception(ExceptionClass::Builtin(class))
+        }
+        // A module of the Python floor 3.15 imports `frozendict` (DAT-18).
+        "frozendict" => {
+            diagnostics.push(crate::body::frozendict_below_floor(span));
+            Type::Error
         }
         _ => {
             diagnostics.push(
@@ -1054,6 +1192,19 @@ fn not_a_type(
 ) -> Type {
     let (message, rule) = if *name == AnnotationName::Cast {
         ("`cast` is a function, not a type", RuleId::TYP_24)
+    } else if *name == AnnotationName::Overload {
+        ("`overload` is a decorator, not a type", RuleId::TYP_29)
+    } else if *name == AnnotationName::AbstractClasses {
+        (
+            "`ABC` and `abstractmethod` are read as a base and a decorator, not as types",
+            RuleId::CLS_45,
+        )
+    } else if *name == AnnotationName::EnumClasses {
+        (
+            "the classes of `enum` are read as bases, and `auto` as a member's value, not as \
+             types; an enum class is a type of its own",
+            RuleId::CLS_44,
+        )
     } else {
         ("`dataclass` and `field` are not types", RuleId::CLS_05)
     };

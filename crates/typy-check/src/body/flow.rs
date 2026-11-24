@@ -3,7 +3,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::typed::{SymbolId, TypedConstant, TypedExpr, TypedExprKind};
+use crate::typed::{LiteralTest, SymbolId, TypedConstant, TypedExpr, TypedExprKind, TypedPattern};
 use crate::types::Type;
 use typy_source::syntax::{BoolOperator, CompareOperator, UnaryOperator};
 
@@ -71,15 +71,103 @@ fn is_none(expression: &TypedExpr) -> bool {
     )
 }
 
+/// Returns whether a test may hold and whether it may fail when the program runs, as the
+/// types decide it: `True` and `False` decide themselves, an `isinstance` test of a value no
+/// tested class takes never holds, and one every value passes never fails (TYP-34,
+/// ADR-0111). A value's static type holds for each of its values, so a branch the test rules
+/// out never runs. With `literals`, a comparison of a variable of literal types with
+/// constants decides too, as the check of an overloaded function's body reads it (TYP-29).
+pub(super) fn test_reach(test: &TypedExpr, literals: bool) -> (bool, bool) {
+    match &test.kind {
+        TypedExprKind::Compare {
+            narrowing: Some(narrowing),
+            ..
+        } if literals => (narrowing.holds.reached, narrowing.fails.reached),
+        TypedExprKind::Constant(TypedConstant::Bool(value)) => (*value, !*value),
+        TypedExprKind::IsInstance(isinstance) => {
+            let optional = matches!(isinstance.value.ty, Type::Optional(_));
+            let may_hold = isinstance.always
+                || isinstance.none_matches
+                || !isinstance.checks.is_empty()
+                || !isinstance.held.is_empty();
+            let may_fail = !(isinstance.always && (!optional || isinstance.none_matches));
+            // A `TypeGuard` call may be false for a value of its type (TYP-31).
+            let inexact = isinstance.guard.as_ref().is_some_and(|guard| !guard.exact);
+            (may_hold, may_fail || inexact)
+        }
+        TypedExprKind::Unary {
+            operator: UnaryOperator::Not,
+            operand,
+        } => {
+            let (may_hold, may_fail) = test_reach(operand, literals);
+            (may_fail, may_hold)
+        }
+        TypedExprKind::BoolOp { operator, values } => {
+            let reach: Vec<(bool, bool)> = values
+                .iter()
+                .map(|value| test_reach(value, literals))
+                .collect();
+            match operator {
+                BoolOperator::And => (
+                    reach.iter().all(|(may_hold, _)| *may_hold),
+                    reach.iter().any(|(_, may_fail)| *may_fail),
+                ),
+                BoolOperator::Or => (
+                    reach.iter().any(|(may_hold, _)| *may_hold),
+                    reach.iter().all(|(_, may_fail)| *may_fail),
+                ),
+            }
+        }
+        _ => (true, true),
+    }
+}
+
+/// Returns whether a pattern may match, as the types decide its tests (TYP-34).
+pub(super) fn pattern_reach(pattern: &TypedPattern, literals: bool) -> bool {
+    match pattern {
+        TypedPattern::Test(test) => test_reach(test, literals).0,
+        TypedPattern::Bind(..) => true,
+        TypedPattern::All(steps) => steps.iter().all(|step| pattern_reach(step, literals)),
+        TypedPattern::Any(alternatives) => alternatives
+            .iter()
+            .any(|alternative| pattern_reach(alternative, literals)),
+    }
+}
+
+/// Returns the facts a comparison of a variable with constants gives when it holds and when
+/// it fails: the literal types it narrows the variable to, and that it is not `None`.
+fn literal_facts(narrowing: &LiteralTest) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
+    let facts = |position: Option<u32>, not_none: bool| {
+        let mut facts = BTreeSet::new();
+        if let Some(position) = position {
+            facts.insert(Fact::Narrowed(narrowing.variable, position));
+        }
+        if not_none {
+            facts.insert(Fact::NotNone(narrowing.variable));
+        }
+        facts
+    };
+    (
+        facts(narrowing.holds.narrowed, narrowing.holds.not_none),
+        facts(narrowing.fails.narrowed, narrowing.fails.not_none),
+    )
+}
+
 /// Returns the facts a test gives when it holds and when it fails: `x is not None` and a
 /// truth test of `x` show `x` is not `None` when they hold, and `x is None` when it fails.
 pub(super) fn test_facts(test: &TypedExpr) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
     let none = BTreeSet::new;
     match &test.kind {
+        // A comparison with constants narrows the variable to literal types (TYP-28).
+        TypedExprKind::Compare {
+            narrowing: Some(narrowing),
+            ..
+        } => literal_facts(narrowing),
         TypedExprKind::Compare {
             left,
             operators,
             comparators,
+            ..
         } if operators.len() == 1 => {
             let right = &comparators[0];
             let variable = match (is_none(left), is_none(right)) {
@@ -108,10 +196,17 @@ pub(super) fn test_facts(test: &TypedExpr) -> (BTreeSet<Fact>, BTreeSet<Fact>) {
                     holds.insert(Fact::NotNone(symbol));
                 }
             }
-            let fails = isinstance
+            let mut fails: BTreeSet<Fact> = isinstance
                 .otherwise
                 .map(|otherwise| BTreeSet::from([Fact::Narrowed(symbol, otherwise)]))
                 .unwrap_or_default();
+            // A test that `None` passes shows an optional is not `None` where it fails; a
+            // `TypeGuard` call that fails shows nothing (TYP-31).
+            let exact = isinstance.guard.as_ref().is_none_or(|guard| guard.exact);
+            if exact && isinstance.none_matches && matches!(isinstance.value.ty, Type::Optional(_))
+            {
+                fails.insert(Fact::NotNone(symbol));
+            }
             (holds, fails)
         }
         TypedExprKind::Unary {

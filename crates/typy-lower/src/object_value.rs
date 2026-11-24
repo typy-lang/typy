@@ -37,8 +37,8 @@ impl FunctionLowerer<'_> {
                 return result;
             }
             // A fixed tuple becomes a tuple object of its items, each an `object`, as CPython
-            // holds every tuple.
-            TyirType::Tuple(_) => {
+            // holds every tuple; a tagged union is held as a tuple too, and boxed below.
+            TyirType::Tuple(_) if !self.is_tagged(value.ty) => {
                 let items = match source {
                     Type::Tuple(items) => items.clone(),
                     other => unreachable!("a fixed tuple's checked type is a tuple, not {other}"),

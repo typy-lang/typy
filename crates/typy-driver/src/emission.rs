@@ -1,11 +1,11 @@
-//! The output of the stage `--emit` stops at.
+//! The output of one stage `--emit` names.
 
-/// What `--emit` produced: text for every stage but `obj`, whose object file is bytes.
+/// What `--emit` produced for one stage: text, or bytes for `llvm-bc` and `obj`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Emission {
     /// Deterministic text (CLI-04).
     Text(String),
-    /// An object file.
+    /// LLVM bitcode or an object file.
     Bytes(Vec<u8>),
 }
 
@@ -21,12 +21,4 @@ impl Emission {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::Emission;
-
-    #[test]
-    fn both_kinds_give_their_bytes() {
-        assert_eq!(Emission::Text("ir".to_owned()).as_bytes(), b"ir");
-        assert_eq!(Emission::Bytes(vec![0x7f, b'E']).as_bytes(), [0x7f, b'E']);
-    }
-}
+mod tests;

@@ -6,7 +6,7 @@ use typy_tyir::{Comparison, RuntimeFunction, ScalarKind, ValueId};
 
 use crate::error::CodegenError;
 use crate::function::FunctionEmitter;
-use crate::runtime::{Internal, internal_function, runtime_function};
+use crate::runtime::runtime_function;
 
 impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
     pub(super) fn compare(
@@ -20,29 +20,11 @@ impl<'ctx> FunctionEmitter<'_, '_, 'ctx> {
         let right_value = self.value(right)?;
         let builder = &self.builder;
         Ok(match kind {
-            ScalarKind::Int => {
-                let callee = internal_function(
-                    self.shared.context,
-                    self.shared.module,
-                    Internal::IntCompare,
-                );
-                let code = self.tagged(comparison.code());
-                let byte = builder
-                    .build_call(
-                        callee,
-                        &[left_value.into(), right_value.into(), code.into()],
-                        "",
-                    )?
-                    .try_as_basic_value();
-                match byte {
-                    inkwell::values::ValueKind::Basic(value) => {
-                        self.byte_to_bool(value.into_int_value())?
-                    }
-                    inkwell::values::ValueKind::Instruction(_) => {
-                        return Err(CodegenError("int_compare returns a byte".to_owned()));
-                    }
-                }
-            }
+            ScalarKind::Int => self.int_compare_in_place(
+                comparison,
+                left_value.into_int_value(),
+                right_value.into_int_value(),
+            )?,
             ScalarKind::Str => {
                 let callee = runtime_function(
                     self.shared.context,

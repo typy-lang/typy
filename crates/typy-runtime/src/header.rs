@@ -82,6 +82,8 @@ pub const NONE_OBJECT_TYPE_ID: u32 = 35;
 /// The type ID of a typing value, such as `list[int]` or `int | None` read as a value, laid
 /// out as a `TypingValueObject` (TYP-18, ADR-0087).
 pub const TYPING_VALUE_TYPE_ID: u32 = 36;
+/// The type ID of a `bytearray`, laid out as a `BytearrayObject` (LIB-28, ADR-0108).
+pub const BYTEARRAY_TYPE_ID: u32 = 37;
 
 /// The first 8 bytes of every heap object.
 #[repr(C)]
@@ -105,12 +107,4 @@ impl ObjectHeader {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::ObjectHeader;
-
-    #[test]
-    fn the_header_takes_eight_bytes() {
-        assert_eq!(core::mem::size_of::<ObjectHeader>(), 8);
-        assert_eq!(ObjectHeader::new(1).reference_count, 1);
-    }
-}
+mod tests;

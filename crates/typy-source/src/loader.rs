@@ -190,6 +190,19 @@ impl Collector {
 pub(crate) struct Location {
     pub(crate) path: Utf8PathBuf,
     pub(crate) is_package: bool,
+    /// The source of a standard library module TyPy gives in Python, which has no file
+    /// (LIB-27).
+    pub(crate) embedded: Option<&'static str>,
+}
+
+/// Returns the location of the standard library module `name` that TyPy gives in Python,
+/// whose path names it under `<typy-stdlib>`; `None` when TyPy gives no such module.
+pub(crate) fn embedded(name: &ModuleName) -> Option<Location> {
+    typy_stdlib::source(name.as_str()).map(|source| Location {
+        path: Utf8PathBuf::from(format!("<typy-stdlib>/{name}.py")),
+        is_package: false,
+        embedded: Some(source),
+    })
 }
 
 /// Finds a module in the root, then in each module path in order, as CPython searches the
@@ -209,12 +222,14 @@ fn locate_in(root: &Utf8Path, relative: &Utf8Path) -> Option<Location> {
         return Some(Location {
             path: package,
             is_package: true,
+            embedded: None,
         });
     }
     let file = relative.with_extension("py");
     root.join(&file).is_file().then_some(Location {
         path: file,
         is_package: false,
+        embedded: None,
     })
 }
 

@@ -20,8 +20,9 @@ const INFINITY: i64 = 314_159;
 pub(crate) const NONE: i64 = 4_238_894_112;
 
 /// Returns the hash of `item`, of the item kind whose code is the `int` word `kind` and, for a
-/// tuple, the descriptor at the address `tuple`, as an `int` word: what a set or a dict hashes
-/// it by, which the `__hash__` of a dataclass returns (CLS-16).
+/// tuple, the descriptor at the address `tuple`, as an `int` word the caller owns: what a set
+/// or a dict hashes it by, which `hash()` and the `__hash__` of a dataclass return (LIB-34,
+/// CLS-16).
 ///
 /// # Safety
 ///
@@ -32,8 +33,9 @@ pub unsafe extern "C" fn typy_rt_hash_value(kind: i64, tuple: u64, item: u64) ->
     let tuple = core::ptr::with_exposed_provenance(usize::try_from(tuple).unwrap_or(0));
     // SAFETY: the caller's guarantee.
     let hash = unsafe { crate::list::ItemType::of(kind, tuple).hash(item) };
-    // A hash is below `2**61` in size, so it fits a word.
-    crate::word::inline(hash).unwrap_or(1)
+    // The hash of an instance is what its `__hash__` gave, which may be outside the inline
+    // range.
+    crate::word::inline(hash).unwrap_or_else(|| Integer::from_i128(i128::from(hash)).into_word())
 }
 
 /// Returns a hash that is never -1, which CPython keeps to mean an error.
@@ -82,16 +84,28 @@ fn frexp(value: f64) -> (f64, i32) {
     (mantissa, biased - 1022)
 }
 
-/// Returns the hash of the `int` a class's `__hash__` returns, as CPython's `hash()` reduces
-/// it, for the `hash` slot of the class's type object (CLS-07, ADR-0026).
+/// Returns the hash of the `int` a class's `__hash__` returns, for the `hash` slot of the
+/// class's type object (CLS-07, ADR-0026): the value itself when it fits a word, as CPython's
+/// slot keeps it, and the hash of the `int` otherwise; -1 becomes -2. Drops the caller's
+/// reference to the `int`.
 ///
 /// # Safety
 ///
-/// `word` is a live `int` word.
+/// `word` is a live `int` word the caller owns.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn typy_rt_int_hash(word: i64) -> i64 {
+    if is_inline(word) {
+        return not_minus_one(inline_value(word));
+    }
+    // SAFETY: a word that is not inline points to a live large integer.
+    let fits = unsafe { Integer::from_word(word) }
+        .to_i128()
+        .and_then(|value| i64::try_from(value).ok());
     // SAFETY: the caller's guarantee.
-    unsafe { int(word) }
+    let hash = fits.map_or_else(|| unsafe { int(word) }, not_minus_one);
+    // SAFETY: the caller owns the reference, which is dropped once.
+    unsafe { crate::refcount::typy_rt_int_decrement(word) };
+    hash
 }
 
 /// Returns the hash of a `float`, as CPython's `_Py_HashDouble` computes it: equal to the hash

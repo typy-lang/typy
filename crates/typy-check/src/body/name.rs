@@ -84,6 +84,7 @@ impl BodyChecker<'_> {
             if let Some(refused) = self.refused_nested_value(symbol, id, span) {
                 return refused;
             }
+            self.read_before_add(symbol, span);
             let ty = self.types.get(&symbol).cloned().unwrap_or(Type::Error);
             let kind = self.read_kind(id, symbol);
             let read = Self::typed(kind, ty.clone(), span);
@@ -207,15 +208,10 @@ impl BodyChecker<'_> {
     }
 
     pub(super) fn unknown_name(&mut self, id: &str, span: Span) -> TypedExpr {
-        // `frozendict` is a builtin from Python 3.15 (PEP 814), planned for 0.12.
-        if id == "frozendict" && self.program.floor >= 15 {
-            let diagnostic = Diagnostic::new(
-                DiagnosticCode::error(201),
-                span,
-                "`frozendict` is planned for TyPy 0.12 (DAT-18)",
-            )
-            .with_rule(RuleId::DAT_18);
-            return self.error(diagnostic, span);
+        // `frozendict` is a builtin from Python 3.15 (PEP 814). A module of that floor imports
+        // the class that writes it, so a read reaches here only below it (DAT-18).
+        if id == "frozendict" {
+            return self.error(frozendict_below_floor(span), span);
         }
         let diagnostic = match unprovided(id) {
             Some(Unprovided::Planned { release, rule }) => Diagnostic::new(
@@ -273,7 +269,7 @@ impl BodyChecker<'_> {
             return None;
         }
         let facts = self.assigned.as_ref()?;
-        let mut narrowest: Option<&Type> = None;
+        let mut narrowest: Option<Type> = None;
         for fact in facts {
             let Fact::Narrowed(each, position) = fact else {
                 continue;
@@ -285,16 +281,29 @@ impl BodyChecker<'_> {
             else {
                 continue;
             };
-            if narrowest.is_none_or(|current| ty.is_assignable_to(current)) {
-                narrowest = Some(ty);
-            }
+            narrowest = Some(match narrowest {
+                None => ty.clone(),
+                // Two tests that each narrowed the variable to literal types leave it the
+                // values both allow (TYP-28).
+                Some(current) => match crate::literal_type::meet(&current, ty) {
+                    Some(both) => both,
+                    None if ty.takes_literals_of(&current) => ty.clone(),
+                    None => current,
+                },
+            });
         }
-        narrowest.cloned()
+        narrowest
     }
 
     /// Returns the read of a variable as the type a test narrowed it to: the value an
     /// optional holds, then the instance as one of a derived class.
     fn narrowed_read(read: TypedExpr, narrowed: Type, span: Span) -> TypedExpr {
+        // A variable narrowed to a literal type holds a value of its base type (TYP-28).
+        let narrowed = if narrowed.has_literal() {
+            narrowed.without_literal()
+        } else {
+            narrowed
+        };
         let read = match &read.ty {
             Type::Optional(inner) if !matches!(narrowed, Type::Optional(_)) => {
                 let inner = inner.as_ref().clone();
@@ -331,4 +340,17 @@ impl BodyChecker<'_> {
             span,
         ))
     }
+}
+
+/// Returns the error for `frozendict` read under a Python floor below 3.15, which has no
+/// such builtin; a module of that floor imports it, so only a lower floor reaches here
+/// (DAT-18).
+pub(crate) fn frozendict_below_floor(span: Span) -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticCode::error(425),
+        span,
+        "`frozendict` is a builtin from Python 3.15",
+    )
+    .with_rule(RuleId::DAT_18)
+    .with_help("set `python-floor = \"3.15\"` in typy.toml to use it")
 }

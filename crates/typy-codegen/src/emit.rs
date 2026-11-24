@@ -1,4 +1,5 @@
-//! Builds the LLVM module for a TyIR module, runs LLVM's pipeline, and writes object code, assembly or IR.
+//! Builds the LLVM module for a TyIR module, runs LLVM's pipeline, and writes object code,
+//! assembly, IR or bitcode.
 
 use inkwell::attributes::{Attribute, AttributeLoc};
 use inkwell::context::Context;
@@ -18,21 +19,45 @@ use crate::function::{FunctionEmitter, Shared};
 use crate::heap::emit_heap_hooks;
 use crate::library::LibraryEmitter;
 use crate::optimization::Optimization;
+use crate::options::CodegenOptions;
+use crate::output::CodegenOutput;
 use crate::statics::Statics;
 use crate::target::Target;
 
-/// What to write: object code, assembly text or LLVM IR text.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Output {
-    Object,
-    Assembly,
-    LlvmIr,
+/// Returns the processor of the machine `typy` runs on, as LLVM names it, such as `skylake`.
+pub(crate) fn host_processor() -> String {
+    TargetMachine::get_host_cpu_name().to_string()
 }
 
-fn target_machine(
-    target: Target,
-    optimization: Optimization,
-) -> Result<TargetMachine, CodegenError> {
+/// Returns the features of the machine `typy` runs on, as LLVM writes them.
+pub(crate) fn host_features() -> String {
+    TargetMachine::get_host_cpu_features().to_string()
+}
+
+/// Writes LLVM's list of the processors and features of `triple` to standard error, as
+/// `llc -mcpu=help` does; LLVM writes it when a machine is made for the processor `help`.
+pub(crate) fn write_processor_help(
+    triple: crate::target::TargetTriple,
+) -> Result<(), CodegenError> {
+    LlvmTarget::initialize_x86(&InitializationConfig::default());
+    LlvmTarget::initialize_aarch64(&InitializationConfig::default());
+    let llvm_triple = LlvmTriple::create(triple.llvm_triple());
+    let llvm_target = LlvmTarget::from_triple(&llvm_triple)
+        .map_err(|error| CodegenError(format!("target {triple}: {error}")))?;
+    llvm_target
+        .create_target_machine(
+            &llvm_triple,
+            "help",
+            "",
+            inkwell::OptimizationLevel::None,
+            RelocMode::PIC,
+            CodeModel::Default,
+        )
+        .map(|_| ())
+        .ok_or_else(|| CodegenError(format!("LLVM cannot generate code for {triple}")))
+}
+
+fn target_machine(target: Target, options: &CodegenOptions) -> Result<TargetMachine, CodegenError> {
     LlvmTarget::initialize_x86(&InitializationConfig::default());
     LlvmTarget::initialize_aarch64(&InitializationConfig::default());
     let triple = LlvmTriple::create(target.triple.llvm_triple());
@@ -41,9 +66,9 @@ fn target_machine(
     llvm_target
         .create_target_machine(
             &triple,
-            target.triple.cpu(),
-            "",
-            optimization.level(),
+            options.processor.as_deref().unwrap_or(target.triple.cpu()),
+            &options.features,
+            options.optimization.level(),
             RelocMode::PIC,
             CodeModel::Default,
         )
@@ -71,15 +96,16 @@ fn declare_globals<'ctx>(
         .collect()
 }
 
-/// Returns the bytes of the requested output for `module`.
+/// Returns the bytes of each of `outputs` for `module`, in their order, from one LLVM module.
 pub(crate) fn generate(
     module: &TyirModule,
     target: Target,
-    optimization: Optimization,
+    options: &CodegenOptions,
     lookup: &dyn SourceLookup,
-    output: Output,
-) -> Result<Vec<u8>, CodegenError> {
-    let machine = target_machine(target, optimization)?;
+    outputs: &[CodegenOutput],
+) -> Result<Vec<Vec<u8>>, CodegenError> {
+    let optimization = options.optimization;
+    let machine = target_machine(target, options)?;
     let context = Context::create();
     let llvm_module = context.create_module("typy");
     llvm_module.set_triple(&machine.get_triple());
@@ -90,9 +116,7 @@ pub(crate) fn generate(
         .map(|function| function.may_raise || function.id == module.entry)
         .collect();
     let functions = declare_functions(&context, &llvm_module, module, &raising);
-    if optimization.minimise_size() {
-        mark_minimum_size(&context, &functions);
-    }
+    mark_size(&context, &functions, optimization);
     let globals = declare_globals(&context, &llvm_module, module);
     let mut statics = Statics::new(&context);
     let mut shared = Shared {
@@ -128,6 +152,19 @@ pub(crate) fn generate(
     llvm_module
         .verify()
         .map_err(|error| CodegenError(format!("LLVM rejected the module: {error}")))?;
+    let text = |module: &Module<'_>| module.print_to_string().to_bytes().to_vec();
+    let mut written = vec![Vec::new(); outputs.len()];
+    for (index, output) in outputs.iter().enumerate() {
+        if *output == CodegenOutput::UnoptimisedIr {
+            written[index] = text(&llvm_module);
+        }
+    }
+    if outputs
+        .iter()
+        .all(|output| *output == CodegenOutput::UnoptimisedIr)
+    {
+        return Ok(written);
+    }
     llvm_module
         .run_passes(
             optimization.pipeline(),
@@ -135,25 +172,49 @@ pub(crate) fn generate(
             PassBuilderOptions::create(),
         )
         .map_err(|error| CodegenError(format!("LLVM passes: {error}")))?;
-    match output {
-        Output::LlvmIr => Ok(llvm_module.print_to_string().to_bytes().to_vec()),
-        Output::Object | Output::Assembly => {
-            let file_type = if output == Output::Object {
-                FileType::Object
-            } else {
-                FileType::Assembly
-            };
-            let buffer = machine
-                .write_to_memory_buffer(&llvm_module, file_type)
-                .map_err(|error| CodegenError(format!("LLVM code generation: {error}")))?;
-            Ok(buffer.as_slice().to_vec())
-        }
+    let last_machine_code = outputs.iter().rposition(|output| output.is_machine_code());
+    for (index, output) in outputs.iter().enumerate() {
+        written[index] = match output {
+            CodegenOutput::UnoptimisedIr => continue,
+            CodegenOutput::LlvmIr => text(&llvm_module),
+            CodegenOutput::Bitcode => llvm_module.write_bitcode_to_memory().as_slice().to_vec(),
+            CodegenOutput::Assembly | CodegenOutput::Object => {
+                let file_type = if *output == CodegenOutput::Object {
+                    FileType::Object
+                } else {
+                    FileType::Assembly
+                };
+                // LLVM's code generator changes the module it writes, so every output but the
+                // last is written from a copy.
+                let copy;
+                let source = if Some(index) == last_machine_code {
+                    &llvm_module
+                } else {
+                    copy = llvm_module.clone();
+                    &copy
+                };
+                let buffer = machine
+                    .write_to_memory_buffer(source, file_type)
+                    .map_err(|error| CodegenError(format!("LLVM code generation: {error}")))?;
+                buffer.as_slice().to_vec()
+            }
+        };
     }
+    Ok(written)
 }
 
-/// Marks each function to be optimised for size, as `--release-small` asks.
-fn mark_minimum_size<'ctx>(context: &'ctx Context, functions: &[FunctionValue<'ctx>]) {
-    for name in ["minsize", "optsize"] {
+/// Marks each function `optsize` for `-Os`, and `minsize` too for `-Oz`.
+fn mark_size<'ctx>(
+    context: &'ctx Context,
+    functions: &[FunctionValue<'ctx>],
+    optimization: Optimization,
+) {
+    let names: &[&str] = match (optimization.minimise_size(), optimization.optimise_size()) {
+        (true, _) => &["minsize", "optsize"],
+        (false, true) => &["optsize"],
+        (false, false) => &[],
+    };
+    for name in names {
         let attribute = context.create_enum_attribute(Attribute::get_named_enum_kind_id(name), 0);
         for function in functions {
             function.add_attribute(AttributeLoc::Function, attribute);

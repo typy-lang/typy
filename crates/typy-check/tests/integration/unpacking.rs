@@ -118,3 +118,24 @@ fn exp_17_a_display_refuses_an_item_of_another_type_after_an_unpacked_one() {
     }
     assert_ne!(messages("values = [*missing]\n").len(), 0);
 }
+
+#[test]
+fn exp_23_comprehension_elements_unpack_from_the_floor_3_15() {
+    let source = "rows = [[1, 2], [3]]\ntables = [{'a': 1}, {'b': 2}]\n\
+                  flat: list[int] = [*row for row in rows]\n\
+                  unique: set[int] = {*row for row in rows if row}\n\
+                  merged: dict[str, int] = {**table for table in tables}\n\
+                  total = sum(*row for row in rows)\n\
+                  print(flat, unique, merged, total, [*text for text in ['ab', 'c']])\n";
+    assert_eq!(
+        crate::common::messages_at(source, typy_source::PythonFloor::V3_15),
+        Vec::new()
+    );
+    // An element of a type that cannot be iterated is refused as a loop over it is.
+    let found = crate::common::messages_at(
+        "print([*n for n in [1, 2]])\n",
+        typy_source::PythonFloor::V3_15,
+    );
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].0, "E0411");
+}

@@ -6,7 +6,7 @@ use typy_source::syntax::{Constant, Expr, Stmt};
 use super::BodyChecker;
 use std::collections::BTreeSet;
 
-use super::flow::{Fact, meet, test_facts};
+use super::flow::{Fact, meet, test_facts, test_reach};
 use crate::builtin::Builtin;
 use crate::typed::{AssignTarget, TypedConstant, TypedExpr, TypedExprKind, TypedStmt};
 use crate::types::Type;
@@ -15,6 +15,11 @@ impl BodyChecker<'_> {
     pub(super) fn statements(&mut self, statements: &[&Stmt]) -> Vec<TypedStmt> {
         let mut typed = Vec::new();
         for statement in statements {
+            // A statement no path reaches cannot run, so it is neither checked nor compiled,
+            // and neither is the rest of the block (TYP-34, ADR-0111).
+            if self.assigned.is_none() {
+                break;
+            }
             if let Stmt::ClassDef {
                 name,
                 body,
@@ -95,6 +100,17 @@ impl BodyChecker<'_> {
                 value,
                 span,
             } => {
+                // `items[key] = value` gives an empty dict its types (TYP-27).
+                if let [
+                    Expr::Subscript {
+                        value: object,
+                        index,
+                        ..
+                    },
+                ] = targets.as_slice()
+                {
+                    self.set_in_empty(object, index, value);
+                }
                 if let [
                     Expr::Attribute {
                         value: object,
@@ -121,6 +137,14 @@ impl BodyChecker<'_> {
                     [single] => self.known_type(single),
                     _ => None,
                 };
+                // An empty collection takes its type from the first statement that adds to it
+                // (TYP-27).
+                let empty = match (targets.as_slice(), &expected) {
+                    ([single], None) => self.empty_local(single, value),
+                    _ => None,
+                };
+                let expected =
+                    expected.or_else(|| empty.as_ref().map(super::first_add::EmptyLocal::ty));
                 // A name may be bound to a `ctypes` class, which the program then calls or
                 // names in a declaration (FFI-03).
                 self.class_allowed = targets
@@ -148,6 +172,9 @@ impl BodyChecker<'_> {
                     .iter()
                     .filter_map(|target| self.assign_target(target, value.ty.clone(), &value))
                     .collect();
+                if let Some(empty) = empty {
+                    self.wait_for_add(empty);
+                }
                 TypedStmt::Assign {
                     targets,
                     value,
@@ -225,6 +252,14 @@ impl BodyChecker<'_> {
             } => {
                 let checked_value = self.expression(value);
                 let current = self.expression(target);
+                // A `frozendict` merged into a dict is the dict it holds (DAT-18).
+                let checked_value = if *operator == typy_source::syntax::BinaryOperator::BitOr
+                    && matches!(current.ty, Type::Dict(..))
+                {
+                    self.frozendict_items(checked_value)
+                } else {
+                    checked_value
+                };
                 // A number held as a variable of a union of numbers, such as an `int | bool`
                 // an `isinstance` test gave, is combined member by member, as `x = x + y` is
                 // (TYP-14, DAT-19).
@@ -380,11 +415,18 @@ impl BodyChecker<'_> {
             } => {
                 let test = self.truth_test(test);
                 let (holds, fails) = test_facts(&test);
+                let (may_hold, may_fail) = test_reach(&test, self.program.overload_look);
                 let before = self.assigned.clone();
                 self.add_facts(holds);
+                if !may_hold {
+                    self.assigned = None;
+                }
                 let body = self.block(body);
                 let after_body = std::mem::replace(&mut self.assigned, before);
                 self.add_facts(fails);
+                if !may_fail {
+                    self.assigned = None;
+                }
                 let orelse = self.block(orelse);
                 self.assigned = meet(after_body, self.assigned.take());
                 TypedStmt::If {
@@ -611,7 +653,10 @@ impl BodyChecker<'_> {
     ) -> Option<TypedStmt> {
         let values: Vec<TypedExpr> = arguments
             .iter()
-            .map(|argument| self.expression(argument))
+            .map(|argument| {
+                let value = self.expression(argument);
+                self.enum_value(value)
+            })
             .collect();
         for value in &values {
             self.expect(value, Type::Int, "an argument of `range`");
@@ -675,6 +720,13 @@ impl BodyChecker<'_> {
         }
     }
 
+    /// Notes a type the function whose result is being inferred returns (TYP-26).
+    pub(super) fn returned(&mut self, ty: Type) {
+        if let Some((_, types)) = &mut self.program.inferring {
+            types.push(ty);
+        }
+    }
+
     pub(super) fn return_statement(&mut self, value: Option<&Expr>, span: Span) -> TypedStmt {
         self.check_instance_complete(span);
         self.check_stays_in_finally("return", span);
@@ -690,6 +742,9 @@ impl BodyChecker<'_> {
         let actual = value
             .as_ref()
             .map_or(Type::NoneType, |value| value.ty.clone());
+        if self.result == super::ResultSource::Inferring {
+            self.returned(actual.clone());
+        }
         if !actual.is_assignable_to(&expected) {
             let mut diagnostic = Diagnostic::new(
                 DiagnosticCode::error(405),

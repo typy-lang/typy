@@ -1,7 +1,11 @@
-//! The compiler stages `--emit` can write (CLI-04).
+//! The compiler stages `--emit` can write (CLI-04, CLI-29).
 
-/// A stage whose output `typy build --emit` writes instead of an executable.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+use camino::{Utf8Path, Utf8PathBuf};
+use typy_codegen::CodegenOutput;
+
+/// A stage whose output `typy build --emit` writes instead of an executable. The order of the
+/// variants is the order of the pipeline.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum EmitStage {
     /// The syntax tree.
     Ast,
@@ -11,8 +15,12 @@ pub enum EmitStage {
     Tyir,
     /// TyIR with every reference count operation.
     TyirMem,
+    /// LLVM IR before the optimisation pipeline runs.
+    LlvmIrUnoptimised,
     /// Optimised LLVM IR.
     LlvmIr,
+    /// Optimised LLVM bitcode.
+    LlvmBc,
     /// Assembly.
     Asm,
     /// An object file.
@@ -21,12 +29,14 @@ pub enum EmitStage {
 
 impl EmitStage {
     /// Every stage, in pipeline order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::Ast,
         Self::TypedAst,
         Self::Tyir,
         Self::TyirMem,
+        Self::LlvmIrUnoptimised,
         Self::LlvmIr,
+        Self::LlvmBc,
         Self::Asm,
         Self::Obj,
     ];
@@ -39,7 +49,9 @@ impl EmitStage {
             Self::TypedAst => "typed-ast",
             Self::Tyir => "tyir",
             Self::TyirMem => "tyir-mem",
+            Self::LlvmIrUnoptimised => "llvm-ir-unoptimised",
             Self::LlvmIr => "llvm-ir",
+            Self::LlvmBc => "llvm-bc",
             Self::Asm => "asm",
             Self::Obj => "obj",
         }
@@ -54,26 +66,49 @@ impl EmitStage {
     /// Returns true when the output is bytes rather than text.
     #[must_use]
     pub const fn is_binary(self) -> bool {
-        matches!(self, Self::Obj)
+        matches!(self, Self::LlvmBc | Self::Obj)
+    }
+
+    /// Returns what code generation writes for the stage, or `None` for a stage before it.
+    #[must_use]
+    pub const fn codegen_output(self) -> Option<CodegenOutput> {
+        match self {
+            Self::LlvmIrUnoptimised => Some(CodegenOutput::UnoptimisedIr),
+            Self::LlvmIr => Some(CodegenOutput::LlvmIr),
+            Self::LlvmBc => Some(CodegenOutput::Bitcode),
+            Self::Asm => Some(CodegenOutput::Assembly),
+            Self::Obj => Some(CodegenOutput::Object),
+            Self::Ast | Self::TypedAst | Self::Tyir | Self::TyirMem => None,
+        }
+    }
+
+    /// Returns the extension of the stage's file, as `rustc --emit` names LLVM's: `ll`, `bc`,
+    /// `s` and `o`, and the stage's name for the others.
+    #[must_use]
+    pub const fn extension(self) -> &'static str {
+        match self {
+            Self::LlvmIrUnoptimised => "unoptimised.ll",
+            Self::LlvmIr => "ll",
+            Self::LlvmBc => "bc",
+            Self::Asm => "s",
+            Self::Obj => "o",
+            Self::Ast | Self::TypedAst | Self::Tyir | Self::TyirMem => self.name(),
+        }
+    }
+
+    /// Returns the path of the stage's file beside `output`: its name up to the first dot,
+    /// with the stage's extension, so `app` gives `app.ll` and `libtools.so.1` `libtools.ll`.
+    #[must_use]
+    pub fn path_beside(self, output: &Utf8Path) -> Utf8PathBuf {
+        let name = output.file_name().unwrap_or("output");
+        let stem = name
+            .split('.')
+            .next()
+            .filter(|stem| !stem.is_empty())
+            .unwrap_or(name);
+        output.with_file_name(format!("{stem}.{}", self.extension()))
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::EmitStage;
-
-    #[test]
-    fn every_stage_parses_from_its_name() {
-        for stage in EmitStage::ALL {
-            assert_eq!(EmitStage::parse(stage.name()), Some(stage));
-            assert_eq!(stage.is_binary(), stage == EmitStage::Obj);
-        }
-    }
-
-    #[test]
-    fn other_names_are_refused() {
-        for text in ["", "AST", "llvm", "typed_ast", "exe"] {
-            assert_eq!(EmitStage::parse(text), None, "{text:?}");
-        }
-    }
-}
+mod tests;

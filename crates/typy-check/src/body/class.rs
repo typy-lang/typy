@@ -498,9 +498,8 @@ impl BodyChecker<'_> {
         )
     }
 
-    /// Checks `Class(arguments)`: the arguments of `__init__`, without the instance, or none
-    /// for a class without `__init__`. An exception class without `__init__` takes positional
-    /// arguments of any type, as its built-in base does.
+    /// Checks `Class(arguments)` of a class the call names: a protocol, and a class with
+    /// abstract methods without an override, have no instances (GEN-04, CLS-45).
     pub(super) fn new_instance(
         &mut self,
         class: ClassId,
@@ -511,6 +510,30 @@ impl BodyChecker<'_> {
         if let Some(refused) = self.protocol_called(class, arguments, span) {
             return refused;
         }
+        if let Some(refused) = self.abstract_called(class, arguments, span) {
+            return refused;
+        }
+        // Calling an enum class finds a member by its value (CLS-44).
+        if let Some(found) = self.enum_lookup(class, arguments, keywords, span) {
+            return found;
+        }
+        // `frozendict` takes what `dict` takes (DAT-18).
+        if let Some(made) = self.frozendict_made(class, arguments, keywords, span) {
+            return made;
+        }
+        self.instance_made(class, arguments, keywords, span)
+    }
+
+    /// Checks `Class(arguments)`: the arguments of `__init__`, without the instance, or none
+    /// for a class without `__init__`. An exception class without `__init__` takes positional
+    /// arguments of any type, as its built-in base does.
+    pub(super) fn instance_made(
+        &mut self,
+        class: ClassId,
+        arguments: &[Expr],
+        keywords: &[Keyword],
+        span: Span,
+    ) -> TypedExpr {
         let class = match self.class_to_call(class, arguments, keywords, span) {
             Ok(class) => class,
             Err(error) => return error,
@@ -634,28 +657,10 @@ impl BodyChecker<'_> {
             );
         }
         if let Some(method) = found.filter(|_| self.is_static_method(class, &name.name)) {
-            let call = self.static_call(method, class, name, arguments, keywords, span);
-            // A class derived from the instance's may define the name again, so the object's
-            // class decides through the static method's bridge (CLS-06).
-            if let Some(call) = self.through_static_bridge(class, &name.name, &receiver, &call) {
-                return call;
-            }
-            // A variable only names the class; any other instance is evaluated first for its
-            // effects, as CPython evaluates it to find the method (CLS-25).
-            if matches!(
-                receiver.kind,
-                TypedExprKind::Local(_) | TypedExprKind::ModuleVariable(_)
-            ) || call.ty.has_error()
-            {
-                return call;
-            }
-            let ty = call.ty.clone();
-            return Self::typed(
-                TypedExprKind::Sequence {
-                    first: Box::new(receiver),
-                    then: Box::new(call),
-                },
-                ty,
+            return self.static_call_through_instance(
+                receiver,
+                (method, class, name),
+                (arguments, keywords),
                 span,
             );
         }
@@ -687,6 +692,7 @@ impl BodyChecker<'_> {
             .parameters
             .first()
             .map(|parameter| parameter.ty.clone());
+        let receiver_type = receiver.ty.clone();
         let mut bound = vec![Argument {
             passed: crate::typed::Passed::Position,
             parameter: 0,
@@ -703,6 +709,17 @@ impl BodyChecker<'_> {
             Ok(found) => found,
             Err(error) => return error,
         };
+        // A method with overloads, or whose signature names `Self`, gives the result its
+        // overload, or the instance's class, gives (TYP-29, TYP-30).
+        if let Some(call) = self.method_call_by_signature(
+            (target, &signature),
+            (&receiver_type, bound.clone()),
+            &qualified,
+            (arguments, keywords),
+            span,
+        ) {
+            return call;
+        }
         match self.bind_to(&signature, 1, &qualified, arguments, keywords, span) {
             Ok(arguments) => bound.extend(arguments),
             Err(error) => return error,
@@ -716,6 +733,40 @@ impl BodyChecker<'_> {
                 dispatch: true,
             },
             signature.returns,
+            span,
+        )
+    }
+
+    /// Checks `receiver.name(arguments)` of a static method through an instance.
+    fn static_call_through_instance(
+        &mut self,
+        receiver: TypedExpr,
+        (method, class, name): (crate::typed::FunctionId, ClassId, &Identifier),
+        (arguments, keywords): (&[Expr], &[Keyword]),
+        span: Span,
+    ) -> TypedExpr {
+        let call = self.static_call(method, class, name, arguments, keywords, span);
+        // A class derived from the instance's may define the name again, so the object's
+        // class decides through the static method's bridge (CLS-06).
+        if let Some(call) = self.through_static_bridge(class, &name.name, &receiver, &call) {
+            return call;
+        }
+        // A variable only names the class; any other instance is evaluated first for its
+        // effects, as CPython evaluates it to find the method (CLS-25).
+        if matches!(
+            receiver.kind,
+            TypedExprKind::Local(_) | TypedExprKind::ModuleVariable(_)
+        ) || call.ty.has_error()
+        {
+            return call;
+        }
+        let ty = call.ty.clone();
+        Self::typed(
+            TypedExprKind::Sequence {
+                first: Box::new(receiver),
+                then: Box::new(call),
+            },
+            ty,
             span,
         )
     }

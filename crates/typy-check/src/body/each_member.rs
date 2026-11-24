@@ -294,6 +294,9 @@ impl BodyChecker<'_> {
         let ty = self
             .narrowed_type(symbol, id)
             .or_else(|| self.types.get(&symbol).cloned())?;
+        // A variable narrowed to literal types holds values of their base types, so the
+        // members are those bases: `Literal[0, 1]` is one `int`, with nothing to split on.
+        let ty = ty.without_literal();
         let Type::Union(members) = &ty else {
             return None;
         };

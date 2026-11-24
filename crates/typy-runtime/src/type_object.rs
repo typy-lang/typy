@@ -388,6 +388,7 @@ pub(crate) unsafe fn type_of(object: *const ObjectHeader) -> &'static TypeObject
         match (*object).type_id {
             STR_TYPE_ID => &STR,
             BYTES_TYPE_ID => &BYTES,
+            crate::header::BYTEARRAY_TYPE_ID => &builtin::BYTEARRAY,
             BIG_INT_TYPE_ID | crate::header::BOXED_INT_TYPE_ID => &INT,
             LIST_TYPE_ID => &LIST,
             TUPLE_TYPE_ID => &TUPLE,

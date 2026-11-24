@@ -10,7 +10,7 @@ use super::definition::Definition;
 use super::visit::visit_statement;
 
 /// Collects the module functions a statement list names, outside nested definitions.
-fn referenced_functions(
+pub(super) fn referenced_functions(
     statements: &[Stmt],
     functions: &BTreeSet<String>,
     found: &mut BTreeSet<String>,

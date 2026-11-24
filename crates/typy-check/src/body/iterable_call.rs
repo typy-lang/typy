@@ -284,7 +284,7 @@ impl BodyChecker<'_> {
             Type::DictView(view, key, value) => view.item(key, value),
             Type::Str => Type::Str,
             file if file.is_file() => file.file_line().unwrap_or(Type::Error),
-            Type::Bytes | Type::Range => Type::Int,
+            Type::Bytes | Type::Bytearray | Type::Range => Type::Int,
             Type::Iterator(item) | Type::Iterable(item) => item.as_ref().clone(),
             Type::Generator { yields, .. } => yields.as_ref().clone(),
             // A `ctypes` array gives the value of each item (FFI-03).
