@@ -123,8 +123,10 @@ print(",".join(str(value) for value in range(3)))
 The item type is that of the element, or the item type of the iterable
 or iterator the context expects, such as `Iterator[int | None]`. A
 generator expression reads the variables around it as a nested function
-does, so one assigned after it is read with its later value. An
-assignment expression inside one is planned for 1.0 (EXP-18). One inside
+does, so one assigned again after it is read with its later value. One
+first assigned after it is E0306, as for a `lambda`, since its body is
+checked where it stands (TYP-12). An assignment expression inside one is
+planned for 1.0 (EXP-18). One inside
 a generic function is made in each copy of the function (FUN-10).
 
 ## Unpacking in displays

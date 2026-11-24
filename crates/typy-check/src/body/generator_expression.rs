@@ -32,6 +32,10 @@ impl BodyChecker<'_> {
         if let Some(refused) = self.refused_generator_expression(element, generators) {
             return refused;
         }
+        // Its body is checked where it stands, as a `lambda`'s is (TYP-12).
+        if let Some(refused) = self.refused_capture(span, "generator expression") {
+            return refused;
+        }
         // The first iterable runs where the expression runs (EXP-15).
         let source = self.iterator_of(&first.iter, first.iter.span());
         if source.ty.has_error() {
