@@ -29,12 +29,12 @@ a debug build, and `libtool`, which writes a static library.
 
 ## Install from a release archive
 
-Download `typy-0.11.0-aarch64-apple-darwin.tar.gz` and its `.sha256` file
+Download `typy-0.12.0-aarch64-apple-darwin.tar.gz` and its `.sha256` file
 from the [release page](https://github.com/typy-lang/typy/releases), then
 check the archive and unpack it:
 
 ```sh
-archive=typy-0.11.0-aarch64-apple-darwin
+archive=typy-0.12.0-aarch64-apple-darwin
 shasum -a 256 --check "$archive.tar.gz.sha256"
 tar -xzf "$archive.tar.gz"
 export PATH="$PWD/$archive/bin:$PATH"

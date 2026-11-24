@@ -6,6 +6,8 @@ All notable changes to TyPy are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-24
+
 ### Added
 
 - `frozendict` from the Python floor 3.15: an immutable mapping made
@@ -1980,7 +1982,8 @@ compiler needs glibc 2.39 or later and a C toolchain.
   non-ASCII text, checks that every requirement has a row in the test plan,
   and checks that every diagram is rendered from its source.
 
-[Unreleased]: https://github.com/typy-lang/typy/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/typy-lang/typy/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/typy-lang/typy/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/typy-lang/typy/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/typy-lang/typy/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/typy-lang/typy/compare/v0.8.0...v0.9.0
