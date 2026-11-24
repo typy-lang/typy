@@ -121,7 +121,13 @@ fn cli_29_outputs_from_one_module_match_the_outputs_generated_alone() {
             .unwrap()
             .into_bytes()
     );
-    assert_eq!(&bitcode[..4], b"BC\xc0\xde");
+    // LLVM wraps the bitcode of an Apple target in a header of its own, as clang does.
+    let magic: &[u8] = if cfg!(target_os = "macos") {
+        &[0xde, 0xc0, 0x17, 0x0b]
+    } else {
+        b"BC\xc0\xde"
+    };
+    assert_eq!(&bitcode[..4], magic);
     assert_ne!(unoptimised, ir);
     let only_unoptimised = outputs(
         &module,

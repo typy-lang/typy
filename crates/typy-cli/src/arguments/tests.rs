@@ -133,20 +133,22 @@ fn cli_32_a_command_typy_does_not_have_is_an_external_one_with_its_arguments() {
 
 #[test]
 fn cli_25_print_takes_what_to_write_and_refuses_anything_else() {
-    match parse(&[
-        "print",
-        "target-cpus",
-        "--target",
-        "aarch64-unknown-linux-gnu",
-    ])
-    .unwrap()
-    {
+    // A Mac takes only its own triple, and Linux each Linux one (CLI-18).
+    let (text, triple) = if cfg!(target_os = "macos") {
+        (
+            "aarch64-apple-darwin",
+            typy_codegen::TargetTriple::Aarch64AppleDarwin,
+        )
+    } else {
+        (
+            "aarch64-unknown-linux-gnu",
+            typy_codegen::TargetTriple::Aarch64LinuxGnu,
+        )
+    };
+    match parse(&["print", "target-cpus", "--target", text]).unwrap() {
         Command::Print { what, target, .. } => {
             assert_eq!(what, crate::arguments::PrintRequest::TargetCpus);
-            assert_eq!(
-                target.triple,
-                Some(typy_codegen::TargetTriple::Aarch64LinuxGnu)
-            );
+            assert_eq!(target.triple, Some(triple));
         }
         other => panic!("{other:?}"),
     }

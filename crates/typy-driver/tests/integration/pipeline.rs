@@ -245,6 +245,12 @@ fn cli_29_several_stages_come_from_one_run_in_pipeline_order() {
     let stages: Vec<EmitStage> = emitted.iter().map(|(stage, _)| *stage).collect();
     assert_eq!(stages, [EmitStage::Tyir, EmitStage::LlvmBc, EmitStage::Obj]);
     assert!(matches!(&emitted[0].1, Emission::Text(text) if text.contains("fn ")));
-    assert!(matches!(&emitted[1].1, Emission::Bytes(bytes) if bytes.starts_with(b"BC")));
+    // LLVM wraps the bitcode of an Apple target in a header of its own, as clang does.
+    let magic: &[u8] = if cfg!(target_os = "macos") {
+        &[0xde, 0xc0, 0x17, 0x0b]
+    } else {
+        b"BC\xc0\xde"
+    };
+    assert!(matches!(&emitted[1].1, Emission::Bytes(bytes) if bytes.starts_with(magic)));
     assert!(matches!(&emitted[2].1, Emission::Bytes(bytes) if !bytes.is_empty()));
 }

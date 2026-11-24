@@ -144,6 +144,18 @@ fn cli_25_print_settings_writes_typy_toml_with_the_command_line_applied() {
 #[test]
 fn cli_25_print_target_cpus_lists_the_baseline_native_and_llvms_processors() {
     let project = Project::new();
+    // A Mac builds for macOS only, whose baseline is the M1.
+    if cfg!(target_os = "macos") {
+        let mac = stdout(&project.typy(
+            &["print", "target-cpus", "--target", "aarch64-apple-darwin"],
+            None,
+        ));
+        assert!(
+            mac.starts_with("apple-m1 (baseline, the default)\n"),
+            "{mac}"
+        );
+        return;
+    }
     let output = project.typy(
         &[
             "print",
@@ -333,6 +345,10 @@ fn cli_21_a_processor_is_checked_and_native_is_only_for_the_host() {
         "{}",
         stderr(&unknown)
     );
+    // A Mac builds for itself only, so it has no other target to refuse `native` for.
+    if cfg!(target_os = "macos") {
+        return;
+    }
     let host = stdout(&project.typy(&["print", "host"], None));
     let other = if host.starts_with("x86_64") {
         "aarch64-unknown-linux-gnu"
@@ -716,7 +732,13 @@ fn cli_29_several_stages_are_written_beside_the_output_and_one_goes_to_standard_
     }
     assert!(!project.root.join("app").exists());
     let read = |name: &str| std::fs::read(project.root.join(name)).unwrap();
-    assert!(read("app.bc").starts_with(b"BC"));
+    // LLVM wraps the bitcode of an Apple target in a header of its own, as clang does.
+    let magic: &[u8] = if cfg!(target_os = "macos") {
+        &[0xde, 0xc0, 0x17, 0x0b]
+    } else {
+        b"BC\xc0\xde"
+    };
+    assert!(read("app.bc").starts_with(magic));
     assert_ne!(read("app.unoptimised.ll"), read("app.ll"));
     let named = project.typy(
         &["build", "app.py", "--emit=llvm-ir,obj", "-o", "out/prog"],
